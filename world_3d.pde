@@ -54,10 +54,12 @@ public class PixelRealm extends Screen {
     PGraphics scene, portal;
     SpriteSystemPlaceholder guiMainToolbar;
     
-    public float xpos = 0.0, ypos = 0.0, zpos = 0.0;
+    public float xpos = 1000.0, ypos = 0., zpos = 1000.0;
     public float yvel = 0.;
     public float direction = PI;
-    float bob = 0.0;
+    public float bob = 0.0;
+    public float onQuadY = 0.;
+    public int jumpTimeout = 0;
     
     public Stack<FileObject> inventory;
     public HashSet<FileObject> inventoryContents;
@@ -697,7 +699,7 @@ public class PixelRealm extends Screen {
           float z = prevZ+random(-500, 500);
           prevX = x;
           prevZ = z;
-          Object3D coin = new Object3D(x, 0., z);
+          Object3D coin = new Object3D(x, onSurface(x,z), z);
           coin.img = img_coin[0];
           coin.setSize(0.25);
           coin.hitboxSize = BIG_HITBOX;
@@ -1319,7 +1321,7 @@ public class PixelRealm extends Screen {
     }
     
     boolean onGround() {
-      return (ypos > -0.1) && onGround;
+      return (ypos >= onQuadY-1.) && onGround;
     }
     
     // NOTE: dist must be pythagoras WITHOUT sqrt! We don't use sqrt because performance!!
@@ -1333,6 +1335,90 @@ public class PixelRealm extends Screen {
       // Finally, apply the scale to the fade distance and do an "inverse" (e.g. 220 out of 255 -> 35 out of 255) so
       // that we're fading away tiles furthest from us, not closest to us.
       return 255-(d*scale);
+    }
+    
+    private PVector calcTile(float x, float z) {
+        float hilly = 100;
+        float y = sin((x)*0.5)*hilly+sin((z)*0.5)*hilly;
+        return new PVector(GROUND_SIZE*(x), y, GROUND_SIZE*(z));
+    }
+    
+    private float onSurface(float x, float z) {
+      float chunkx = floor(x/float(GROUND_SIZE))+1.;
+      float chunkz = floor(z/float(GROUND_SIZE))+1.;  
+      
+      PVector pv1 = calcTile(chunkx-1., chunkz-1.);          // Left, top
+      PVector pv2 = calcTile(chunkx, chunkz-1.);          // Right, top
+      PVector pv3 = calcTile(chunkx, chunkz);          // Right, bottom
+      PVector pv4 = calcTile(chunkx-1., chunkz);          // Left, bottom
+      return getYposOnQuad(pv1, pv2, pv3, pv4, x, z); 
+    }
+    
+    private float getYposOnQuad(PVector v1, PVector v2, PVector v3, PVector v4, float xpos, float zpos) {
+      // Part 1
+      float v3tov4 = v3.x-v4.x;
+      float v2tov3 = v3.z-v2.z;
+      float m1 = (xpos-v1.x)/(zpos-v1.z);
+      PVector point1;
+      boolean otherEdge = false;
+      if (m1 > 1) {
+        // Swappsies and inversies
+        m1 = ((zpos-v1.z)/(xpos-v1.x));
+        point1 = new PVector(v3.x, v1.y, v2.z+(v2tov3)*m1);
+        otherEdge = true;
+      }
+      else {
+        point1 = new PVector(v4.x+(v3tov4)*m1, v1.y, v3.z);
+      }
+      
+      // stroke(0);
+      // line(v1.x, 40, v1.z, point1.x, 40, point1.z);
+      
+      // Part 2
+      // NOTE: we can actually skip that.
+      // percentLine == m1 always.
+      
+      // Calculate the y height on the line
+      // by using the point as a "percentage"
+      // const percentLine = (point1.x-v4.x)/v3v4dist;
+      // print(m1);
+      
+      // We still need to cal y value tho
+      float point1Height = otherEdge ? lerp(v2.y, v3.y, m1) : lerp(v4.y, v3.y, m1);
+      
+      // Part 3
+      // Pythagoras
+      float len;
+      if (otherEdge) {
+        float v1tov2 = v2.x-v1.x;
+        float v2toPoint1 = point1.z-v2.z;
+        len = sqrt(v1tov2*v1tov2 + v2toPoint1*v2toPoint1);
+      }
+      else {
+        float v1tov4 = v4.z-v1.z;
+        float v4toPoint1 = point1.x-v4.x;
+        len = sqrt(v1tov4*v1tov4 + v4toPoint1*v4toPoint1);
+      }
+      
+      // Part 4
+      // Yay
+      // Pythagoras again
+      float playerLen;
+      if (otherEdge) {
+        float v1toPlayer = xpos-v1.x;
+        float v2toPlayer = zpos-v2.z;
+        playerLen = sqrt(v1toPlayer*v1toPlayer + v2toPlayer*v2toPlayer);
+      }
+      else {
+        float v1toPlayer = zpos-v1.z;
+        float v4toPlayer = xpos-v4.x;
+        playerLen = sqrt(v1toPlayer*v1toPlayer + v4toPlayer*v4toPlayer);
+        
+      }
+      float percent = playerLen/len;
+      float calculatedY = lerp(v1.y, point1Height, percent);
+      
+      return calculatedY;
     }
     
     boolean onGround = false;
@@ -1479,6 +1565,7 @@ public class PixelRealm extends Screen {
               isWalking = true;
             }
             
+            
             if (engine.keyDown('e')) rot = -TURN_SPEED;
             if (engine.keyDown('q')) rot =  TURN_SPEED;
             
@@ -1503,20 +1590,40 @@ public class PixelRealm extends Screen {
                 bob += bob_Speed;
             }
             
+            // TODO: god this is messy.
+            int chunkx = floor(xpos/float(GROUND_SIZE))+1;
+            int chunkz = floor(zpos/float(GROUND_SIZE))+1;        
+            
             flatSinDirection = sin(direction-PI+HALF_PI);
             flatCosDirection = cos(direction-PI+HALF_PI);
             
-            if (engine.keyDown(' ') && onGround()) {
+            if (engine.keyDown(' ') && onGround() && jumpTimeout < 1) {
               yvel = JUMP_STRENGTH;
+              ypos -= 10;
               tempJumpSound.play();
+              jumpTimeout = 10;
             }
+            
+            if (jumpTimeout > 0) jumpTimeout--;
+            
+            
+            float cchunkx = float(chunkx);
+            float cchunkz = float(chunkz);
+            PVector pv1 = calcTile(cchunkx-1., cchunkz-1.);          // Left, top
+            PVector pv2 = calcTile(cchunkx, cchunkz-1.);          // Right, top
+            PVector pv3 = calcTile(cchunkx, cchunkz);          // Right, bottom
+            PVector pv4 = calcTile(cchunkx-1., cchunkz);          // Left, bottom
+            onQuadY = getYposOnQuad(pv1, pv2, pv3, pv4, xpos, zpos); 
             
             ypos -= yvel;
             
             if (!onGround()) {
               if (yvel < TERMINAL_VEL) yvel -= GRAVITY;
             }
-            else yvel = 0.;
+            else {
+              yvel = 0.;
+              ypos = onQuadY;
+            }
             
             if (ypos > 2000.) {
               xpos = 1000.;
@@ -1534,6 +1641,9 @@ public class PixelRealm extends Screen {
             requestScreen(new Explorer(engine, engine.currentDir));
           }
         }
+            
+        int chunkx = floor(xpos/float(GROUND_SIZE))+1;
+        int chunkz = floor(zpos/float(GROUND_SIZE))+1;  
         
         obstructionFront = false;
         
@@ -1565,7 +1675,7 @@ public class PixelRealm extends Screen {
         float x = xpos;
         float y = ypos+(sin(bob)*3)-PLAYER_HEIGHT;
         float z = zpos;
-        float LOOK_DIST = 100.;
+        float LOOK_DIST = 200.;
         scene.camera(x, y, z, 
                      x+sin(direction)*LOOK_DIST, y, z+cos(direction)*LOOK_DIST, 
                      0.,1.,0.);
@@ -1583,21 +1693,20 @@ public class PixelRealm extends Screen {
         }
         
         scene.pushMatrix();
-        int chunkx = int(xpos/float(GROUND_SIZE))+1;
-        int chunkz = int(zpos/float(GROUND_SIZE))+1;
+
         
         // This only uses a single cycle, dw.
         terrainObjects.empty();
         
         // TODO: fix the bug once and for all!
-        //scene.hint(DISABLE_DEPTH_TEST);
+        scene.hint(ENABLE_DEPTH_TEST);
         
         
 
-        for (int j = (chunkz-RENDER_DISTANCE-1); j < (chunkz+RENDER_DISTANCE); j++) {
+        for (int tilez = (chunkz-RENDER_DISTANCE-1); tilez < (chunkz+RENDER_DISTANCE); tilez++) {
           //                                                        random bug fix over here.
-          for (int i = (chunkx-RENDER_DISTANCE-1); i < (chunkx+RENDER_DISTANCE); i++) {
-            float x = GROUND_SIZE*(i-0.5), z = GROUND_SIZE*(j-0.5);
+          for (int tilex = (chunkx-RENDER_DISTANCE-1); tilex < (chunkx+RENDER_DISTANCE); tilex++) {
+            float x = GROUND_SIZE*(tilex-0.5), z = GROUND_SIZE*(tilez-0.5);
             float dist = pow((xpos-x), 2)+pow((zpos-z), 2);
             
             boolean dontRender = false;
@@ -1609,7 +1718,7 @@ public class PixelRealm extends Screen {
             else scene.noTint();
             
             if (!dontRender) {
-              float noisePosition = noise(i, j);
+              float noisePosition = noise(tilex, tilez);
             
               scene.beginShape();
               scene.textureMode(NORMAL);
@@ -1621,23 +1730,31 @@ public class PixelRealm extends Screen {
               //scene.vertex(groundSize*i,     noise(i, j)*craziness, groundSize*j, groundRepeat, groundRepeat);
               //scene.vertex(groundSize*(i-1), noise(i-1, j)*craziness, groundSize*j, 0, groundRepeat);
               
-              float y = 0;
+              // Default flat plane
+              //float y = 0;
               
-              int ccx = chunkx < 0 ? chunkx-1 : chunkx;
-              int ccz = chunkz < 0 ? chunkz-1 : chunkz;
-              if (noisePosition > 0.6 || chunkx == 0) y = 0;
-              else {
-                //y = -10000;
-                if (i == ccx && j == ccz) {
-                  //onGround = false;
-                }
+              
+              
+              if (tilex == chunkx && tilez == chunkz) {
+                //scene.tint(color(255, 127, 127));
+                //console.log(str(chunkx)+" "+str(chunkz));
               }
+              //if (noisePosition > 0.6 || chunkx == 0) y = 0;
+              //else {
+              //  //y = -10000;
+              //}
               
-              scene.vertex(GROUND_SIZE*(i-1), y, GROUND_SIZE*(j-1), 0, 0);
-              scene.vertex(GROUND_SIZE*i,     y, GROUND_SIZE*(j-1), GROUND_REPEAT, 0);
-              scene.vertex(GROUND_SIZE*i,     y, GROUND_SIZE*j, GROUND_REPEAT, GROUND_REPEAT);
-              scene.vertex(GROUND_SIZE*(i-1), y, GROUND_SIZE*j, 0, GROUND_REPEAT);
+              PVector v1 = calcTile(tilex-1., tilez-1.);          // Left, top
+              PVector v2 = calcTile(tilex, tilez-1.);          // Right, top
+              PVector v3 = calcTile(tilex, tilez);          // Right, bottom
+              PVector v4 = calcTile(tilex-1., tilez);          // Left, bottom
               
+              
+              scene.vertex(v1.x, v1.y, v1.z, 0, 0);                                    
+              scene.vertex(v2.x, v2.y, v2.z, GROUND_REPEAT, 0);  
+              scene.vertex(v3.x, v3.y, v3.z, GROUND_REPEAT, GROUND_REPEAT);  
+              scene.vertex(v4.x, v4.y, v4.z, 0, GROUND_REPEAT);       
+                
               
               scene.endShape();
               scene.noTint();
@@ -1652,12 +1769,15 @@ public class PixelRealm extends Screen {
                 // Only create a new tree object if there isn't already one in this
                 // position.
                 
-                String id = str(i)+","+str(j);
+                String id = str(tilex)+","+str(tilez);
                 if (!autogenStuff.contains(id)) {
+                  float terrainX = (GROUND_SIZE*(tilex-1))+offset;
+                  float terrainZ = (GROUND_SIZE*(tilez-1))+offset;
+                  float terrainY = getYposOnQuad(v1,v2,v3,v4,terrainX,terrainZ)+10;
                   TerrainObject3D tree = new TerrainObject3D(
-                  (GROUND_SIZE*(i-1))+offset, 
-                  0., 
-                  (GROUND_SIZE*(j-1))+offset, 
+                  terrainX,
+                  terrainY,
+                  terrainZ,
                   3+(30*pureStaticNoise), 
                   id
                   );
@@ -1928,9 +2048,11 @@ public class PixelRealm extends Screen {
           
           // Stick to in front of the player.
           if (!repositionMode) {
-            inventory.top().x = xpos+sin(direction)*SELECT_FAR;
-            inventory.top().y = ypos;
-            inventory.top().z = zpos+cos(direction)*SELECT_FAR;
+            float x = xpos+sin(direction)*SELECT_FAR;
+            float z = zpos+cos(direction)*SELECT_FAR;
+            inventory.top().x = x;
+            inventory.top().z = z;
+            inventory.top().y = onSurface(x,z);
             inventory.top().visible = true;
             // TODO: We don't need this...?
             if (!inventory.isEmpty()) {
