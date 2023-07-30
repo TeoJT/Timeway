@@ -14,6 +14,7 @@ import java.awt.datatransfer.UnsupportedFlavorException;
 import java.awt.Toolkit;
 import processing.video.*;
 import org.freedesktop.gstreamer.*;
+import java.util.TreeSet;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -60,6 +61,7 @@ class Engine {
     public final String FONT_PATH           = "data/engine/font/";
     public final String SHADER_PATH         = "data/engine/shaders/";
     public final String CONFIG_PATH         = "data/config.json";
+    public final String KEYBIND_PATH        = "data/keybindings.json";
     public final String PATH_SPRITES_ATTRIB = "data/engine/spritedata/";
     public final String DAILY_ENTRY         = "data/daily_entry.timewayentry";
     public final String GLITCHED_REALM      = "data/engine/default/glitched_realm/";
@@ -149,7 +151,9 @@ class Engine {
     
     // Settings & config
     public JSONObject settings;
+    public JSONObject keybindings;
     public HashMap <String, Object> defaultSettings;
+    public HashMap <String, Character> defaultKeybindings;
     public boolean devMode = false;
     
     // Save & load
@@ -217,6 +221,55 @@ class Engine {
         // Init loading screen.
         currScreen = new Startup(this);
     }
+    
+    public JSONObject loadConfig(String configPath, HashMap defaultConfig) {
+        File f = new File(configPath);
+        JSONObject returnSettings = null;
+        boolean newConfig = false;
+        if (!f.exists()) {
+            newConfig = true;
+        }
+        else {
+          try {
+            returnSettings = loadJSONObject(configPath);
+          }
+          catch (RuntimeException e) {
+            console.warn("There's an error in the config file. Loading default settings.");
+            newConfig = true;
+          }
+        }
+        
+        // New config
+        if (newConfig) {
+            console.log("Config file not found, creating one.");
+            returnSettings = new JSONObject();
+            
+            // Alphabetically sort the settings so that the config is a lil easier to configure.
+            TreeSet<String> sortedSet = new TreeSet<String>(defaultConfig.keySet());
+            
+            for (String k : sortedSet) {
+                if (defaultConfig.get(k) instanceof Boolean)
+                  returnSettings.setBoolean(k, (boolean)defaultConfig.get(k));
+                else if (defaultConfig.get(k) instanceof String)
+                  returnSettings.setString(k, (String)defaultConfig.get(k));
+                else if (defaultConfig.get(k) instanceof Float)
+                  returnSettings.setFloat(k, (float)defaultConfig.get(k));
+                else if (defaultConfig.get(k) instanceof Character) {
+                  String s = "";
+                  s += defaultConfig.get(k);
+                  returnSettings.setString(k, s);
+                }
+            }
+            
+            try {
+              saveJSONObject(returnSettings, configPath);
+            }
+            catch (RuntimeException e) {
+              console.warn("Failed to save config.");
+            }
+        }
+        return returnSettings;
+    }
 
     public void setup() {
       
@@ -225,29 +278,9 @@ class Engine {
         //println("Running in seperate thread.");
         // Config file
         loadDefaultSettings();
-        File f = new File(APPPATH+CONFIG_PATH);
-        if (!f.exists()) {
-            console.log("Config file not found, creating one.");
-            settings = new JSONObject();
-            for (String k : defaultSettings.keySet()) {
-                if (defaultSettings.get(k) instanceof Boolean)
-                  settings.setBoolean(k, (boolean)defaultSettings.get(k));
-                else if (defaultSettings.get(k) instanceof String)
-                  settings.setString(k, (String)defaultSettings.get(k));
-                else if (defaultSettings.get(k) instanceof Float)
-                  settings.setFloat(k, (float)defaultSettings.get(k));
-            }
-            saveJSONObject(settings, APPPATH+CONFIG_PATH);
-        }
-        else {
-          try {
-            settings = loadJSONObject(APPPATH+CONFIG_PATH);
-          }
-          catch (RuntimeException e) {
-            console.warn("There's an error in the config file. Loading default settings.");
-            settings = new JSONObject();
-          }
-        }
+        settings = loadConfig(APPPATH+CONFIG_PATH, defaultSettings);
+        keybindings = loadConfig(APPPATH+KEYBIND_PATH, defaultKeybindings);
+        
         
         scrollSensitivity = getSettingFloat("scrollSensitivity");
         dynamicFramerate = getSettingBoolean("dynamicFramerate");
@@ -910,6 +943,7 @@ class Engine {
         return s;
     }
 
+    public final char LEFT_CLICK = char(1);
     public void loadDefaultSettings() {
         defaultSettings = new HashMap<String, Object>();
         defaultSettings.putIfAbsent("forceDevMode", false);
@@ -922,6 +956,26 @@ class Engine {
         defaultSettings.putIfAbsent("defaultSystemFont", "Typewriter");
         defaultSettings.putIfAbsent("homeDirectory", System.getProperty("user.home").replace('\\', '/'));
         defaultSettings.putIfAbsent("forcePowerMode", "NONE");
+        
+        defaultKeybindings = new HashMap<String, Character>();
+        defaultKeybindings.putIfAbsent("CONFIG_VERSION", char(1));
+        defaultKeybindings.putIfAbsent("moveForewards", 'w');
+        defaultKeybindings.putIfAbsent("moveBackwards", 's');
+        defaultKeybindings.putIfAbsent("moveLeft", 'a');
+        defaultKeybindings.putIfAbsent("moveRight", 'd');
+        defaultKeybindings.putIfAbsent("lookLeft", 'q');
+        defaultKeybindings.putIfAbsent("lookRight", 'e');
+        defaultKeybindings.putIfAbsent("menu", '\n');
+        defaultKeybindings.putIfAbsent("menuSelect", '\t');
+        defaultKeybindings.putIfAbsent("jump", ' ');
+        defaultKeybindings.putIfAbsent("sneak", char(0x0F));
+        defaultKeybindings.putIfAbsent("dash", 'r');
+        defaultKeybindings.putIfAbsent("scaleUp", '=');
+        defaultKeybindings.putIfAbsent("scaleDown", '-');
+        defaultKeybindings.putIfAbsent("scaleUpSlow", '+');
+        defaultKeybindings.putIfAbsent("scaleDownSlow", '_');
+        defaultKeybindings.putIfAbsent("primaryAction", LEFT_CLICK);
+        defaultKeybindings.putIfAbsent("scaleDownSlow", '_');
     }
     //*************************************************************
     //*************************************************************
@@ -2827,6 +2881,15 @@ class Engine {
         }
       }
       return false;
+    }
+    
+    public boolean keyAction(String keybindName) {
+      char k = keybindings.getString(keybindName).charAt(0);
+      return anyKeyDown(k);
+    }
+    
+    public boolean keybindPressed(String keybindName) {
+      return (this.keyPressed && int(key) == keybindings.getString(keybindName).charAt(0));
     }
     
     public boolean anyKeyDown(char k) {

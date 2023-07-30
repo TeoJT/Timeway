@@ -1,0 +1,19 @@
+{
+  "scaleUp": "=",
+  "lookLeft": "q",
+  "primaryAction": "\u0001",
+  "scaleUpSlow": "+",
+  "scaleDown": "-",
+  "menu": "\n",
+  "moveForewards": "w",
+  "scaleDownSlow": "_",
+  "menuSelect": "\t",
+  "moveRight": "d",
+  "moveBackwards": "s",
+  "moveLeft": "a",
+  "CONFIG_VERSION": "\u0001",
+  "dash": "r",
+  "sneak": "\u000f",
+  "lookRight": "e",
+  "jump": " "
+}

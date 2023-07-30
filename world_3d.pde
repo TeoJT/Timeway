@@ -895,7 +895,7 @@ public class PixelRealm extends Screen {
           // If we're going backwards, we might as well position ourselves in the opposite direction
           // This is just a really hack'd up script.
           float additionalDir = 0;
-          if (engine.keyDown('s') || engine.keyDown('S')) {
+          if (engine.keyAction("moveBackwards")) {
             additionalDir = PI;
             if (chosenDir >= 2)
               chosenDir -= 2;
@@ -1507,11 +1507,11 @@ public class PixelRealm extends Screen {
         isWalking = false;
         float speed = WALK_SPEED;
         
-          if (engine.keyDown('r')) speed = RUN_SPEED;
+          if (engine.keyAction("dash")) speed = RUN_SPEED;
           if (engine.shiftKeyPressed) speed = SNEAK_SPEED;
           
           // :3
-          if (engine.keyDown(' ') && onGround()) speed *= 3;
+          if (engine.keyAction("jump") && onGround()) speed *= 3;
           
           float sin_d = sin(direction);
           float cos_d = cos(direction);
@@ -1528,7 +1528,7 @@ public class PixelRealm extends Screen {
           // Toggle between item reposition mode and free move mode
           
         // Tab pressed.
-        if (engine.keyPressed && int(key) == 9) {
+        if (engine.keybindPressed("menu")) {
           if (!inventory.isEmpty()) repositionMode = !repositionMode;
           else { 
             menuShown = !menuShown;
@@ -1541,36 +1541,40 @@ public class PixelRealm extends Screen {
             float movex = 0.;
             float movez = 0.;
             float rot = 0.;
-            if (engine.anyKeyDown('w')) {
+            if (engine.keyAction("moveForewards")) {
               movex += sin_d*speed;
               movez += cos_d*speed;
               
               isWalking = true;
             }
-            if (engine.anyKeyDown('a')) {
+            if (engine.keyAction("moveLeft")) {
               movex += cos_d*speed;
               movez += -sin_d*speed;
               
               isWalking = true;
             }
-            if (engine.anyKeyDown('s')) {
+            if (engine.keyAction("moveBackwards")) {
               movex += -sin_d*speed;
               movez += -cos_d*speed;
               
               isWalking = true;
             }
-            if (engine.anyKeyDown('d')) {
+            if (engine.keyAction("moveRight")) {
               movex += -cos_d*speed;
               movez += sin_d*speed;
               isWalking = true;
             }
             
             
-            if (engine.keyDown('e')) rot = -TURN_SPEED;
-            if (engine.keyDown('q')) rot =  TURN_SPEED;
+            if (engine.shiftKeyPressed) {
+              if (engine.keyAction("lookRight")) rot = -SLOW_TURN_SPEED;
+              if (engine.keyAction("lookLeft")) rot =  SLOW_TURN_SPEED;
+            }
+            else {
+              if (engine.keyAction("lookRight")) rot = -TURN_SPEED;
+              if (engine.keyAction("lookLeft")) rot =  TURN_SPEED;
+            }
             
-            if (engine.keyDown('E')) rot = -SLOW_TURN_SPEED;
-            if (engine.keyDown('Q')) rot =  SLOW_TURN_SPEED;
             
             if (repositionMode) {
               if (!inventory.isEmpty()) {
@@ -1597,7 +1601,7 @@ public class PixelRealm extends Screen {
             flatSinDirection = sin(direction-PI+HALF_PI);
             flatCosDirection = cos(direction-PI+HALF_PI);
             
-            if (engine.keyDown(' ') && onGround() && jumpTimeout < 1) {
+            if (engine.keyAction("jump") && onGround() && jumpTimeout < 1) {
               yvel = JUMP_STRENGTH;
               ypos -= 10;
               tempJumpSound.play();
@@ -1794,7 +1798,7 @@ public class PixelRealm extends Screen {
         
         objectsInteractions();
         
-        render3DObjects(); //<>// //<>// //<>//
+        render3DObjects(); //<>// //<>//
         scene.hint(DISABLE_DEPTH_TEST);
         
         
@@ -1879,7 +1883,7 @@ public class PixelRealm extends Screen {
     float closestDist = 0;
     private void render3DObjects() {
       // Update the distances from the player for all nodes
-      Object3D currNode = headNode; //<>// //<>// //<>//
+      Object3D currNode = headNode; //<>// //<>//
       while (currNode != null) {
         currNode.calculateVal();
         currNode = currNode.next;
@@ -1935,7 +1939,7 @@ public class PixelRealm extends Screen {
 
     public void content() {
       engine.setAwake();
-      Plain3D(); //<>// //<>// //<>//
+      Plain3D(); //<>// //<>//
     }
     
     public void init3DObjects() {
