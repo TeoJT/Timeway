@@ -25,7 +25,7 @@ public class PixelRealm extends Screen {
     public PImage img_grass;
     public PImage img_neonTest;
     public PImage img_coin[] = new PImage[6];
-    public PImage img_tree;
+    public PImage img_tree[];
     public PImage img_nightskyStars[] = new PImage[4];
     public SoundFile snd_bgm;
     
@@ -37,10 +37,9 @@ public class PixelRealm extends Screen {
     public boolean finderEnabled = false;
     
     public final static String REALM_GRASS = ".pixelrealm-grass.png";
-    public final static String REALM_MUSIC = ".pixelrealm-music.wav";
     public final static String REALM_SKY   = ".pixelrealm-sky.png";
-    public final static String REALM_TREE  = ".pixelrealm-terrain_object-1.png";
-    public final static String REALM_BGM   = ".pixelrealm-bgm.wav";
+    public final static String REALM_TREE  = ".pixelrealm-terrain_object-";
+    public final static String REALM_BGM   = ".pixelrealm-bgm";
     public final static String REALM_SEQ   = ".pixelrealm-bgm.mid";
     public final static String REALM_TURF  = ".pixelrealm-turf.json";
     
@@ -99,12 +98,14 @@ public class PixelRealm extends Screen {
     
     private AtomicBoolean refreshRealm = new AtomicBoolean(false);
     
+    public float HILL_HEIGHT = 0.;
+    public float HILL_FREQUENCY = 0.5;
     
-    final int RENDER_DISTANCE = 6;
-    final int GROUND_REPEAT = 2;
-    final int GROUND_SIZE = 400;
-    final float FADE_DIST_OBJECTS = pow((RENDER_DISTANCE-4)*GROUND_SIZE,2);
-    final float FADE_DIST_GROUND = pow(GROUND_SIZE*max(RENDER_DISTANCE-3, 0),2);
+    public int RENDER_DISTANCE = 6;
+    public float GROUND_REPEAT = 2;
+    public float GROUND_SIZE = 400;
+    public float FADE_DIST_OBJECTS = pow((RENDER_DISTANCE-4)*GROUND_SIZE,2);
+    public float FADE_DIST_GROUND = pow(GROUND_SIZE*max(RENDER_DISTANCE-3, 0),2);
     
     public float portalLight = 255.;
     public final float MIN_PORTAL_LIGHT_THRESHOLD = pow(140.,2);
@@ -125,21 +126,24 @@ public class PixelRealm extends Screen {
     private Object3D tailNode = null;
     private Object3D headNode = null;
     private int numObjects = 0;
-
-    class NightSkyStar {
-        boolean active;
-        float x;
-        float y;
-        int image;
-        int config;
+    
+    // TODO: move cus I can't be bothered
+    public void setRenderDistance(int renderDistance) {
+      RENDER_DISTANCE = renderDistance;
+      FADE_DIST_OBJECTS = pow((RENDER_DISTANCE-4)*GROUND_SIZE,2);
+      FADE_DIST_GROUND = pow(GROUND_SIZE*max(RENDER_DISTANCE-3, 0),2);
     }
-    NightSkyStar[] nightskyStars;
-    final int MAX_NIGHT_SKY_STARS = 100;
+    
+    public void setGroundSize(float groundSize) {
+      GROUND_SIZE = groundSize;
+      FADE_DIST_OBJECTS = pow((RENDER_DISTANCE-4)*GROUND_SIZE,2);
+      FADE_DIST_GROUND = pow(GROUND_SIZE*max(RENDER_DISTANCE-3, 0),2);
+    }
     
     class TerrainObject3D extends Object3D {
       public TerrainObject3D(float x, float y, float z, float size, String id) {
         super(x,y,z);
-        this.img = img_tree;
+        this.img = img_tree[int(random(0, img_tree.length))];
         this.setSize(size);
         this.hitboxSize = SMALL_HITBOX;
         autogenStuff.add(id);
@@ -174,8 +178,13 @@ public class PixelRealm extends Screen {
         // We expect the engine to have already loaded a JSON object.
         // Every 3d object has x y z position.
         this.x = engine.getJSONFloat("x", random(-4000, 4000));
-        this.y = engine.getJSONFloat("y", 0.);
         this.z = engine.getJSONFloat("z", random(-4000, 4000));
+        float yy = onSurface(this.x, this.z);
+        this.y = engine.getJSONFloat("y", yy);
+        
+        // If the object is below the ground, reset its position.
+        if (y < yy-5.) this.y = yy;
+          
       }
       
       public JSONObject save() {
@@ -667,12 +676,13 @@ public class PixelRealm extends Screen {
         img_coin[3]  = engine.systemImages.get("coin_3");
         img_coin[4]  = engine.systemImages.get("coin_4");
         img_coin[5]  = engine.systemImages.get("coin_5");
-        img_tree     = engine.systemImages.get("tree");
+        img_tree = new PImage[1];
+        img_tree[0]  = engine.systemImages.get("tree");
         img_sky_1    = engine.systemImages.get("sky_1");
         REALM_GRASS_DEFAULT = img_grass;
         REALM_MUSIC_DEFAULT = null;
         REALM_SKY_DEFAULT = img_sky_1;
-        REALM_TREE_DEFAULT = img_tree;
+        REALM_TREE_DEFAULT = img_tree[0];
         
         guiMainToolbar = new SpriteSystemPlaceholder(engine, engine.APPPATH+engine.PATH_SPRITES_ATTRIB+"gui/pixelrealm/");
         
@@ -690,22 +700,6 @@ public class PixelRealm extends Screen {
         
         //img_sky_1.resize(scene.width, scene.height);
         
-        //Set the position of the coins.
-        coins = new Object3D[100];
-        float prevX = 0.;
-        float prevZ = 0.;
-        for (int i = 0; i < 100; i++) {
-          float x = prevX+random(0, 90);
-          float z = prevZ+random(-500, 500);
-          prevX = x;
-          prevZ = z;
-          Object3D coin = new Object3D(x, onSurface(x,z), z);
-          coin.img = img_coin[0];
-          coin.setSize(0.25);
-          coin.hitboxSize = BIG_HITBOX;
-          coins[i] = coin;
-          
-        }
         
         //Reset the particles in the portal(s).
         for (int i = 0; i < portPartNum; i++) {
@@ -724,6 +718,23 @@ public class PixelRealm extends Screen {
         init3DObjects();
         
         loadTurfJson(dir, emergeFrom);
+        
+        //Set the position of the coins.
+        coins = new Object3D[100];
+        float prevX = 0.;
+        float prevZ = 0.;
+        for (int i = 0; i < 100; i++) {
+          float x = prevX+random(0, 90);
+          float z = prevZ+random(-500, 500);
+          prevX = x;
+          prevZ = z;
+          Object3D coin = new Object3D(x, onSurface(x,z), z);
+          coin.img = img_coin[0];
+          coin.setSize(0.25);
+          coin.hitboxSize = BIG_HITBOX;
+          coins[i] = coin;
+          
+        }
         
         // TODO: make the thread only load when there are changes to the files
         // and run the refreshRealm() in the main thread.
@@ -803,6 +814,13 @@ public class PixelRealm extends Screen {
           }
           
           // This is where we actually load our json.
+          // Load settings
+          setRenderDistance(engine.getJSONInt("render_distance", 6));
+          setGroundSize(engine.getJSONFloat("ground_size", 400.));
+          HILL_HEIGHT = engine.getJSONFloat("hill_height", 0.);
+          HILL_FREQUENCY = engine.getJSONFloat("hill_frequency", 400.);
+          
+          
           int l = objects3d.size();
           // Loop thru each file object in the array. Remember each object is uniquely identified by its filename.
           for (int i = 0; i < l; i++) {
@@ -964,6 +982,10 @@ public class PixelRealm extends Screen {
       JSONObject turfJson = new JSONObject();
       turfJson.setJSONArray("objects3d", objects3d);
       turfJson.setString("compatibility_version", COMPATIBILITY_VERSION);
+      turfJson.setInt("render_distance", RENDER_DISTANCE);
+      turfJson.setFloat("ground_size", GROUND_SIZE);
+      turfJson.setFloat("hill_height", HILL_HEIGHT);
+      turfJson.setFloat("hill_frequency", HILL_FREQUENCY);
       
       try {
         engine.backupAndSaveJSON(turfJson, engine.currentDir+REALM_TURF);
@@ -1086,8 +1108,9 @@ public class PixelRealm extends Screen {
     public void refreshRealmInSeperateThread() {
       refreshThread = new Thread(new Runnable() {
           private FileTime img_sky_1_modified = getLastModified(engine.currentDir+REALM_SKY);
-          private FileTime img_tree_modified  = getLastModified(engine.currentDir+REALM_TREE);
           private FileTime img_grass_modified = getLastModified(engine.currentDir+REALM_GRASS);
+          
+          private FileTime[] img_tree_modified  = getLastModifiedTree(engine.currentDir+REALM_TREE);
           
           // Leave bgm out for now since this one is complicated.
           //private FileTime bgm_modified       = null;
@@ -1103,19 +1126,28 @@ public class PixelRealm extends Screen {
               }
               if (
                 fileChanged(REALM_SKY, img_sky_1_modified)  ||
-                fileChanged(REALM_TREE, img_tree_modified) ||
+                terrainObjectFileChanged(REALM_TREE, img_tree_modified) ||
                 fileChanged(REALM_GRASS, img_grass_modified))
               {
                 console.log("Change detected, reloading...");
                 refreshRealm.set(true);
                 img_sky_1_modified = getLastModified(engine.currentDir+REALM_SKY);
-                img_tree_modified  = getLastModified(engine.currentDir+REALM_TREE);
+                img_tree_modified  = getLastModifiedTree(engine.currentDir+REALM_TREE);
                 img_grass_modified = getLastModified(engine.currentDir+REALM_GRASS);
               }
             }
           }
       });
       refreshThread.start();
+    }
+    
+    
+    public boolean terrainObjectFileChanged(String path, FileTime[] lastLastChange) {
+      boolean changed = false;
+      for (int i = 0; i < img_tree.length; i++) {
+        changed |= fileChanged(path+str(i+1)+".png", lastLastChange[i]);
+      }
+      return changed;
     }
     
     
@@ -1137,6 +1169,14 @@ public class PixelRealm extends Screen {
         // if t equals lastLastChange, then there's been no change, so return false.
         return !t.equals(lastLastChange);
       }
+    }
+    
+    public FileTime[] getLastModifiedTree(String path) {
+      FileTime[] filetimes = new FileTime[img_tree.length];
+      for (int i = 0; i < img_tree.length; i++) {
+        filetimes[i] = getLastModified(path+str(i+1)+".png");
+      }
+      return filetimes;
     }
     
     public FileTime getLastModified(String path) {
@@ -1169,8 +1209,23 @@ public class PixelRealm extends Screen {
     
     public void refreshRealm() {
       img_grass = (PImage)getRealmFile(REALM_GRASS, REALM_GRASS_DEFAULT);
-      img_tree = (PImage)getRealmFile(REALM_TREE, REALM_TREE_DEFAULT);
       img_sky_1 = (PImage)getRealmFile(REALM_SKY, REALM_SKY_DEFAULT);
+      
+      
+      ArrayList<PImage> terrainobjs = new ArrayList<PImage>();
+      PImage terrainobj = (PImage)getRealmFile(REALM_SKY, REALM_TREE_DEFAULT);
+      int i = 0;
+      while (terrainobj != null && i <= 9) {
+        terrainobj = (PImage)getRealmFile(REALM_TREE+str(i+1)+".png", null);
+        if (terrainobj != null)
+          terrainobjs.add(terrainobj);
+        i++;
+      }
+      img_tree = new PImage[terrainobjs.size()];
+      for (int j = 0; j < terrainobjs.size(); j++) {
+        img_tree[j] = terrainobjs.get(j);
+      }
+      
       //img_sky_1.resize(scene.width, scene.height);
       
         // Starts playback of the MIDI data in the currently loaded sequence.
@@ -1179,10 +1234,18 @@ public class PixelRealm extends Screen {
       // For now just load music only once lmao
       
       if (!loadedMusic) {
-        File f = new File(engine.currentDir+REALM_BGM);
-        if (f.exists())
-          engine.streamMusicWithFade(engine.currentDir+REALM_BGM);
-        else
+        String[] soundFileFormats = {".wav", ".mp3", ".ogg", ".flac"};
+        boolean found = false;
+        i = 0;
+        while (i < soundFileFormats.length && !found) {
+          String ext = soundFileFormats[i++];
+          File f = new File(engine.currentDir+REALM_BGM+ext);
+          if (f.exists()) {
+            found = true;
+            engine.streamMusicWithFade(engine.currentDir+REALM_BGM+ext);
+          }
+        }
+        if (!found)
           engine.streamMusicWithFade(engine.APPPATH+REALM_BGM_DEFAULT);
         loadedMusic = true;
       }
@@ -1338,14 +1401,13 @@ public class PixelRealm extends Screen {
     }
     
     private PVector calcTile(float x, float z) {
-        float hilly = 100;
-        float y = sin((x)*0.5)*hilly+sin((z)*0.5)*hilly;
+        float y = sin(x*HILL_FREQUENCY)*HILL_HEIGHT+sin(z*HILL_FREQUENCY)*HILL_HEIGHT;
         return new PVector(GROUND_SIZE*(x), y, GROUND_SIZE*(z));
     }
     
     private float onSurface(float x, float z) {
-      float chunkx = floor(x/float(GROUND_SIZE))+1.;
-      float chunkz = floor(z/float(GROUND_SIZE))+1.;  
+      float chunkx = floor(x/GROUND_SIZE)+1.;
+      float chunkz = floor(z/GROUND_SIZE)+1.;  
       
       PVector pv1 = calcTile(chunkx-1., chunkz-1.);          // Left, top
       PVector pv2 = calcTile(chunkx, chunkz-1.);          // Right, top
@@ -1595,8 +1657,8 @@ public class PixelRealm extends Screen {
             }
             
             // TODO: god this is messy.
-            int chunkx = floor(xpos/float(GROUND_SIZE))+1;
-            int chunkz = floor(zpos/float(GROUND_SIZE))+1;        
+            int chunkx = floor(xpos/GROUND_SIZE)+1;
+            int chunkz = floor(zpos/GROUND_SIZE)+1;        
             
             flatSinDirection = sin(direction-PI+HALF_PI);
             flatCosDirection = cos(direction-PI+HALF_PI);
@@ -1646,8 +1708,8 @@ public class PixelRealm extends Screen {
           }
         }
             
-        int chunkx = floor(xpos/float(GROUND_SIZE))+1;
-        int chunkz = floor(zpos/float(GROUND_SIZE))+1;  
+        int chunkx = floor(xpos/GROUND_SIZE)+1;
+        int chunkz = floor(zpos/GROUND_SIZE)+1;  
         
         obstructionFront = false;
         
@@ -1840,44 +1902,12 @@ public class PixelRealm extends Screen {
         fill(255);
         textSize(30);
         textAlign(LEFT, TOP);
-        text((str(frameRate) + "\nX:" + str(xpos) + " Y:" + str(ypos) + " Z:" + str(zpos)), 50, myUpperBarWeight+35);
+        //text((str(frameRate) + "\nX:" + str(xpos) + " Y:" + str(ypos) + " Z:" + str(zpos)), 50, myUpperBarWeight+35);
         
         // We need to run the gui here otherwise it's going to look   t e r r i b l e   in the scene.
         runGUI();
         
         //image(portal,0,0, 128, 256);
-    }
-
-    public void scatterNightskyStars() {
-        int selectedNum = int(app.random(MAX_NIGHT_SKY_STARS/2, MAX_NIGHT_SKY_STARS));
-        nightskyStars = new NightSkyStar[selectedNum];
-        
-        for (int i = 0; i < selectedNum; i++) {
-            nightskyStars[i] = new NightSkyStar();
-            int x = int(app.random(-16, engine.WIDTH));
-            int y = int(app.random(-16, this.height));
-            
-            int j = 0;
-            boolean colliding = false;
-            final int spacing = 4;
-            
-            while (colliding) {
-              colliding = false;
-              
-              while ((j < i) && !colliding) {
-                  if (((x+spacing+16) > (nightskyStars[j].x-spacing)) && ((x-spacing) < (nightskyStars[j].x+spacing+16)) && ((y+spacing+16) > (nightskyStars[j].y-spacing)) && ((y-spacing) < (nightskyStars[j].y+spacing+16))) {
-                      colliding = true;
-                  }
-                  j++;
-              }
-            }
-            
-            nightskyStars[i].x = x;
-            nightskyStars[i].y = y;
-            nightskyStars[i].image = int(app.random(0, 5));
-            nightskyStars[i].config = int(app.random(0, 4));
-            nightskyStars[i].active = true;
-        }
     }
     
     float closestDist = 0;
@@ -1903,36 +1933,6 @@ public class PixelRealm extends Screen {
         currNode.display();
         currNode = currNode.next;
       }
-    }
-
-
-    private void drawNightSkyStars() {
-        for (NightSkyStar star : nightskyStars) {
-            if (star.active) {
-                
-                // Render the star
-                engine.img("nightsky"+str(star.image), star.x, star.y, 16, 16);
-
-                // Move the star
-                star.x -= moveStarX;
-                
-                // If the star is off the screen, deactivate it
-                if (star.x < -16 || star.x > engine.WIDTH) {
-                    star.active = false;
-                }
-            }
-            else {
-                // Random chance for the star to be reborn on the right of the screen
-                // Also only if it's moved
-                if (int(app.random(0, 20)) == 1 && moveStarX != 0.0) {
-                    star.x = engine.WIDTH;
-                    star.y = int(app.random(-16, this.height));
-                    star.image = int(app.random(0, 5));
-                    star.config = int(app.random(0, 4));
-                    star.active = true;
-                }
-            }
-        }
     }
 
     

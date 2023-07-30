@@ -68,6 +68,12 @@ public class Startup extends Screen {
             floatOut *= 0.9;
             app.tint(255, (255*floatOut));
             engine.imgCentre("logo", engine.WIDTH/2, engine.HEIGHT/2);
+            app.fill(255);
+            app.noStroke();
+            app.textAlign(CENTER, CENTER);
+            app.textFont(engine.DEFAULT_FONT);
+            app.textSize(34);
+            app.text("By "+engine.AUTHOR, engine.WIDTH/2, engine.HEIGHT+100);
             
             // Only executes once
             if (!nextScreen) {
@@ -92,5 +98,6 @@ public class Startup extends Screen {
         app.textFont(engine.DEFAULT_FONT);
         app.textSize(30);
         app.text(engine.VERSION, 10, engine.HEIGHT-60);
+        
     }
 }
