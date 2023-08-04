@@ -16,7 +16,6 @@ import java.nio.file.*;
 public class PixelRealm extends Screen {
     final String COMPATIBILITY_VERSION = "1.0";
   
-    public float moveStarX = 0.;
     public float height = 0.;
     
     final int scale = 4;
@@ -59,9 +58,35 @@ public class PixelRealm extends Screen {
     public float bob = 0.0;
     public float onQuadY = 0.;
     public int jumpTimeout = 0;
+    public boolean primaryAction = false;
+    public boolean secondaryAction = false;
     
-    public Stack<FileObject> inventory;
     public HashSet<FileObject> inventoryContents;
+    
+    private final static int TOOL_NORMAL = 1;
+    private final static int TOOL_GRABBER = 2;
+    private final static int TOOL_CUBER = 3;
+    private final static int TOOL_BOMBER = 4;
+    private final static int TOOL_CREATOR = 5;
+    
+    private final static int TOOL_GRABBER_NORMAL = 2;
+    private final static int TOOL_GRABBER_REPOSITION = 3;
+    
+    private int parentTool(int tool) {
+      switch (tool) {
+        case TOOL_GRABBER_NORMAL:
+        return TOOL_GRABBER;
+        case TOOL_GRABBER_REPOSITION:
+        return TOOL_GRABBER;
+        default:
+        return tool;
+      }
+    }
+    
+    // Subtools
+    
+    private int currentTool = TOOL_NORMAL;
+    
     
     private float flatSinDirection;
     private float flatCosDirection;
@@ -72,7 +97,6 @@ public class PixelRealm extends Screen {
     // All of this is stupid
     public boolean isWalking = false;
     public boolean nearObject = false;
-    public boolean repositionMode = false;
     public boolean menuShown = false;
     
     int coinSpinAnimation = 0;
@@ -138,6 +162,79 @@ public class PixelRealm extends Screen {
       GROUND_SIZE = groundSize;
       FADE_DIST_OBJECTS = pow((RENDER_DISTANCE-4)*GROUND_SIZE,2);
       FADE_DIST_GROUND = pow(GROUND_SIZE*max(RENDER_DISTANCE-3, 0),2);
+    }
+    
+    public InventorySlot inventoryHead = null;
+    public InventorySlot inventoryTail = null;
+    public InventorySlot inventorySelectedItem = null;
+    
+    class InventorySlot {
+      public InventorySlot next = null;
+      public InventorySlot prev = null;
+      public FileObject carrying = null;
+      
+      public InventorySlot(FileObject o) {
+        this.carrying = o;
+      }
+      
+      public void remove() {
+        if (this == inventoryHead)
+          inventoryHead = this.next;
+      
+        if (this == inventoryTail)
+          inventoryTail = this.prev;
+          
+        if (this == inventorySelectedItem) {
+          inventorySelectedItem = this.prev;
+          if (inventorySelectedItem == null) 
+            inventorySelectedItem = this.next;
+          // Will be null as intended if next is null too.
+          // i.e., the item just removed happens to be the last item in the inventory.
+        }
+        
+        if (this.prev != null)
+          this.prev.next = this.next;
+          
+        if (this.next != null)
+          this.next.prev = this.prev;
+          
+      }
+      
+      public void addAfterMe(InventorySlot newNode) {
+        
+        InventorySlot prev = this;
+        InventorySlot next = this.next;
+        
+        newNode.next = next;
+        newNode.prev = prev;
+        if (next != null) next.prev = newNode;
+        prev.next = newNode;
+
+        if (this == inventoryTail) {
+            inventoryTail = prev;
+        }
+    }
+      
+      public void addEnd() {
+       if(inventoryHead == null) {  
+            inventoryHead = this;
+            inventoryTail = this;
+            inventoryHead.prev = null;
+            inventoryTail.next = null;
+            inventorySelectedItem = this;
+        }  
+        else {  
+            //add newNode to the end of list. tail->next set to newNode  
+            inventoryTail.next = this;  
+            //newNode->previous set to tail  
+            this.prev = inventoryTail;  
+            //newNode becomes new tail  
+            inventoryTail = this;  
+            //tail's next point to null  
+            inventoryTail.next = null;  
+        }
+        inventorySelectedItem = this;
+      }
     }
     
     class TerrainObject3D extends Object3D {
@@ -250,6 +347,8 @@ public class PixelRealm extends Screen {
             }
           }
         }
+        // Reset tint
+        this.tint = color(255);
       }
       
       public void load() {
@@ -332,6 +431,9 @@ public class PixelRealm extends Screen {
             // If close to the portal, set the portal light to create a portal enter/transistion effect.
             portalLight = max(portalLight, (1.-(dist/MIN_PORTAL_LIGHT_THRESHOLD))*255.);
           }
+          
+          // Reset tint
+          this.tint = color(255);
         }
       }
     }
@@ -353,6 +455,7 @@ public class PixelRealm extends Screen {
       public Object3D next = null;
       public Object3D prev = null;
       public boolean visible = true;
+      public color tint = color(255);
       
       public Object3D() {
         addToList(this);
@@ -400,8 +503,11 @@ public class PixelRealm extends Screen {
         float beamX1 = xpos;
         float beamZ1 = zpos;
         
+        // TODO: optimise.
         float beamX2 = xpos+sin(direction)*SELECT_FAR;
         float beamZ2 = zpos+cos(direction)*SELECT_FAR;
+        
+        //boolean withinYrange = (y-hi < ypos-
         
         if (lineLine(x1,z1,x2,z2,beamX1,beamZ1,beamX2,beamZ2)) {
           if (this.val < closestVal) {
@@ -413,15 +519,24 @@ public class PixelRealm extends Screen {
       
       // Note: you need to run checkHovering for all hoverable 3d objects first.
       public boolean hovering() {
-        return (closestObject == this);
+        if (closestObject == this) {
+          // Highlight the object if its being hovered over.
+          // We only hover on certain tools where the object's interactable.
+          if (currentTool == TOOL_GRABBER_NORMAL)
+            this.tint = color(255, 230, 200);
+          return true;
+        }
+        else {
+          return false;
+        }
       }
       
       public boolean selectedLeft() {
-        return hovering() && engine.leftClick;
+        return hovering() && primaryAction;
       }
       
       public boolean selectedRight() {
-        return hovering() && engine.rightClick;
+        return hovering() && secondaryAction;
       }
       
       public void destroy() {
@@ -460,6 +575,9 @@ public class PixelRealm extends Screen {
           float z2 = z - cos_d;
           
           displayQuad(x1,y1,z1,x2,y1+hi,z2,useFinder);
+          
+          // Reset tint
+          this.tint = color(255);
         }
       }
       
@@ -482,13 +600,13 @@ public class PixelRealm extends Screen {
         if (dist > FADE_DIST_OBJECTS) {
           float fade = calculateFade(dist, FADE_DIST_OBJECTS);
           if (fade > 1) {
-            scene.tint(255, fade);
+            scene.tint(tint, fade);
           }
           else {
             dontRender = true;
           }
         }
-        else scene.tint(255, 255);
+        else scene.tint(tint, 255);
         
         
         if (useFinder) {
@@ -654,6 +772,20 @@ public class PixelRealm extends Screen {
       }
       return null;
   }
+  
+    public PixelRealm(Engine engine, String dir, String emergeFrom, HashSet<String> prevInventory) {
+        super(engine);
+        this.setup(dir, emergeFrom);
+        // Find our items carried over from the previous realm and add them to our inventory
+        for (FileObject f : files) {
+          if (f != null) {
+            if (prevInventory.contains(f.dir)) {
+              pickupItem(f);
+            }
+          }
+        }
+        currentTool = TOOL_GRABBER_NORMAL;
+    }
 
     public PixelRealm(Engine engine, String dir, String emergeFrom) {
         super(engine);
@@ -712,12 +844,16 @@ public class PixelRealm extends Screen {
         // Because our stack holds the generated terrain objects which is generated by the floor tiles,
         // this means that there could theoretically be at most renderDistance in the x axis times
         // renderDistance in the z axis. Hope that makes sense.
-        inventory = new Stack<FileObject>(128);
-        terrainObjects = new Stack<Object3D>((RENDER_DISTANCE*2)*(RENDER_DISTANCE*2));
+        terrainObjects = new Stack<Object3D>(((RENDER_DISTANCE+5)*2)*((RENDER_DISTANCE+5)*2));
         autogenStuff = new HashSet<String>();
         init3DObjects();
         
-        loadTurfJson(dir, emergeFrom);
+        //loadTurfJson(dir, emergeFrom);
+        
+        refreshRealm(dir, emergeFrom);
+        
+        refreshRealmInSeperateThread();
+        
         
         //Set the position of the coins.
         coins = new Object3D[100];
@@ -736,13 +872,6 @@ public class PixelRealm extends Screen {
           
         }
         
-        // TODO: make the thread only load when there are changes to the files
-        // and run the refreshRealm() in the main thread.
-        refreshRealmInSeperateThread();
-        
-        refreshRealm();
-        //scatterNightskyStars();
-        
     }
     
     final int portPartNum = 90;
@@ -756,11 +885,16 @@ public class PixelRealm extends Screen {
     public void loadTurfJson(String dir, String emergeFrom) {
         openDir(dir);
         if (dir.charAt(dir.length()-1) != '/')  dir += "/";
-        if (emergeFrom.length() > 0)
-          if (emergeFrom.charAt(emergeFrom.length()-1) == '/')  emergeFrom = emergeFrom.substring(0, emergeFrom.length()-1);;
-        // Really really stupid bug fix.
-        if (emergeFrom.equals("C:")) emergeFrom = "C:/";
-        emergeFrom     = engine.getFilename(emergeFrom);
+        
+        boolean emergeFromPortal = !(emergeFrom.length() == 0);
+        if (emergeFromPortal) {
+          if (emergeFrom.length() > 0)
+            if (emergeFrom.charAt(emergeFrom.length()-1) == '/')  emergeFrom = emergeFrom.substring(0, emergeFrom.length()-1);;
+          // TODO: obviously we need to fix for macos and linux. (I think)
+          // Really really stupid bug fix.
+          if (emergeFrom.equals("C:")) emergeFrom = "C:/";
+          emergeFrom     = engine.getFilename(emergeFrom);
+        }
         
         // Find out if the directory has a turf file.
         File f = new File(dir+REALM_TURF);
@@ -818,7 +952,7 @@ public class PixelRealm extends Screen {
           setRenderDistance(engine.getJSONInt("render_distance", 6));
           setGroundSize(engine.getJSONFloat("ground_size", 400.));
           HILL_HEIGHT = engine.getJSONFloat("hill_height", 0.);
-          HILL_FREQUENCY = engine.getJSONFloat("hill_frequency", 400.);
+          HILL_FREQUENCY = engine.getJSONFloat("hill_frequency", 0.5);
           
           
           int l = objects3d.size();
@@ -863,101 +997,103 @@ public class PixelRealm extends Screen {
         }
         
         // Figure out the starting position, we want to choose a position that is clear of other portals.
-        final float FROM_DIST = 150.;
-        final float AREA_LENGTH = 1500.;
-        final float AREA_OFFSET = 100.;
-        final float AREA_WIDTH  = 100.;
-        int[] portalCount = new int[4];
-        // 0   +x
-        // 1   +z
-        // 2   -x
-        // 3   -z
-        if (fromPortal != null) {
-          for (Object3D o : files) {
-            if (o != null) {
-              if (o instanceof DirectoryPortal) {
-                
-                // This is +z and -z
-                if (o.x > fromPortal.x-AREA_WIDTH && o.x < fromPortal.x+AREA_WIDTH) {
-                  // +z
-                  if (o.z > fromPortal.z+AREA_OFFSET && o.z < fromPortal.z+AREA_LENGTH)
-                    portalCount[1] += 1;
-                  // -z
-                  if (o.z < fromPortal.z-AREA_OFFSET && o.z > fromPortal.z-AREA_LENGTH)
-                    portalCount[3] += 1;
-                }
-                if (o.z > fromPortal.z-AREA_WIDTH && o.z < fromPortal.z+AREA_WIDTH) {
-                  // +x
-                  if (o.x > fromPortal.x+AREA_OFFSET && o.x < fromPortal.x+AREA_LENGTH)
-                    portalCount[0] += 1;
-                  // -x
-                  if (o.x < fromPortal.x-AREA_OFFSET && o.x > fromPortal.x-AREA_LENGTH)
-                    portalCount[2] += 1;
-                }
-              }
-            }
-          }
-          
-          // Now we've exit the loop.
-          // Check which exit has the least portals and choose that one to position the player.
-          int lowest = Integer.MAX_VALUE;
-          int chosenDir = 0;
-          for (int i = 0; i < portalCount.length; i++) {
-            if (portalCount[i] < lowest) {
-              chosenDir = i;
-              lowest = portalCount[i];
-            }
-          }
-          
-          // I think I'm overdoing it now lol
-          // If we're going backwards, we might as well position ourselves in the opposite direction
-          // This is just a really hack'd up script.
-          float additionalDir = 0;
-          if (engine.keyAction("moveBackwards")) {
-            additionalDir = PI;
-            if (chosenDir >= 2)
-              chosenDir -= 2;
-            else
-              chosenDir += 2;
-          }
-          
-          // Remember:
+        if (emergeFromPortal) {
+          final float FROM_DIST = 150.;
+          final float AREA_LENGTH = 1500.;
+          final float AREA_OFFSET = 100.;
+          final float AREA_WIDTH  = 100.;
+          int[] portalCount = new int[4];
           // 0   +x
           // 1   +z
           // 2   -x
           // 3   -z
-          
-          // PI        -z
-          // HALF_PI   +x
-          // 0         +z
-          // -HALF_PI  -x
-          switch (chosenDir) {
-            // +x
-            case 0:
-            xpos = fromPortal.x+FROM_DIST;
-            zpos = fromPortal.z;
-            direction = HALF_PI + additionalDir;
-            break;
-            // +z
-            case 1:
-            xpos = fromPortal.x;
-            zpos = fromPortal.z+FROM_DIST;
-            direction = 0. + additionalDir;
-            break;
-            // -x
-            case 2:
-            xpos = fromPortal.x-FROM_DIST;
-            zpos = fromPortal.z;
-            direction = -HALF_PI + additionalDir;
-            break;
-            // -z
-            case 3:
-            xpos = fromPortal.x;
-            zpos = fromPortal.z-FROM_DIST;
-            direction = PI + additionalDir;
-            break;
+          if (fromPortal != null) {
+            for (Object3D o : files) {
+              if (o != null) {
+                if (o instanceof DirectoryPortal) {
+                  
+                  // This is +z and -z
+                  if (o.x > fromPortal.x-AREA_WIDTH && o.x < fromPortal.x+AREA_WIDTH) {
+                    // +z
+                    if (o.z > fromPortal.z+AREA_OFFSET && o.z < fromPortal.z+AREA_LENGTH)
+                      portalCount[1] += 1;
+                    // -z
+                    if (o.z < fromPortal.z-AREA_OFFSET && o.z > fromPortal.z-AREA_LENGTH)
+                      portalCount[3] += 1;
+                  }
+                  if (o.z > fromPortal.z-AREA_WIDTH && o.z < fromPortal.z+AREA_WIDTH) {
+                    // +x
+                    if (o.x > fromPortal.x+AREA_OFFSET && o.x < fromPortal.x+AREA_LENGTH)
+                      portalCount[0] += 1;
+                    // -x
+                    if (o.x < fromPortal.x-AREA_OFFSET && o.x > fromPortal.x-AREA_LENGTH)
+                      portalCount[2] += 1;
+                  }
+                }
+              }
+            }
+            
+            // Now we've exit the loop.
+            // Check which exit has the least portals and choose that one to position the player.
+            int lowest = Integer.MAX_VALUE;
+            int chosenDir = 0;
+            for (int i = 0; i < portalCount.length; i++) {
+              if (portalCount[i] < lowest) {
+                chosenDir = i;
+                lowest = portalCount[i];
+              }
+            }
+            
+            // I think I'm overdoing it now lol
+            // If we're going backwards, we might as well position ourselves in the opposite direction
+            // This is just a really hack'd up script.
+            float additionalDir = 0;
+            if (engine.keyAction("moveBackwards")) {
+              additionalDir = PI;
+              if (chosenDir >= 2)
+                chosenDir -= 2;
+              else
+                chosenDir += 2;
+            }
+            
+            // Remember:
+            // 0   +x
+            // 1   +z
+            // 2   -x
+            // 3   -z
+            
+            // PI        -z
+            // HALF_PI   +x
+            // 0         +z
+            // -HALF_PI  -x
+            switch (chosenDir) {
+              // +x
+              case 0:
+              xpos = fromPortal.x+FROM_DIST;
+              zpos = fromPortal.z;
+              direction = HALF_PI + additionalDir;
+              break;
+              // +z
+              case 1:
+              xpos = fromPortal.x;
+              zpos = fromPortal.z+FROM_DIST;
+              direction = 0. + additionalDir;
+              break;
+              // -x
+              case 2:
+              xpos = fromPortal.x-FROM_DIST;
+              zpos = fromPortal.z;
+              direction = -HALF_PI + additionalDir;
+              break;
+              // -z
+              case 3:
+              xpos = fromPortal.x;
+              zpos = fromPortal.z-FROM_DIST;
+              direction = PI + additionalDir;
+              break;
+            }
           }
-        }
+      }
     }
     
     
@@ -1144,7 +1280,7 @@ public class PixelRealm extends Screen {
     
     public boolean terrainObjectFileChanged(String path, FileTime[] lastLastChange) {
       boolean changed = false;
-      for (int i = 0; i < img_tree.length; i++) {
+      for (int i = 0; i < lastLastChange.length; i++) {
         changed |= fileChanged(path+str(i+1)+".png", lastLastChange[i]);
       }
       return changed;
@@ -1172,11 +1308,12 @@ public class PixelRealm extends Screen {
     }
     
     public FileTime[] getLastModifiedTree(String path) {
-      FileTime[] filetimes = new FileTime[img_tree.length];
+      ArrayList<FileTime> filetimes = new ArrayList<FileTime>();
       for (int i = 0; i < img_tree.length; i++) {
-        filetimes[i] = getLastModified(path+str(i+1)+".png");
+        filetimes.add( getLastModified(path+str(i+1)+".png") );
       }
-      return filetimes;
+      FileTime filetimesArray[] = new FileTime[filetimes.size()];
+      return filetimes.toArray(filetimesArray);
     }
     
     public FileTime getLastModified(String path) {
@@ -1208,17 +1345,31 @@ public class PixelRealm extends Screen {
     boolean loadedMusic = false;
     
     public void refreshRealm() {
+      // Refresh the realm without spawning back at the emerging portal.
+      refreshRealm(engine.currentDir, "");
+    }
+    
+    public void refreshRealm(String dir, String emergeFrom) {
+      // Refresh the dir without resetting the position.
+      
+      headNode = null;
+      tailNode = null;
+      loadTurfJson(dir, emergeFrom);
+      portalLight = 255;
+      
       img_grass = (PImage)getRealmFile(REALM_GRASS, REALM_GRASS_DEFAULT);
       img_sky_1 = (PImage)getRealmFile(REALM_SKY, REALM_SKY_DEFAULT);
       
       
       ArrayList<PImage> terrainobjs = new ArrayList<PImage>();
-      PImage terrainobj = (PImage)getRealmFile(REALM_SKY, REALM_TREE_DEFAULT);
-      int i = 0;
+      PImage terrainobj = (PImage)getRealmFile(REALM_TREE+"1.png", REALM_TREE_DEFAULT);
+      terrainobjs.add(terrainobj);
+      int i = 1;
       while (terrainobj != null && i <= 9) {
         terrainobj = (PImage)getRealmFile(REALM_TREE+str(i+1)+".png", null);
-        if (terrainobj != null)
+        if (terrainobj != null) {
           terrainobjs.add(terrainobj);
+          }
         i++;
       }
       img_tree = new PImage[terrainobjs.size()];
@@ -1249,6 +1400,12 @@ public class PixelRealm extends Screen {
           engine.streamMusicWithFade(engine.APPPATH+REALM_BGM_DEFAULT);
         loadedMusic = true;
       }
+      
+      // TODO: could cause problems
+      inventoryHead = null;
+      inventoryTail = null;
+      inventorySelectedItem = null;
+      
       
       //if (!loadedMusic) {
       //  Thread t1 = new Thread(new Runnable() {
@@ -1565,37 +1722,37 @@ public class PixelRealm extends Screen {
         scene.noTint();
         scene.noStroke();
         
+        primaryAction = engine.keyActionOnce("primaryAction");
+        secondaryAction = engine.keyActionOnce("secondaryAction");
         
         isWalking = false;
         float speed = WALK_SPEED;
         
-          if (engine.keyAction("dash")) speed = RUN_SPEED;
-          if (engine.shiftKeyPressed) speed = SNEAK_SPEED;
-          
-          // :3
-          if (engine.keyAction("jump") && onGround()) speed *= 3;
-          
-          float sin_d = sin(direction);
-          float cos_d = cos(direction);
-          
-          //if (repositionMode) {
-          //  if (clipboard != null) {
-          //    if (clipboard instanceof ImageFileObject) {
-          //      ImageFileObject fileobject = (ImageFileObject)clipboard;
-          //    }
-          //  }
-          //}
+        if (engine.keyAction("dash")) speed = RUN_SPEED;
+        if (engine.shiftKeyPressed) speed = SNEAK_SPEED;
+        
+        // :3
+        if (engine.keyAction("jump") && onGround()) speed *= 3;
+        
+        float sin_d = sin(direction);
+        float cos_d = cos(direction);
+        
+        //if (repositionMode) {
+        //  if (clipboard != null) {
+        //    if (clipboard instanceof ImageFileObject) {
+        //      ImageFileObject fileobject = (ImageFileObject)clipboard;
+        //    }
+        //  }
+        //}
           
           // BIG TODO: Make it so that you can't walk through trees and other obstacles.
           // Toggle between item reposition mode and free move mode
           
         // Tab pressed.
         if (engine.keybindPressed("menu")) {
-          if (!inventory.isEmpty()) repositionMode = !repositionMode;
-          else { 
-            menuShown = !menuShown;
-            if (menuShown) tempMenuAppear.play();
-          }
+          menuShown = !menuShown;
+          menuID = MENU_MAIN;
+          if (menuShown) tempMenuAppear.play();
         }
           
         if (!menuShown) {
@@ -1638,14 +1795,17 @@ public class PixelRealm extends Screen {
             }
             
             
-            if (repositionMode) {
-              if (!inventory.isEmpty()) {
-                if (inventory.top() instanceof ImageFileObject) {
-                  ImageFileObject fileobject = (ImageFileObject)inventory.top();
+            if (currentTool == TOOL_GRABBER_REPOSITION) {
+              if (inventorySelectedItem != null) {
+                
+                // Rotate if the object is an image or related.
+                if (inventorySelectedItem.carrying instanceof ImageFileObject) {
+                  ImageFileObject fileobject = (ImageFileObject)inventorySelectedItem.carrying;
                   fileobject.rot += rot;
                 }
-                inventory.top().x += movex;
-                inventory.top().z += movez;
+                
+                inventorySelectedItem.carrying.x += movex;
+                inventorySelectedItem.carrying.z += movez;
               }
             }
             else {
@@ -1839,7 +1999,7 @@ public class PixelRealm extends Screen {
                 if (!autogenStuff.contains(id)) {
                   float terrainX = (GROUND_SIZE*(tilex-1))+offset;
                   float terrainZ = (GROUND_SIZE*(tilez-1))+offset;
-                  float terrainY = getYposOnQuad(v1,v2,v3,v4,terrainX,terrainZ)+10;
+                  float terrainY = onSurface(terrainX, terrainZ)+10;
                   TerrainObject3D tree = new TerrainObject3D(
                   terrainX,
                   terrainY,
@@ -1860,7 +2020,7 @@ public class PixelRealm extends Screen {
         
         objectsInteractions();
         
-        render3DObjects(); //<>// //<>//
+        render3DObjects(); //<>// //<>// //<>// //<>//
         scene.hint(DISABLE_DEPTH_TEST);
         
         
@@ -1913,7 +2073,7 @@ public class PixelRealm extends Screen {
     float closestDist = 0;
     private void render3DObjects() {
       // Update the distances from the player for all nodes
-      Object3D currNode = headNode; //<>// //<>//
+      Object3D currNode = headNode; //<>// //<>// //<>// //<>//
       while (currNode != null) {
         currNode.calculateVal();
         currNode = currNode.next;
@@ -1935,11 +2095,18 @@ public class PixelRealm extends Screen {
       }
     }
 
-    
+    public boolean customCommands(String command) {
+      if (command.equals("/refresh")) {
+        console.log("Refreshing dir...");
+        refreshRealm();
+        return true;
+      }
+      else return false;
+    }
 
     public void content() {
-      engine.setAwake();
-      Plain3D(); //<>// //<>//
+      if (engine.sleepyMode) engine.setAwake();
+      Plain3D(); //<>// //<>// //<>//
     }
     
     public void init3DObjects() {
@@ -1959,72 +2126,218 @@ public class PixelRealm extends Screen {
       return (uA >= 0 && uA <= 1 && uB >= 0 && uB <= 1);
     }
     
-    public void runGUI() {
-      if (menuShown) {
-        float wi = 800;
-        float hi = 500;
+    private void enterNewRealm(String newdir) {
+      if (newdir.charAt(newdir.length()-1) != '/')  newdir += "/";
+      
+      // If inventory isn't empty, move the files to the new directory.
+      if (inventoryHead != null && inventorySelectedItem != null) {
+        InventorySlot slot = inventoryHead;
         
-        app.fill(0, 127);
-        app.noStroke();
-        app.rect(engine.WIDTH/2-wi/2, engine.HEIGHT/2-hi/2, wi, hi);
+        HashSet<String> carry = new HashSet<String>();
         
-        if (!engine.textPromptShown) {
-          engine.useSpriteSystem(guiMainToolbar);
-          guiMainToolbar.interactable = false;
-        
-          if (engine.button("newentry", "new_entry_128", "New entry")) {
-            // TODO: placeholder
-            String newName = engine.currentDir+"new entry please change name"+"."+engine.ENTRY_EXTENSION;
-            
-            // TODO: more elegant solution required
-            
-            // Go to the journal
-            requestScreen(new Editor(engine, newName, true));
-            // "Refresh" the folder
-            endRealm();
-            engine.prevScreen = new PixelRealm(engine, engine.currentDir);
-            endRealm();
-            menuShown = false;
-            tempMenuSelect.play();
-            
-          }
-          
-          if (engine.button("newfolder", "new_folder_128", "New folder")) {
-            tempMenuSelect.play();
-            
-            Runnable r = new Runnable() {
-              public void run() {
-                if (engine.keyboardMessage.length() <= 1) {
-                  console.log("Please enter a valid folder name!");
-                  return;
-                }
-                String foldername = engine.currentDir+engine.keyboardMessage.substring(0, engine.keyboardMessage.length()-1);
-                println(foldername);
-                new File(foldername).mkdirs();
-                
-                // TODO: have more of an elegant solution.
-                endRealm();
-                engine.currScreen = new PixelRealm(engine, engine.currentDir);
-                menuShown = false;
-                tempMenuSelect.play();
-              }
-            };
-        
-            engine.beginTextPrompt("Folder name:", r);
-          }
-          
-          if (engine.button("find", "find_128", "Finder")) {
-            finderEnabled = !finderEnabled;
-            menuShown = false;
-            tempMenuSelect.play();
-          }
-          
-          guiMainToolbar.updateSpriteSystem();
+        // Go thru the linked list and move each file to the new dir.
+        while (slot != null) {
+          engine.mv(slot.carrying.dir, newdir+slot.carrying.filename);
+          carry.add(newdir+slot.carrying.filename);
+          slot = slot.next;
         }
-        else {
-          engine.displayTextPrompt();
+        
+        engine.currScreen = new PixelRealm(engine, newdir, engine.getFilename(engine.currentDir), carry);
+      }
+      else engine.currScreen = new PixelRealm(engine, newdir, engine.getFilename(engine.currentDir));
+    }
+    
+    public int menuID = 1;
+    public final static int MENU_MAIN = 1;
+    public final static int MENU_CREATOR = 2;
+    public final static int MENU_CREATE_FOLDER_PROMPT = 3;
+    
+    private int buttonCount = 0;
+    private int selectedButton = 0;
+    
+    public boolean button(String spriteName, String ico, String label) {
+      buttonCount++;
+      
+      return engine.button(spriteName, ico, label);
+    }
+    
+    
+    public void runGUI() {
+      buttonCount = 0;
+      
+      // Controls for the inventory
+      if (inventorySelectedItem != null) {
+        inventorySelectedItem.carrying.visible = false;
+        if (engine.keyActionOnce("inventorySelectLeft")) {
+          if (inventorySelectedItem.prev != null) {
+            inventorySelectedItem.carrying.x = -999999;
+            inventorySelectedItem = inventorySelectedItem.prev;
+            tempPickupSound.play();
+          }
+        }
+        else if (engine.keyActionOnce("inventorySelectRight")) {
+          if (inventorySelectedItem.next != null) {
+            inventorySelectedItem.carrying.x = -999999;
+            inventorySelectedItem = inventorySelectedItem.next;
+            tempPickupSound.play();
+          }
+        }
+        inventorySelectedItem.carrying.visible = true;
+      }
+      
+      
+      // Render the inventory
+      float invx = 10;
+      float invy = this.height-80;
+      InventorySlot slot = inventoryHead;
+      
+      while (slot != null) {
+        PImage ico = slot.carrying.img;
+        
+        invy = this.height-80;
+        if (slot == inventorySelectedItem) invy -= 30;
+        
+        if (ico != null) 
+          image(ico, invx, invy, 64, 64);
+        invx += 70;
+        slot = slot.next;
+      }
+      
+      if (menuShown) {
+        // These are default width and height for the gui prompt.
+        // These can be changed in the switch statement below, have fun!
+        float promptWi = 800;
+        float promptHi = 500;
+        
+        engine.useSpriteSystem(guiMainToolbar);
+        guiMainToolbar.interactable = false;
+        switch (menuID) {
+          case MENU_MAIN:
+            app.fill(0, 127);
+            app.noStroke();
+            app.rect(engine.WIDTH/2-promptWi/2, engine.HEIGHT/2-promptHi/2, promptWi, promptHi);
+            if (engine.button("notool_1", "notool_128", "No tool")) {
+              currentTool = TOOL_NORMAL;
+              menuShown = false;
+              tempMenuSelect.play();
+            }
+            if (engine.button("grabber_1", "grabber_tool_128", "Grabber")) {
+              currentTool = TOOL_GRABBER_NORMAL;
+              menuShown = false;
+              tempMenuSelect.play();
+            }
+            if (engine.button("creator_1", "new_entry_128", "Creator")) {
+              currentTool = TOOL_CREATOR;
+              tempMenuSelect.play();
+              menuID = MENU_CREATOR;
+            }
+            if (engine.button("cuber_1", "cuber_tool_128", "Cuber")) {
+              console.log("Not yet functional!");
+            }
+            if (engine.button("bomber_1", "bomber_128", "Bomber")) {
+              console.log("Not yet functional!");
+            }
+          break;
+          case MENU_CREATOR: 
+            promptWi = 700;
+            promptHi = 200;
+        
+            app.fill(0, 127);
+            app.noStroke();
+            app.rect(engine.WIDTH/2-promptWi/2, engine.HEIGHT/2-promptHi/2, promptWi, promptHi);
+            if (engine.button("newentry", "new_entry_128", "New entry")) {
+              // TODO: placeholder
+              String newName = engine.currentDir+"new entry please change name"+"."+engine.ENTRY_EXTENSION;
+              
+              // TODO: more elegant solution required
+              
+              // Go to the journal
+              requestScreen(new Editor(engine, newName, true));
+              // "Refresh" the folder
+              endRealm();
+              currentTool = TOOL_GRABBER_NORMAL;
+              
+              //engine.currScreen = new PixelRealm(engine, engine.currentDir, engine.currentDir);
+              //endRealm();
+              menuShown = false;
+              tempMenuSelect.play();
+            }
+            
+            if (engine.button("newfolder", "new_folder_128", "New folder")) {
+              tempMenuSelect.play();
+              
+              Runnable r = new Runnable() {
+                public void run() {
+                  if (engine.keyboardMessage.length() <= 1) {
+                    console.log("Please enter a valid folder name!");
+                    return;
+                  }
+                  String foldername = engine.currentDir+engine.keyboardMessage;
+                  println(foldername);
+                  new File(foldername).mkdirs();
+                  
+                  refreshRealm();
+                  pickupItem(foldername);
+                  
+                  menuShown = false;
+                  tempMenuSelect.play();
+                }
+              };
+          
+              engine.beginInputPrompt("Folder name:", r);
+              menuID = MENU_CREATE_FOLDER_PROMPT;
+            }
+            
+            if (engine.button("find", "find_128", "Finder")) {
+              finderEnabled = !finderEnabled;
+              menuShown = false;
+              tempMenuSelect.play();
+            }
+          break;
+          case MENU_CREATE_FOLDER_PROMPT:
+            app.fill(0, 127);
+            app.noStroke();
+            app.rect(engine.WIDTH/2-promptWi/2, engine.HEIGHT/2-promptHi/2, promptWi, promptHi);
+            engine.displayInputPrompt();
+          break;
+        }
+        
+        guiMainToolbar.updateSpriteSystem();
+      }
+    }
+    
+    private void pickupItem(FileObject p) {
+      // If inventory isn't empty, make the item (before picking up the current item)
+      // invisible and move it outta the way.
+      if (inventorySelectedItem != null) {
+        inventorySelectedItem.carrying.visible = false;
+        inventorySelectedItem.carrying.x = -999999;
+      } 
+      
+      // If inventory is empty, then just add the new item
+      if (inventorySelectedItem == null) {
+        InventorySlot firstItem = new InventorySlot(p);
+        firstItem.addEnd();
+      }
+      // If items in inventory, just add it to the item next to the one being held
+      else {
+        InventorySlot newItem = new InventorySlot(p);
+        inventorySelectedItem.addAfterMe(newItem);
+        inventorySelectedItem = newItem;
+      }
+    }
+    
+    public void pickupItem(String path) {
+      for (FileObject f : files) {
+        if (f != null) {
+          if (path.equals(f.dir)) {
+            pickupItem(f);
+            currentTool = TOOL_GRABBER_NORMAL;
+            return;
+          }
         }
       }
+      console.bugWarn("pickupItem: not found!");
     }
     
     public void objectsInteractions() {
@@ -2046,22 +2359,23 @@ public class PixelRealm extends Screen {
             break;
         }
         
-        if (!inventory.isEmpty()) {
-          // OPTIMISATION REQUIRED
+        if (inventorySelectedItem != null) {
+          // TODO: OPTIMISATION REQUIRED
           float SELECT_FAR = 300.;
           
           // Stick to in front of the player.
-          if (!repositionMode) {
+          if (currentTool == TOOL_GRABBER_NORMAL) {
             float x = xpos+sin(direction)*SELECT_FAR;
             float z = zpos+cos(direction)*SELECT_FAR;
-            inventory.top().x = x;
-            inventory.top().z = z;
-            inventory.top().y = onSurface(x,z);
-            inventory.top().visible = true;
+            Object3D o = inventorySelectedItem.carrying;
+            o.x = x;
+            o.z = z;
+            o.y = onSurface(x,z);
+            o.visible = true;
             // TODO: We don't need this...?
-            if (!inventory.isEmpty()) {
-              if (inventory.top() instanceof ImageFileObject) {
-                ImageFileObject imgobject = (ImageFileObject)inventory.top();
+            if (inventorySelectedItem != null) {
+              if (inventorySelectedItem.carrying instanceof ImageFileObject) {
+                ImageFileObject imgobject = (ImageFileObject)inventorySelectedItem.carrying;
                 imgobject.rot = direction+HALF_PI;
               }
             }
@@ -2095,11 +2409,11 @@ public class PixelRealm extends Screen {
             
             // Quick inventory check; if it's empty, we don't want it to act.
             boolean holding = false;
-            if (!inventory.isEmpty())
-              holding = (f == inventory.top());
+            if (inventorySelectedItem != null)
+              holding = (f == inventorySelectedItem.carrying);
             
             if (!holding) {
-            f.checkHovering();
+              f.checkHovering();
               if (f instanceof DirectoryPortal) {
                 // Take the player to a new directory in the world if we enter the portal.
                 if (f.touchingPlayer()) {
@@ -2107,7 +2421,9 @@ public class PixelRealm extends Screen {
                     // For now just create an entirely new screen object lmao.
                     endRealm();
                     tempShiftSound.play();
-                    engine.currScreen = new PixelRealm(engine, f.dir, engine.getFilename(engine.currentDir));
+                    
+                    // Go into the new world
+                    enterNewRealm(f.dir);
                   }
                   else if (cancelOut) {
                     // Pause the portalcooldown by essentially cancelling out the values.
@@ -2122,36 +2438,46 @@ public class PixelRealm extends Screen {
         }
         
         // Pick up the object.
-        if (closestObject != null) {
+        if (closestObject != null && !menuShown) {
           FileObject p = (FileObject)closestObject;
           
-          // When clicked pick up the object.
-          // Obviously don't do that if the menu is shown,
-          // mouse clicks might just be clicking on the menu.
-          if (p.selectedLeft() && !menuShown) {
-            if (!inventory.isEmpty()) {
-              //inventory.top().visible = false;
-              inventory.top().y = -99999;
-            } 
-            inventory.push(p);
-            // Cheap bug fix.
-            engine.leftClick = false;
-            tempPickupSound.play();
+          // Open the file/directory if clicked
+          if (currentTool == TOOL_NORMAL) {
+            if (p.selectedLeft()) {
+              engine.open(p.dir);
+            }
           }
           
-          if (p.selectedRight()) {
-            engine.open(p.dir);
+          // GRABBER TOOL
+          else if (currentTool == TOOL_GRABBER_NORMAL) {
+            
+            // When clicked pick up the object.
+            if (p.selectedLeft()) {
+              
+              pickupItem(p);
+              
+              tempPickupSound.play();
+            }
           }
+          
         }
           
         // Plonk the object down.
         // We also do not want clicks from clicking the menu to unintendedly plonk down objects.
-        if (!inventory.isEmpty() && !menuShown) {
-          if (engine.leftClick) {
-            inventory.pop();
-            if (!inventory.isEmpty()) 
-              inventory.top().visible = true;
-            repositionMode = false;
+        if (inventorySelectedItem != null && !menuShown) {
+          if ((parentTool(currentTool) == TOOL_GRABBER) && secondaryAction) {
+            inventorySelectedItem.remove();
+            
+            // If not null here, inventory's not empty and we can plonk down next item.
+            if (inventorySelectedItem != null)  {
+              inventorySelectedItem.carrying.visible = true;
+              // switch back to normal for the next item
+              currentTool = TOOL_GRABBER_NORMAL;
+            }
+              
+            // Otherwise once the inventory's empty just switch back to normal mode.
+            //else currentTool = TOOL_NORMAL;
+            
           }
         }
         

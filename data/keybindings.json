@@ -1,19 +1,23 @@
 {
   "scaleUp": "=",
   "lookLeft": "q",
-  "primaryAction": "\u0001",
+  "primaryAction": "o",
   "scaleUpSlow": "+",
   "scaleDown": "-",
-  "menu": "\n",
+  "menu": "\t",
   "moveForewards": "w",
   "scaleDownSlow": "_",
   "menuSelect": "\t",
   "moveRight": "d",
+  "secondaryAction": "p",
   "moveBackwards": "s",
   "moveLeft": "a",
   "CONFIG_VERSION": "\u0001",
   "dash": "r",
   "sneak": "\u000f",
   "lookRight": "e",
-  "jump": " "
+  "jump": " ",
+  "inventorySelectLeft": ",",
+  "inventorySelectRight": ".",
+  "showCommandPrompt": "/"
 }

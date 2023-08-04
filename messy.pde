@@ -1003,7 +1003,7 @@ public final class SpriteSystemPlaceholder {
             s.setImg(image);
             try { spritesStack.push(s); }
             catch (StackException e) { 
-              this.engine.console.warnOnce("Sprite stack is full, did you forget to call updateSpriteSystem()?"); 
+              this.engine.console.bugWarnOnce("Sprite stack is full, did you forget to call updateSpriteSystem()?"); 
             }
             renderSprite(s);
         }
@@ -1105,10 +1105,9 @@ public final class SpriteSystemPlaceholder {
         
         //idk man. I'm not in the mood to name things today lol.
         public void keyboardInteractionEnabler() {
-          char ctrl = CONTROL;
           //println(ctrl);
           // Yeah whatever.
-          if (engine.keyPressed && engine.lastKeyPressed == 28) {
+          if (engine.keyPressed && engine.lastKeyPressed == char('~')) {
             if (!this.interactable) {
               this.interactable = true;
               engine.console.log("Sprite system interactability enabled.");

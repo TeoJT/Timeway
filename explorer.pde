@@ -205,14 +205,14 @@ public class Explorer extends Screen {
             console.log("Please enter a valid folder name!");
             return;
           }
-          String foldername = engine.currentDir+engine.keyboardMessage.substring(0, engine.keyboardMessage.length()-1);
+          String foldername = engine.currentDir+engine.keyboardMessage;
           println(foldername);
           new File(foldername).mkdirs();
           refreshDir();
         }
       };
       
-      engine.beginTextPrompt("Folder name:", r);
+      engine.beginInputPrompt("Folder name:", r);
     }
     
     //***********CLOSE BUTTON***********
@@ -274,7 +274,7 @@ public class Explorer extends Screen {
         renderDir();
       }
       
-      engine.displayTextPrompt();
+      engine.displayInputPrompt();
   }
   
 }

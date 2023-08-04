@@ -100,6 +100,7 @@ class Engine {
     public boolean doNotExceed = false;
     public boolean sleepyMode = false;
     public boolean dynamicFramerate = true;
+    public boolean powerSaver = false;
     public int lastPowerCheck = 0;
     //public Kernel32.SYSTEM_POWER_STATUS powerStatus;
     
@@ -328,18 +329,18 @@ class Engine {
     
     public Runnable doWhenPromptSubmitted = null;
     public String promptText;
-    public boolean textPromptShown = false;
+    public boolean inputPromptShown = false;
     
-    public void beginTextPrompt(String prompt, Runnable doWhenSubmitted) {
+    public void beginInputPrompt(String prompt, Runnable doWhenSubmitted) {
       keyboardMessage = "";
-      textPromptShown = true;
+      inputPromptShown = true;
       promptText = prompt;
       doWhenPromptSubmitted = doWhenSubmitted;
     }
     
     // TODO: obviously improve...
-    public void displayTextPrompt() {
-      if (textPromptShown) {
+    public void displayInputPrompt() {
+      if (inputPromptShown) {
         // this is such a placeholder lol
         app.noStroke();
         
@@ -351,11 +352,96 @@ class Engine {
         app.text(keyboardMessage, WIDTH/2, HEIGHT/2);
         
         if (enterPressed) {
-          // Get rid of the enter character?
+          // Remove enter character at end
+          keyboardMessage = keyboardMessage.substring(0, keyboardMessage.length()-1);
           doWhenPromptSubmitted.run();
           enterPressed = false;
-          textPromptShown = false;
+          inputPromptShown = false;
         }
+      }
+    }
+    
+    public boolean commandPromptShown = false;
+    public void showCommandPrompt() {
+      commandPromptShown = true;
+      
+      // Execute our command when the command is submitted.
+      Runnable r = new Runnable() {
+        public void run() {
+          commandPromptShown = false;
+          runCommand(keyboardMessage);
+        }
+      };
+      
+      beginInputPrompt("Enter command", r);
+      keyboardMessage = "/";
+    }
+    
+    private boolean commandEquals(String input, String expected) {
+      int ind = input.indexOf(' ');
+      if (ind <= -1) {
+        ind = input.length();
+      }
+      else {
+        if (ind >= input.length())  return false;
+      }
+      return (input.substring(0, ind).equals(expected));
+    }
+    
+    
+    public void runCommand(String command) {
+      // TODO: have a better system for commands.
+      if (command.equals("/powersaver")) {
+        powerSaver = !powerSaver;
+        forcePowerModeEnabled = false;
+        if (powerSaver) console.log("Power saver enabled.");
+        else {
+          setPowerMode(PowerMode.NORMAL);
+          forceFPSRecoveryMode();
+          console.log("Power saver disabled.");
+        }
+      }
+      else if (commandEquals(command, "/forcepowermode")) {
+        // Count the number of characters, add one.
+        // That's how you deal with substirng.
+        String arg = "";
+        if (command.length() > 16)
+          arg = command.substring(16);
+        console.log(arg);
+        
+        forcePowerModeEnabled = true;   // Temp set to true, if not enabled, it will reset to false.
+        if (arg.equals("HIGH")) {
+          forcedPowerMode = PowerMode.HIGH;
+          console.log("powermode forced to HIGH.");
+        }
+        else if (arg.equals("NORMAL")){
+          forcedPowerMode = PowerMode.NORMAL;
+          console.log("powermode forced to NORMAL.");
+        }
+        else if (arg.equals("SLEEPY")) {
+          forcedPowerMode = PowerMode.SLEEPY;
+          console.log("powermode forced to SLEEPY.");
+        }
+        else if (arg.equals("MINIMAL")) {
+          console.log("forcePowerMode set to MINIMAL, I wouldn't do that if I were you!");
+          forcedPowerMode = PowerMode.MINIMAL;
+        }
+        else {
+          console.log("Invalid argument, options are: HIGH (60fps), NORMAL (30fps), SLEEPY (15fps).");
+        }
+      }
+      else if (commandEquals(command, "/disableforcepowermode")) {
+        console.log("Disabled forced powermode.");
+        forcePowerModeEnabled = false;
+      }
+      else if (command.length() <= 1) {
+        // If empty, do nothing and close the prompt.
+      }
+      else if (currScreen.customCommands(command)) {
+        // Do nothing, we just don't want it to return "unknown command" for a custom command.
+      }
+      else {
+        console.log("Unknown command.");
       }
     }
     
@@ -460,6 +546,7 @@ class Engine {
       }
     }
     
+    // You shouldn't call this every frame
     public void setAwake() {
       sleepyMode = false;
       if (fpsTrackingMode == SLEEPY) {
@@ -474,26 +561,29 @@ class Engine {
       //if (powerModeSetTimeout == 1)
       //  console.warnOnce("You shouldn't call setPowerMode on every frame, otherwise Timeway will seriously stutter.");
       //powerModeSetTimeout = 2;
-      powerMode = m;
-      switch (m) {
-        case HIGH:
-        frameRate(60);
-        //console.log("Power mode HIGH");
-        break;
-        case NORMAL:
-        frameRate(30);
-        //console.log("Power mode NORMAL");
-        break;
-        case SLEEPY:
-        frameRate(15);
-        //console.log("Power mode SLEEPY");
-        break;
-        case MINIMAL:
-        frameRate(1); //idk for now
-        //console.log("Power mode MINIMAL");
-        break;
+      // Only update if it's not already set to prevent a whole load of bugs
+      if (powerMode != m) {
+        powerMode = m;
+        switch (m) {
+          case HIGH:
+          frameRate(60);
+          //console.log("Power mode HIGH");
+          break;
+          case NORMAL:
+          frameRate(30);
+          //console.log("Power mode NORMAL");
+          break;
+          case SLEEPY:
+          frameRate(15);
+          //console.log("Power mode SLEEPY");
+          break;
+          case MINIMAL:
+          frameRate(1); //idk for now
+          //console.log("Power mode MINIMAL");
+          break;
+        }
+        redraw();
       }
-      redraw();
     }
     
     final int MONITOR = 1;
@@ -601,26 +691,33 @@ class Engine {
       }
       
       if (millis() > lastPowerCheck) {
-        lastPowerCheck = millis()+POWER_CHECK_INTERVAL;
+          lastPowerCheck = millis()+POWER_CHECK_INTERVAL;
         
         // If we specifically requested slow, then go right ahead.
-        if (!isCharging() && !noBattery && sleepyMode) {
+        if (powerSaver || sleepyMode) {
           prevPowerMode = powerMode;
           fpsTrackingMode = SLEEPY;
           setPowerMode(PowerMode.SLEEPY);
-          return;
         }
+        //if (!isCharging() && !noBattery && sleepyMode) {
+        //  prevPowerMode = powerMode;
+        //  fpsTrackingMode = SLEEPY;
+        //  setPowerMode(PowerMode.SLEEPY);
+        //  return;
+        //}
         
         // TODO: run in seperate thread to prevent stutters. For the time being I'm only gonna
         // run it once.
         updateBatteryStatus();
-      }
-      
+      }  
+    
     // If forced power mode is enabled, don't bother with the powermode selection algorithm below.
     if (forcePowerModeEnabled) {
       if (powerMode != forcedPowerMode) setPowerMode(forcedPowerMode);
       return;
     }
+    
+    if (powerSaver || sleepyMode) return;
       
     // How the fps algorithm works:
     /*
@@ -822,7 +919,7 @@ class Engine {
           }
         }
         else if (fpsTrackingMode == SLEEPY) {
-          //console.log("Wait we shouldn't be here");
+          
         }
         else if (fpsTrackingMode == GRACE) {
           graceTimer++;
@@ -943,7 +1040,8 @@ class Engine {
         return s;
     }
 
-    public final char LEFT_CLICK = char(1);
+    public final int LEFT_CLICK = 1;
+    public final int RIGHT_CLICK = 2;
     public void loadDefaultSettings() {
         defaultSettings = new HashMap<String, Object>();
         defaultSettings.putIfAbsent("forceDevMode", false);
@@ -974,8 +1072,12 @@ class Engine {
         defaultKeybindings.putIfAbsent("scaleDown", '-');
         defaultKeybindings.putIfAbsent("scaleUpSlow", '+');
         defaultKeybindings.putIfAbsent("scaleDownSlow", '_');
-        defaultKeybindings.putIfAbsent("primaryAction", LEFT_CLICK);
+        defaultKeybindings.putIfAbsent("primaryAction", char(LEFT_CLICK));
+        defaultKeybindings.putIfAbsent("secondaryAction", char(RIGHT_CLICK));
+        defaultKeybindings.putIfAbsent("inventorySelectLeft", ',');
+        defaultKeybindings.putIfAbsent("inventorySelectRight", '.');
         defaultKeybindings.putIfAbsent("scaleDownSlow", '_');
+        defaultKeybindings.putIfAbsent("showCommandPrompt", '/');
     }
     //*************************************************************
     //*************************************************************
@@ -2702,6 +2804,9 @@ class Engine {
 
 
         //*************KEYBOARD*************
+        if (keyActionPressed && !keyAction(keyActionPressedName))
+          keyActionPressed = false;
+        
         if (keyHoldCounter >= 1) {
             switch (powerMode) {
               case HIGH:
@@ -2874,10 +2979,12 @@ class Engine {
     }
     
     public boolean keyDown(char k) {
-      // TODO: use a hashmap instead of an array.
-      for (int i = 0; i < PRESSED_KEY_ARRAY_LENGTH; i++) {
-        if (currentKeyArray[i] == k) {
-          return true;
+      if (!inputPromptShown) {
+        // TODO: use a hashmap instead of an array.
+        for (int i = 0; i < PRESSED_KEY_ARRAY_LENGTH; i++) {
+          if (currentKeyArray[i] == k) {
+            return true;
+          }
         }
       }
       return false;
@@ -2885,7 +2992,32 @@ class Engine {
     
     public boolean keyAction(String keybindName) {
       char k = keybindings.getString(keybindName).charAt(0);
-      return anyKeyDown(k);
+      // Special keys/buttons
+      switch (int(k)) {
+        case LEFT_CLICK:
+        return this.leftClick;
+        case RIGHT_CLICK:
+        return this.rightClick;
+        
+        // Otherwise just tell us if the key is down or not
+        default:
+          return anyKeyDown(k);
+      }
+    }
+    
+    private boolean keyActionPressed = false;
+    private String keyActionPressedName = "";
+    
+    public boolean keyActionOnce(String keybindName) {
+      if (!keyActionPressed) {
+        if (keyAction(keybindName)) {
+          keyActionPressedName = keybindName;
+          keyActionPressed = true;
+          return true;
+        }
+      }
+        
+      return false;
     }
     
     public boolean keybindPressed(String keybindName) {
@@ -2893,11 +3025,13 @@ class Engine {
     }
     
     public boolean anyKeyDown(char k) {
-      k = Character.toLowerCase(k);
-      // TODO: use a hashmap instead of an array.
-      for (int i = 0; i < PRESSED_KEY_ARRAY_LENGTH; i++) {
-        if (Character.toLowerCase(currentKeyArray[i]) == k) {
-          return true;
+      if (!inputPromptShown) {
+        k = Character.toLowerCase(k);
+        // TODO: use a hashmap instead of an array.
+        for (int i = 0; i < PRESSED_KEY_ARRAY_LENGTH; i++) {
+          if (Character.toLowerCase(currentKeyArray[i]) == k) {
+            return true;
+          }
         }
       }
       return false;
@@ -3570,6 +3704,17 @@ class Engine {
         // Show the current GUI.
         displayScreens();
         
+        // Allow command prompt to be shown.
+        if (keyActionOnce("showCommandPrompt"))
+          showCommandPrompt();
+          
+        // Display the command prompt if shown.
+        app.pushMatrix();
+        app.scale(displayScale);
+        if (commandPromptShown)
+          displayInputPrompt();
+        app.popMatrix();
+        
         // Update times so we can calculate live fps.
         lastFrameMillis = thisFrameMillis;
         thisFrameMillis = app.millis();
@@ -3924,6 +4069,14 @@ public abstract class Screen {
         engine.setAwake();
         engine.clearKeyBuffer();
       }
+    }
+    
+    
+    // A method where you can add your own custom commands.
+    // Must return true if a command is found and false if a command
+    // is not found.
+    protected boolean customCommands(String command) {
+      return false;
     }
     
 
