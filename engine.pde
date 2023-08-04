@@ -165,7 +165,7 @@ class Engine {
     // Other / doesn't fit into any categories.
     public boolean wireframe;
     public SpriteSystemPlaceholder spriteSystemPlaceholder;
-    public int lastTimestamp;
+    public long lastTimestamp;
     public String lastTimestampName = null;
     public int timestampCount = 0;
     
@@ -407,7 +407,6 @@ class Engine {
         String arg = "";
         if (command.length() > 16)
           arg = command.substring(16);
-        console.log(arg);
         
         forcePowerModeEnabled = true;   // Temp set to true, if not enabled, it will reset to false.
         if (arg.equals("HIGH")) {
@@ -434,6 +433,17 @@ class Engine {
         console.log("Disabled forced powermode.");
         forcePowerModeEnabled = false;
       }
+      else if (commandEquals(command, "/benchmark")) {
+        int runFor = 180;
+        String arg = "";
+        if (command.length() > 11) {
+          arg = command.substring(11);
+          console.log(arg);
+          runFor = int(arg);
+        }
+        
+        beginBenchmark(runFor);
+      }
       else if (command.length() <= 1) {
         // If empty, do nothing and close the prompt.
       }
@@ -455,6 +465,41 @@ class Engine {
         return createFont("Monospace", 128);
       }
       else return f;
+    }
+    
+    
+    public final int MAX_TIMESTAMPS = 1024;
+    public boolean benchmark = false;
+    public int timestampIndex = 0;
+    public boolean finalBenchmarkFrame = false;
+    public long[] benchmarkArray = new long[MAX_TIMESTAMPS];
+    public long benchmarkFrames = 0;
+    public ArrayList<String> benchmarkResults = new ArrayList<String>();
+    public long benchmarkRunFor;
+    
+    public void beginBenchmark(int runFor) {
+      benchmarkResults = new ArrayList<String>();
+      benchmarkFrames = 0;
+      benchmarkArray = new long[MAX_TIMESTAMPS];
+      finalBenchmarkFrame = false;
+      benchmark = true;
+      this.benchmarkRunFor = (long)runFor;
+      console.log("Benchmark started");
+    }
+    
+    public void runBenchmark() {
+      if (benchmark) {
+        timestampIndex = 0;
+        benchmarkFrames++;
+        if (benchmarkFrames >= benchmarkRunFor) {
+          if (!finalBenchmarkFrame) finalBenchmarkFrame = true;  // Order the timestamps to finalise the results
+          else {
+            console.log("Benchmark ended");
+            benchmark = false;
+            currScreen.requestScreen(new Benchmark(this));
+          }
+        }
+      }
     }
     
     // Debugging function
@@ -485,20 +530,37 @@ class Engine {
       return (timeframe/float(thisFrameMillis-lastFrameMillis))*fps;
     }
     
+    
     // This is a debug function used for measuring performance at certain points.
     public void timestamp(String name) {
-      if (lastTimestampName == null) {
-        String out = name+" timestamp captured.";
-        if (console != null) console.log(out);
-        else println(out);
+      if (!benchmark) {
+        long nanoCapture = System.nanoTime();
+        if (lastTimestampName == null) {
+          String out = name+" timestamp captured.";
+          if (console != null) console.info(out);
+          else println(out);
+        }
+        else {
+          String out = lastTimestampName+" - "+name+": "+str((nanoCapture-lastTimestamp)/1000)+"microseconds";
+          if (console != null) console.info(out);
+          else println(out);
+        }
+        lastTimestampName = name;
+        lastTimestamp = nanoCapture;
       }
       else {
-        String out = lastTimestampName+" - "+name+": "+str(millis()-lastTimestamp)+"ms";
-        if (console != null) console.log(out);
-        else println(out);
+        long nanoCapture = System.nanoTime();
+        benchmarkArray[timestampIndex++] += (nanoCapture-lastTimestamp)/1000;
+        lastTimestamp = nanoCapture;
+        
+        if (finalBenchmarkFrame) {
+          // Calculate the average for that timestamp.
+          long results = benchmarkArray[timestampIndex-1] /= benchmarkFrames;
+          String mssg = lastTimestampName+" - "+name+": "+str(results)+"microseconds";
+          benchmarkResults.add(mssg);
+          lastTimestampName = name;
+        }
       }
-      lastTimestampName = name;
-      lastTimestamp = millis();
     }
     
     public class NoBattery extends RuntimeException {
@@ -3273,6 +3335,7 @@ class Engine {
             streamMusic(reloadMusicPath);
             reloadMusic = false;
           }
+          
         
           // Fade the music.
           if (musicFadeOut < 1.) {
@@ -3281,6 +3344,7 @@ class Engine {
               float vol = musicFadeOut *= pow(MUSIC_FADE_SPEED,n);
               streamMusic.playbin.setVolume(vol);
               streamMusic.playbin.getState();   
+              
               
               // Fade the new music in.
               if (streamMusicFadeTo != null) {
@@ -3297,12 +3361,15 @@ class Engine {
             }
           }
           
+        
+          
           if (streamMusic != null) {
             if (streamMusic.available() == true) {
               streamMusic.read(); 
             }
-            
             float error = 0.1;
+            
+            // PERFORMANCE ISSUE: streamMusic.time()
             if (streamMusic.time() >= streamMusic.duration()-error) {
               streamMusic.jump(0.);
             }
@@ -3674,6 +3741,9 @@ class Engine {
     // The core engine function which essentially runs EVERYTHING in Timeway.
     // All the screens, all the input management, and everything else.
     public void engine() {
+        // Run benchmark if it's active.
+        runBenchmark();
+      
         updatePowerMode();
         
         processSound();

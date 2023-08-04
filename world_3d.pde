@@ -1654,13 +1654,13 @@ public class PixelRealm extends Screen {
         //if (time > 1440) {
         //  time = 0;
         //}
-        float timeWave = (-cos(radians((timeRef*0.25)+0))+1)/2;
+        //float timeWave = (-cos(radians((timeRef*0.25)+0))+1)/2;
         
-        float sunset = 0;
+        //float sunset = 0;
         
-        if ((timeRef > 1080) && (timeRef < 1380)) {
-          sunset = (1-cos(radians((timeRef-1080)*1.2)))*70;
-        }
+        //if ((timeRef > 1080) && (timeRef < 1380)) {
+        //  sunset = (1-cos(radians((timeRef-1080)*1.2)))*70;
+        //}
         
         
         // TODO: Reenable night sky stars.
@@ -1672,8 +1672,10 @@ public class PixelRealm extends Screen {
         //}
         
         //This function assumes you have not called portal.beginDraw().
+        engine.timestamp("Render portal");
         renderPortal();
         
+        engine.timestamp("atomicboolean get");
         
         // If the file check thread has noticed a change, use the main thread to reload the files.
         // We use the main thread and not the refreshThread because we don't want to load assets
@@ -1685,6 +1687,8 @@ public class PixelRealm extends Screen {
           engine.putFPSSystemIntoGraceMode();
           refreshRealm();
         }
+        
+        engine.timestamp("begindraw");
         
         
         int n = 1;
@@ -1719,11 +1723,14 @@ public class PixelRealm extends Screen {
         // in the background which rotates as you look around.
         scene.background(0);
         
+        
         scene.noTint();
         scene.noStroke();
+        engine.timestamp("keyactiononce");
         
         primaryAction = engine.keyActionOnce("primaryAction");
         secondaryAction = engine.keyActionOnce("secondaryAction");
+        engine.timestamp("moving");
         
         isWalking = false;
         float speed = WALK_SPEED;
@@ -1833,6 +1840,9 @@ public class PixelRealm extends Screen {
             if (jumpTimeout > 0) jumpTimeout--;
             
             
+            engine.timestamp("getYposOnQuad");
+            
+            
             float cchunkx = float(chunkx);
             float cchunkz = float(chunkz);
             PVector pv1 = calcTile(cchunkx-1., cchunkz-1.);          // Left, top
@@ -1858,6 +1868,7 @@ public class PixelRealm extends Screen {
               yvel = 0.;
             }
             onGround = true;
+            engine.timestamp("render sky");
           }
         
         
@@ -1893,8 +1904,12 @@ public class PixelRealm extends Screen {
         
         //scene.image(img_sky_1,0,0,scene.width,scene.height);
         
+        engine.timestamp("camera");
+        
         // Push the camera positioning.
         scene.pushMatrix();
+        
+        
         
         //scene.translate(-xpos+(scene.width / 2), ypos+(sin(bob)*3)+(scene.height / 2)+80, -zpos+(scene.width / 2));
         {
@@ -1908,6 +1923,8 @@ public class PixelRealm extends Screen {
         }
         if (lights) scene.pointLight(255, 245, 245, xpos, ypos-PLAYER_HEIGHT, zpos);
         
+        
+        engine.timestamp("render terrain");
         
         //Coin animation.
         
@@ -2018,21 +2035,28 @@ public class PixelRealm extends Screen {
         
         scene.popMatrix();
         
+        engine.timestamp("objectsinteractions");
+        
         objectsInteractions();
         
-        render3DObjects(); //<>// //<>// //<>// //<>//
+        engine.timestamp("render3DObjects");
+        
+        render3DObjects();  //<>//
         scene.hint(DISABLE_DEPTH_TEST);
         
+        engine.timestamp("portal light");
         
         // Pop the camera positioning.
         scene.popMatrix();
         
-        scene.blendMode(ADD);
-        scene.fill(portalLight);
-        tempPortalSound.amp(max(portalLight/255.,0.));
-        scene.noStroke();
-        scene.rect(0,0,scene.width,scene.height);
-        scene.blendMode(NORMAL);
+        if (portalLight > 0.1) {
+          scene.blendMode(ADD);
+          scene.fill(portalLight);
+          tempPortalSound.amp(max(portalLight/255.,0.));
+          scene.noStroke();
+          scene.rect(0,0,scene.width,scene.height);
+          scene.blendMode(NORMAL);
+        }
         
         
         // Fade out the portal light
@@ -2053,8 +2077,11 @@ public class PixelRealm extends Screen {
           break;
         }
         
+        engine.timestamp("end draw");
+        
         scene.endDraw();
         
+        engine.timestamp("display final scene");
         
         
         image(scene, 0, myUpperBarWeight, engine.WIDTH, this.height);
@@ -2064,27 +2091,35 @@ public class PixelRealm extends Screen {
         textAlign(LEFT, TOP);
         //text((str(frameRate) + "\nX:" + str(xpos) + " Y:" + str(ypos) + " Z:" + str(zpos)), 50, myUpperBarWeight+35);
         
+        engine.timestamp("gui");
+        
         // We need to run the gui here otherwise it's going to look   t e r r i b l e   in the scene.
         runGUI();
+        
+        engine.timestamp("end");
         
         //image(portal,0,0, 128, 256);
     }
     
     float closestDist = 0;
     private void render3DObjects() {
+      engine.timestamp("Update distances");
       // Update the distances from the player for all nodes
-      Object3D currNode = headNode; //<>// //<>// //<>// //<>//
+      Object3D currNode = headNode; //<>//
       while (currNode != null) {
         currNode.calculateVal();
         currNode = currNode.next;
       }
       
+      engine.timestamp("insertionSort");
       
       // sort thru from furthest to shortest distances.
       operationCount = 0;
       insertionSort();
       //headNode = mergeSort(headNode);
       //console.log("Number operations: "+str(operationCount+1)+", Number objects: "+str(numObjects));
+      
+      engine.timestamp("render each object");
         
       // Iterate thru the list and
       // render each object.
@@ -2093,6 +2128,8 @@ public class PixelRealm extends Screen {
         currNode.display();
         currNode = currNode.next;
       }
+      
+      engine.timestamp("done render3DObjects");
     }
 
     public boolean customCommands(String command) {
@@ -2106,7 +2143,7 @@ public class PixelRealm extends Screen {
 
     public void content() {
       if (engine.sleepyMode) engine.setAwake();
-      Plain3D(); //<>// //<>// //<>//
+      Plain3D(); //<>// //<>// //<>// //<>// //<>//
     }
     
     public void init3DObjects() {
