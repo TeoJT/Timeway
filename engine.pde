@@ -111,6 +111,7 @@ class Engine {
     public HashSet<String> loadedContent;
     public HashMap<String, PFont> fonts;
     public HashMap<String, PShader> shaders;
+    public HashMap<String, SoundFile> sounds;
     public float WIDTH = 0, HEIGHT = 0;
     public int loadingFramesLength = 0;
     public int pastedImageCount = 0;
@@ -192,6 +193,7 @@ class Engine {
         systemImages = new HashMap<String, PImage>();
         fonts = new HashMap<String, PFont>();
         shaders = new HashMap<String, PShader>();
+        sounds = new HashMap<String, SoundFile>();
         
         // First, load the logo and loading symbol.
         loadAsset(APPPATH+IMG_PATH+"logo.png");
@@ -2230,6 +2232,9 @@ class Engine {
         else if (ext.equals("glsl")) {
             shaders.put(name, app.loadShader(path));
         }
+        else if (ext.equals("wav") || ext.equals("ogg") || ext.equals("mp3")) {
+            sounds.put(name, new SoundFile(app, path));
+        }
         else {
             console.warn("Unknown file type "+ext+" for file "+name+", skipping.");
         }
@@ -3204,6 +3209,29 @@ class Engine {
         exit();
       }
     }
+    
+    public SoundFile getSound(String name) {
+      SoundFile sound = sounds.get(name);
+      if (sounds == null) {
+        console.bugWarn("playSound: Sound "+name+" doesn't exist!");
+        return null;
+      }
+      else return sound;
+    
+    }
+    
+    public void playSound(String name) {
+      getSound(name).play();
+    }
+    
+    public void loopSound(String name) {
+      getSound(name).loop();
+    }
+    
+    public void setSoundVolume(String name, float vol) {
+      getSound(name).amp(vol);
+    }
+    
     
     public Movie streamMusic;
     public Movie streamMusicFadeTo;

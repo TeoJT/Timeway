@@ -13,6 +13,11 @@ import java.nio.file.*;
 // - Use shaders for the portal code rather than the gross old code from yestercentury when I didn't know how to code gud.
 // - Only process and sort objects that are in view instead of every single one.
 
+// WIP
+public class PixelRealmContext {
+  float xpos = 0, ypos = 0, zpos = 0;
+}
+
 public class PixelRealm extends Screen {
     final String COMPATIBILITY_VERSION = "1.0";
   
@@ -164,16 +169,16 @@ public class PixelRealm extends Screen {
       FADE_DIST_GROUND = pow(GROUND_SIZE*max(RENDER_DISTANCE-3, 0),2);
     }
     
-    public InventorySlot inventoryHead = null;
-    public InventorySlot inventoryTail = null;
-    public InventorySlot inventorySelectedItem = null;
+    public ItemSlot inventoryHead = null;
+    public ItemSlot inventoryTail = null;
+    public ItemSlot inventorySelectedItem = null;
     
-    class InventorySlot {
-      public InventorySlot next = null;
-      public InventorySlot prev = null;
+    class ItemSlot {
+      public ItemSlot next = null;
+      public ItemSlot prev = null;
       public FileObject carrying = null;
       
-      public InventorySlot(FileObject o) {
+      public ItemSlot(FileObject o) {
         this.carrying = o;
       }
       
@@ -200,10 +205,10 @@ public class PixelRealm extends Screen {
           
       }
       
-      public void addAfterMe(InventorySlot newNode) {
+      public void addAfterMe(ItemSlot newNode) {
         
-        InventorySlot prev = this;
-        InventorySlot next = this.next;
+        ItemSlot prev = this;
+        ItemSlot next = this.next;
         
         newNode.next = next;
         newNode.prev = prev;
@@ -489,6 +494,7 @@ public class PixelRealm extends Screen {
         && (ypos-PLAYER_HEIGHT < (y)) 
         && (ypos > (y-hi)));
       }
+        
       
       public void checkHovering() {
         float d_sin = flatSinDirection*(wi/2);
@@ -1097,13 +1103,6 @@ public class PixelRealm extends Screen {
     }
     
     
-    public void findStartingPos(String dirName, String emergeFrom, DirectoryPortal p) {
-      final float FROM_DIST = 50.;
-      if (emergeFrom.equals(dirName)) {
-        xpos = p.x;
-        zpos = p.z-50.;
-      }
-    }
     
     public void saveTurfJson() {
       JSONArray objects3d = new JSONArray();
@@ -1352,19 +1351,32 @@ public class PixelRealm extends Screen {
     public void refreshRealm(String dir, String emergeFrom) {
       // Refresh the dir without resetting the position.
       
-      headNode = null;
-      tailNode = null;
+      // First, we need to destroy all file objects since these will be reloaded.
+      if (files != null) {
+        for (FileObject f : files) {
+          if (f != null) f.destroy();
+        }
+      }
+      
+      // Load the turf and aka all the files in the folder
       loadTurfJson(dir, emergeFrom);
+      
+      // Portal light to make it look like a transition effect
       portalLight = 255;
       
       img_grass = (PImage)getRealmFile(REALM_GRASS, REALM_GRASS_DEFAULT);
       img_sky_1 = (PImage)getRealmFile(REALM_SKY, REALM_SKY_DEFAULT);
       
-      
+      /// here we search for the terrain objects textures from the dir.
       ArrayList<PImage> terrainobjs = new ArrayList<PImage>();
+      
+      // Try to find the first terrain object texture, it will return default if not found
       PImage terrainobj = (PImage)getRealmFile(REALM_TREE+"1.png", REALM_TREE_DEFAULT);
       terrainobjs.add(terrainobj);
+      
       int i = 1;
+      // Run this loop only if the terrain_objects files exist and only for how many pixelrealm-terrain_objects
+      // there are in the folder.
       while (terrainobj != null && i <= 9) {
         terrainobj = (PImage)getRealmFile(REALM_TREE+str(i+1)+".png", null);
         if (terrainobj != null) {
@@ -1372,6 +1384,8 @@ public class PixelRealm extends Screen {
           }
         i++;
       }
+      
+      // New array and plonk that all in there.
       img_tree = new PImage[terrainobjs.size()];
       for (int j = 0; j < terrainobjs.size(); j++) {
         img_tree[j] = terrainobjs.get(j);
@@ -1388,6 +1402,8 @@ public class PixelRealm extends Screen {
         String[] soundFileFormats = {".wav", ".mp3", ".ogg", ".flac"};
         boolean found = false;
         i = 0;
+        
+        // Search until one of the pixelrealm-bgm with the appropriate file format is found.
         while (i < soundFileFormats.length && !found) {
           String ext = soundFileFormats[i++];
           File f = new File(engine.currentDir+REALM_BGM+ext);
@@ -1396,15 +1412,15 @@ public class PixelRealm extends Screen {
             engine.streamMusicWithFade(engine.currentDir+REALM_BGM+ext);
           }
         }
+        
+        // If none found use default bgm
         if (!found)
           engine.streamMusicWithFade(engine.APPPATH+REALM_BGM_DEFAULT);
         loadedMusic = true;
       }
       
-      // TODO: could cause problems
-      inventoryHead = null;
-      inventoryTail = null;
-      inventorySelectedItem = null;
+      // TODO: keep the inventory, regenerate it
+      dropInventoryInstantly();
       
       
       //if (!loadedMusic) {
@@ -1451,6 +1467,7 @@ public class PixelRealm extends Screen {
       return hash;
     }
     
+    // Literally the only bit of code that (mostly) hasn't been changed since Evolving Gateway.
     public void renderPortal() {
       portal.beginDraw();
       //portal.clear();
@@ -1640,8 +1657,15 @@ public class PixelRealm extends Screen {
       return calculatedY;
     }
     
+    
+    // We need this to prevent any bugs while dropping items in the inventory.
+    public boolean droppingInventory = false;
+    public int dropInventoryTimeIndex = 0;
+    
+    
+    
     boolean onGround = false;
-    private void Plain3D() {
+    private void runPixelRealm() {
       
       // This time code here is unused. It was meant to colour the sky based on the
       // time of day. Maybe one day it will be re-used.
@@ -2138,12 +2162,20 @@ public class PixelRealm extends Screen {
         refreshRealm();
         return true;
       }
+      if (command.equals("/dropall")) {
+        if (inventorySelectedItem != null && inventoryHead != null) {
+          dropInventory();
+          console.log("Dropping all items");
+        }
+        else console.log("No items to drop.");
+        return true;
+      }
       else return false;
     }
 
     public void content() {
       if (engine.sleepyMode) engine.setAwake();
-      Plain3D(); //<>// //<>// //<>// //<>// //<>//
+      runPixelRealm();  //<>//
     }
     
     public void init3DObjects() {
@@ -2166,9 +2198,15 @@ public class PixelRealm extends Screen {
     private void enterNewRealm(String newdir) {
       if (newdir.charAt(newdir.length()-1) != '/')  newdir += "/";
       
+      // If we're dropping items we don't want to take them with us.
+      if (droppingInventory) {
+        inventoryHead = null;
+        inventorySelectedItem = null;
+      }
+      
       // If inventory isn't empty, move the files to the new directory.
       if (inventoryHead != null && inventorySelectedItem != null) {
-        InventorySlot slot = inventoryHead;
+        ItemSlot slot = inventoryHead;
         
         HashSet<String> carry = new HashSet<String>();
         
@@ -2226,7 +2264,7 @@ public class PixelRealm extends Screen {
       // Render the inventory
       float invx = 10;
       float invy = this.height-80;
-      InventorySlot slot = inventoryHead;
+      ItemSlot slot = inventoryHead;
       
       while (slot != null) {
         PImage ico = slot.carrying.img;
@@ -2256,6 +2294,7 @@ public class PixelRealm extends Screen {
             if (engine.button("notool_1", "notool_128", "No tool")) {
               currentTool = TOOL_NORMAL;
               menuShown = false;
+              dropInventory();
               tempMenuSelect.play();
             }
             if (engine.button("grabber_1", "grabber_tool_128", "Grabber")) {
@@ -2269,9 +2308,11 @@ public class PixelRealm extends Screen {
               menuID = MENU_CREATOR;
             }
             if (engine.button("cuber_1", "cuber_tool_128", "Cuber")) {
+              //dropInventory();
               console.log("Not yet functional!");
             }
             if (engine.button("bomber_1", "bomber_128", "Bomber")) {
+              //dropInventory();
               console.log("Not yet functional!");
             }
           break;
@@ -2310,7 +2351,6 @@ public class PixelRealm extends Screen {
                     return;
                   }
                   String foldername = engine.currentDir+engine.keyboardMessage;
-                  println(foldername);
                   new File(foldername).mkdirs();
                   
                   refreshRealm();
@@ -2353,12 +2393,12 @@ public class PixelRealm extends Screen {
       
       // If inventory is empty, then just add the new item
       if (inventorySelectedItem == null) {
-        InventorySlot firstItem = new InventorySlot(p);
+        ItemSlot firstItem = new ItemSlot(p);
         firstItem.addEnd();
       }
       // If items in inventory, just add it to the item next to the one being held
       else {
-        InventorySlot newItem = new InventorySlot(p);
+        ItemSlot newItem = new ItemSlot(p);
         inventorySelectedItem.addAfterMe(newItem);
         inventorySelectedItem = newItem;
       }
@@ -2375,6 +2415,48 @@ public class PixelRealm extends Screen {
         }
       }
       console.bugWarn("pickupItem: not found!");
+    }
+    
+    public float dropInventoryYVel = 0.;
+    public Object3D dropInventoryItem = null;
+    
+    public void dropInventory() {
+      if (inventoryHead != null && inventorySelectedItem != null) {
+          
+        // Place the object down in front of the player with a small random offset.
+        // TODO: neaten up this repeated code.
+        ItemSlot slot = inventoryHead;
+        FileObject o = slot.carrying;
+        while (slot != null) {
+          o = slot.carrying;
+          final float SELECT_FAR = 300.;
+          float x = xpos+sin(direction)*SELECT_FAR + random(-100, 100);
+          float z = zpos+cos(direction)*SELECT_FAR + random(-100, 100);
+          o.x = x;
+          o.z = z;
+          o.y = onSurface(x,z);
+          if (inventorySelectedItem.carrying instanceof ImageFileObject) {
+            ImageFileObject imgobject = (ImageFileObject)inventorySelectedItem.carrying;
+            imgobject.rot = direction+HALF_PI;
+          }
+          slot = slot.next;
+        }
+        dropInventoryItem = o;
+        dropInventoryYVel = 0.;
+        droppingInventory = true;
+      }
+    }
+    
+    public void dropInventoryInstantly() {
+      dropInventory();
+      droppingInventory = false;    // Cancel out
+      ItemSlot slot = inventoryHead;
+      while (slot != null) {
+        slot.carrying.visible = true;
+        slot = slot.next;
+      }
+      inventorySelectedItem = null;
+      inventoryHead = null;
     }
     
     public void objectsInteractions() {
@@ -2396,6 +2478,38 @@ public class PixelRealm extends Screen {
             break;
         }
         
+        if (droppingInventory) {
+          currentTool = TOOL_NORMAL;
+          
+          if (dropInventoryItem != null) {
+            dropInventoryYVel += float(n);
+            dropInventoryItem.y += dropInventoryYVel;
+          }
+          
+          // Once the currently dropping item has hit the ground or
+          // we're dropping the first item.
+          if (dropInventoryItem.y > onSurface(dropInventoryItem.x,dropInventoryItem.z)) {
+            
+            // Position to the ground so it doesn't get stuck too deep in the ground
+            dropInventoryItem.y = onSurface(dropInventoryItem.x,dropInventoryItem.z);
+            if (inventorySelectedItem != null && inventoryHead != null) {
+              Object3D o = inventoryHead.carrying;
+              o.y = onSurface(o.x,o.z)-100;
+              o.visible = true;
+              
+              
+              dropInventoryYVel = 0.;
+              dropInventoryItem = o;
+              // Remove from inventory
+              inventoryHead.remove();
+            }
+            else {
+              droppingInventory = false;
+            }
+          }
+          
+        }
+        
         if (inventorySelectedItem != null) {
           // TODO: OPTIMISATION REQUIRED
           float SELECT_FAR = 300.;
@@ -2409,12 +2523,9 @@ public class PixelRealm extends Screen {
             o.z = z;
             o.y = onSurface(x,z);
             o.visible = true;
-            // TODO: We don't need this...?
-            if (inventorySelectedItem != null) {
-              if (inventorySelectedItem.carrying instanceof ImageFileObject) {
-                ImageFileObject imgobject = (ImageFileObject)inventorySelectedItem.carrying;
-                imgobject.rot = direction+HALF_PI;
-              }
+            if (inventorySelectedItem.carrying instanceof ImageFileObject) {
+              ImageFileObject imgobject = (ImageFileObject)inventorySelectedItem.carrying;
+              imgobject.rot = direction+HALF_PI;
             }
           }
         }
