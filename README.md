@@ -5,7 +5,7 @@ Timeway is a Onenote-like application where you can create notes stored on your 
 It is currently very WIP, so there may be noticable missing features/bugs.
 
 ## Quick start
-Download from the [releases page](https://www.google.com) and run the executable. If running on Linux or MacOS, you'll need to ensure Java 8 is installed.
+Download from the [releases page](https://github.com/TeoJT/timeway/releases/) and run the executable. If running on Linux or MacOS, you'll need to ensure Java 8 is installed.
 When you start the program, it should present you with an introductory page which shows you the basics. To leave this page, click the "entries" arrow at the top-left.
 
 ## How to use
