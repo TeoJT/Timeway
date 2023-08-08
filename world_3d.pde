@@ -1696,10 +1696,10 @@ public class PixelRealm extends Screen {
         //}
         
         //This function assumes you have not called portal.beginDraw().
-        engine.timestamp("Render portal");
+        //engine.timestamp("Render portal");
         renderPortal();
         
-        engine.timestamp("atomicboolean get");
+        //engine.timestamp("atomicboolean get");
         
         // If the file check thread has noticed a change, use the main thread to reload the files.
         // We use the main thread and not the refreshThread because we don't want to load assets
@@ -1712,7 +1712,7 @@ public class PixelRealm extends Screen {
           refreshRealm();
         }
         
-        engine.timestamp("begindraw");
+        //engine.timestamp("begindraw");
         
         
         int n = 1;
@@ -1750,11 +1750,11 @@ public class PixelRealm extends Screen {
         
         scene.noTint();
         scene.noStroke();
-        engine.timestamp("keyactiononce");
+        //engine.timestamp("keyactiononce");
         
         primaryAction = engine.keyActionOnce("primaryAction");
         secondaryAction = engine.keyActionOnce("secondaryAction");
-        engine.timestamp("moving");
+        //engine.timestamp("moving");
         
         isWalking = false;
         float speed = WALK_SPEED;
@@ -1864,7 +1864,7 @@ public class PixelRealm extends Screen {
             if (jumpTimeout > 0) jumpTimeout--;
             
             
-            engine.timestamp("getYposOnQuad");
+            //engine.timestamp("getYposOnQuad");
             
             
             float cchunkx = float(chunkx);
@@ -1892,7 +1892,7 @@ public class PixelRealm extends Screen {
               yvel = 0.;
             }
             onGround = true;
-            engine.timestamp("render sky");
+            //engine.timestamp("render sky");
           }
         
         
@@ -1928,7 +1928,7 @@ public class PixelRealm extends Screen {
         
         //scene.image(img_sky_1,0,0,scene.width,scene.height);
         
-        engine.timestamp("camera");
+        //engine.timestamp("camera");
         
         // Push the camera positioning.
         scene.pushMatrix();
@@ -1948,7 +1948,7 @@ public class PixelRealm extends Screen {
         if (lights) scene.pointLight(255, 245, 245, xpos, ypos-PLAYER_HEIGHT, zpos);
         
         
-        engine.timestamp("render terrain");
+        //engine.timestamp("render terrain");
         
         //Coin animation.
         
@@ -2059,16 +2059,16 @@ public class PixelRealm extends Screen {
         
         scene.popMatrix();
         
-        engine.timestamp("objectsinteractions");
+        //engine.timestamp("objectsinteractions");
         
         objectsInteractions();
         
-        engine.timestamp("render3DObjects");
+        //engine.timestamp("render3DObjects");
         
         render3DObjects();  //<>//
         scene.hint(DISABLE_DEPTH_TEST);
         
-        engine.timestamp("portal light");
+        //engine.timestamp("portal light");
         
         // Pop the camera positioning.
         scene.popMatrix();
@@ -2101,11 +2101,11 @@ public class PixelRealm extends Screen {
           break;
         }
         
-        engine.timestamp("end draw");
+        //engine.timestamp("end draw");
         
         scene.endDraw();
         
-        engine.timestamp("display final scene");
+        //engine.timestamp("display final scene");
         
         
         image(scene, 0, myUpperBarWeight, engine.WIDTH, this.height);
@@ -2115,19 +2115,19 @@ public class PixelRealm extends Screen {
         textAlign(LEFT, TOP);
         //text((str(frameRate) + "\nX:" + str(xpos) + " Y:" + str(ypos) + " Z:" + str(zpos)), 50, myUpperBarWeight+35);
         
-        engine.timestamp("gui");
+        //engine.timestamp("gui");
         
         // We need to run the gui here otherwise it's going to look   t e r r i b l e   in the scene.
         runGUI();
         
-        engine.timestamp("end");
+        //engine.timestamp("end");
         
         //image(portal,0,0, 128, 256);
     }
     
     float closestDist = 0;
     private void render3DObjects() {
-      engine.timestamp("Update distances");
+      //engine.timestamp("Update distances");
       // Update the distances from the player for all nodes
       Object3D currNode = headNode; //<>//
       while (currNode != null) {
@@ -2135,7 +2135,7 @@ public class PixelRealm extends Screen {
         currNode = currNode.next;
       }
       
-      engine.timestamp("insertionSort");
+      //engine.timestamp("insertionSort");
       
       // sort thru from furthest to shortest distances.
       operationCount = 0;
@@ -2143,7 +2143,7 @@ public class PixelRealm extends Screen {
       //headNode = mergeSort(headNode);
       //console.log("Number operations: "+str(operationCount+1)+", Number objects: "+str(numObjects));
       
-      engine.timestamp("render each object");
+      //engine.timestamp("render each object");
         
       // Iterate thru the list and
       // render each object.
@@ -2153,7 +2153,7 @@ public class PixelRealm extends Screen {
         currNode = currNode.next;
       }
       
-      engine.timestamp("done render3DObjects");
+      //engine.timestamp("done render3DObjects");
     }
 
     public boolean customCommands(String command) {
@@ -2325,7 +2325,7 @@ public class PixelRealm extends Screen {
             app.rect(engine.WIDTH/2-promptWi/2, engine.HEIGHT/2-promptHi/2, promptWi, promptHi);
             if (engine.button("newentry", "new_entry_128", "New entry")) {
               // TODO: placeholder
-              String newName = engine.currentDir+"new entry please change name"+"."+engine.ENTRY_EXTENSION;
+              String newName = engine.currentDir+"entry"+str(engine.numTimewayEntries)+"."+engine.ENTRY_EXTENSION;
               
               // TODO: more elegant solution required
               

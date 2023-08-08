@@ -12,7 +12,7 @@ import java.awt.datatransfer.Transferable;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.UnsupportedFlavorException;
 import java.awt.Toolkit;
-import processing.video.*;
+import processing.video.Movie;
 import org.freedesktop.gstreamer.*;
 import java.util.TreeSet;
 
@@ -33,7 +33,7 @@ class Engine {
     // Info and versioning
     public static final String NAME        = "Timeway";
     public static final String AUTHOR      = "Teo Taylor";
-    public static final String VERSION     = "0.0.2";
+    public static final String VERSION     = "0.0.3";
     public static final String VERSION_DESCRIPTION = 
     "- Added world customisation \n"+
     "- Made sky move \n"+
@@ -445,6 +445,12 @@ class Engine {
         }
         
         beginBenchmark(runFor);
+      }
+      else if (commandEquals(command, "/debuginfo")) {
+        // Toggle debug info
+        console.debugInfo = !console.debugInfo;
+        if (console.debugInfo) console.log("Debug info enabled.");
+        else console.log("Debug info disabled.");
       }
       else if (command.length() <= 1) {
         // If empty, do nothing and close the prompt.
@@ -1156,10 +1162,10 @@ class Engine {
         int timeout = 0;
         final static int messageDelay = 60;
         final static int totalLines = 60;
-        final static int displayLines = 5;
+        final static int displayLines = 20;
         private int initialPos = 0;
         private boolean force = false;
-        private boolean debugInfo = false;
+        public boolean debugInfo = false;
         PFont consoleFont;
         public BasicUI basicui;
         private boolean enableBasicUI = false;
@@ -2719,6 +2725,22 @@ class Engine {
       return returnImage;
     }
     
+    public void moveCache(String oldPath, String newPath) {
+      openCacheInfo();
+      // If cache of that file exists...
+      if (!cacheInfoJSON.isNull(oldPath)) {
+        console.info("moveCache: Moved image cache "+newPath);
+        JSONObject properties = cacheInfoJSON.getJSONObject(oldPath);
+        
+        // Tbh we don't care about deleting the original entry
+        // Just create a new entry in the new location.
+        
+        cacheInfoJSON.setJSONObject(newPath, properties);
+      }
+      
+      // Should close automatically by the cache manager so no need to save or anything.
+    }
+    
     public void scaleDown(PImage image, int scale) {
       console.info("scaleDown: "+str(image.width)+","+str(image.height)+",scale"+str(scale));
       if ((image.width > scale || image.height > scale)) {
@@ -2806,7 +2828,11 @@ class Engine {
       try {
         File of = new File(oldPlace);
         File nf = new File(newPlace);
-        if (of.exists()) of.renameTo(nf);
+        if (of.exists()) {
+          of.renameTo(nf);
+          // If the file is cached, move the cached file too to avoid stalling and creating duplicate cache
+          moveCache(oldPlace, newPlace);
+        }
         else if (!of.exists()) console.warn(oldPlace+" doesn't exist");
       }
       catch (RuntimeException e) {
@@ -3155,6 +3181,7 @@ class Engine {
         else {
             currScreen.display();
         }
+        timestamp("end display");
     }
 
     
@@ -3595,7 +3622,7 @@ class Engine {
                 else currentFiles[index].icon = extIcon(currentFiles[index].fileext);
                 
                 // Just a piece of code plonked in for the entries part
-                //if (currentFiles[index].fileext.equals(engine.ENTRY_EXTENSION)) numTimewayEntries++;
+                if (currentFiles[index].fileext.equals(ENTRY_EXTENSION)) numTimewayEntries++;
                 index++;
               }
             }
@@ -3769,6 +3796,7 @@ class Engine {
     // The core engine function which essentially runs EVERYTHING in Timeway.
     // All the screens, all the input management, and everything else.
     public void engine() {
+      
         // Run benchmark if it's active.
         runBenchmark();
       
@@ -3802,10 +3830,12 @@ class Engine {
         // Show the current GUI.
         displayScreens();
         
+        
         // Allow command prompt to be shown.
         if (keyActionOnce("showCommandPrompt"))
           showCommandPrompt();
           
+        
         // Display the command prompt if shown.
         app.pushMatrix();
         app.scale(displayScale);
@@ -3820,6 +3850,8 @@ class Engine {
         devInfo();
 
         // Display console
+        // TODO: this renders the console 4 times which is BAD.
+        // We need to make the animation execute 4 times, not the drawing routines.
         for (int i = 0; i < n; i++) {
           console.display(true);
         }
@@ -4124,7 +4156,7 @@ public abstract class Screen {
     }
 
     protected void lowerBar() {
-        redrawInArea(0, engine.HEIGHT-LOWER_BAR_WEIGHT, engine.WIDTH, myLowerBarWeight, myLowerBarColor);
+        redrawInArea(0, engine.HEIGHT-myLowerBarWeight, engine.WIDTH, myLowerBarWeight, myLowerBarColor);
     }
 
     protected void backg() {

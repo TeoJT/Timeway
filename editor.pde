@@ -1,26 +1,148 @@
 import java.util.Base64;
+import de.humatic.dsj.DSCapture;
+import java.awt.image.BufferedImage;
+import java.util.concurrent.atomic.AtomicInteger;
+
+class CameraException extends RuntimeException {};
+
+class DCapture implements java.beans.PropertyChangeListener {
+ 
+  private DSCapture capture;
+  public int width, height;
+  public AtomicBoolean ready = new AtomicBoolean(false);
+  
+  public AtomicBoolean error = new AtomicBoolean(false);
+  public AtomicInteger errorCode = new AtomicInteger(0);
+  
+  public final int DEVICE_NONE = -1;
+  public final int DEVICE_CAMERA     = 0;
+  public final int DEVICE_MICROPHONE = 1;
+  
+  public ArrayList<DSFilterInfo> cameraDevices;
+  private int selectedCamera = 0;
+ 
+  public DCapture() {
+    ready.set(false);
+    error.set(false);
+  }
+  
+  public void setup() {
+    ready.set(false);
+    error.set(false);
+    DSFilterInfo[][] dsi = DSCapture.queryDevices();
+    cameraDevices = new ArrayList<DSFilterInfo>();
+    
+    for (int y = 0; y < dsi.length; y++) {
+      for (int x = 0; x < dsi[y].length; x++) {
+        println("("+x+", "+y+") "+dsi[y][x].getName(), dsi[y][x].getType());
+        if (dsi[y][x].getType() == DEVICE_CAMERA)
+          cameraDevices.add(dsi[y][x]);
+      }
+    }
+    
+    if (cameraDevices.size() <= 0) {
+      error.set(true);
+      errorCode.set(Editor.ERR_NO_CAMERA_DEVICES);
+      return;
+    }
+      
+    selectedCamera = 0;
+    activateCamera();
+    
+    ready.set(true);
+  }
+  
+  public void turnOffCamera() {
+    if (capture != null) capture.dispose();
+  }
+  
+  // Activate currently selected camera, switching to next camera if it doesn't work
+  private void activateCamera() {
+    boolean success = false;
+    int originalSelection = selectedCamera;
+    
+    while (!success) {
+      try {
+        // Activate the next camera in the list.
+        // Some cameras may not work. Skip them if they don't work. If none of them work, throw an error.
+        capture = new DSCapture(DSFiltergraph.DD7, cameraDevices.get(selectedCamera), false, DSFilterInfo.doNotRender(), this);
+        success = true;
+      }
+      catch (DSJException e) {
+        success = false; // Keep trying
+        // Increase index by 1, reset to 0 if we're at end of list.
+        selectedCamera = ((selectedCamera+1)%(cameraDevices.size()));
+        
+        // If we're back where we started, then there's been a problem :(
+        if (originalSelection == selectedCamera) {
+          error.set(true);
+          errorCode.set(Editor.ERR_FAILED_TO_SWITCH);
+          return;
+        }
+      }
+    }
+    
+    width = capture.getDisplaySize().width;
+    height = capture.getDisplaySize().height;
+  }
+  
+  public void switchNextCamera() {
+    ready.set(false);
+    if (cameraDevices == null) return;
+    if (cameraDevices.size() == 0) return;
+    
+    // Turn off last used camera.
+    turnOffCamera();
+    
+    // Increase index by 1, reset to 0 if we're at end of list.
+    selectedCamera = ((selectedCamera+1)%(cameraDevices.size()));
+    activateCamera();
+    
+    ready.set(true);
+  }
+ 
+  public PImage updateImage() {
+    PImage img = createImage(width, height, RGB);
+    BufferedImage bimg = capture.getImage();
+    bimg.getRGB(0, 0, img.width, img.height, img.pixels, 0, img.width);
+    img.updatePixels();
+    return img;
+  }
+ 
+  public void propertyChange(java.beans.PropertyChangeEvent e) {
+    switch (DSJUtils.getEventType(e)) {
+    }
+  }
+}
 
 public class Editor extends Screen {
-    float upperbarExpand = 0;
-    SpriteSystemPlaceholder gui;
-    SpriteSystemPlaceholder placeables;
-    HashSet<Placeable> placeableset;
-    ArrayList<String> imagesInEntry;  // This is so that we can know what to remove when we exit this screen.
-    TextPlaceable textPlaceable;
-    Placeable editingPlaceable = null;
-    String entryName;
-    String entryPath;
-    String entryDir;
-    MiniMenu currMinimenu = null;
-    float guiFade;
-    color selectedColor = color(255, 255, 255);
-    float selectedFontSize = 20;
-    float xview = 0;
-    float yview = 0;
-    TextPlaceable entryNameText;
-    boolean cameraMode = false;
-    boolean autoScaleDown = false;
-    boolean usingERS = false;           // Not ever changed during runtime, but useful to disable during debugging.
+    public float upperbarExpand = 0;
+    public SpriteSystemPlaceholder gui;
+    public SpriteSystemPlaceholder placeables;
+    public HashSet<Placeable> placeableset;
+    public ArrayList<String> imagesInEntry;  // This is so that we can know what to remove when we exit this screen.
+    public TextPlaceable textPlaceable;
+    public Placeable editingPlaceable = null;
+    public DCapture camera;
+    public PGraphics cameraDisplay;
+    public String entryName;
+    public String entryPath;
+    public String entryDir;
+    public MiniMenu currMinimenu = null;
+    public float guiFade;
+    public color selectedColor = color(255, 255, 255);
+    public float selectedFontSize = 20;
+    public float xview = 0;
+    public float yview = 0;
+    public TextPlaceable entryNameText;
+    public boolean cameraMode = false;
+    public boolean autoScaleDown = false;
+    public boolean usingERS = false;           // Not ever changed during runtime, but useful to disable during debugging.
+    public int upperBarDrop = INITIALISE_DROP_ANIMATION;
+    
+    public static final int INITIALISE_DROP_ANIMATION = 0;
+    public static final int CAMERA_ON_ANIMATION = 1;
+    public static final int CAMERA_OFF_ANIMATION = 2;
     
     final String RENAMEABLE_NAME         = "title";                // The name of the sprite object which is used to rename entries
     final float  EXPAND_HITBOX           = 10;                     // For the (unused) ERS system to slightly increase the erase area to prevent glitches
@@ -31,6 +153,13 @@ public class Editor extends Screen {
     final float  MIN_FONT_SIZE           = 8.;
     final float  UPPER_BAR_DROP_WEIGHT   = 150;                    
     final int    SCALE_DOWN_SIZE         = 512;
+    
+    final color BACKGROUND_COLOR = 0xFF0f0f0e;
+    
+    // Camera errors
+    public final static int ERR_UNKNOWN = 0;
+    public final static int ERR_NO_CAMERA_DEVICES = 1;
+    public final static int ERR_FAILED_TO_SWITCH = 2;
 
 
     public class MiniMenu {
@@ -414,6 +543,13 @@ public class Editor extends Screen {
         imagesInEntry = new ArrayList<String>();
         placeableset = new HashSet<Placeable>();
         this.entryPath = entryPath;
+        camera = new DCapture();
+        
+        // Because of the really annoying delay thing, we wanna create a canvas that uses the cpu to draw the frame instead
+        // of the P2D renderer struggling to draw things. In the future, we can implement this into the engine so that it can
+        // be used in other places and not just for the camera.
+        int SIZE_DIVIDER = 2;
+        cameraDisplay = createGraphics(int(engine.WIDTH)/SIZE_DIVIDER, int(engine.HEIGHT)/SIZE_DIVIDER);
 
         // Get the path without the file name
         int lindex = entryPath.lastIndexOf('/');
@@ -436,7 +572,7 @@ public class Editor extends Screen {
 
         myLowerBarColor   = 0xFF4c4945;
         myUpperBarColor   = myLowerBarColor;
-        myBackgroundColor = 0xFF0f0f0e;
+        myBackgroundColor = BACKGROUND_COLOR;
         //myBackgroundColor = color(255,0,0);
         
         if (usingERS) {
@@ -690,6 +826,16 @@ public class Editor extends Screen {
       });
       t.start();
     }
+    
+    protected boolean customCommands(String command) {
+      if (command.equals("/editgui")) {
+        gui.interactable = !gui.interactable;
+        if (gui.interactable) console.log("GUI now interactable.");
+        else  console.log("GUI is no longer interactable.");
+        return true;
+      }
+      else return false;
+    }
 
 
     //*****************************************************************
@@ -701,91 +847,115 @@ public class Editor extends Screen {
         engine.spriteSystemClickable = (currMinimenu == null);
         engine.guiFade = guiFade;
 
-        // Cool fade in animation
-        app.tint(255, guiFade);
-
-        // The lines nothin to see here
-        gui.guiElement("line_1");
-        gui.guiElement("line_2");
-        gui.guiElement("line_3");
-
-        app.noTint();
-        app.textFont(engine.DEFAULT_FONT);
-
-        //************BACK BUTTON************
-        if (engine.button("back", "back_arrow_128", "Entries")) {
-             saveEntryJSON();
-             if (engine.prevScreen instanceof Explorer) {
-               Explorer prevExplorerScreen = (Explorer)engine.prevScreen;
-               prevExplorerScreen.refreshDir();
-             }
-             // Remove all the images from this entry before we head back,
-             // we don't wanna cause any memory leaks.
-             previousScreen();
-        }
-
-        //************FONT COLOUR************
-        if (engine.button("font_color", "fonts_128", "Colour")) {
-            SpriteSystemPlaceholder.Sprite s = gui.getSprite("font_color");
-            currMinimenu = new ColorPicker(s.xpos, s.ypos+100, 300, 200);
-        }
-
-        //************BIGGER FONT************
-        if (engine.button("bigger_font", "bigger_text_128", "Bigger")) {
-            if (editingPlaceable != null && editingPlaceable instanceof TextPlaceable) {
-                TextPlaceable editingTextPlaceable = (TextPlaceable)editingPlaceable;
-                selectedFontSize = editingTextPlaceable.fontSize + 2;
-                editingTextPlaceable.fontSize = selectedFontSize;
-            }
-            else {
-                selectedFontSize += 2;
-            }
-        }
-
-        //************SMALLER FONT************
-        if (engine.button("smaller_font", "smaller_text_128", "Smaller")) {
-            if (editingPlaceable != null && editingPlaceable instanceof TextPlaceable) {
-                TextPlaceable editingTextPlaceable = (TextPlaceable)editingPlaceable;
-                selectedFontSize = editingTextPlaceable.fontSize - 2;
-                editingTextPlaceable.fontSize = selectedFontSize;
-            }
-            else {
-                selectedFontSize -= 2;
-            }
-
-            // Minimum font size
-            if (selectedFontSize < MIN_FONT_SIZE) {
-                selectedFontSize = MIN_FONT_SIZE;
-            }
-        }
-
-        //************FONT SIZE************
         
-        // Sprite might not be loaded by the time we want to check for hovering
-        // so suppress warnings so we don't get an ugly warning.
-        // Nothing bad will happen other than that.
-        gui.suppressSpriteWarning = true;
-        SpriteSystemPlaceholder.Sprite s = gui.getSprite("font_size");
-        // Draw text where the sprite is
-        app.textAlign(CENTER, CENTER);
-        app.textSize(20);
-
-        // Added this line cus other elements caused the text size to gray.
-        app.fill(255, guiFade);
-        app.text(selectedFontSize, s.xpos+s.wi/2, s.ypos+s.hi/2);
-
-        // The button code
-        if (engine.button("font_size", "nothing", "Font size")) {
-            if (editingPlaceable != null && editingPlaceable instanceof TextPlaceable) {
-                TextPlaceable editingTextPlaceable = (TextPlaceable)editingPlaceable;
-                // Doesn't really do anything yet really.
-                editingTextPlaceable.fontSize = selectedFontSize;
-            }
+        if (!cameraMode) {
+          // Cool fade in animation
+          app.tint(255, guiFade);
+  
+          // The lines nothin to see here
+          gui.guiElement("line_1");
+          gui.guiElement("line_2");
+          gui.guiElement("line_3");
+  
+          app.noTint();
+          app.textFont(engine.DEFAULT_FONT);
+  
+          //************BACK BUTTON************
+          if (engine.button("back", "back_arrow_128", "Entries")) {
+               saveEntryJSON();
+               if (engine.prevScreen instanceof Explorer) {
+                 Explorer prevExplorerScreen = (Explorer)engine.prevScreen;
+                 prevExplorerScreen.refreshDir();
+               }
+               // Remove all the images from this entry before we head back,
+               // we don't wanna cause any memory leaks.
+               previousScreen();
+          }
+  
+          //************FONT COLOUR************
+          if (engine.button("font_color", "fonts_128", "Colour")) {
+              SpriteSystemPlaceholder.Sprite s = gui.getSprite("font_color");
+              currMinimenu = new ColorPicker(s.xpos, s.ypos+100, 300, 200);
+          }
+  
+          //************BIGGER FONT************
+          if (engine.button("bigger_font", "bigger_text_128", "Bigger")) {
+              if (editingPlaceable != null && editingPlaceable instanceof TextPlaceable) {
+                  TextPlaceable editingTextPlaceable = (TextPlaceable)editingPlaceable;
+                  selectedFontSize = editingTextPlaceable.fontSize + 2;
+                  editingTextPlaceable.fontSize = selectedFontSize;
+              }
+              else {
+                  selectedFontSize += 2;
+              }
+          }
+  
+          //************SMALLER FONT************
+          if (engine.button("smaller_font", "smaller_text_128", "Smaller")) {
+              if (editingPlaceable != null && editingPlaceable instanceof TextPlaceable) {
+                  TextPlaceable editingTextPlaceable = (TextPlaceable)editingPlaceable;
+                  selectedFontSize = editingTextPlaceable.fontSize - 2;
+                  editingTextPlaceable.fontSize = selectedFontSize;
+              }
+              else {
+                  selectedFontSize -= 2;
+              }
+  
+              // Minimum font size
+              if (selectedFontSize < MIN_FONT_SIZE) {
+                  selectedFontSize = MIN_FONT_SIZE;
+              }
+          }
+  
+          //************FONT SIZE************
+          
+          // Sprite might not be loaded by the time we want to check for hovering
+          // so suppress warnings so we don't get an ugly warning.
+          // Nothing bad will happen other than that.
+          gui.suppressSpriteWarning = true;
+          SpriteSystemPlaceholder.Sprite s = gui.getSprite("font_size");
+          // Draw text where the sprite is
+          app.textAlign(CENTER, CENTER);
+          app.textSize(20);
+  
+          // Added this line cus other elements caused the text size to gray.
+          app.fill(255, guiFade);
+          app.text(selectedFontSize, s.xpos+s.wi/2, s.ypos+s.hi/2);
+  
+          // The button code
+          if (engine.button("font_size", "nothing", "Font size")) {
+              if (editingPlaceable != null && editingPlaceable instanceof TextPlaceable) {
+                  TextPlaceable editingTextPlaceable = (TextPlaceable)editingPlaceable;
+                  // Doesn't really do anything yet really.
+                  editingTextPlaceable.fontSize = selectedFontSize;
+              }
+          }
+  
+          // Turn warnings back on.
+          gui.suppressSpriteWarning = false;
+          
+          //************CAMERA************
+          if (engine.button("camera", "camera_128", "Take photo")) {
+            this.beginCamera();
+          }
         }
-
-        // Turn warnings back on.
-        gui.suppressSpriteWarning = false;
-
+        else {
+          
+          if (engine.button("camera_back", "back_arrow_128", "")) {
+            this.endCamera();
+          }
+          
+          if (engine.button("snap", "snap_button_128", "")) {
+            takePhoto = true;
+            cameraFlashEffect = 255.;
+          }
+          
+          if (engine.button("camera_flip", "flip_camera_128", "Switch camera")) {
+            preparingCameraMessage = "Switching camera...";
+            camera.switchNextCamera();
+          }
+          
+        }
 
         // We want to render the gui sprite system above the upper bar
         // so we do it here instead of content()
@@ -795,6 +965,44 @@ public class Editor extends Screen {
         if (currMinimenu != null) {
             currMinimenu.display();
         }
+
+    }
+    
+    public void beginCamera() {
+      upperBarDrop = CAMERA_ON_ANIMATION;        // Set to 
+      upperbarExpand = 1.;
+      cameraMode = true;
+      myBackgroundColor = color(0);
+      
+      // Because rendering cameraDisplay takes time on the first run, we should prompt the user
+      // that the display is getting set up. I hate this so much.
+      app.textFont(engine.DEFAULT_FONT);
+      engine.loadingIcon(engine.WIDTH/2, engine.HEIGHT/2);
+      fill(255);
+      textSize(30);
+      textAlign(CENTER, CENTER);
+      text("Starting camera display...", engine.WIDTH/2, engine.HEIGHT/2+120);
+      cameraDisplay.beginDraw();
+      cameraDisplay.clear();
+      cameraDisplay.endDraw();
+      app.image(cameraDisplay, 0, 0, engine.WIDTH, engine.HEIGHT);
+      
+      // Start up the camera.
+      Thread t = new Thread(new Runnable() {
+          public void run() {
+             camera.setup();
+          }
+      });
+      t.start();
+      preparingCameraMessage = "Starting camera...";
+    }
+    
+    public void endCamera() {
+      upperBarDrop = CAMERA_OFF_ANIMATION;
+      upperbarExpand = 1.;
+      cameraMode = false;
+      camera.turnOffCamera();
+      myBackgroundColor = BACKGROUND_COLOR;       // Restore original background color
     }
 
     // New name without the following path.
@@ -830,7 +1038,12 @@ public class Editor extends Screen {
             }
             guiFade = 255.*(1.-upperbarExpand);
             float newBarWeight = UPPER_BAR_DROP_WEIGHT;
-            myUpperBarWeight = UPPER_BAR_WEIGHT + newBarWeight - (newBarWeight * upperbarExpand);
+            
+            if (upperBarDrop == CAMERA_OFF_ANIMATION || upperBarDrop == INITIALISE_DROP_ANIMATION)
+              myUpperBarWeight = UPPER_BAR_WEIGHT + newBarWeight - (newBarWeight * upperbarExpand);
+            else myUpperBarWeight = UPPER_BAR_WEIGHT + (newBarWeight * upperbarExpand);
+              
+            
             
             if (upperbarExpand <= 0.001) engine.setSleepy();
         }
@@ -844,10 +1057,78 @@ public class Editor extends Screen {
     
     public void lowerBar() {
       
-      //engine.useShader("fabric", "color",float((myLowerBarColor)&0xFF)/255.,float((myLowerBarColor>>8)&0xFF)/255.,float((myLowerBarColor>>16)&0xFF)/255.,1., "intensity",0.1);
-        engine.useShader("fabric", "color",float((myUpperBarColor>>16)&0xFF)/255.,float((myUpperBarColor>>8)&0xFF)/255.,float((myUpperBarColor)&0xFF)/255.,1., "intensity",0.1);
+      engine.useShader("fabric", "color",float((myUpperBarColor>>16)&0xFF)/255.,float((myUpperBarColor>>8)&0xFF)/255.,float((myUpperBarColor)&0xFF)/255.,1., "intensity",0.1);
+      
+      float LOWER_BAR_EXPAND = UPPER_BAR_DROP_WEIGHT;
+      if (upperBarDrop == CAMERA_ON_ANIMATION) myLowerBarWeight = LOWER_BAR_WEIGHT+(LOWER_BAR_EXPAND * (1.-upperbarExpand));
+      if (upperBarDrop == CAMERA_OFF_ANIMATION) myLowerBarWeight = LOWER_BAR_WEIGHT+(LOWER_BAR_EXPAND * (upperbarExpand));
+      
       super.lowerBar();
       engine.defaultShader();
+    }
+    
+    public float insertedImagexpos = 10;
+    public float insertedImageypos = this.myUpperBarWeight;
+    
+    private void insertImage(PImage img) {
+      // Because this could potentially take a while to load and cache into the Processing engine,
+      // we should expect framerate drops here.
+      engine.resetFPSSystem();
+      
+      // TODO: Check whether we have text or image in the clipboard.
+      if (currMinimenu == null) {
+        if (img == null) console.log("Can't paste image from clipboard!");
+        else {
+          // Resize the image if autoScaleDown is enabled for faster performance.
+          if (autoScaleDown) {
+            engine.scaleDown(img, SCALE_DOWN_SIZE);
+          }
+          
+          ImagePlaceable imagePlaceable = new ImagePlaceable(img);
+          if (editingPlaceable != null) {
+            // Grab the position of the text that was there previously
+            // so we can plonk an image in its place, but only if there was
+            // no text to begin with.
+            if (editingPlaceable instanceof TextPlaceable) {
+              TextPlaceable editingTextPlaceable = (TextPlaceable)editingPlaceable;
+              float xpos = editingPlaceable.sprite.xpos;
+              float ypos = editingPlaceable.sprite.ypos;
+              int hi = editingPlaceable.sprite.hi;
+              
+              if (editingTextPlaceable.text.length() == 0) {
+                  placeableset.remove(editingPlaceable);
+                  imagePlaceable.sprite.xpos = xpos;
+                  imagePlaceable.sprite.ypos = ypos;
+              }
+              else {
+                  imagePlaceable.sprite.xpos = xpos;
+                  imagePlaceable.sprite.ypos = ypos+hi;
+              }
+            }
+          }
+          else {
+            // If no text is being edited then place the image in the default location.
+            imagePlaceable.sprite.xpos = insertedImagexpos;
+            imagePlaceable.sprite.ypos = insertedImageypos;
+            insertedImagexpos += 20;
+            insertedImageypos += 20;
+          }
+          // Dont want our image stretched
+          imagePlaceable.sprite.wi = img.width;
+          imagePlaceable.sprite.hi = img.height;
+          
+          
+          float aspect = float(img.height)/float(img.width);
+          // If the image is too large, make it smaller quickly
+          if (imagePlaceable.sprite.wi > engine.WIDTH*0.5) {
+            imagePlaceable.sprite.wi = int((engine.WIDTH*0.5));
+            imagePlaceable.sprite.hi = int((engine.WIDTH*0.5)*aspect);
+          }
+          
+          // Select the image we just pasted.
+          editingPlaceable = imagePlaceable;
+        }
+      }
     }
     
     private void renderEditor() {
@@ -905,63 +1186,8 @@ public class Editor extends Screen {
         
         if (engine.keyPressed && key == 0x16) // Ctrl+v
         {
-          // Because this could potentially take a while to load and cache into the Processing engine,
-          // we should expect framerate drops here.
-          engine.resetFPSSystem();
-          
-          // TODO: Check whether we have text or image in the clipboard.
-          if (currMinimenu == null) {
             PImage pastedImage = engine.getImageFromClipboard();
-            if (pastedImage == null) console.log("Can't paste image from clipboard!");
-            else {
-              // Resize the image if autoScaleDown is enabled for faster performance.
-              if (autoScaleDown) {
-                engine.scaleDown(pastedImage, SCALE_DOWN_SIZE);
-              }
-              
-              if (editingPlaceable != null) {
-                // Grab the position of the text that was there previously
-                // so we can plonk an image in its place, but only if there was
-                // no text to begin with.
-                if (editingPlaceable instanceof TextPlaceable) {
-                  TextPlaceable editingTextPlaceable = (TextPlaceable)editingPlaceable;
-                  float xpos = editingPlaceable.sprite.xpos;
-                  float ypos = editingPlaceable.sprite.ypos;
-                  int hi = editingPlaceable.sprite.hi;
-                  ImagePlaceable imagePlaceable = new ImagePlaceable(pastedImage);
-                  
-                  if (editingTextPlaceable.text.length() == 0) {
-                      placeableset.remove(editingPlaceable);
-                      imagePlaceable.sprite.xpos = xpos;
-                      imagePlaceable.sprite.ypos = ypos;
-                  }
-                  else {
-                      imagePlaceable.sprite.xpos = xpos;
-                      imagePlaceable.sprite.ypos = ypos+hi;
-                    
-                  }
-                  // Dont want our image stretched
-                  imagePlaceable.sprite.wi = pastedImage.width;
-                  imagePlaceable.sprite.hi = pastedImage.height;
-                  
-                  
-                  float aspect = float(pastedImage.height)/float(pastedImage.width);
-                  // If the image is too large, make it smaller quickly
-                  if (imagePlaceable.sprite.wi > engine.WIDTH*0.5) {
-                    imagePlaceable.sprite.wi = int((engine.WIDTH*0.5));
-                    imagePlaceable.sprite.hi = int((engine.WIDTH*0.5)*aspect);
-                  }
-                  
-                  // Select the image we just pasted.
-                  editingPlaceable = imagePlaceable;
-                }
-                
-              }
-              else {
-                
-              }
-            }
-          }
+            insertImage(pastedImage);
         }
         
         
@@ -1011,18 +1237,123 @@ public class Editor extends Screen {
           }
         }
     }
+    
+    public String preparingCameraMessage = "Starting camera...";
+    public boolean takePhoto = false;
+    public float cameraFlashEffect = 0.;
+    public void renderPhotoTaker() {
+      app.textFont(engine.DEFAULT_FONT);
+      if (!camera.ready.get()) {
+        
+        textAlign(CENTER, CENTER);
+        textSize(30);
+        if (camera.error.get() == true) {
+          engine.loadingIcon(engine.WIDTH/2, engine.HEIGHT/2);
+          String errorMessage = "";
+          fill(255, 0, 0);
+          switch (camera.errorCode.get()) {
+            case ERR_UNKNOWN:
+              errorMessage = "An unknown error has occured.";
+            break;
+            case ERR_NO_CAMERA_DEVICES:
+              errorMessage = "No camera devices found.";
+            break;
+            case ERR_FAILED_TO_SWITCH:
+              errorMessage = "A weird error occured with switching cameras.";
+            break;
+            default:
+              errorMessage = "An unknown error has occured.";
+              console.bugWarn("renderPhotoTaker: Unused error code.");
+            break;
+          }
+          text(errorMessage, engine.WIDTH/2, engine.HEIGHT/2+120);
+        }
+        else {
+          engine.loadingIcon(engine.WIDTH/2, engine.HEIGHT/2);
+          fill(255);
+          text("Starting camera...", engine.WIDTH/2, engine.HEIGHT/2+120);
+        }
+      }
+      else {
+        PImage pic = camera.updateImage();
+        if (pic != null && pic.width > 0 && pic.height > 0) {
+          
+          float aspect = float(pic.height)/float(pic.width);
+          cameraDisplay.beginDraw();
+          cameraDisplay.image(pic, 0, 0, float(cameraDisplay.width), float(cameraDisplay.width)*aspect);
+          cameraDisplay.endDraw();
+          app.image(cameraDisplay, 0, 0, engine.WIDTH, engine.HEIGHT);
+          if (takePhoto) {
+            float n = 1.;
+            switch (engine.powerMode) {
+                case HIGH:
+                n = 1.;
+                break;
+                case NORMAL:
+                n = 2.;
+                break;
+                case SLEEPY:
+                n = 4.;
+                break;
+                case MINIMAL:
+                n = 1.;
+                break;
+            }
+            app.blendMode(ADD);
+            app.noStroke();
+            app.fill(cameraFlashEffect);
+            app.rect(0,0, engine.WIDTH, engine.HEIGHT);
+            app.blendMode(NORMAL);
+            cameraFlashEffect -= 20.*n;
+            if (cameraFlashEffect < 10.) {
+              takePhoto = false;
+              insertImage(pic);
+              this.endCamera();
+            }
+          }
+        }
+        //engine.timestamp("start image");
+        //app.beginShape();
+        //engine.timestamp("texture");
+        //app.texture(pic);
+        //engine.timestamp("verticies");
+        //app.vertex(x1, y1, 0, 0);           // Bottom left
+        //app.vertex(x2,     y1, 1., 0);    // Bottom right
+        //app.vertex(x2,     y2, 1., 1.); // Top right
+        //app.vertex(x1,       y2, 0, 1.);  // Top left
+        //app.endShape();
+        //engine.timestamp("end image");
+      }
+    }
+    
+    public void display() {
+      if (engine.powerMode != PowerMode.MINIMAL) {
+        app.pushMatrix();
+        app.translate(screenx,screeny);
+        app.scale(engine.displayScale);
+        this.backg();
+        
+        engine.timestamp("begin content");
+        this.content();
+        engine.timestamp("end content");
+        this.lowerBar();
+        engine.timestamp("end lowerbar");
+        this.upperBar();
+        engine.timestamp("end upperbar");
+        app.popMatrix();
+      }
+    }
 
-    // We pretty much just render all of the placeables here.
     public void content() {
       if (loading) {
         engine.loadingIcon(engine.WIDTH/2, engine.HEIGHT/2);
       }
       else {
-        // No background or clear screens should be rendered.
         if (cameraMode) {
-          
+          renderPhotoTaker();
         }
         else {
+          // We pretty much just render all of the placeables here.
           renderEditor();
         }
       }
@@ -1031,6 +1362,7 @@ public class Editor extends Screen {
     public void startupAnimation() {
         // As soon as the window finishes sliding in, roll down the upper bar.
         // Beautiful animation :twinkle_emoji:
+        upperBarDrop = INITIALISE_DROP_ANIMATION;
         upperbarExpand = 1.0;
     }
     
