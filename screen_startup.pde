@@ -85,6 +85,7 @@ public class Startup extends Screen {
               engine.initialScreen = true;
               
               engine.stopMusic();
+              
               // This is the part where we exit the welcome screen and go to our main screen.
               requestScreen(new PixelRealm(engine, dir));
             }

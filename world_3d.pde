@@ -58,6 +58,7 @@ public class PixelRealm extends Screen {
     SpriteSystemPlaceholder guiMainToolbar;
     
     public float xpos = 1000.0, ypos = 0., zpos = 1000.0;
+    public float runAcceleration = 0.;
     public float yvel = 0.;
     public float direction = PI;
     public float bob = 0.0;
@@ -108,8 +109,10 @@ public class PixelRealm extends Screen {
     
     
     final float bob_Speed = 0.4;
-    final float WALK_SPEED = 7.0;
-    final float RUN_SPEED = 15.0;
+    final float WALK_SPEED = 8.0;
+    final float RUN_SPEED = 18.0;
+    final float RUN_ACCELERATION = 0.1;
+    final float MAX_SPEED = 50.;
     final float SNEAK_SPEED = 1.5;
     final float TURN_SPEED = 0.05;
     final float SLOW_TURN_SPEED = 0.01;
@@ -832,7 +835,8 @@ public class PixelRealm extends Screen {
         
         //Now craete those offscreen graphics so we can use them for all eternity!!!!
         scene = createGraphics((int(engine.WIDTH)/scale), int(this.height)/scale, P3D);
-        ((PGraphicsOpenGL)scene).textureSampling(2);                  //This strange code here just turns off smooth rendering because for some reason noSmooth() doesn't work.
+        //This strange code here just turns off smooth rendering because for some reason noSmooth() doesn't work.
+        ((PGraphicsOpenGL)scene).textureSampling(2);                  
         portal = createGraphics(128, 128+96, P2D);
         
         
@@ -877,6 +881,7 @@ public class PixelRealm extends Screen {
           coins[i] = coin;
           
         }
+        
         
     }
     
@@ -1398,26 +1403,27 @@ public class PixelRealm extends Screen {
       
       // For now just load music only once lmao
       
-      if (!loadedMusic) {
-        String[] soundFileFormats = {".wav", ".mp3", ".ogg", ".flac"};
-        boolean found = false;
-        i = 0;
-        
-        // Search until one of the pixelrealm-bgm with the appropriate file format is found.
-        while (i < soundFileFormats.length && !found) {
-          String ext = soundFileFormats[i++];
-          File f = new File(engine.currentDir+REALM_BGM+ext);
-          if (f.exists()) {
-            found = true;
-            engine.streamMusicWithFade(engine.currentDir+REALM_BGM+ext);
-          }
+      //if (!loadedMusic) {
+      String[] soundFileFormats = {".wav", ".mp3", ".ogg", ".flac"};
+      boolean found = false;
+      i = 0;
+      
+      // Search until one of the pixelrealm-bgm with the appropriate file format is found.
+      while (i < soundFileFormats.length && !found) {
+        String ext = soundFileFormats[i++];
+        File f = new File(engine.currentDir+REALM_BGM+ext);
+        if (f.exists()) {
+          found = true;
+          engine.streamMusicWithFade(engine.currentDir+REALM_BGM+ext);
         }
-        
-        // If none found use default bgm
-        if (!found)
-          engine.streamMusicWithFade(engine.APPPATH+REALM_BGM_DEFAULT);
-        loadedMusic = true;
       }
+      
+      // If none found use default bgm
+      if (!found)
+        engine.streamMusicWithFade(engine.APPPATH+REALM_BGM_DEFAULT);
+      loadedMusic = true;
+      //}
+      
       
       // TODO: keep the inventory, regenerate it
       dropInventoryInstantly();
@@ -1437,6 +1443,10 @@ public class PixelRealm extends Screen {
       //  loadedMusic = true;
       //  t1.start();
       //}
+    }
+    
+    protected void previousReturnAnimation() {
+      refreshRealm();
     }
     
     public Object getRealmFile(String filename, Object defaultFile) {
@@ -1759,8 +1769,15 @@ public class PixelRealm extends Screen {
         isWalking = false;
         float speed = WALK_SPEED;
         
-        if (engine.keyAction("dash")) speed = RUN_SPEED;
-        if (engine.shiftKeyPressed) speed = SNEAK_SPEED;
+        if (engine.keyAction("dash")) {
+          speed = RUN_SPEED+runAcceleration;
+          if (RUN_SPEED+runAcceleration <= MAX_SPEED) runAcceleration+=RUN_ACCELERATION;
+        }
+        else runAcceleration = 0.;
+        if (engine.shiftKeyPressed) {
+          speed = SNEAK_SPEED;
+          runAcceleration = 0.;
+        }
         
         // :3
         if (engine.keyAction("jump") && onGround()) speed *= 3;
@@ -2065,7 +2082,7 @@ public class PixelRealm extends Screen {
         
         //engine.timestamp("render3DObjects");
         
-        render3DObjects();  //<>//
+        render3DObjects();  //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>//
         scene.hint(DISABLE_DEPTH_TEST);
         
         //engine.timestamp("portal light");
@@ -2129,7 +2146,7 @@ public class PixelRealm extends Screen {
     private void render3DObjects() {
       //engine.timestamp("Update distances");
       // Update the distances from the player for all nodes
-      Object3D currNode = headNode; //<>//
+      Object3D currNode = headNode; //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>//
       while (currNode != null) {
         currNode.calculateVal();
         currNode = currNode.next;
@@ -2175,7 +2192,14 @@ public class PixelRealm extends Screen {
 
     public void content() {
       if (engine.sleepyMode) engine.setAwake();
-      runPixelRealm();  //<>//
+      runPixelRealm();  //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>//
+    }
+    
+    public void startupAnimation() {
+        if (engine.showUpdateScreen) {
+          requestScreen(new Updater(engine, engine.updateInfo));
+          engine.showUpdateScreen = false;
+        }
     }
     
     public void init3DObjects() {
@@ -2638,3 +2662,66 @@ public class PixelRealm extends Screen {
         }
     }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// How bout a lil easter egg from code from forever ago?
+// Also sorry not sorry for the code compression
+
+public class World extends Screen { public float height=0; int myRandomSeed=0; float xscroll=0; float yscroll=0; float moveStarX=0;
+boolean displayStars=true; class NightSkyStar{ boolean active; float x; float y; int image; int config;} NightSkyStar[] nightskyStars;
+int MAX_NIGHT_SKY_STARS=100; float TREE_SPACE=50; float MAX_RANDOM_HEIGHT=500; float WATER_LEVEL=300; float VARI=0.0009;
+float HILL_WIDTH=300; float MOUNTAIN_FREQUENCY=3.; float LOW_DIPS_REQUENCY=0.5; float HIGHEST_MOUNTAIN=1500; float LOWEST_DIPS=1200;
+int OCTAVE=2; public World(Engine engine){ super(engine); this.height=engine.HEIGHT-myLowerBarWeight-myUpperBarWeight;
+myRandomSeed=(int)app.random(100000); scatterNightskyStars(); console.log("Press backspace to go back."); console.log("Legacy World"); 
+} public void scatterNightskyStars(){ int selectedNum=int(app.random(MAX_NIGHT_SKY_STARS/2,MAX_NIGHT_SKY_STARS)); 
+nightskyStars=new NightSkyStar[selectedNum]; for(int i=0;i<selectedNum;i++){ nightskyStars[i]=new NightSkyStar();
+int x=int(app.random(-16,engine.WIDTH)); int y=int(app.random(-16,this.height)); int j=0; boolean colliding=false; 
+final int spacing=4; while(colliding){ colliding=false; while((j<i)&&!colliding){ if(((x+spacing+16)>(nightskyStars[j].x-spacing))
+&&((x-spacing)<(nightskyStars[j].x+spacing+16))&&((y+spacing+16)>(nightskyStars[j].y-spacing))&&((y-spacing)<(nightskyStars[j].y
++spacing+16))){ colliding=true; } j++; } } nightskyStars[i].x=x; nightskyStars[i].y=y; nightskyStars[i].image=int(app.random(0,5)); 
+nightskyStars[i].config=int(app.random(0,4)); nightskyStars[i].active=true; } } private void drawNightSkyStars(){ 
+for(NightSkyStar star:nightskyStars){ if(star.active){ engine.img("nightsky"+str(star.image),star.x,star.y,16,16); star.x-=moveStarX; 
+if(star.x<-16||star.x>engine.WIDTH){ star.active=false; } } else{ if(int(app.random(0,20))==1&&moveStarX!=0.0){ star.x=engine.WIDTH; 
+star.y=int(app.random(-16,this.height)); star.image=int(app.random(0,5)); star.config=int(app.random(0,4)); star.active=true; } } } }
+private void beginRandom(){ app.noiseSeed(myRandomSeed); } public float rand(float i,float min,float max){ beginRandom();
+return app.noise(i)*(max-min)+min; } public float getHillHeight(float x){ float slow=x*0.0001; return floor(rand(x*VARI,40,
+MAX_RANDOM_HEIGHT))+(pow(sin(slow*MOUNTAIN_FREQUENCY),3)*HIGHEST_MOUNTAIN*0.5+HIGHEST_MOUNTAIN)-(sin(slow*LOW_DIPS_REQUENCY)*
+LOWEST_DIPS*0.5+LOWEST_DIPS); } public float interpolate(float arr[],float x){ float y1=arr[int(x)]; float y2=arr[int(x)+1];
+float i=(x/HILL_WIDTH); return lerp(y1,y2,i); } public void content(){ app.noiseDetail(OCTAVE,2.); engine.img("sky_1",0,myUpperBarWeight,
+engine.WIDTH,this.height); if(displayStars) drawNightSkyStars(); float hillWidth=HILL_WIDTH; float prevWaveHeight=WATER_LEVEL;
+float prevHeight=0; float floorPos=this.height+myUpperBarWeight; if(engine.mouseEventClick) xscroll+=5; xscroll+=50; moveStarX=1;
+float[] chunks=new float[int(engine.WIDTH/hillWidth)*2]; int j=0; float w=engine.WIDTH+hillWidth; for(float i=-hillWidth;i<w;i+=hillWidth)
+{ float x=i+floor(xscroll/hillWidth)*hillWidth; float hillHeight=getHillHeight(x); if(i>engine.WIDTH/2-hillWidth&&i<engine.WIDTH/2
++hillWidth){ yscroll=lerp(yscroll,hillHeight-300,0.01); } chunks[j++]=hillHeight; float off=float(int(xscroll)%int(hillWidth));
+app.beginShape(); app.fill(0); app.vertex(i-off,floorPos-prevHeight+yscroll); app.vertex(i-off,floorPos); app.vertex(i-off+hillWidth,
+floorPos); app.vertex(i-off+hillWidth,floorPos-hillHeight+yscroll); app.endShape(); app.beginShape(); app.fill(0,127,255,100); 
+float wave=WATER_LEVEL+sin(x*0.01+app.frameCount*0.1)*10; app.vertex(i-off,max(floorPos-prevWaveHeight+yscroll,0)); app.vertex(i-off,
+floorPos); app.vertex(i-off+hillWidth,floorPos); app.vertex(i-off+hillWidth,max(floorPos-wave+yscroll,0)); app.endShape(); 
+prevHeight=hillHeight; prevWaveHeight=wave; } if(engine.keyDown(BACKSPACE)) previousScreen(); } }
