@@ -40,11 +40,11 @@ class Engine {
   // Info and versioning
   public final String NAME        = "Timeway";
   public final String AUTHOR      = "Teo Taylor";
-  public final String VERSION     = "0.0.4";
+  public final String VERSION     = "0.0.5";
   public final String VERSION_DESCRIPTION = 
-    "- Added updater\n"+
-    "- Added acceleration\n"+
-    "- probably added a buncha other stuff";
+    "- Updated sound system\n"+
+    "- Added new sound effects\n"+
+    "- Improved bobbing";
   // ***************************
   // How versioning works:
   // a.b.c
@@ -57,10 +57,10 @@ class Engine {
   public final String ENTRIES_PATH        = "data/legacyentry/";
   public final String ENTRY_DEFAULT_NAME  = "entry";
   public final String CONSOLE_FONT        = "data/engine/font/SourceCodePro-Regular.ttf";
-  public final String SND_NOPE            = "data/engine/sound/nope.wav";
   public final String IMG_PATH            = "data/engine/img/";
   public final String FONT_PATH           = "data/engine/font/";
   public final String SHADER_PATH         = "data/engine/shaders/";
+  public final String SOUND_PATH          = "data/engine/sounds/";
   public final String CONFIG_PATH         = "data/config.json";
   public final String KEYBIND_PATH        = "data/keybindings.json";
   public final String PATH_SPRITES_ATTRIB = "data/engine/spritedata/";
@@ -77,12 +77,15 @@ class Engine {
   public static final int    PRESSED_KEY_ARRAY_LENGTH = 10;
   public static final String CACHE_COMPATIBILITY_VERSION = "0.1";
   public static final int    CACHE_SCALE_DOWN = 128;
+  
 
   // Dynamic constants (changes based on things like e.g. configuration file)
   public       int    POWER_HIGH_BATTERY_THRESHOLD = 50;
   public       PFont  DEFAULT_FONT;
   public       String DEFAULT_DIR;
   public       String DEFAULT_FONT_NAME = "Typewriter";
+  public       float  VOLUME_NORMAL = 1.;
+  public       float  VOLUME_QUIET = 0.;
 
 
   public final String ENTRY_EXTENSION = "timewayentry";
@@ -96,6 +99,7 @@ class Engine {
   public String OSName;
   public int usingOS;
   public Console console;
+  public Sound soundSystem;
 
   // Power modes
   public PowerMode powerMode = PowerMode.HIGH;
@@ -207,6 +211,8 @@ class Engine {
     console = new Console();
     console.info("Hello console");
     console.info("init: width/height set to "+str(WIDTH)+", "+str(HEIGHT));
+    
+    soundSystem = new Sound(app);
 
 
     // Run the setup method in a seperate thread
@@ -221,7 +227,7 @@ class Engine {
 
 
     console.info("init: Running setup in main thread");
-    setup();
+    this.setup();
 
 
     // Init loading screen.
@@ -295,6 +301,9 @@ class Engine {
     currentDir  = DEFAULT_DIR;
     POWER_HIGH_BATTERY_THRESHOLD = int(getSettingFloat("lowBatteryPercent"));
     DEFAULT_FONT = getFont(DEFAULT_FONT_NAME);
+    VOLUME_NORMAL = getSettingFloat("volumeNormal");
+    VOLUME_QUIET = getSettingFloat("volumeUnfocused");
+    setMasterVolume(VOLUME_NORMAL);
     checkDevMode();
 
     String forcePowerMode = getSettingString("forcePowerMode");
@@ -351,7 +360,7 @@ class Engine {
 
       app.fill(255);
       app.textAlign(CENTER, CENTER);
-      app.textSize(60);
+      app.textFont(DEFAULT_FONT, 60);
       app.text(promptText, WIDTH/2, HEIGHT/2-100);
       app.textSize(30);
       app.text(keyboardMessage, WIDTH/2, HEIGHT/2);
@@ -1168,7 +1177,7 @@ class Engine {
     scoreDrain = 1.;
     recoveryScore = 1.;
   }
-
+  
   public void updatePowerMode() {
     // Just so we can provide a warning lol
     powerModeSetTimeout = max(0, powerModeSetTimeout-1);
@@ -1195,12 +1204,14 @@ class Engine {
         setPowerMode(prevPowerMode);
         focusedMode = true;
         putFPSSystemIntoGraceMode();
+        setMasterVolume(VOLUME_NORMAL);
       }
     } else {
       if (focusedMode) {
         prevPowerMode = powerMode;
         setPowerMode(PowerMode.MINIMAL);
         focusedMode = false;
+        setMasterVolume(VOLUME_QUIET);
       }
       return;
     }
@@ -1481,6 +1492,7 @@ class Engine {
     loadAllAssets(APPPATH+IMG_PATH);
     loadAllAssets(APPPATH+FONT_PATH);
     loadAllAssets(APPPATH+SHADER_PATH);
+    loadAllAssets(APPPATH+SOUND_PATH);
 
     // Find out how many images there are in loadingmorph
     File f = new File(APPPATH+IMG_PATH+"loadingmorph/");
@@ -1556,6 +1568,8 @@ class Engine {
     defaultSettings.putIfAbsent("defaultSystemFont", "Typewriter");
     defaultSettings.putIfAbsent("homeDirectory", System.getProperty("user.home").replace('\\', '/'));
     defaultSettings.putIfAbsent("forcePowerMode", "NONE");
+    defaultSettings.putIfAbsent("volumeNormal", 1.0);
+    defaultSettings.putIfAbsent("volumeUnfocused", 0.0);
 
     defaultKeybindings = new HashMap<String, Character>();
     defaultKeybindings.putIfAbsent("CONFIG_VERSION", char(1));
@@ -2662,19 +2676,23 @@ class Engine {
     // Get list of all assets in current dir
     File f = new File(path);
     File[] assets = f.listFiles();
-    // Loop through all assets
-    for (int i = 0; i < assets.length; i++) {
-      // If asset is a directory
-      if (assets[i].isFile()) {
-        // Load asset
-        loadAsset(assets[i].getAbsolutePath());
-      }
-      // If asset is a file
-      else if (assets[i].isDirectory()) {
-        // Load all assets in that directory
-        loadAllAssets(assets[i].getAbsolutePath());
+    
+    if (assets != null) {
+      // Loop through all assets
+      for (int i = 0; i < assets.length; i++) {
+        // If asset is a directory
+        if (assets[i].isFile()) {
+          // Load asset
+          loadAsset(assets[i].getAbsolutePath());
+        }
+        // If asset is a file
+        else if (assets[i].isDirectory()) {
+          // Load all assets in that directory
+          loadAllAssets(assets[i].getAbsolutePath());
+        }
       }
     }
+    else console.warn("Missing assets, was the files tampered with?");
   }
 
   // Since loading essential content only really takes place at the beginning,
@@ -3624,22 +3642,38 @@ class Engine {
 
   public SoundFile getSound(String name) {
     SoundFile sound = sounds.get(name);
-    if (sounds == null) {
+    if (sound == null) {
       console.bugWarn("playSound: Sound "+name+" doesn't exist!");
       return null;
     } else return sound;
   }
 
   public void playSound(String name) {
-    getSound(name).play();
+    SoundFile s = getSound(name);
+    if (s != null) {
+      s.play();
+    }
+  }
+  
+  public void playSound(String name, float pitch) {
+    SoundFile s = getSound(name);
+    if (s != null) {
+      s.play(pitch);
+    }
   }
 
   public void loopSound(String name) {
-    getSound(name).loop();
+    // Don't want loads of annoying loops
+    SoundFile s = getSound(name);
+    if (s != null) {
+      if (!s.isPlaying())
+        s.loop();
+    }
   }
 
   public void setSoundVolume(String name, float vol) {
-    getSound(name).amp(vol);
+    SoundFile s = getSound(name);
+    if (s != null) s.amp(vol);
   }
 
 
@@ -3652,6 +3686,13 @@ class Engine {
   public AtomicBoolean musicReady = new AtomicBoolean(true);
   public boolean reloadMusic = false;
   public String reloadMusicPath = "";
+  
+  private float masterVolume = 1.;
+  public void setMasterVolume(float vol) {
+    masterVolume = vol;
+    soundSystem.volume(vol);
+  }
+
 
   // Plays background music directly from the hard drive without loading it into memory, and
   // loops the music when the end of the audio has been reached.
@@ -3783,14 +3824,14 @@ class Engine {
         if (musicFadeOut > 0.005) {
           // Fade the old music out
           float vol = musicFadeOut *= pow(MUSIC_FADE_SPEED, n);
-          streamMusic.playbin.setVolume(vol);
+          streamMusic.playbin.setVolume(vol*masterVolume);
           streamMusic.playbin.getState();   
 
 
           // Fade the new music in.
           if (streamMusicFadeTo != null) {
             streamMusicFadeTo.play();
-            streamMusicFadeTo.volume(1.-vol);
+            streamMusicFadeTo.volume((1.-vol)*masterVolume);
           } else 
           console.bugWarnOnce("streamMusicFadeTo shouldn't be null here.");
         } else {
@@ -3803,6 +3844,7 @@ class Engine {
 
 
       if (streamMusic != null) {
+        streamMusic.volume(masterVolume);
         if (streamMusic.available() == true) {
           streamMusic.read();
         }
@@ -4232,12 +4274,20 @@ class Engine {
       showCommandPrompt();
 
 
-    // Display the command prompt if shown.
-    app.pushMatrix();
-    app.scale(displayScale);
-    if (commandPromptShown)
+    if (commandPromptShown) {
+      // Display the command prompt if shown.
+      app.pushMatrix();
+      app.scale(displayScale);
+      noStroke();
+      app.fill(0, 127);
+      app.noStroke();
+      float promptWi = 600;
+      float promptHi = 250;
+      app.rect(WIDTH/2-promptWi/2, HEIGHT/2-promptHi/2, promptWi, promptHi);
       displayInputPrompt();
-    app.popMatrix();
+      app.noFill();
+      app.popMatrix();
+    }
 
     // Update times so we can calculate live fps.
     lastFrameMillis = thisFrameMillis;

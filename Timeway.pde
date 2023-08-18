@@ -22,15 +22,6 @@ import processing.sound.*;
 Engine timewayEngine;
 
 // TODO: Sorry ill put that in the engine code later.
-SoundFile tempCoinSound;
-SoundFile temp1upSound;
-SoundFile tempPortalSound;
-SoundFile tempMenuAppear;
-SoundFile tempMenuSelect;
-SoundFile tempShiftSound;
-SoundFile tempIntroSound;
-SoundFile tempJumpSound;
-SoundFile tempPickupSound;
 
 void settings() {
   try {
@@ -52,27 +43,8 @@ void setup() {
     surface.setResizable(true);
     surface.setTitle("Timeway");
     
-    
     background(0);
-    textSize(32);
-    textAlign(LEFT, TOP);
-    text("Setting up", 10, 10);
-    
-    
-    tempCoinSound = new SoundFile(this, "data/engine/sound/coin.wav");
-    temp1upSound  = new SoundFile(this, "data/engine/sound/oneup.wav");
-    tempPortalSound = new SoundFile(this, "data/engine/sound/portal.wav");
-    tempMenuAppear = new SoundFile(this, "data/engine/sound/menu_appear.wav");
-    tempMenuSelect = new SoundFile(this, "data/engine/sound/menu_select.wav");
-    tempShiftSound = new SoundFile(this, "data/engine/sound/shift.wav");
-    tempIntroSound = new SoundFile(this, "data/engine/sound/intro.wav");
-    tempPickupSound = new SoundFile(this, "data/engine/sound/pickup.wav");
-    tempJumpSound = new SoundFile(this, "data/engine/sound/jump.wav");
-    
     timewayEngine = new Engine(this);
-    tempPortalSound.amp(0.);
-    tempPortalSound.loop();
-        
 }
 
 void draw() {

@@ -861,7 +861,8 @@ public class Editor extends Screen {
           app.textFont(engine.DEFAULT_FONT);
   
           //************BACK BUTTON************
-          if (engine.button("back", "back_arrow_128", "Entries")) {
+          if (engine.button("back", "back_arrow_128", "Save & back")) {
+               engine.playSound("chime");
                saveEntryJSON();
                if (engine.prevScreen instanceof Explorer) {
                  Explorer prevExplorerScreen = (Explorer)engine.prevScreen;

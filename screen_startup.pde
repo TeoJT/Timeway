@@ -15,7 +15,7 @@ public class Startup extends Screen {
           engine.streamMusic(engine.DEFAULT_DIR+PixelRealm.REALM_BGM);
         else
           engine.streamMusic(engine.APPPATH+PixelRealm.REALM_BGM_DEFAULT);
-        tempIntroSound.play();
+        engine.playSound("intro");
     }
 
     public void upperBar() {

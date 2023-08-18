@@ -960,7 +960,7 @@ public final class SpriteSystemPlaceholder {
         public void button(String identifier, String image, String text) {
             this.guiElement(identifier, image);
             if (text.length() > 0) {
-                app.textSize(18);
+                app.textFont(engine.DEFAULT_FONT, 18);
                 // app.fill(255);
                 app.textAlign(CENTER, TOP);
                 float x = getSprite(identifier).getX() + getSprite(identifier).getWidth()/2;

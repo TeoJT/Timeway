@@ -51,11 +51,12 @@ public class PixelRealm extends Screen {
     public PImage REALM_MUSIC_DEFAULT;
     public PImage REALM_SKY_DEFAULT;
     public PImage REALM_TREE_DEFAULT;
-    public static final String REALM_BGM_DEFAULT = "data/engine/sound/birds.wav";
+    public static final String REALM_BGM_DEFAULT = "data/engine/music/pixelrealm_default_bgm.wav";
     public Sequencer REALM_SEQ_DEFAULT = null;
     
     PGraphics scene, portal;
     SpriteSystemPlaceholder guiMainToolbar;
+    SoundFile portalSound;
     
     public float xpos = 1000.0, ypos = 0., zpos = 1000.0;
     public float runAcceleration = 0.;
@@ -108,7 +109,7 @@ public class PixelRealm extends Screen {
     int coinSpinAnimation = 0;
     
     
-    final float bob_Speed = 0.4;
+    final float BOB_SPEED = 0.4;
     final float WALK_SPEED = 8.0;
     final float RUN_SPEED = 18.0;
     final float RUN_ACCELERATION = 0.1;
@@ -820,6 +821,8 @@ public class PixelRealm extends Screen {
         img_tree = new PImage[1];
         img_tree[0]  = engine.systemImages.get("tree");
         img_sky_1    = engine.systemImages.get("sky_1");
+        portalSound  = engine.getSound("portal");
+        if (portalSound != null) portalSound.loop();
         REALM_GRASS_DEFAULT = img_grass;
         REALM_MUSIC_DEFAULT = null;
         REALM_SKY_DEFAULT = img_sky_1;
@@ -1800,7 +1803,7 @@ public class PixelRealm extends Screen {
         if (engine.keybindPressed("menu")) {
           menuShown = !menuShown;
           menuID = MENU_MAIN;
-          if (menuShown) tempMenuAppear.play();
+          if (menuShown) engine.playSound("menu_appear");
         }
           
         if (!menuShown) {
@@ -1860,8 +1863,20 @@ public class PixelRealm extends Screen {
               direction += rot;
               xpos += movex;
               zpos += movez;
-              if (isWalking)
-                bob += bob_Speed;
+              if (isWalking && onGround()) {
+                float bob_speed = speed*0.05;
+                
+                // If we bob too much, the bob will jiggle wayyyy to much
+                // and the sound effect will be played too much and end up reallllly glitchy
+                if (bob_speed < 1)
+                  bob += bob_speed;
+                else 
+                  bob += 1.;
+                if (bob-HALF_PI > TWO_PI-HALF_PI) {
+                  bob = 0.;
+                  engine.playSound("step", random(0.9, 1.2));
+                }
+              }
             }
             
             // TODO: god this is messy.
@@ -1874,7 +1889,7 @@ public class PixelRealm extends Screen {
             if (engine.keyAction("jump") && onGround() && jumpTimeout < 1) {
               yvel = JUMP_STRENGTH;
               ypos -= 10;
-              tempJumpSound.play();
+              engine.playSound("jump");
               jumpTimeout = 10;
             }
             
@@ -2093,7 +2108,8 @@ public class PixelRealm extends Screen {
         if (portalLight > 0.1) {
           scene.blendMode(ADD);
           scene.fill(portalLight);
-          tempPortalSound.amp(max(portalLight/255.,0.));
+          
+          if (portalSound != null) portalSound.amp(max(portalLight/255.,0.));
           scene.noStroke();
           scene.rect(0,0,scene.width,scene.height);
           scene.blendMode(NORMAL);
@@ -2187,6 +2203,12 @@ public class PixelRealm extends Screen {
         else console.log("No items to drop.");
         return true;
       }
+      if (command.equals("/editgui")) {
+        guiMainToolbar.interactable = !guiMainToolbar.interactable;
+        if (guiMainToolbar.interactable) console.log("GUI now interactable.");
+        else  console.log("GUI is no longer interactable.");
+        return true;
+      }
       else return false;
     }
 
@@ -2271,14 +2293,14 @@ public class PixelRealm extends Screen {
           if (inventorySelectedItem.prev != null) {
             inventorySelectedItem.carrying.x = -999999;
             inventorySelectedItem = inventorySelectedItem.prev;
-            tempPickupSound.play();
+            engine.playSound("pickup");
           }
         }
         else if (engine.keyActionOnce("inventorySelectRight")) {
           if (inventorySelectedItem.next != null) {
             inventorySelectedItem.carrying.x = -999999;
             inventorySelectedItem = inventorySelectedItem.next;
-            tempPickupSound.play();
+            engine.playSound("pickup");
           }
         }
         inventorySelectedItem.carrying.visible = true;
@@ -2319,16 +2341,16 @@ public class PixelRealm extends Screen {
               currentTool = TOOL_NORMAL;
               menuShown = false;
               dropInventory();
-              tempMenuSelect.play();
+              engine.playSound("menu_select");
             }
             if (engine.button("grabber_1", "grabber_tool_128", "Grabber")) {
               currentTool = TOOL_GRABBER_NORMAL;
               menuShown = false;
-              tempMenuSelect.play();
+              engine.playSound("menu_select");
             }
             if (engine.button("creator_1", "new_entry_128", "Creator")) {
               currentTool = TOOL_CREATOR;
-              tempMenuSelect.play();
+              engine.playSound("menu_select");
               menuID = MENU_CREATOR;
             }
             if (engine.button("cuber_1", "cuber_tool_128", "Cuber")) {
@@ -2362,11 +2384,11 @@ public class PixelRealm extends Screen {
               //engine.currScreen = new PixelRealm(engine, engine.currentDir, engine.currentDir);
               //endRealm();
               menuShown = false;
-              tempMenuSelect.play();
+              engine.playSound("menu_select");
             }
             
             if (engine.button("newfolder", "new_folder_128", "New folder")) {
-              tempMenuSelect.play();
+              engine.playSound("menu_select");
               
               Runnable r = new Runnable() {
                 public void run() {
@@ -2381,7 +2403,7 @@ public class PixelRealm extends Screen {
                   pickupItem(foldername);
                   
                   menuShown = false;
-                  tempMenuSelect.play();
+                  engine.playSound("menu_select");
                 }
               };
           
@@ -2392,7 +2414,7 @@ public class PixelRealm extends Screen {
             if (engine.button("find", "find_128", "Finder")) {
               finderEnabled = !finderEnabled;
               menuShown = false;
-              tempMenuSelect.play();
+              engine.playSound("menu_select");
             }
           break;
           case MENU_CREATE_FOLDER_PROMPT:
@@ -2559,11 +2581,11 @@ public class PixelRealm extends Screen {
           if (coins[i] != null) {
             coins[i].img = img_coin[((int(frameCount*n)/4))%l];
             if (coins[i].touchingPlayer()) {
-              tempCoinSound.play();
+              engine.playSound("coin");
               coins[i].destroy();
               coins[i] = null;
               console.log("Coins: "+str(++collectedCoins));
-              if (collectedCoins == 100) temp1upSound.play();
+              if (collectedCoins == 100) engine.playSound("oneup");
             }
           }
         }
@@ -2592,7 +2614,7 @@ public class PixelRealm extends Screen {
                   if (portalCoolDown <= 0) {
                     // For now just create an entirely new screen object lmao.
                     endRealm();
-                    tempShiftSound.play();
+                    engine.playSound("shift");
                     
                     // Go into the new world
                     enterNewRealm(f.dir);
@@ -2628,7 +2650,7 @@ public class PixelRealm extends Screen {
               
               pickupItem(p);
               
-              tempPickupSound.play();
+              engine.playSound("pickup");
             }
           }
           
@@ -2639,6 +2661,7 @@ public class PixelRealm extends Screen {
         if (inventorySelectedItem != null && !menuShown) {
           if ((parentTool(currentTool) == TOOL_GRABBER) && secondaryAction) {
             inventorySelectedItem.remove();
+            engine.playSound("plonk");
             
             // If not null here, inventory's not empty and we can plonk down next item.
             if (inventorySelectedItem != null)  {
