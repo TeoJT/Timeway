@@ -725,8 +725,8 @@ public class Editor extends Screen {
     public void readEntryJSON() {
         // check if file exists
         File f = new File(entryPath);
-        if (!f.exists()) {
-          // If it doesn't exist, create a new placeable for the name of the entry
+        if (!f.exists() || f.length() <= 1) {
+          // If it doesn't exist or is blank, create a new placeable for the name of the entry
             entryNameText = new TextPlaceable();
             entryNameText.sprite.xpos = 20;
             entryNameText.sprite.ypos = UPPER_BAR_DROP_WEIGHT + 80;

@@ -40,7 +40,7 @@ class Engine {
   // Info and versioning
   public final String NAME        = "Timeway";
   public final String AUTHOR      = "Teo Taylor";
-  public final String VERSION     = "0.0.5";
+  public final String VERSION     = "0.0.5-d03";
   public final String VERSION_DESCRIPTION = 
     "- Updated sound system\n"+
     "- Added new sound effects\n"+
@@ -176,6 +176,7 @@ class Engine {
   public long lastTimestamp;
   public String lastTimestampName = null;
   public int timestampCount = 0;
+  public HashMap<String, Object> sharedResources;
 
   // *************************************************************
   // *********************Begin engine code***********************
@@ -201,6 +202,7 @@ class Engine {
     fonts = new HashMap<String, PFont>();
     shaders = new HashMap<String, PShader>();
     sounds = new HashMap<String, SoundFile>();
+    sharedResources = new HashMap<String, Object>();
 
     // First, load the logo and loading symbol.
     loadAsset(APPPATH+IMG_PATH+"logo.png");
@@ -332,6 +334,30 @@ class Engine {
 
     // PlaceholderReadEntryProperties p = new PlaceholderReadEntryProperties(APPPATH+"data/entry/exampleentry");
   }
+  
+  
+  public void setSharedResource(String resourceName, Object val) {
+    sharedResources.put(resourceName, val);
+  }
+  
+  public Object getSharedResource(String resourceName) {
+    Object o = sharedResources.get(resourceName);
+    if (o == null) console.bugWarn("getSharedResource: null object. Maybe use setSharedResource or add a runnable argument to getSharedResource?");
+    return o;
+  }
+  
+  public Object getSharedResource(String resourceName, Runnable runIfAbsent) {
+    Object o = sharedResources.get(resourceName);
+    if (o == null) runIfAbsent.run();
+    o = sharedResources.get(resourceName);
+    // If it's still null after running, send a warning
+    if (o == null) console.bugWarn("getSharedResource: object still null after running runIfAbsent. Make sure to use setSharedResource in your runnable!");
+    return o;
+  }
+  
+  public void deleteSharedResource(String resourceName) {
+    sharedResources.remove(resourceName);
+  }
 
   public void clearKeyBuffer() {
     //Clear the key buffer, ready for us to press some nice keys.
@@ -451,7 +477,8 @@ class Engine {
       ZipFile zipFile = new ZipFile(zipFilePath);
       int zipSize = zipFile.size();
       zipFile.close();
-
+      
+      boolean success = true;
       ZipEntry zipEntry = zipInputStream.getNextEntry();
       while (zipEntry != null) {
         String fileName = zipEntry.getName();
@@ -472,18 +499,23 @@ class Engine {
             completionPercent.set(int((float(numberFilesExtracted)/float(zipSize))*100.));
           }
           catch (Exception e) {
+            console.warn("Couldn't uncompress file: "+newFile+", "+e.getMessage());
+            success = false;
           }
         }
-
         zipInputStream.closeEntry();
         zipEntry = zipInputStream.getNextEntry();
       }
       zipInputStream.close();
+      if (!success)
+        updateError = "Something went wrong with extracting individual files.";
       operationComplete.set(true);
     }
     catch (Exception e) {
-      console.warn("An error occured with extracting the files...");
+      console.warn("An error occured with extracting the files, "+e.getMessage());
       e.printStackTrace();
+      updateError = "An error occured with extracting the files...";
+      operationComplete.set(true);
     }
   }
   
@@ -493,6 +525,7 @@ class Engine {
         String[] cmds = new String[1];
         cmds[0] = cmd;
         app.saveStrings(APPPATH+WINDOWS_CMD, cmds);
+        delay(100);
         open(APPPATH+WINDOWS_CMD);
       break;
       default:
@@ -656,6 +689,7 @@ class Engine {
       
       
       if (operationComplete.get()) {
+        delay(1000);
         if (updateError.length() == 0) {
           String exeloc = "";
           switch (platform) {
@@ -679,7 +713,8 @@ class Engine {
             String cmd = "start \"Timeway\" /d \""+getDir(newVersion).replaceAll("/", "\\\\")+"\" \""+getFilename(newVersion)+"\"";
             console.log(cmd);
             runOSCommand(cmd);
-            app.exit();
+            delay(500);
+            exit();
           }
           else {
             console.warn("New version of Timeway could not be found, please close Timeway and open new version manually.");
@@ -1594,6 +1629,7 @@ class Engine {
     defaultKeybindings.putIfAbsent("inventorySelectRight", '.');
     defaultKeybindings.putIfAbsent("scaleDownSlow", '_');
     defaultKeybindings.putIfAbsent("showCommandPrompt", '/');
+    for (int i = 0; i < 10; i++) defaultKeybindings.putIfAbsent("quickWarp"+str(i), str(i).charAt(0));
   }
   //*************************************************************
   //*************************************************************
@@ -3488,7 +3524,14 @@ class Engine {
   }
 
   public boolean keyAction(String keybindName) {
-    char k = keybindings.getString(keybindName).charAt(0);
+    String s = keybindings.getString(keybindName);
+    char k;
+    if (s == null) {
+      if (defaultKeybindings.get(keybindName) != null) k = defaultKeybindings.get(keybindName);
+      else { console.bugWarnOnce("keyAction: unknown keyaction "+keybindName);
+      return false; }
+    }
+    else k = s.charAt(0);
     // Special keys/buttons
     switch (int(k)) {
     case LEFT_CLICK:

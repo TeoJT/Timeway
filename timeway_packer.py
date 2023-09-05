@@ -91,16 +91,23 @@ version_original = input("Enter version: ")
 version = version_original.replace("-", "_")
 version = version.replace(".", "_")
 
+actionsComplete = False
+
 # Check for folder application.windows64 folder
 new_name = "timeway_windows_"+version
 if (os.path.isdir("application.windows64")):
     # rename to timeway_windows_(version)
     os.rename("application.windows64", new_name)
 
+# If a folder with files called timeway_windows exists from a previous packaging, delete it.
+if (os.path.isdir("timeway_windows")):
+    shutil.rmtree("timeway_windows")
+
 windows_executable_location = "null"
 windows_stability = 0
 windows_download_size = 1  # Needs to be at least 1kb
 if (os.path.isdir("timeway_windows_"+version)):
+    actionsComplete = True
     windows_stability = 5
     windows_executable_location = "timeway_windows_"+version+"/Timeway.exe"
     # move all .dll files in timeway_windows_(version)/lib (apart from dsj.dll) to windows64
@@ -125,7 +132,8 @@ if (os.path.isdir("timeway_windows_"+version)):
         # If the lib folder does not have dsj.dll, copy it from the code folder to the lib folder
         if (not os.path.isfile(new_name+"/lib/dsj.dll")):
             if (os.path.isfile("code/dsj.dll")):
-                os.copy("code/dsj.dll", new_name+"/lib/dsj.dll")
+                # copy the dsj.dll file to the lib folder
+                shutil.copy("code/dsj.dll", new_name+"/lib/dsj.dll")
                 print("Copied dsj.dll to lib folder.")
             else:
                 print(color.RED+"Error: code/dsj.dll doesn't exist!"+color.NONE)
@@ -171,7 +179,14 @@ if (os.path.isdir("timeway_windows_"+version)):
 
         if (zip):
             print(color.WHITE+"Zipping (patience, this may take some time)..."+color.NONE)
-            shutil.make_archive(new_name, 'zip', new_name)
+            # We don't want loose items in the zip folder
+            # so put it all in another folder of the same name
+            zip_source = "timeway_windows"+"/"+new_name
+            if (not os.path.isdir("timeway_windows")): 
+                os.mkdir("timeway_windows")
+            os.rename(new_name, zip_source)
+
+            shutil.make_archive(new_name, 'zip', "timeway_windows")
             # Make bell sound in terminal to indicate finished zipping
             print("\a")
             print(color.GREEN+"Done."+color.NONE)
@@ -274,8 +289,11 @@ info = """
     patch_notes=""
 )
 
-print(info)
-print(color.GOLD+"\nRemember to fill in the blank \"INSERT HERE\" spaces!"+color.NONE)
+if (not actionsComplete):
+    print(color.RED+"There isn't any exported applications to package up..."+color.NONE)
+else:
+    print(info)
+    print(color.GOLD+"\nRemember to fill in the blank \"INSERT HERE\" spaces!"+color.NONE)
 
 if (output_to_file):
     f = open("timeway_update.json", "w")

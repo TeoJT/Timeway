@@ -19,7 +19,10 @@ public class PixelRealmContext {
 }
 
 public class PixelRealm extends Screen {
-    final String COMPATIBILITY_VERSION = "1.0";
+    final static String COMPATIBILITY_VERSION = "1.0";
+    final static String QUICK_WARP_DATASET = "quick_warp_dataset";  // The name of this really doesn't matter as long as it's consistant when quick warping
+    final static String QUICK_WARP_ID = "quick_warp_id";
+  
   
     public float height = 0.;
     
@@ -78,6 +81,8 @@ public class PixelRealm extends Screen {
     
     private final static int TOOL_GRABBER_NORMAL = 2;
     private final static int TOOL_GRABBER_REPOSITION = 3;
+    
+    public boolean launchWhenPlaced = false; 
     
     private int parentTool(int tool) {
       switch (tool) {
@@ -173,6 +178,13 @@ public class PixelRealm extends Screen {
       FADE_DIST_GROUND = pow(GROUND_SIZE*max(RENDER_DISTANCE-3, 0),2);
     }
     
+    public final Runnable generateQuickWarp = new Runnable() {
+      public void run() {
+        QuickWarpSaveInfo[] quickWarp = new QuickWarpSaveInfo[10];
+        engine.setSharedResource(QUICK_WARP_DATASET, quickWarp);
+      }
+    };
+    
     public ItemSlot inventoryHead = null;
     public ItemSlot inventoryTail = null;
     public ItemSlot inventorySelectedItem = null;
@@ -256,7 +268,10 @@ public class PixelRealm extends Screen {
       }
     }
     
-    class FileObject extends Object3D {
+    public float lastPlacedPosX = 0;
+    public float lastPlacedPosZ = 0;
+    
+    abstract class FileObject extends Object3D {
       public String dir;
       public String filename;
       public FileObject(float x, float y, float z, String dir) {
@@ -283,8 +298,11 @@ public class PixelRealm extends Screen {
       public void load() {
         // We expect the engine to have already loaded a JSON object.
         // Every 3d object has x y z position.
-        this.x = engine.getJSONFloat("x", random(-4000, 4000));
-        this.z = engine.getJSONFloat("z", random(-4000, 4000));
+        this.x = engine.getJSONFloat("x", lastPlacedPosX+random(-500, 500));
+        this.z = engine.getJSONFloat("z", lastPlacedPosZ+random(-500, 500));
+        lastPlacedPosX = this.x;
+        lastPlacedPosZ = this.z;
+        
         float yy = onSurface(this.x, this.z);
         this.y = engine.getJSONFloat("y", yy);
         
@@ -300,6 +318,36 @@ public class PixelRealm extends Screen {
           object3d.setFloat("y", this.y);
           object3d.setFloat("z", this.z);
           return object3d;
+      }
+      
+    }
+    
+    class UnknownTypeFileObject extends FileObject {
+      
+      public UnknownTypeFileObject(float x, float y, float z, String dir) {
+        super(x,y,z,dir);
+      }
+      
+      public UnknownTypeFileObject(String dir) {
+        super(dir);
+      }
+      
+      public void display() {
+        // Display the name of the file
+        float d = direction-PI;
+        
+        if (lights) scene.noLights();
+        scene.pushMatrix();
+        scene.translate(x, y-hi-20, z);
+        scene.rotateY(d);
+        scene.textFont(engine.DEFAULT_FONT, 16);
+        scene.textAlign(CENTER, CENTER);
+        scene.fill(255);
+        scene.text(filename, 0, 0, 0);
+        scene.popMatrix();
+        if (lights) scene.lights();
+          
+        super.display(true);
       }
       
     }
@@ -420,10 +468,9 @@ public class PixelRealm extends Screen {
           // Display text over the portal showing the directory.
           float d = direction-PI;
           //float w = img.width*size;
-          float h = img.height*size;
           if (lights) scene.noLights();
           scene.pushMatrix();
-          scene.translate(x, y-h+40, z);
+          scene.translate(x, y-hi+40, z);
           scene.rotateY(d);
           scene.textSize(24);
           scene.textFont(engine.DEFAULT_FONT);
@@ -783,18 +830,53 @@ public class PixelRealm extends Screen {
       return null;
   }
   
+    public class QuickWarpSaveInfo {
+      public QuickWarpSaveInfo(float xpos, float ypos, float zpos, float direction, String currentDir) {
+        this.xpos = xpos;
+        this.ypos = ypos;
+        this.zpos = zpos;
+        this.direction = direction;
+        this.currentDir = currentDir;
+      }
+      public float xpos, ypos, zpos;
+      public float direction;
+      public String currentDir;
+    }
+    
+    private void prevInventoryToNewInventory(HashSet<String> prevInventory) {
+      // Find our items carried over from the previous realm and add them to our inventory
+      for (FileObject f : files) {
+        if (f != null) {
+          if (prevInventory.contains(f.dir)) {
+            pickupItem(f);
+          }
+        }
+      }
+      currentTool = TOOL_GRABBER_NORMAL;
+    }
+    
+    public PixelRealm(Engine engine, String dir, HashSet<String> prevInventory, QuickWarpSaveInfo quickWarp) {
+        super(engine);
+        // Find our items carried over from the previous realm and add them to our inventory
+        this.setup(dir, dir.substring(0, dir.lastIndexOf("/", dir.length()-2)));
+        prevInventoryToNewInventory(prevInventory);
+        
+        this.xpos = quickWarp.xpos;
+        this.ypos = quickWarp.ypos;
+        this.zpos = quickWarp.zpos;
+        this.direction  = quickWarp.direction;
+    }
+    
+    public PixelRealm(Engine engine, String dir, HashSet<String> prevInventory) {
+        super(engine);
+        this.setup(dir, dir.substring(0, dir.lastIndexOf("/", dir.length()-2)));
+        prevInventoryToNewInventory(prevInventory);
+    }
+  
     public PixelRealm(Engine engine, String dir, String emergeFrom, HashSet<String> prevInventory) {
         super(engine);
         this.setup(dir, emergeFrom);
-        // Find our items carried over from the previous realm and add them to our inventory
-        for (FileObject f : files) {
-          if (f != null) {
-            if (prevInventory.contains(f.dir)) {
-              pickupItem(f);
-            }
-          }
-        }
-        currentTool = TOOL_GRABBER_NORMAL;
+        prevInventoryToNewInventory(prevInventory);
     }
 
     public PixelRealm(Engine engine, String dir, String emergeFrom) {
@@ -805,6 +887,7 @@ public class PixelRealm extends Screen {
     public PixelRealm(Engine engine, String dir) {
         super(engine);
         this.setup(dir, dir.substring(0, dir.lastIndexOf("/", dir.length()-2)));
+        engine.setSharedResource(QUICK_WARP_ID, 1);
     }
     
     public void setup(String dir, String emergeFrom) {
@@ -863,7 +946,7 @@ public class PixelRealm extends Screen {
         
         //loadTurfJson(dir, emergeFrom);
         
-        refreshRealm(dir, emergeFrom);
+        refreshRealm(dir, emergeFrom, false);
         
         refreshRealmInSeperateThread();
         
@@ -1224,7 +1307,7 @@ public class PixelRealm extends Screen {
             String path = engine.currentFiles[i].file.getAbsolutePath();
             switch (type) {
               case FILE_TYPE_UNKNOWN:
-              fileobject = new FileObject(path);
+              fileobject = new UnknownTypeFileObject(path);
               fileobject.img = engine.systemImages.get(engine.currentFiles[i].icon);
               fileobject.setSize(0.5);
               fileobject.hitboxSize = BIG_HITBOX;
@@ -1233,7 +1316,7 @@ public class PixelRealm extends Screen {
               fileobject = new ImageFileObject(path);
               break;
               default:
-              fileobject = new FileObject(engine.currentFiles[i].file.getAbsolutePath());
+              fileobject = new UnknownTypeFileObject(path);
               fileobject.img = engine.systemImages.get(engine.currentFiles[i].icon);
               fileobject.setSize(0.5);
               fileobject.hitboxSize = BIG_HITBOX;
@@ -1247,8 +1330,10 @@ public class PixelRealm extends Screen {
     }
     
     Thread refreshThread;
+    public AtomicBoolean refreshThreadEnded = new AtomicBoolean(false);
     
     public void refreshRealmInSeperateThread() {
+      refreshThreadEnded.set(false);
       refreshThread = new Thread(new Runnable() {
           private FileTime img_sky_1_modified = getLastModified(engine.currentDir+REALM_SKY);
           private FileTime img_grass_modified = getLastModified(engine.currentDir+REALM_GRASS);
@@ -1265,7 +1350,7 @@ public class PixelRealm extends Screen {
               }
               catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
-                break; // Exit the loop on interruption
+                //break; // Exit the loop on interruption
               }
               if (
                 fileChanged(REALM_SKY, img_sky_1_modified)  ||
@@ -1279,6 +1364,7 @@ public class PixelRealm extends Screen {
                 img_grass_modified = getLastModified(engine.currentDir+REALM_GRASS);
               }
             }
+            refreshThreadEnded.set(true);
           }
       });
       refreshThread.start();
@@ -1347,13 +1433,20 @@ public class PixelRealm extends Screen {
       if (REALM_SEQ_DEFAULT != null) sequencer.stop();
       refreshThread.interrupt();
       saveTurfJson();
+      
+      // Cheap solution cry about it
+      while (!refreshThreadEnded.get()) { 
+        delay(10); 
+        refreshThread.interrupt();
+      }
     }
     
     boolean loadedMusic = false;
     
-    public void refreshRealm() {
-      // Refresh the realm without spawning back at the emerging portal.
-      refreshRealm(engine.currentDir, "");
+    
+    public void refreshRealm(String dir, String emergeFrom, boolean saveBeforeRefresh) {
+      if (saveBeforeRefresh) saveTurfJson();
+      refreshRealm(dir, emergeFrom);
     }
     
     public void refreshRealm(String dir, String emergeFrom) {
@@ -1446,6 +1539,11 @@ public class PixelRealm extends Screen {
       //  loadedMusic = true;
       //  t1.start();
       //}
+    }
+    
+    public void refreshRealm() {
+      // Refresh the realm without spawning back at the emerging portal.
+      refreshRealm(engine.currentDir, "", true);
     }
     
     protected void previousReturnAnimation() {
@@ -1928,12 +2026,55 @@ public class PixelRealm extends Screen {
           }
         
         
-          if (engine.keyDown(BACKSPACE)) {
+        }
+        
+        if (engine.keyDown(BACKSPACE)) {
+          endRealm();
+          engine.fadeAndStopMusic();
+          requestScreen(new Explorer(engine, engine.currentDir));
+        }
+        
+        // Quick warp shortcut keys
+        for (int i = 0; i < 10; i++) {
+          // Go through all the keys 0-9 and check if it's being pressed
+          if (engine.keyActionOnce("quickWarp"+str(i))) {
+            // Get the quick warp info from shared resources (creating the resource if it doesn't exist)
+            QuickWarpSaveInfo[] quickWarp = (QuickWarpSaveInfo[])engine.getSharedResource(QUICK_WARP_DATASET, generateQuickWarp);
+            
+            // If quick warp on the key pressed has been used before, go to it. Otherwise, start from the default dir.
+            // Save our quickwarp first
+            // If we pressed the same button as the warp we're already in, then go back to the default dir instead.
+            int myQuickWarpID = ((Integer)engine.getSharedResource(QUICK_WARP_ID)).intValue();
+              
+            quickWarp[myQuickWarpID] = new QuickWarpSaveInfo(xpos, ypos, zpos, direction, engine.currentDir);
+            
+            // Now go to new warp
             endRealm();
-            engine.fadeAndStopMusic();
-            requestScreen(new Explorer(engine, engine.currentDir));
+            engine.setSharedResource(QUICK_WARP_ID, new Integer(i));
+            portalLight = 255.;
+            if (myQuickWarpID == i) console.log("Going back to default dir.");
+            if (quickWarp[i] == null || (myQuickWarpID == i)) {
+              //console.log("New quick warp!");
+              // If warp on the number key has not been used before, then create a new quickwarp
+              PixelRealm warpTo = new PixelRealm(engine, engine.DEFAULT_DIR, inventoryToHashSet(engine.DEFAULT_DIR));
+              // A really really hacky way of doing things.
+              // We need to know the starting position calculated by loading everything after creating the world
+              quickWarp[i] = new QuickWarpSaveInfo(warpTo.xpos, warpTo.ypos, warpTo.zpos, warpTo.direction, engine.DEFAULT_DIR);
+              engine.currScreen = warpTo;
+            }
+            else {
+              engine.currScreen = new PixelRealm(engine, quickWarp[i].currentDir, inventoryToHashSet(quickWarp[i].currentDir), quickWarp[i]);
+            }
           }
         }
+        
+        // Go back to explorer if backspace pressed
+        if (engine.keyDown(BACKSPACE)) {
+          endRealm();
+          engine.fadeAndStopMusic();
+          requestScreen(new Explorer(engine, engine.currentDir));
+        }
+        
             
         int chunkx = floor(xpos/GROUND_SIZE)+1;
         int chunkz = floor(zpos/GROUND_SIZE)+1;  
@@ -2097,7 +2238,7 @@ public class PixelRealm extends Screen {
         
         //engine.timestamp("render3DObjects");
         
-        render3DObjects();  //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>//
+        render3DObjects();  //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>//
         scene.hint(DISABLE_DEPTH_TEST);
         
         //engine.timestamp("portal light");
@@ -2162,7 +2303,7 @@ public class PixelRealm extends Screen {
     private void render3DObjects() {
       //engine.timestamp("Update distances");
       // Update the distances from the player for all nodes
-      Object3D currNode = headNode; //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>//
+      Object3D currNode = headNode; //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>//
       while (currNode != null) {
         currNode.calculateVal();
         currNode = currNode.next;
@@ -2214,7 +2355,7 @@ public class PixelRealm extends Screen {
 
     public void content() {
       if (engine.sleepyMode) engine.setAwake();
-      runPixelRealm();  //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>//
+      runPixelRealm();  //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>//
     }
     
     public void startupAnimation() {
@@ -2241,6 +2382,24 @@ public class PixelRealm extends Screen {
       return (uA >= 0 && uA <= 1 && uB >= 0 && uB <= 1);
     }
     
+    private HashSet<String> inventoryToHashSet(String newdir) {
+      ItemSlot slot = inventoryHead;
+        
+      HashSet<String> carry = new HashSet<String>();
+      String dirFolderName = engine.getFilename(engine.currentDir);
+      
+      // Go thru the linked list and move each file to the new dir.
+      while (slot != null) {
+        if (!slot.carrying.filename.equals(dirFolderName)) {
+          engine.mv(slot.carrying.dir, newdir+slot.carrying.filename);
+          carry.add(newdir+slot.carrying.filename);
+        }
+        else console.log("You can't move the back portal to another folder!");
+        slot = slot.next;
+      }
+      return carry;
+    }
+    
     private void enterNewRealm(String newdir) {
       if (newdir.charAt(newdir.length()-1) != '/')  newdir += "/";
       
@@ -2252,18 +2411,7 @@ public class PixelRealm extends Screen {
       
       // If inventory isn't empty, move the files to the new directory.
       if (inventoryHead != null && inventorySelectedItem != null) {
-        ItemSlot slot = inventoryHead;
-        
-        HashSet<String> carry = new HashSet<String>();
-        
-        // Go thru the linked list and move each file to the new dir.
-        while (slot != null) {
-          engine.mv(slot.carrying.dir, newdir+slot.carrying.filename);
-          carry.add(newdir+slot.carrying.filename);
-          slot = slot.next;
-        }
-        
-        engine.currScreen = new PixelRealm(engine, newdir, engine.getFilename(engine.currentDir), carry);
+        engine.currScreen = new PixelRealm(engine, newdir, engine.getFilename(engine.currentDir), inventoryToHashSet(newdir));
       }
       else engine.currScreen = new PixelRealm(engine, newdir, engine.getFilename(engine.currentDir));
     }
@@ -2370,21 +2518,37 @@ public class PixelRealm extends Screen {
             app.noStroke();
             app.rect(engine.WIDTH/2-promptWi/2, engine.HEIGHT/2-promptHi/2, promptWi, promptHi);
             if (engine.button("newentry", "new_entry_128", "New entry")) {
-              // TODO: placeholder
-              String newName = engine.currentDir+"entry"+str(engine.numTimewayEntries)+"."+engine.ENTRY_EXTENSION;
-              
-              // TODO: more elegant solution required
-              
-              // Go to the journal
-              requestScreen(new Editor(engine, newName, true));
-              // "Refresh" the folder
-              endRealm();
-              currentTool = TOOL_GRABBER_NORMAL;
-              
-              //engine.currScreen = new PixelRealm(engine, engine.currentDir, engine.currentDir);
-              //endRealm();
-              menuShown = false;
               engine.playSound("menu_select");
+              
+              Runnable r = new Runnable() {
+                public void run() {
+                  if (engine.keyboardMessage.length() <= 1) {
+                    console.log("Please enter a valid entry name!");
+                    return;
+                  }
+                  
+                  String newName = engine.currentDir+engine.keyboardMessage+"."+engine.ENTRY_EXTENSION;
+                  // Create a new empty file so that we can hold it and place it down, editor will handle the rest.
+                  String[] empty = new String[0];
+                  app.saveStrings(newName, empty);
+                  
+                  refreshRealm();
+                  pickupItem(newName);
+                  
+                  launchWhenPlaced = true;
+                  
+                  //engine.currScreen = new PixelRealm(engine, engine.currentDir, engine.currentDir);
+                  //endRealm();
+                  menuShown = false;
+                  engine.playSound("menu_select");
+                }
+              };
+          
+              engine.beginInputPrompt("Entry name:", r);
+              
+              // TODO: rename MENU_CREATE_FOLDER_PROMPT since it's not just for folders.
+              menuID = MENU_CREATE_FOLDER_PROMPT;
+              
             }
             
             if (engine.button("newfolder", "new_folder_128", "New folder")) {
@@ -2660,6 +2824,9 @@ public class PixelRealm extends Screen {
         // We also do not want clicks from clicking the menu to unintendedly plonk down objects.
         if (inventorySelectedItem != null && !menuShown) {
           if ((parentTool(currentTool) == TOOL_GRABBER) && secondaryAction) {
+            // Used for if we're launching an entry/other files after placing it down
+            String itemPath = inventorySelectedItem.carrying.dir;
+            
             inventorySelectedItem.remove();
             engine.playSound("plonk");
             
@@ -2668,6 +2835,16 @@ public class PixelRealm extends Screen {
               inventorySelectedItem.carrying.visible = true;
               // switch back to normal for the next item
               currentTool = TOOL_GRABBER_NORMAL;
+            }
+            
+              
+            if (launchWhenPlaced) {
+              launchWhenPlaced = false;
+              // "Refresh" the folder
+              endRealm();
+              // Go to the journal
+              engine.open(itemPath);
+              currentTool = TOOL_NORMAL;
             }
               
             // Otherwise once the inventory's empty just switch back to normal mode.
