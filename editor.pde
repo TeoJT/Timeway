@@ -583,16 +583,6 @@ public class Editor extends Screen {
         readEntryJSONInSeperateThread();
     }
 
-    public Editor(Engine engine, String entryPath, boolean startSamplePage) {
-        this(engine, entryPath);
-        if (startSamplePage) {
-            TextPlaceable date = new TextPlaceable();
-            String d = engine.appendZeros(day(), 2)+"/"+engine.appendZeros(month(), 2)+"/"+year()+"\n"+engine.appendZeros(hour(), 2)+":"+engine.appendZeros(minute(), 2)+":"+engine.appendZeros(second(), 2);
-            date.sprite.move(engine.WIDTH-app.textWidth(d)*2., 250);
-            date.text = d;
-        }
-    }
-
     // Honestly just commenting it out so the code isn't as bloated.
 
     // public void saveEntry() {
@@ -734,6 +724,13 @@ public class Editor extends Screen {
             entryNameText.textColor = color(255);
             entryNameText.text = entryName;
             entryNameText.sprite.name = RENAMEABLE_NAME;
+            
+            // Create date
+            TextPlaceable date = new TextPlaceable();
+            String d = engine.appendZeros(day(), 2)+"/"+engine.appendZeros(month(), 2)+"/"+year()+"\n"+engine.appendZeros(hour(), 2)+":"+engine.appendZeros(minute(), 2)+":"+engine.appendZeros(second(), 2);
+            date.sprite.move(engine.WIDTH-app.textWidth(d)*2., 250);
+            date.text = d;
+            
             loading = false;
             return;
         }

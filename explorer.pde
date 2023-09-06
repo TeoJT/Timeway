@@ -193,7 +193,7 @@ public class Explorer extends Screen {
     if (button("new_entry", "new_entry_128", "New entry")) {
       // TODO: placeholder
       String newName = engine.currentDir+engine.appendZeros(numTimewayEntries, 5)+"."+engine.ENTRY_EXTENSION;
-      requestScreen(new Editor(engine, newName, true));
+      requestScreen(new Editor(engine, newName));
     }
     
     //************NEW FOLDER************

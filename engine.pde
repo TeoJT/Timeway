@@ -40,11 +40,9 @@ class Engine {
   // Info and versioning
   public final String NAME        = "Timeway";
   public final String AUTHOR      = "Teo Taylor";
-  public final String VERSION     = "0.0.5-d03";
+  public final String VERSION     = "0.0.5-d05";
   public final String VERSION_DESCRIPTION = 
-    "- Updated sound system\n"+
-    "- Added new sound effects\n"+
-    "- Improved bobbing";
+    "- Added shortcuts\n";
   // ***************************
   // How versioning works:
   // a.b.c
@@ -89,6 +87,7 @@ class Engine {
 
 
   public final String ENTRY_EXTENSION = "timewayentry";
+  public final String[] SHORTCUT_EXTENSION = {"timewayshortcut"};
 
 
   //*************************************************************
@@ -3960,6 +3959,25 @@ class Engine {
     } else
       return path;
   }
+  
+  // Returns filename without the extension.
+  public String getIsolatedFilename(String path) {
+    int index = path.lastIndexOf('/', path.length()-2);
+    String filenameWithExt = "";
+    if (index != -1) {
+      if (path.charAt(path.length()-1) == '/') {
+        path = path.substring(0, path.length()-1);
+      }
+      filenameWithExt = path.substring(index+1);
+    } else
+      filenameWithExt = path;
+    
+    // Now strip off the ext.
+    index = filenameWithExt.indexOf('.');
+    String result = filenameWithExt.substring(0, index);
+    console.log(result);
+    return result;
+  }
 
   public boolean atRootDir(String dirName) {
     // This will heavily depend on what os we're on.
@@ -4024,6 +4042,11 @@ class Engine {
     if (ext.equals("mp4")
       || ext.equals("m4v")
       || ext.equals("mov")) return FileType.FILE_TYPE_VIDEO;
+    
+    // For backwards compat, we may have different portal shortcut extensions.
+    for (String s : SHORTCUT_EXTENSION) {
+      if (ext.equals(s)) return FileType.FILE_TYPE_SHORTCUT;
+    }
 
     return FileType.FILE_TYPE_UNKNOWN;
   }
@@ -4750,5 +4773,6 @@ public enum FileType {
     FILE_TYPE_VIDEO, 
     FILE_TYPE_MUSIC, 
     FILE_TYPE_MODEL, 
-    FILE_TYPE_DOC
+    FILE_TYPE_DOC,
+    FILE_TYPE_SHORTCUT
 }
