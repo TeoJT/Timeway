@@ -1,4 +1,4 @@
-import java.util.concurrent.atomic.AtomicBoolean; //<>// //<>// //<>//
+import java.util.concurrent.atomic.AtomicBoolean; //<>//
 import javax.sound.midi.*;
 import java.io.BufferedInputStream;
 import processing.sound.*;
@@ -328,6 +328,39 @@ public class PixelRealm extends Screen {
       object3d.setFloat("z", this.z);
       return object3d;
     }
+  }
+  
+  class OBJFileObject extends FileObject {
+    public PShape model = null;
+    public OBJFileObject(float x, float y, float z, String dir) {
+      super(x, y, z, dir);
+      this.wi = 300;
+      this.hi = 300;
+      this.size = 1.;
+    }
+
+    public OBJFileObject(String dir) {
+      super(dir);
+    }
+    
+    public void load() {
+      super.load();
+      // TODO: load in seperate thread.
+      model = app.loadShape(dir);
+    }
+    
+    public void display() {
+      super.display();
+      if (model != null && visible) {
+        scene.pushMatrix();
+        scene.translate(this.x, this.y-30, this.z);
+        scene.scale(500);
+        scene.shape(model);
+        scene.popMatrix();
+      }
+    }
+    
+    
   }
 
   class UnknownTypeFileObject extends FileObject {
@@ -1416,6 +1449,9 @@ public class PixelRealm extends Screen {
           case FILE_TYPE_SHORTCUT:
             fileobject = new ShortcutPortal(0., 0., 0., engine.currentFiles[i].file.getAbsolutePath());
             break;
+          case FILE_TYPE_MODEL:
+            fileobject = new OBJFileObject(0., 0., 0., engine.currentFiles[i].file.getAbsolutePath());
+            break;
           default:
             fileobject = new UnknownTypeFileObject(path);
             fileobject.img = engine.systemImages.get(engine.currentFiles[i].icon);
@@ -2176,7 +2212,6 @@ public class PixelRealm extends Screen {
 
 
     scene.beginShape();
-    scene.texture(img_sky_1);
     scene.textureMode(NORMAL);
     scene.textureWrap(REPEAT);
     scene.texture(img_sky_1);
@@ -2366,9 +2401,11 @@ public class PixelRealm extends Screen {
     scene.endDraw();
 
     //engine.timestamp("display final scene");
-
-
+    
     image(scene, 0, myUpperBarWeight, engine.WIDTH, this.height);
+    //if (blurrr) filter(NORMAL);
+    if (blurrr) filter(BLUR, 0.1);
+    
 
     fill(255);
     textSize(30);
@@ -2415,6 +2452,8 @@ public class PixelRealm extends Screen {
 
     //engine.timestamp("done render3DObjects");
   }
+  
+  boolean blurrr = false;
 
   public boolean customCommands(String command) {
     if (command.equals("/refresh")) {
@@ -2427,6 +2466,11 @@ public class PixelRealm extends Screen {
         dropInventory();
         console.log("Dropping all items");
       } else console.log("No items to drop.");
+      return true;
+    }
+    if (command.equals("/blurrr")) {
+      blurrr = !blurrr;
+      console.log("BLURRR");
       return true;
     }
     if (command.equals("/editgui")) {

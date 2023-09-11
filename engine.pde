@@ -40,7 +40,7 @@ class Engine {
   // Info and versioning
   public final String NAME        = "Timeway";
   public final String AUTHOR      = "Teo Taylor";
-  public final String VERSION     = "0.0.5-d05";
+  public final String VERSION     = "0.0.5-d06";
   public final String VERSION_DESCRIPTION = 
     "- Added shortcuts\n";
   // ***************************
@@ -84,6 +84,9 @@ class Engine {
   public       String DEFAULT_FONT_NAME = "Typewriter";
   public       float  VOLUME_NORMAL = 1.;
   public       float  VOLUME_QUIET = 0.;
+  
+  // EXPERIMENTAL THING STILL
+  public      boolean USE_CPU_CANVAS = false;
 
 
   public final String ENTRY_EXTENSION = "timewayentry";
@@ -123,6 +126,11 @@ class Engine {
   public int pastedImageCount = 0;
   public int lastFrameMillis = 0;
   public int thisFrameMillis = 0;
+  public PGraphics[] CPUCanvas;
+  public int usedCPUCanvases = 0;
+  public int currentCPUCanvas = 0;
+  public int smallerCanvasTimeout = 300;
+  
 
   // Screens
   public Screen currScreen;
@@ -195,7 +203,14 @@ class Engine {
 
 
     generateErrorImg();
-
+    if (USE_CPU_CANVAS) {
+      CPUCanvas = new PGraphics[8];
+      CPUCanvas[0] = createGraphics(app.width, app.height);
+      CPUCanvas[0].beginDraw();
+      CPUCanvas[0].clear();
+      CPUCanvas[0].endDraw();
+      app.image(CPUCanvas[0], 0, 0);
+    }
     loadedContent = new HashSet<String>();
     systemImages = new HashMap<String, PImage>();
     fonts = new HashMap<String, PFont>();
@@ -808,7 +823,7 @@ class Engine {
   }
 
 
-  public void runCommand(String command) {
+  public void runCommand(String command) throws RuntimeException {
     // TODO: have a better system for commands.
     if (command.equals("/powersaver")) {
       powerSaver = !powerSaver;
@@ -872,7 +887,12 @@ class Engine {
         console.log("An update is available!");
       }
       else console.log("No updates available.");
-    } else if (command.length() <= 1) {
+    } 
+    else if (commandEquals(command, "/throwexception")) {
+      console.log("Prepare for a crash!");
+      throw new RuntimeException("/throwexception command");
+    }
+    else if (command.length() <= 1) {
       // If empty, do nothing and close the prompt.
     } else if (currScreen.customCommands(command)) {
       // Do nothing, we just don't want it to return "unknown command" for a custom command.
@@ -1182,6 +1202,7 @@ class Engine {
   float framerateBuffer[];
   public boolean forcePowerModeEnabled = false;
   public PowerMode forcedPowerMode = PowerMode.HIGH;
+  public boolean fatalFPS = false;
 
   // basically use when you expect a significant difference in fps from that point forward.
   public void forceFPSRecoveryMode() {
@@ -1276,6 +1297,7 @@ class Engine {
       if (powerMode != forcedPowerMode) setPowerMode(forcedPowerMode);
       return;
     }
+    
 
     if (powerSaver || sleepyMode) return;
 
@@ -1375,6 +1397,7 @@ class Engine {
             //recoveryScore += 1;
             break;
           case SLEEPY:
+            // Raise this to true to enable any other bits of the code to perform performance-saving measures.
             break;
           case MINIMAL:
             // This is not a power level we downgrade to.
@@ -2813,7 +2836,7 @@ class Engine {
       }
     }
   }
-
+  
   public void img(PImage image, float x, float y, float w, float h) {
     if (wireframe) {
       app.stroke(sin(app.frameCount*0.1)*127+127, 100);
@@ -2836,7 +2859,87 @@ class Engine {
     }
     // If image is loaded render.
     if (image.width > 0 && image.height > 0) {
-      app.image(image, x, y, w, h);
+      if (image.width > 1024 && image.height > 1024 && USE_CPU_CANVAS) {
+        PGraphics canv = CPUCanvas[currentCPUCanvas];
+        float canvDispSclX = canv.width/WIDTH;
+        float canvDispSclY = canv.height/HEIGHT;
+        canv.beginDraw();
+        //CPUCanvas.clear();
+        //CPUCanvas.clip(x*canvDispSclX,y*canvDispSclY,w*canvDispSclX,h*canvDispSclY);
+        canv.image(image, x*canvDispSclX, y*canvDispSclY, w*canvDispSclX, h*canvDispSclY);
+        //CPUCanvas.noClip();
+        canv.endDraw();
+        app.clip(x*displayScale, y*displayScale, w*displayScale, h*displayScale);
+        app.image(canv, 0, 0, WIDTH, HEIGHT);
+        app.noClip();
+      }
+      else app.image(image, x, y, w, h);
+      
+      //final float IMG_MAX_CHUNK_X = 128;
+      //final float IMG_MAX_CHUNK_Y = 128;
+      
+      //float scalex = w/image.width;
+      //float scaley = h/image.height;
+      
+      //for (float iy = 0; iy < image.height; iy += IMG_MAX_CHUNK_Y) {
+      //  float maxy = IMG_MAX_CHUNK_Y;
+      //  float textop = iy/image.height;
+      //  float texbottom = (iy+maxy)/image.height;
+      //  for (float ix = 0; ix < image.width; ix += IMG_MAX_CHUNK_X) {
+      //    float maxx = IMG_MAX_CHUNK_X;
+          
+      //    float texleft = ix/image.width;
+      //    float texright = (ix+maxx)/image.width;
+          
+      //    float iix = x+(ix*scalex);
+      //    float iixw = iix+(maxx*scalex);
+      //    float iiy = y+(iy*scaley);
+      //    float iiyh = iiy+(maxy*scaley);
+          
+          
+      //    app.beginShape();
+      //    app.textureMode(NORMAL);
+      //    app.textureWrap(CLAMP);
+      //    app.texture(image);
+      //    app.vertex(iix, iiy, texleft, textop);
+      //    app.vertex(iixw, iiy, texright, textop);
+      //    app.vertex(iixw, iiyh, texright, texbottom);
+      //    app.vertex(iix, iiyh, texleft, texbottom);
+      //    app.endShape();
+      //  }
+      //}
+      
+      //timestamp("ok good");
+      return;
+    } else {
+      app.noStroke();
+      return;
+    }
+  }
+
+  public void imgOld(PImage image, float x, float y, float w, float h) {
+    if (wireframe) {
+      app.stroke(sin(app.frameCount*0.1)*127+127, 100);
+      app.strokeWeight(3);
+      app.noFill();
+      app.rect(x, y, w, h);
+      app.noStroke();
+    } else {
+      app.noStroke();
+    }
+    if (image == null) {
+      app.image(errorImg, x, y, w, h);
+      console.warnOnce("Image listed as 'loaded' but image doesn't seem to exist.");
+      return;
+    }
+    if (image.width == -1 || image.height == -1) {
+      app.image(errorImg, x, y, w, h);
+      console.warnOnce("Corrupted image.");
+      return;
+    }
+    // If image is loaded render.
+    if (image.width > 0 && image.height > 0) {
+      img(image, x, y, w, h);
       return;
     } else {
       app.noStroke();
@@ -4042,6 +4145,8 @@ class Engine {
     if (ext.equals("mp4")
       || ext.equals("m4v")
       || ext.equals("mov")) return FileType.FILE_TYPE_VIDEO;
+      
+    if (ext.equals("obj")) return FileType.FILE_TYPE_MODEL;
     
     // For backwards compat, we may have different portal shortcut extensions.
     for (String s : SHORTCUT_EXTENSION) {
@@ -4225,6 +4330,7 @@ class Engine {
   public void refreshDir() {
     openDirInNewThread(currentDir);
   }
+  
 
   public String getTextFromClipboard()
   {
@@ -4329,7 +4435,25 @@ class Engine {
 
     // Show the current GUI.
     displayScreens();
-
+    
+    // If we're struggling with our framerate, opt back to a smaller CPU canvas at the
+    // cost of quality
+    if (USE_CPU_CANVAS) {
+      if (frameRate < 13 && smallerCanvasTimeout < 1 && powerMode != PowerMode.MINIMAL) {
+        currentCPUCanvas++;
+        if (CPUCanvas[currentCPUCanvas] == null) {
+          int w = CPUCanvas[currentCPUCanvas-1].width;
+          int h = CPUCanvas[currentCPUCanvas-1].height;
+          CPUCanvas[currentCPUCanvas] = createGraphics(w/2, h/2);
+          usedCPUCanvases++;
+        }
+        smallerCanvasTimeout = 120;
+      }
+      else smallerCanvasTimeout -= n;
+    }
+    
+    
+    
     // If Timeway is updating, a little notice and progress
     // bar will appear in front of the screen.
     runUpdate();
