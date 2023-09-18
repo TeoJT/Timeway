@@ -45,7 +45,6 @@ void settings() {
 }
 
 void sketch_openErrorLog(Exception e) {
-  
   StringWriter sw = new StringWriter();
   PrintWriter pw = new PrintWriter(sw);
   e.printStackTrace(pw);
@@ -88,8 +87,7 @@ void setup() {
     
     // Are we running in Processing or as an exported application?
     File f1 = new File(sketchPath()+"/lib");
-    File f2 = new File(sketchPath()+"/java");
-    sketch_showCrashScreen = true;//f1.exists() && f2.exists();
+    sketch_showCrashScreen = f1.exists();
     println("ShowcrashScreen: ", sketch_showCrashScreen);
     sketch_ERR_LOG_PATH = sketchPath()+"/data/error_log.txt";
     

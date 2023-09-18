@@ -40,7 +40,7 @@ class Engine {
   // Info and versioning
   public final String NAME        = "Timeway";
   public final String AUTHOR      = "Teo Taylor";
-  public final String VERSION     = "0.0.5-d06";
+  public final String VERSION     = "0.0.5-d08";
   public final String VERSION_DESCRIPTION = 
     "- Added shortcuts\n";
   // ***************************
@@ -390,6 +390,7 @@ class Engine {
     inputPromptShown = true;
     promptText = prompt;
     doWhenPromptSubmitted = doWhenSubmitted;
+    enterPressed = false;
   }
 
   // TODO: obviously improve...
@@ -407,7 +408,8 @@ class Engine {
 
       if (enterPressed) {
         // Remove enter character at end
-        keyboardMessage = keyboardMessage.substring(0, keyboardMessage.length()-1);
+        int ll = max(keyboardMessage.length()-1, 0);   // Don't allow it to go lower than 0
+        if (keyboardMessage.charAt(ll) == '\n') keyboardMessage = keyboardMessage.substring(0, ll);
         doWhenPromptSubmitted.run();
         enterPressed = false;
         inputPromptShown = false;

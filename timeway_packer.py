@@ -94,10 +94,10 @@ version = version.replace(".", "_")
 actionsComplete = False
 
 # Check for folder application.windows64 folder
-new_name = "timeway_windows_"+version
+new_name_windows = "timeway_windows_"+version
 if (os.path.isdir("application.windows64")):
     # rename to timeway_windows_(version)
-    os.rename("application.windows64", new_name)
+    os.rename("application.windows64", new_name_windows)
 
 # If a folder with files called timeway_windows exists from a previous packaging, delete it.
 if (os.path.isdir("timeway_windows")):
@@ -113,27 +113,27 @@ if (os.path.isdir("timeway_windows_"+version)):
     # move all .dll files in timeway_windows_(version)/lib (apart from dsj.dll) to windows64
     # check if lib dir exists
     success = True
-    if (not os.path.isdir(new_name+"/lib")):
+    if (not os.path.isdir(new_name_windows+"/lib")):
         print(color.RED+"Error: lib directory not found."+color.NONE)
         success = False
     else:
         # move all .dll files in lib to windows64
-        if (not os.path.isdir(new_name+"/lib/windows64")):
-            os.mkdir(new_name+"/lib/windows64")
-        for file in os.listdir(new_name+"/lib"):
+        if (not os.path.isdir(new_name_windows+"/lib/windows64")):
+            os.mkdir(new_name_windows+"/lib/windows64")
+        for file in os.listdir(new_name_windows+"/lib"):
             if (file.endswith(".dll") and file != "dsj.dll"):
-                os.rename(new_name+"/lib/"+file, new_name+"/lib/windows64/"+file)
+                os.rename(new_name_windows+"/lib/"+file, new_name_windows+"/lib/windows64/"+file)
                 print("Moved "+file+" to windows64 folder.")
 
-        if (os.path.isdir(new_name+"/lib/gstreamer-1.0")):
-            os.rename(new_name+"/lib/gstreamer-1.0", new_name+"/lib/windows64/gstreamer-1.0")
+        if (os.path.isdir(new_name_windows+"/lib/gstreamer-1.0")):
+            os.rename(new_name_windows+"/lib/gstreamer-1.0", new_name_windows+"/lib/windows64/gstreamer-1.0")
             print("Moved gstreamer folder to windows64 folder.")
 
         # If the lib folder does not have dsj.dll, copy it from the code folder to the lib folder
-        if (not os.path.isfile(new_name+"/lib/dsj.dll")):
+        if (not os.path.isfile(new_name_windows+"/lib/dsj.dll")):
             if (os.path.isfile("code/dsj.dll")):
                 # copy the dsj.dll file to the lib folder
-                shutil.copy("code/dsj.dll", new_name+"/lib/dsj.dll")
+                shutil.copy("code/dsj.dll", new_name_windows+"/lib/dsj.dll")
                 print("Copied dsj.dll to lib folder.")
             else:
                 print(color.RED+"Error: code/dsj.dll doesn't exist!"+color.NONE)
@@ -144,18 +144,21 @@ if (os.path.isdir("timeway_windows_"+version)):
             print(color.GREEN+"Moved dll files to windows64 folder."+color.NONE)
     
     # Do a bit of housecleaning of our package and delete the cache folder keybindings.json and config.json
-    if (os.path.isdir(new_name+"/data/cache")):
-        shutil.rmtree(new_name+"/data/cache")
+    if (os.path.isdir(new_name_windows+"/data/cache")):
+        shutil.rmtree(new_name_windows+"/data/cache")
         print("Removed cache folder.")
-    if (os.path.isfile(new_name+"/data/keybindings.json")):
-        os.remove(new_name+"/data/keybindings.json")
+    if (os.path.isfile(new_name_windows+"/data/keybindings.json")):
+        os.remove(new_name_windows+"/data/keybindings.json")
         print("Removed keybindings.json.")
-    if (os.path.isfile(new_name+"/data/config.json")):
-        os.remove(new_name+"/data/config.json")
+    if (os.path.isfile(new_name_windows+"/data/config.json")):
+        os.remove(new_name_windows+"/data/config.json")
         print("Removed config.json.")
+    if (os.path.isfile(new_name_windows+"/data/error_log.txt")):
+        os.remove(new_name_windows+"/data/error_log.txt")
+        print("Removed error_log.txt.")
     # Also recursively search and remove any files beginning with .pixelrealm from the folders
     files_to_remove = []
-    for root, dirs, files in os.walk(new_name):
+    for root, dirs, files in os.walk(new_name_windows):
         for file in files:
             if (file.startswith(".pixelrealm")):
                 files_to_remove.append(os.path.join(root, file))
@@ -178,22 +181,23 @@ if (os.path.isdir("timeway_windows_"+version)):
                 zip = False
 
         if (zip):
+            print(color.GOLD+"Now zipping, if you want to skip this, you may CTRL+C now."+color.NONE)
             print(color.WHITE+"Zipping (patience, this may take some time)..."+color.NONE)
             # We don't want loose items in the zip folder
             # so put it all in another folder of the same name
-            zip_source = "timeway_windows"+"/"+new_name
+            zip_source = "timeway_windows"+"/"+new_name_windows
             if (not os.path.isdir("timeway_windows")): 
                 os.mkdir("timeway_windows")
-            os.rename(new_name, zip_source)
+            os.rename(new_name_windows, zip_source)
 
-            shutil.make_archive(new_name, 'zip', "timeway_windows")
+            shutil.make_archive(new_name_windows, 'zip', "timeway_windows")
             # Make bell sound in terminal to indicate finished zipping
             print("\a")
             print(color.GREEN+"Done."+color.NONE)
     
     # Get the size of the zip file
-    if (os.path.isfile(new_name+".zip")):
-        windows_download_size = os.path.getsize(new_name+".zip")
+    if (os.path.isfile(new_name_windows+".zip")):
+        windows_download_size = os.path.getsize(new_name_windows+".zip")
         windows_download_size = windows_download_size/1000
         windows_download_size = int(windows_download_size)
         print(color.WHITE+"Download size: "+str(windows_download_size)+"kb"+color.NONE)

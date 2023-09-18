@@ -23,6 +23,7 @@ public class PixelRealm extends Screen {
   final static String SHORTCUT_COMPATIBILITY_VERSION = "1.0";
   final static String QUICK_WARP_DATASET = "quick_warp_dataset";  // The name of this really doesn't matter as long as it's consistant when quick warping
   final static String QUICK_WARP_ID = "quick_warp_id";
+  final static float PSHAPE_SIZE_FACTOR = 100.;
 
 
   public float height = 0.;
@@ -310,6 +311,7 @@ public class PixelRealm extends Screen {
       // Every 3d object has x y z position.
       this.x = engine.getJSONFloat("x", lastPlacedPosX+random(-500, 500));
       this.z = engine.getJSONFloat("z", lastPlacedPosZ+random(-500, 500));
+      this.size = engine.getJSONFloat("scale", 1.);
       lastPlacedPosX = this.x;
       lastPlacedPosZ = this.z;
 
@@ -317,7 +319,7 @@ public class PixelRealm extends Screen {
       this.y = engine.getJSONFloat("y", yy);
 
       // If the object is below the ground, reset its position.
-      if (y < yy-5.) this.y = yy;
+      if (y > yy+5.) this.y = yy;
     }
 
     public JSONObject save() {
@@ -326,12 +328,32 @@ public class PixelRealm extends Screen {
       object3d.setFloat("x", this.x);
       object3d.setFloat("y", this.y);
       object3d.setFloat("z", this.z);
+      object3d.setFloat("scale", this.size);
       return object3d;
+    }
+    
+    public void scaleUp(float amount) {
+      // Use a curve to make it scale a little when small and scale a lot when larger
+      setSize(size+max((amount*amount), 0.001));
+    }
+    
+    public void scaleDown(float amount) {
+      // Use a curve to make it scale a little when small and scale a lot when larger
+      setSize(size-max((amount*amount), 0.001));
     }
   }
   
   class OBJFileObject extends FileObject {
     public PShape model = null;
+    
+    private float biggestDepthAxis = 0.;
+    
+    // TODO: scale each axis...?
+    public float rotX = 0.;
+    public float rotY = 0.;
+    public float rotZ = 0.;
+    
+    
     public OBJFileObject(float x, float y, float z, String dir) {
       super(x, y, z, dir);
       this.wi = 300;
@@ -347,20 +369,46 @@ public class PixelRealm extends Screen {
       super.load();
       // TODO: load in seperate thread.
       model = app.loadShape(dir);
+      //console.log("vertex count: "+model.getVertexCount());
+      //console.log("width: "+model.getWidth());
+      //console.log("height: "+model.getHeight());
+      //console.log("depth: "+model.getDepth());
+      
+      // We need axis to display the shape, we don't care about height
+      
+      biggestDepthAxis = model.getWidth() > model.getDepth() ? model.getWidth() : model.getDepth();
+      
+      size = 1.;
+      
+      // Tbh we only really care about the width and depth (I think)
+    }
+    
+    
+    public void setSize(float size) {
+      this.size = size;
     }
     
     public void display() {
       super.display();
       if (model != null && visible) {
         scene.pushMatrix();
-        scene.translate(this.x, this.y-30, this.z);
-        scene.scale(500);
+        scene.translate(this.x, this.y, this.z);
+        scene.scale(-PSHAPE_SIZE_FACTOR*(1/biggestDepthAxis)*size);
+        scene.rotateX(rotX);
+        scene.rotateY(rotY);
+        scene.rotateZ(rotZ);
         scene.shape(model);
         scene.popMatrix();
       }
     }
     
+    public void scaleUp(float amount) {
+      setSize(size+amount);
+    }
     
+    public void scaleDown(float amount) {
+      setSize(size-amount);
+    }
   }
 
   class UnknownTypeFileObject extends FileObject {
@@ -427,7 +475,9 @@ public class PixelRealm extends Screen {
             }
           }
           if (img.width > 0 && img.height > 0 && loadFlag) {
-            setSize(1.);
+            //setSize(1.);
+            this.wi = img.width*size;
+            this.hi = img.height*size;
             float y1 = y-hi;
             // There's no y2 huehue.
 
@@ -644,7 +694,6 @@ public class PixelRealm extends Screen {
     public float y;
     public float z;
     public PImage img = null;
-    ;
     protected float size = 1.;
     protected float wi = 0.;
     protected float hi = 0.;
@@ -2072,6 +2121,7 @@ public class PixelRealm extends Screen {
         }
 
 
+        // If holding item and we're in reposition mode, move the object instead of the player.
         if (currentTool == TOOL_GRABBER_REPOSITION) {
           if (inventorySelectedItem != null) {
 
@@ -2101,6 +2151,22 @@ public class PixelRealm extends Screen {
               bob = 0.;
               engine.playSound("step", random(0.9, 1.2));
             }
+          }
+        }
+        
+        // If holding an item, allow scaling up and down.
+        if (inventorySelectedItem != null) {
+          if (engine.keyAction("scaleUp")) {
+            inventorySelectedItem.carrying.scaleUp(0.20);
+          }
+          if (engine.keyAction("scaleDown")) {
+            inventorySelectedItem.carrying.scaleDown(0.20);
+          }
+          if (engine.keyAction("scaleUpSlow")) {
+            inventorySelectedItem.carrying.scaleUp(0.07);
+          }
+          if (engine.keyAction("scaleDownSlow")) {
+            inventorySelectedItem.carrying.scaleDown(0.07);
           }
         }
 
@@ -2410,7 +2476,7 @@ public class PixelRealm extends Screen {
     fill(255);
     textSize(30);
     textAlign(LEFT, TOP);
-    //text((str(frameRate) + "\nX:" + str(xpos) + " Y:" + str(ypos) + " Z:" + str(zpos)), 50, myUpperBarWeight+35);
+    text((str(frameRate) + "\nX:" + str(xpos) + " Y:" + str(ypos) + " Z:" + str(zpos)), 50, myUpperBarWeight+35);
 
     //engine.timestamp("gui");
 
@@ -2657,13 +2723,23 @@ public class PixelRealm extends Screen {
             public void run() {
               if (engine.keyboardMessage.length() <= 1) {
                 console.log("Please enter a valid entry name!");
+                menuShown = false;
                 return;
               }
 
               String newName = engine.currentDir+engine.keyboardMessage+"."+engine.ENTRY_EXTENSION;
               // Create a new empty file so that we can hold it and place it down, editor will handle the rest.
-              String[] empty = new String[0];
-              app.saveStrings(newName, empty);
+              try {
+                FileWriter emptyFile = new FileWriter(newName);
+                emptyFile.write("");
+                emptyFile.close();
+              } catch (IOException e2) {
+                console.warn("Couldn't create entry, IO error!");
+                console.warn(e2.getMessage());
+                console.warn("Error path: "+newName);
+                menuShown = false;
+                return;
+              }
 
               refreshRealm();
               pickupItem(newName);
@@ -2869,7 +2945,10 @@ public class PixelRealm extends Screen {
         Object3D o = inventorySelectedItem.carrying;
         o.x = x;
         o.z = z;
-        o.y = onSurface(x, z);
+        if (onGround())
+          o.y = onSurface(x, z);
+        else
+          o.y = ypos;
         o.visible = true;
         if (inventorySelectedItem.carrying instanceof ImageFileObject) {
           ImageFileObject imgobject = (ImageFileObject)inventorySelectedItem.carrying;
