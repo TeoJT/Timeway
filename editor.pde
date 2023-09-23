@@ -6,7 +6,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 class CameraException extends RuntimeException {};
 
 class DCapture implements java.beans.PropertyChangeListener {
- 
   private DSCapture capture;
   public int width, height;
   public AtomicBoolean ready = new AtomicBoolean(false);
@@ -18,14 +17,18 @@ class DCapture implements java.beans.PropertyChangeListener {
   public final int DEVICE_CAMERA     = 0;
   public final int DEVICE_MICROPHONE = 1;
   
+  private Engine engine;
   public ArrayList<DSFilterInfo> cameraDevices;
-  private int selectedCamera = 0;
+  public int selectedCamera = 0;
  
-  public DCapture() {
+  public DCapture(Engine e) {
     ready.set(false);
     error.set(false);
+    engine = e;
   }
   
+  // Lmao don't care I'm using Java 8 in 2023 dangit
+  @SuppressWarnings("deprecation")
   public void setup() {
     ready.set(false);
     error.set(false);
@@ -45,8 +48,13 @@ class DCapture implements java.beans.PropertyChangeListener {
       errorCode.set(Editor.ERR_NO_CAMERA_DEVICES);
       return;
     }
-      
-    selectedCamera = 0;
+    
+    Runnable useDefaultCamera = new Runnable() {
+      public void run() {
+        engine.sharedResources.setSharedResource("lastusedcamera", 0);
+      }
+    };
+    selectedCamera = (int)engine.sharedResources.getSharedResource("lastusedcamera", useDefaultCamera);
     activateCamera();
     
     ready.set(true);
@@ -87,18 +95,20 @@ class DCapture implements java.beans.PropertyChangeListener {
   }
   
   public void switchNextCamera() {
-    ready.set(false);
-    if (cameraDevices == null) return;
-    if (cameraDevices.size() == 0) return;
-    
-    // Turn off last used camera.
-    turnOffCamera();
-    
-    // Increase index by 1, reset to 0 if we're at end of list.
-    selectedCamera = ((selectedCamera+1)%(cameraDevices.size()));
-    activateCamera();
-    
-    ready.set(true);
+    // Only run if a camera isn't currently being setup.
+    if (ready.compareAndSet(true, false)) {
+      if (cameraDevices == null) return;
+      if (cameraDevices.size() == 0) return;
+      
+      // Turn off last used camera.
+      turnOffCamera();
+      
+      // Increase index by 1, reset to 0 if we're at end of list.
+      selectedCamera = ((selectedCamera+1)%(cameraDevices.size()));
+      activateCamera();
+      
+      ready.set(true);
+    }
   }
  
   public PImage updateImage() {
@@ -139,7 +149,6 @@ public class Editor extends Screen {
     public boolean autoScaleDown = false;
     public boolean usingERS = false;           // Not ever changed during runtime, but useful to disable during debugging.
     public int upperBarDrop = INITIALISE_DROP_ANIMATION;
-    
     public static final int INITIALISE_DROP_ANIMATION = 0;
     public static final int CAMERA_ON_ANIMATION = 1;
     public static final int CAMERA_OFF_ANIMATION = 2;
@@ -468,10 +477,15 @@ public class Editor extends Screen {
 
             if (editing()) {
                 engine.addNewlineWhenEnterPressed = true;
+                // Oh my god if this bug fix doesn't work I'm gonna lose it
+                // DO NOT allow the command prompt to appear by pressing '/' and make the current text we're writing disappear
+                // while writing text
+                engine.allowShowCommandPrompt = false;
                 text = engine.keyboardMessage;
             }
             
             if (placeableSelected()) {
+                engine.allowShowCommandPrompt = false;
                 editingPlaceable = this;
                 engine.keyboardMessage = text;
             }
@@ -543,7 +557,7 @@ public class Editor extends Screen {
         imagesInEntry = new ArrayList<String>();
         placeableset = new HashSet<Placeable>();
         this.entryPath = entryPath;
-        camera = new DCapture();
+        camera = new DCapture(engine);
         
         // Reset cpu canvas to original size, it will automatically shrink as needed.
         engine.currentCPUCanvas = 0;
@@ -947,6 +961,9 @@ public class Editor extends Screen {
           }
           
           if (engine.button("snap", "snap_button_128", "")) {
+            insertImage(camera.updateImage());
+            
+            // Rest of the stuff is just for cosmetic effects :sparkle_emoji:
             takePhoto = true;
             cameraFlashEffect = 255.;
           }
@@ -1004,9 +1021,11 @@ public class Editor extends Screen {
       cameraMode = false;
       camera.turnOffCamera();
       myBackgroundColor = BACKGROUND_COLOR;       // Restore original background color
+      engine.sharedResources.setSharedResource("lastusedcamera", camera.selectedCamera);
     }
 
     // New name without the following path.
+    // TODO: safer to move instead of delete
     public void renameEntry(String newName) {
       File f = new File(entryPath);
       if (f.exists()) {
@@ -1178,6 +1197,7 @@ public class Editor extends Screen {
                   
                   // Otherwise anything else should be deselected automatically.
                   editingPlaceable = null;
+                  engine.allowShowCommandPrompt = true;
                   //saveEntryJSON();
                 }
 
@@ -1225,6 +1245,7 @@ public class Editor extends Screen {
                 editingTextPlaceable.sprite.ypos = engine.mouseY()-20;
                 editingPlaceable = editingTextPlaceable;
                 engine.keyboardMessage = "";
+                engine.allowShowCommandPrompt = false;
             }
         }
 
@@ -1311,7 +1332,6 @@ public class Editor extends Screen {
             cameraFlashEffect -= 20.*n;
             if (cameraFlashEffect < 10.) {
               takePhoto = false;
-              insertImage(pic);
               this.endCamera();
             }
           }

@@ -51,7 +51,7 @@ void sketch_openErrorLog(Exception e) {
   String sStackTrace = sw.toString();
   
   String errMsg = 
-  "Sorry! Timeway crashed, an exception occured :(\n"+
+  "Sorry! Timeway crashed :(\n"+
   "Please provide Neo_2222 with this error log (only if it doesn't contain any personal information you don't want shared), thanks <3\n"+
   e.getClass().toString()+"\nMessage: \""+
   e.getMessage()+"\"\nStack trace:\n"+
@@ -83,6 +83,7 @@ void sketch_openErrorLog(Exception e) {
 void setup() {
     surface.setResizable(true);
     surface.setTitle("Timeway");
+    hint(DISABLE_OPENGL_ERRORS);
     background(0);
     
     // Are we running in Processing or as an exported application?
@@ -90,7 +91,6 @@ void setup() {
     sketch_showCrashScreen = f1.exists();
     println("ShowcrashScreen: ", sketch_showCrashScreen);
     sketch_ERR_LOG_PATH = sketchPath()+"/data/error_log.txt";
-    
     timewayEngine = new Engine(this);
 }
 

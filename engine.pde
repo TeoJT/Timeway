@@ -40,7 +40,7 @@ class Engine {
   // Info and versioning
   public final String NAME        = "Timeway";
   public final String AUTHOR      = "Teo Taylor";
-  public final String VERSION     = "0.0.5-d08";
+  public final String VERSION     = "0.0.5-d10";
   public final String VERSION_DESCRIPTION = 
     "- Added shortcuts\n";
   // ***************************
@@ -183,7 +183,40 @@ class Engine {
   public long lastTimestamp;
   public String lastTimestampName = null;
   public int timestampCount = 0;
-  public HashMap<String, Object> sharedResources;
+  public boolean allowShowCommandPrompt = true;
+  
+  public SharedResourcesModule sharedResources = new SharedResourcesModule();
+  
+  public class SharedResourcesModule {
+    private HashMap<String, Object> sharedResourcesMap;
+    
+    public SharedResourcesModule() {
+      sharedResourcesMap = new HashMap<String, Object>();
+    }
+    
+    public void setSharedResource(String resourceName, Object val) {
+      sharedResourcesMap.put(resourceName, val);
+    }
+    
+    public Object getSharedResource(String resourceName) {
+      Object o = sharedResourcesMap.get(resourceName);
+      if (o == null) console.bugWarn("getSharedResource: null object. Maybe use setSharedResource or add a runnable argument to getSharedResource?");
+      return o;
+    }
+    
+    public Object getSharedResource(String resourceName, Runnable runIfAbsent) {
+      Object o = sharedResourcesMap.get(resourceName);
+      if (o == null) runIfAbsent.run();
+      o = sharedResourcesMap.get(resourceName);
+      // If it's still null after running, send a warning
+      if (o == null) console.bugWarn("getSharedResource: object still null after running runIfAbsent. Make sure to use setSharedResource in your runnable!");
+      return o;
+    }
+    
+    public void deleteSharedResource(String resourceName) {
+      sharedResourcesMap.remove(resourceName);
+    }
+  }
 
   // *************************************************************
   // *********************Begin engine code***********************
@@ -216,7 +249,6 @@ class Engine {
     fonts = new HashMap<String, PFont>();
     shaders = new HashMap<String, PShader>();
     sounds = new HashMap<String, SoundFile>();
-    sharedResources = new HashMap<String, Object>();
 
     // First, load the logo and loading symbol.
     loadAsset(APPPATH+IMG_PATH+"logo.png");
@@ -314,11 +346,20 @@ class Engine {
     dynamicFramerate = getSettingBoolean("dynamicFramerate");
     DEFAULT_FONT_NAME = getSettingString("defaultSystemFont");
     DEFAULT_DIR  = getSettingString("homeDirectory");
-    currentDir  = DEFAULT_DIR;
+    {
+      File f = new File(DEFAULT_DIR);
+      if (!f.exists()) {
+        console.warn("homeDirectory "+DEFAULT_DIR+" doesn't exist! You should check your config file.");
+        DEFAULT_DIR = System.getProperty("user.home").replace('\\', '/');
+      }
+      currentDir  = DEFAULT_DIR;
+    }
+    
+    
     POWER_HIGH_BATTERY_THRESHOLD = int(getSettingFloat("lowBatteryPercent"));
     DEFAULT_FONT = getFont(DEFAULT_FONT_NAME);
     VOLUME_NORMAL = getSettingFloat("volumeNormal");
-    VOLUME_QUIET = getSettingFloat("volumeUnfocused");
+    VOLUME_QUIET = getSettingFloat("volumeQuiet");
     setMasterVolume(VOLUME_NORMAL);
     checkDevMode();
 
@@ -347,30 +388,6 @@ class Engine {
     //spriteSystemPlaceholder = new SpriteSystemPlaceholder(this, APPPATH+PATH_SPRITES_ATTRIB+"gui/");
 
     // PlaceholderReadEntryProperties p = new PlaceholderReadEntryProperties(APPPATH+"data/entry/exampleentry");
-  }
-  
-  
-  public void setSharedResource(String resourceName, Object val) {
-    sharedResources.put(resourceName, val);
-  }
-  
-  public Object getSharedResource(String resourceName) {
-    Object o = sharedResources.get(resourceName);
-    if (o == null) console.bugWarn("getSharedResource: null object. Maybe use setSharedResource or add a runnable argument to getSharedResource?");
-    return o;
-  }
-  
-  public Object getSharedResource(String resourceName, Runnable runIfAbsent) {
-    Object o = sharedResources.get(resourceName);
-    if (o == null) runIfAbsent.run();
-    o = sharedResources.get(resourceName);
-    // If it's still null after running, send a warning
-    if (o == null) console.bugWarn("getSharedResource: object still null after running runIfAbsent. Make sure to use setSharedResource in your runnable!");
-    return o;
-  }
-  
-  public void deleteSharedResource(String resourceName) {
-    sharedResources.remove(resourceName);
   }
 
   public void clearKeyBuffer() {
@@ -724,7 +741,6 @@ class Engine {
           File f = new File(newVersion);
           if (f.exists()) {
             updatePhase = 0;
-            open(newVersion);
             //Process p = Runtime.getRuntime().exec(newVersion);
             String cmd = "start \"Timeway\" /d \""+getDir(newVersion).replaceAll("/", "\\\\")+"\" \""+getFilename(newVersion)+"\"";
             console.log(cmd);
@@ -768,6 +784,40 @@ class Engine {
       
       popMatrix();
     }
+  }
+  
+  public String getExeFilename() {
+    switch (platform) {
+      case WINDOWS:
+      return "Timeway.exe";
+      case LINUX:
+      console.bugWarn("getExeFilename(): Not implemented for Linux");
+      break;
+      case MACOSX:
+      console.bugWarn("getExeFilename(): Not implemented for MacOS");
+      break;
+    }
+    return "";
+  }
+  
+  public void restart() {
+    String cmd = "";
+    
+    // TODO: make restart work while in Processing (dev mode)
+    switch (platform) {
+      case WINDOWS:
+      cmd = "start \"Timeway\" /d \""+getMyDir().replaceAll("/", "\\\\")+"\" \""+getExeFilename()+"\"";
+      break;
+      case LINUX:
+      console.bugWarn("restart(): Not implemented for Linux");
+      return;
+      case MACOSX:
+      console.bugWarn("restart(): Not implemented for MacOS");
+      return;
+    }
+    runOSCommand(cmd);
+    delay(500);
+    exit();
   }
 
 
@@ -893,6 +943,10 @@ class Engine {
     else if (commandEquals(command, "/throwexception")) {
       console.log("Prepare for a crash!");
       throw new RuntimeException("/throwexception command");
+    }
+    else if (commandEquals(command, "/restart")) {
+      console.log("Restarting Timeway...");
+      restart();
     }
     else if (command.length() <= 1) {
       // If empty, do nothing and close the prompt.
@@ -1628,7 +1682,7 @@ class Engine {
     defaultSettings.putIfAbsent("homeDirectory", System.getProperty("user.home").replace('\\', '/'));
     defaultSettings.putIfAbsent("forcePowerMode", "NONE");
     defaultSettings.putIfAbsent("volumeNormal", 1.0);
-    defaultSettings.putIfAbsent("volumeUnfocused", 0.0);
+    defaultSettings.putIfAbsent("volumeQuiet", 0.0);
 
     defaultKeybindings = new HashMap<String, Character>();
     defaultKeybindings.putIfAbsent("CONFIG_VERSION", char(1));
@@ -2990,7 +3044,22 @@ class Engine {
 
 
   public int counter(int max, int interval) {
-    return (int)(app.frameCount/interval) % (max);
+    float n = 1.;
+    switch (powerMode) {
+    case HIGH:
+      n = 1.;
+      break;
+    case NORMAL:
+      n = 2.;
+      break;
+    case SLEEPY:
+      n = 4.;
+      break;
+    case MINIMAL:
+      n = 0.;
+      break;
+    }
+    return (int)((app.frameCount*n)/interval) % (max);
   }
 
   public String appendZeros(int num, int length) {
@@ -3066,22 +3135,7 @@ class Engine {
   }
 
   public void loadingIcon(float x, float y) {
-    int interval = 3;
-    switch (powerMode) {
-    case HIGH:
-      interval = 4;
-      break;
-    case NORMAL:
-      interval = 2;
-      break;
-    case SLEEPY:
-      interval = 1;
-      break;
-    case MINIMAL:
-      interval = 4;
-      break;
-    }
-    imgCentre("load-"+appendZeros(counter(loadingFramesLength, interval), 4), x, y);
+    imgCentre("load-"+appendZeros(counter(loadingFramesLength, 3), 4), x, y);
   }
 
   public float smoothLikeButter(float i) {
@@ -4462,7 +4516,7 @@ class Engine {
 
 
     // Allow command prompt to be shown.
-    if (keyActionOnce("showCommandPrompt"))
+    if (keyActionOnce("showCommandPrompt") && allowShowCommandPrompt)
       showCommandPrompt();
 
 
@@ -4827,6 +4881,7 @@ public abstract class Screen {
       screen.startScreenTransition();
       engine.clearKeyBuffer();
       engine.resetFPSSystem();
+      engine.allowShowCommandPrompt = true;
       //engine.setAwake();
     }
   }

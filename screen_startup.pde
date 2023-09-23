@@ -68,12 +68,6 @@ public class Startup extends Screen {
             floatOut *= 0.9;
             app.tint(255, (255*floatOut));
             engine.imgCentre("logo", engine.WIDTH/2, engine.HEIGHT/2);
-            app.fill(255);
-            app.noStroke();
-            app.textAlign(CENTER, CENTER);
-            app.textFont(engine.DEFAULT_FONT);
-            app.textSize(34);
-            app.text("By "+engine.AUTHOR, engine.WIDTH/2, engine.HEIGHT+100);
             
             // Only executes once
             if (!nextScreen) {
@@ -90,8 +84,14 @@ public class Startup extends Screen {
               requestScreen(new PixelRealm(engine, dir));
             }
         }
-        app.noTint();
+        app.fill(255, 255-(255*floatIn));
+        app.noStroke();
+        app.textAlign(CENTER, CENTER);
+        app.textFont(engine.DEFAULT_FONT);
+        app.textSize(34);
+        app.text("by "+engine.AUTHOR, engine.WIDTH/2, engine.HEIGHT/2+150);
         
+        app.noTint();
         // Version in bottom-right.
         app.fill(255);
         app.noStroke();

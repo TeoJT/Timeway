@@ -153,8 +153,7 @@ public class PixelRealm extends Screen {
 
   final boolean BIG_HITBOX = true;
   final boolean SMALL_HITBOX = false;
-
-  private boolean obstructionFront = false;
+  
 
   HashSet<String> autogenStuff;
 
@@ -183,7 +182,7 @@ public class PixelRealm extends Screen {
   public final Runnable generateQuickWarp = new Runnable() {
     public void run() {
       QuickWarpSaveInfo[] quickWarp = new QuickWarpSaveInfo[10];
-      engine.setSharedResource(QUICK_WARP_DATASET, quickWarp);
+      engine.sharedResources.setSharedResource(QUICK_WARP_DATASET, quickWarp);
     }
   };
 
@@ -1073,7 +1072,7 @@ public class PixelRealm extends Screen {
   public PixelRealm(Engine engine, String dir) {
     super(engine);
     this.setup(dir, dir.substring(0, dir.lastIndexOf("/", dir.length()-2)));
-    engine.setSharedResource(QUICK_WARP_ID, 1);
+    engine.sharedResources.setSharedResource(QUICK_WARP_ID, 1);
   }
 
   public void setup(String dir, String emergeFrom) {
@@ -1109,8 +1108,10 @@ public class PixelRealm extends Screen {
     //Now craete those offscreen graphics so we can use them for all eternity!!!!
     scene = createGraphics((int(engine.WIDTH)/scale), int(this.height)/scale, P3D);
     //This strange code here just turns off smooth rendering because for some reason noSmooth() doesn't work.
-    ((PGraphicsOpenGL)scene).textureSampling(2);                  
+    ((PGraphicsOpenGL)scene).textureSampling(2);        
+    scene.hint(DISABLE_OPENGL_ERRORS);          
     portal = createGraphics(128, 128+96, P2D);
+    portal.hint(DISABLE_OPENGL_ERRORS);
 
 
     //img_sky_1.resize(scene.width, scene.height);
@@ -1185,14 +1186,15 @@ public class PixelRealm extends Screen {
     if (f.exists()) {
       if (!engine.openJSONObject(dir+REALM_TURF)) {
         console.warn("There's an error in the folder's turf file. Will now act as if the turf is new.");
+        engine.backupMove(dir+REALM_TURF);
         newTurf = true;
       }
 
       // Check to see if the version we're reading is compatible.
       if (!engine.getJSONString("compatibility_version", "").equals(COMPATIBILITY_VERSION)) {
-        newTurf = true;
-        console.log("Incompatible turf file, creating new turf.");
+        console.log("Incompatible turf file, backing up old and creating new turf.");
         engine.backupMove(dir+REALM_TURF);
+        newTurf = true;
       }
     } else newTurf = true;
 
@@ -1959,9 +1961,9 @@ public class PixelRealm extends Screen {
 
     // This time code here is unused. It was meant to colour the sky based on the
     // time of day. Maybe one day it will be re-used.
-    int hr = 21;//hour();
-    int mi = 00;//minute();
-    float timeRef = (hr*60)+mi;
+    //int hr = 21;//hour();
+    //int mi = 00;//minute();
+    //float timeRef = (hr*60)+mi;
 
     //timeRef = time;
     //time += 5;
@@ -1976,20 +1978,15 @@ public class PixelRealm extends Screen {
     //  sunset = (1-cos(radians((timeRef-1080)*1.2)))*70;
     //}
 
-
-    // TODO: Reenable night sky stars.
-
-    //drawNightSkyStars();
-
     //if ((timeRef > 1140) || (timeRef < 300)) {
     //  starsInTheSky();
     //}
 
     //This function assumes you have not called portal.beginDraw().
-    //engine.timestamp("Render portal");
+    engine.timestamp("Render portal");
     renderPortal();
 
-    //engine.timestamp("atomicboolean get");
+    engine.timestamp("atomicboolean get");
 
     // If the file check thread has noticed a change, use the main thread to reload the files.
     // We use the main thread and not the refreshThread because we don't want to load assets
@@ -2002,7 +1999,7 @@ public class PixelRealm extends Screen {
       refreshRealm();
     }
 
-    //engine.timestamp("begindraw");
+    engine.timestamp("begindraw");
 
 
     int n = 1;
@@ -2026,7 +2023,9 @@ public class PixelRealm extends Screen {
 
     //println(scene, GUI, back);
     scene.beginDraw();
-
+    
+    engine.timestamp("controls");
+    
     scene.perspective(PI/3.0, (float)scene.width/scene.height, 1, 10000);
     //scene.clear();      // Might need to reenable to clear z-buffer.
     //scene.colorMode(HSB, 255);
@@ -2229,18 +2228,18 @@ public class PixelRealm extends Screen {
       // Go through all the keys 0-9 and check if it's being pressed
       if (engine.keyActionOnce("quickWarp"+str(i))) {
         // Get the quick warp info from shared resources (creating the resource if it doesn't exist)
-        QuickWarpSaveInfo[] quickWarp = (QuickWarpSaveInfo[])engine.getSharedResource(QUICK_WARP_DATASET, generateQuickWarp);
+        QuickWarpSaveInfo[] quickWarp = (QuickWarpSaveInfo[])engine.sharedResources.getSharedResource(QUICK_WARP_DATASET, generateQuickWarp);
 
         // If quick warp on the key pressed has been used before, go to it. Otherwise, start from the default dir.
         // Save our quickwarp first
         // If we pressed the same button as the warp we're already in, then go back to the default dir instead.
-        int myQuickWarpID = ((Integer)engine.getSharedResource(QUICK_WARP_ID)).intValue();
+        int myQuickWarpID = ((Integer)engine.sharedResources.getSharedResource(QUICK_WARP_ID)).intValue();
 
         quickWarp[myQuickWarpID] = new QuickWarpSaveInfo(xpos, ypos, zpos, direction, engine.currentDir);
 
         // Now go to new warp
         endRealm();
-        engine.setSharedResource(QUICK_WARP_ID, new Integer(i));
+        engine.sharedResources.setSharedResource(QUICK_WARP_ID, new Integer(i));
         portalLight = 255.;
         if (myQuickWarpID == i) console.log("Going back to default dir.");
         if (quickWarp[i] == null || (myQuickWarpID == i)) {
@@ -2263,12 +2262,13 @@ public class PixelRealm extends Screen {
       engine.fadeAndStopMusic();
       requestScreen(new Explorer(engine, engine.currentDir));
     }
+    
+    
+    engine.timestamp("render sky");
 
 
     int chunkx = floor(xpos/GROUND_SIZE)+1;
-    int chunkz = floor(zpos/GROUND_SIZE)+1;  
-
-    obstructionFront = false;
+    int chunkz = floor(zpos/GROUND_SIZE)+1; 
 
 
     // Render the sky.
@@ -2293,8 +2293,8 @@ public class PixelRealm extends Screen {
 
     // Push the camera positioning.
     scene.pushMatrix();
-
-
+    
+    engine.timestamp("camera");
 
     //scene.translate(-xpos+(scene.width / 2), ypos+(sin(bob)*3)+(scene.height / 2)+80, -zpos+(scene.width / 2));
     {
@@ -2308,13 +2308,11 @@ public class PixelRealm extends Screen {
     }
     if (lights) scene.pointLight(255, 245, 245, xpos, ypos-PLAYER_HEIGHT, zpos);
 
-
-    //engine.timestamp("render terrain");
+    engine.timestamp("render terrain");
 
     //Coin animation.
 
     int spinSpeed = 4/n;
-    int coinFrame = int(coinSpinAnimation/spinSpeed);
     coinSpinAnimation++;
     if (coinSpinAnimation >= spinSpeed*6) {
       coinSpinAnimation = 0;
@@ -2384,7 +2382,7 @@ public class PixelRealm extends Screen {
 
 
           scene.endShape();
-          scene.noTint();
+          //scene.noTint();
 
           final float treeLikelyhood = 0.6;
           final float randomOffset = 70;
@@ -2419,16 +2417,16 @@ public class PixelRealm extends Screen {
 
     scene.popMatrix();
 
-    //engine.timestamp("objectsinteractions");
+    engine.timestamp("objectsinteractions");
 
     objectsInteractions();
 
-    //engine.timestamp("render3DObjects");
+    engine.timestamp("render3DObjects");
 
     render3DObjects();  //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>//
     scene.hint(DISABLE_DEPTH_TEST);
 
-    //engine.timestamp("portal light");
+    engine.timestamp("portal light");
 
     // Pop the camera positioning.
     scene.popMatrix();
@@ -2462,35 +2460,35 @@ public class PixelRealm extends Screen {
       break;
     }
 
-    //engine.timestamp("end draw");
+    engine.timestamp("end draw");
 
     scene.endDraw();
 
-    //engine.timestamp("display final scene");
+    engine.timestamp("display final scene");
     
     image(scene, 0, myUpperBarWeight, engine.WIDTH, this.height);
     //if (blurrr) filter(NORMAL);
     if (blurrr) filter(BLUR, 0.1);
     
 
-    fill(255);
-    textSize(30);
-    textAlign(LEFT, TOP);
-    text((str(frameRate) + "\nX:" + str(xpos) + " Y:" + str(ypos) + " Z:" + str(zpos)), 50, myUpperBarWeight+35);
+    //fill(255);
+    //textSize(30);
+    //textAlign(LEFT, TOP);
+    //text((str(frameRate) + "\nX:" + str(xpos) + " Y:" + str(ypos) + " Z:" + str(zpos)), 50, myUpperBarWeight+35);
 
-    //engine.timestamp("gui");
+    engine.timestamp("gui");
 
     // We need to run the gui here otherwise it's going to look   t e r r i b l e   in the scene.
     runGUI();
 
-    //engine.timestamp("end");
+    engine.timestamp("end");
 
     //image(portal,0,0, 128, 256);
   }
 
   float closestDist = 0;
   private void render3DObjects() {
-    //engine.timestamp("Update distances");
+    engine.timestamp("Update distances");
     // Update the distances from the player for all nodes
     Object3D currNode = headNode; //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>//
     while (currNode != null) {
@@ -2498,7 +2496,7 @@ public class PixelRealm extends Screen {
       currNode = currNode.next;
     }
 
-    //engine.timestamp("insertionSort");
+    engine.timestamp("insertionSort");
 
     // sort thru from furthest to shortest distances.
     operationCount = 0;
@@ -2506,7 +2504,7 @@ public class PixelRealm extends Screen {
     //headNode = mergeSort(headNode);
     //console.log("Number operations: "+str(operationCount+1)+", Number objects: "+str(numObjects));
 
-    //engine.timestamp("render each object");
+    engine.timestamp("render each object");
 
     // Iterate thru the list and
     // render each object.
@@ -2516,7 +2514,7 @@ public class PixelRealm extends Screen {
       currNode = currNode.next;
     }
 
-    //engine.timestamp("done render3DObjects");
+    engine.timestamp("done render3DObjects");
   }
   
   boolean blurrr = false;
@@ -2999,7 +2997,17 @@ public class PixelRealm extends Screen {
 
                 // Go into the new world
                 // If it's a shortcut, go to where the shortcut points to.
-                if (f instanceof ShortcutPortal) enterNewRealm(((ShortcutPortal)f).shortcutDir);
+                
+                if (f instanceof ShortcutPortal) {
+                  // SECRET EASTER EGG TOP SECRET
+                  if (((ShortcutPortal)f).shortcutName.equals("Neo_2222?")) {
+                    requestScreen(new WorldLegacy(engine));
+                    f.destroy();
+                  }
+                  // Normal non-easter egg action
+                  else
+                    enterNewRealm(((ShortcutPortal)f).shortcutDir);
+                }
                 // Otherwise go to where the directory points to.
                 else enterNewRealm(f.dir);
               } else if (cancelOut) {
@@ -3071,9 +3079,7 @@ public class PixelRealm extends Screen {
 
     for (Object3D t : terrainObjects) {
       if (t != null) {
-        if (t.touchingPlayer()) {
-          obstructionFront = true;
-        }
+        // No action for terrain objects.
       }
     }
   }
@@ -3110,7 +3116,7 @@ public class PixelRealm extends Screen {
 // How bout a lil easter egg from code from forever ago?
 // Also sorry not sorry for the code compression
 
-public class World extends Screen { 
+public class WorldLegacy extends Screen { 
   public float height=0; 
   int myRandomSeed=0; 
   float xscroll=0; 
@@ -3136,13 +3142,12 @@ public class World extends Screen {
   float HIGHEST_MOUNTAIN=1500; 
   float LOWEST_DIPS=1200;
   int OCTAVE=2; 
-  public World(Engine engine) { 
+  public WorldLegacy(Engine engine) { 
     super(engine); 
     this.height=engine.HEIGHT-myLowerBarWeight-myUpperBarWeight;
     myRandomSeed=(int)app.random(100000); 
-    scatterNightskyStars(); 
-    console.log("Press backspace to go back."); 
-    console.log("Legacy World");
+    scatterNightskyStars();
+    console.log("Neo's Legacy World");
   } 
   public void scatterNightskyStars() { 
     int selectedNum=int(app.random(MAX_NIGHT_SKY_STARS/2, MAX_NIGHT_SKY_STARS)); 
@@ -3254,6 +3259,10 @@ public class World extends Screen {
       app.endShape(); 
       prevHeight=hillHeight; 
       prevWaveHeight=wave;
+      app.fill(0);
+      app.textFont(engine.DEFAULT_FONT, 40);
+      app.textAlign(LEFT, TOP);
+      app.text("Press backspace to go back", 10, myUpperBarWeight+5);
     } 
     if (engine.keyDown(BACKSPACE)) previousScreen();
   }
