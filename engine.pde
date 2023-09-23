@@ -184,6 +184,7 @@ class Engine {
   public String lastTimestampName = null;
   public int timestampCount = 0;
   public boolean allowShowCommandPrompt = true;
+  public boolean playWhileUnfocused = true;
   
   public SharedResourcesModule sharedResources = new SharedResourcesModule();
   
@@ -948,6 +949,19 @@ class Engine {
       console.log("Restarting Timeway...");
       restart();
     }
+    else if (commandEquals(command, "/backgroundmusic") || commandEquals(command, "/backmusic")) {
+      playWhileUnfocused = !playWhileUnfocused;
+      if (playWhileUnfocused) console.log("Background music (while focused) enabled.");
+      else console.log("Background music (while focused) disabled.");
+    }
+    else if (commandEquals(command, "/enablebackgroundmusic") || commandEquals(command, "/enablebackmusic")) {
+      playWhileUnfocused = true;
+      console.log("Background music (while focused) disabled.");
+    }
+    else if (commandEquals(command, "/disablebackgroundMusic") || commandEquals(command, "/disablebackMusic")) {
+      playWhileUnfocused = false;
+      console.log("Background music (while focused) disabled.");
+    }
     else if (command.length() <= 1) {
       // If empty, do nothing and close the prompt.
     } else if (currScreen.customCommands(command)) {
@@ -1322,7 +1336,11 @@ class Engine {
         prevPowerMode = powerMode;
         setPowerMode(PowerMode.MINIMAL);
         focusedMode = false;
-        setMasterVolume(VOLUME_QUIET);
+        
+        if (playWhileUnfocused)
+          setMasterVolume(VOLUME_QUIET);
+        else
+          setMasterVolume(0.);  // Mute
       }
       return;
     }
@@ -4052,8 +4070,13 @@ class Engine {
         float error = 0.1;
 
         // PERFORMANCE ISSUE: streamMusic.time()
+        
+        // If the music has finished playing, jump to beginning to play again.
         if (streamMusic.time() >= streamMusic.duration()-error) {
           streamMusic.jump(0.);
+          if (!streamMusic.isPlaying()) {
+            streamMusic.play();
+          }
         }
       }
     }
