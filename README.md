@@ -82,3 +82,11 @@ As of 0.0.4, Timeway should automatically look for updates and prompt you when o
 Follow [my blog](https://teojt.github.io/blog) for updates and roadmaps for the project.
 More documentation will (maybe) be released soon.
 
+## Quick todo summary:
+- General code cleanup, and split code in Engine and PixelRealm into sub-classes.
+- Graphical optimisation of the Pixel Realm.
+- Add 3D displayable objects (like OBJ files).
+- Add animated GIF's and videos playback in realtime in the Pixel Realm.
+- Add extra GUI's for making customisation of realms less painful.
+- Make moving and creating files safer (VERY IMPORTANT).
+- Test and add support for Linux and MacOS.
