@@ -592,7 +592,7 @@ public class Editor extends Screen {
         // textPlaceable.text = "[ amogus ]";
         gui.interactable = false;
         
-        autoScaleDown = engine.getSettingBoolean("autoScaleDown");
+        autoScaleDown = engine.settings.getBoolean("autoScaleDown");
 
         myLowerBarColor   = 0xFF4c4945;
         myUpperBarColor   = myLowerBarColor;

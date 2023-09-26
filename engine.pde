@@ -40,7 +40,7 @@ class Engine {
   // Info and versioning
   public final String NAME        = "Timeway";
   public final String AUTHOR      = "Teo Taylor";
-  public final String VERSION     = "0.0.5-d12";
+  public final String VERSION     = "0.0.5-d13";
   public final String VERSION_DESCRIPTION = 
     "- Added shortcuts\n";
   // ***************************
@@ -97,11 +97,13 @@ class Engine {
   //**************ENGINE SETUP CODE AND VARIABLES****************
   // Core stuff
   public PApplet app;
-  public String APPPATH;
+  public String APPPATH = sketchPath().replace('\\', '/')+"/";
   public String OSName;
   public int usingOS;
-  public Console console;
+  public Console console = new Console();
   public Sound soundSystem;
+  public SharedResourcesModule sharedResources = new SharedResourcesModule();
+  public SettingsModule settings = new SettingsModule(console);
 
 
   // Display system
@@ -157,15 +159,9 @@ class Engine {
   public boolean shiftKeyPressed = false;
 
   // Settings & config
-  public JSONObject settings;
-  public JSONObject keybindings;
-  public HashMap <String, Object> defaultSettings;
-  public HashMap <String, Character> defaultKeybindings;
   public boolean devMode = false;
 
   // Save & load
-  public SaveEntryProperties save;
-  public PlaceholderReadEntryProperties read;
   public JSONArray loadedJsonArray;
 
   // Other / doesn't fit into any categories.
@@ -177,7 +173,6 @@ class Engine {
   public boolean allowShowCommandPrompt = true;
   public boolean playWhileUnfocused = true;
   
-  public SharedResourcesModule sharedResources = new SharedResourcesModule();
   
   public class SharedResourcesModule {
     private HashMap<String, Object> sharedResourcesMap;
@@ -210,6 +205,178 @@ class Engine {
     }
   }
 
+  
+  
+  public class SettingsModule {
+      private JSONObject settings;
+      private JSONObject keybindings;
+      private HashMap <String, Object> defaultSettings;
+      private HashMap <String, Character> defaultKeybindings;
+      private Console console;
+      
+      public SettingsModule(Console c) {
+        console = c;
+        loadDefaultSettings();
+        settings = loadConfig(APPPATH+CONFIG_PATH, defaultSettings);
+        keybindings = loadConfig(APPPATH+KEYBIND_PATH, defaultKeybindings);
+      }
+      
+      public char getKeybinding(String keybindName) {
+        String s = keybindings.getString(keybindName);
+        char k;
+        if (s == null) {
+          if (defaultKeybindings.get(keybindName) != null) k = defaultKeybindings.get(keybindName);
+          else { console.bugWarnOnce("getKeybinding: unknown keyaction "+keybindName);
+          return 0; }
+        }
+        else k = s.charAt(0);
+        return k;
+      }
+      
+      public boolean getBoolean(String setting) {
+        boolean b = false;
+        try {
+          b = settings.getBoolean(setting);
+        }
+        catch (NullPointerException e) {
+          if (defaultSettings.containsKey(setting)) {
+            b = (boolean)defaultSettings.get(setting);
+          } else {
+            console.warnOnce("Setting "+setting+" does not exist.");
+            return false;
+          }
+        }
+        return b;
+      }
+    
+      public float getFloat(String setting) {
+        float f = 0.0;
+        try {
+          f = settings.getFloat(setting);
+        }
+        catch (RuntimeException e) {
+          if (defaultSettings.containsKey(setting)) {
+            f = (float)defaultSettings.get(setting);
+          } else {
+            console.warnOnce("Setting "+setting+" does not exist.");
+            return 0.;
+          }
+        }
+        return f;
+      }
+    
+      public String getString(String setting) {
+        String s = "";
+        s = settings.getString(setting);
+        if (s == null) {
+          if (defaultSettings.containsKey(setting)) {
+            s = (String)defaultSettings.get(setting);
+          } else {
+            console.warnOnce("Setting "+setting+" does not exist.");
+            return "";
+          }
+        }
+        return s;
+      }
+    
+      public final int LEFT_CLICK = 1;
+      public final int RIGHT_CLICK = 2;
+      
+      public void loadDefaultSettings() {
+        defaultSettings = new HashMap<String, Object>();
+        defaultSettings.putIfAbsent("forceDevMode", false);
+        defaultSettings.putIfAbsent("repressDevMode", false);
+        defaultSettings.putIfAbsent("fullscreen", false);
+        defaultSettings.putIfAbsent("scrollSensitivity", 20.0);
+        defaultSettings.putIfAbsent("dynamicFramerate", true);
+        defaultSettings.putIfAbsent("lowBatteryPercent", 50.0);
+        defaultSettings.putIfAbsent("autoScaleDown", true);
+        defaultSettings.putIfAbsent("defaultSystemFont", "Typewriter");
+        defaultSettings.putIfAbsent("homeDirectory", System.getProperty("user.home").replace('\\', '/'));
+        defaultSettings.putIfAbsent("forcePowerMode", "NONE");
+        defaultSettings.putIfAbsent("volumeNormal", 1.0);
+        defaultSettings.putIfAbsent("volumeQuiet", 0.0);
+        defaultSettings.putIfAbsent("fasterImageImport", false);
+    
+        defaultKeybindings = new HashMap<String, Character>();
+        defaultKeybindings.putIfAbsent("CONFIG_VERSION", char(1));
+        defaultKeybindings.putIfAbsent("moveForewards", 'w');
+        defaultKeybindings.putIfAbsent("moveBackwards", 's');
+        defaultKeybindings.putIfAbsent("moveLeft", 'a');
+        defaultKeybindings.putIfAbsent("moveRight", 'd');
+        defaultKeybindings.putIfAbsent("lookLeft", 'q');
+        defaultKeybindings.putIfAbsent("lookRight", 'e');
+        defaultKeybindings.putIfAbsent("menu", '\t');
+        defaultKeybindings.putIfAbsent("menuSelect", '\t');
+        defaultKeybindings.putIfAbsent("jump", ' ');
+        defaultKeybindings.putIfAbsent("sneak", char(0x0F));
+        defaultKeybindings.putIfAbsent("dash", 'r');
+        defaultKeybindings.putIfAbsent("scaleUp", '=');
+        defaultKeybindings.putIfAbsent("scaleDown", '-');
+        defaultKeybindings.putIfAbsent("scaleUpSlow", '+');
+        defaultKeybindings.putIfAbsent("scaleDownSlow", '_');
+        defaultKeybindings.putIfAbsent("primaryAction", 'o');
+        defaultKeybindings.putIfAbsent("secondaryAction", 'p');
+        defaultKeybindings.putIfAbsent("inventorySelectLeft", ',');
+        defaultKeybindings.putIfAbsent("inventorySelectRight", '.');
+        defaultKeybindings.putIfAbsent("scaleDownSlow", '_');
+        defaultKeybindings.putIfAbsent("showCommandPrompt", '/');
+        for (int i = 0; i < 10; i++) defaultKeybindings.putIfAbsent("quickWarp"+str(i), str(i).charAt(0));
+      }
+      
+      public JSONObject loadConfig(String configPath, HashMap defaultConfig) {
+      File f = new File(configPath);
+      JSONObject returnSettings = null;
+      boolean newConfig = false;
+      if (!f.exists()) {
+        newConfig = true;
+      } else {
+        try {
+          returnSettings = loadJSONObject(configPath);
+        }
+        catch (RuntimeException e) {
+          console.warn("There's an error in the config file. Loading default settings.");
+          newConfig = true;
+        }
+      }
+  
+      // New config
+      if (newConfig) {
+        console.log("Config file not found, creating one.");
+        returnSettings = new JSONObject();
+  
+        // Alphabetically sort the settings so that the config is a lil easier to configure.
+        // TODO: doesn't actually work, you should prolly delete that
+        TreeSet<String> sortedSet = new TreeSet<String>(defaultConfig.keySet());
+  
+        for (String k : sortedSet) {
+          if (defaultConfig.get(k) instanceof Boolean)
+            returnSettings.setBoolean(k, (boolean)defaultConfig.get(k));
+          else if (defaultConfig.get(k) instanceof String)
+            returnSettings.setString(k, (String)defaultConfig.get(k));
+          else if (defaultConfig.get(k) instanceof Float)
+            returnSettings.setFloat(k, (float)defaultConfig.get(k));
+          else if (defaultConfig.get(k) instanceof Character) {
+            String s = "";
+            s += defaultConfig.get(k);
+            returnSettings.setString(k, s);
+          }
+        }
+  
+        try {
+          saveJSONObject(returnSettings, configPath);
+        }
+        catch (RuntimeException e) {
+          console.warn("Failed to save config.");
+        }
+      }
+      return returnSettings;
+    }
+  }
+  
+  
+
+
   // *************************************************************
   // *********************Begin engine code***********************
   // *************************************************************
@@ -217,7 +384,7 @@ class Engine {
     // PApplet & engine init stuff
     app = p;
     app.background(0);
-    APPPATH = app.sketchPath().replace('\\', '/')+"/";
+    
 
     // Set the display scale; since I've been programming this with my Surface Book 2 at high density resolution,
     // the original display area is 1500x1000, so we simply divide this device's display resolution by 1500 to
@@ -248,11 +415,12 @@ class Engine {
 
 
     // Console stuff
-    console = new Console();
+    //console = new Console();
     console.info("Hello console");
     console.info("init: width/height set to "+str(WIDTH)+", "+str(HEIGHT));
     
     soundSystem = new Sound(app);
+    
 
 
     // Run the setup method in a seperate thread
@@ -274,58 +442,10 @@ class Engine {
     currScreen = new Startup(this);
   }
 
-  public JSONObject loadConfig(String configPath, HashMap defaultConfig) {
-    File f = new File(configPath);
-    JSONObject returnSettings = null;
-    boolean newConfig = false;
-    if (!f.exists()) {
-      newConfig = true;
-    } else {
-      try {
-        returnSettings = loadJSONObject(configPath);
-      }
-      catch (RuntimeException e) {
-        console.warn("There's an error in the config file. Loading default settings.");
-        newConfig = true;
-      }
-    }
-
-    // New config
-    if (newConfig) {
-      console.log("Config file not found, creating one.");
-      returnSettings = new JSONObject();
-
-      // Alphabetically sort the settings so that the config is a lil easier to configure.
-      TreeSet<String> sortedSet = new TreeSet<String>(defaultConfig.keySet());
-
-      for (String k : sortedSet) {
-        if (defaultConfig.get(k) instanceof Boolean)
-          returnSettings.setBoolean(k, (boolean)defaultConfig.get(k));
-        else if (defaultConfig.get(k) instanceof String)
-          returnSettings.setString(k, (String)defaultConfig.get(k));
-        else if (defaultConfig.get(k) instanceof Float)
-          returnSettings.setFloat(k, (float)defaultConfig.get(k));
-        else if (defaultConfig.get(k) instanceof Character) {
-          String s = "";
-          s += defaultConfig.get(k);
-          returnSettings.setString(k, s);
-        }
-      }
-
-      try {
-        saveJSONObject(returnSettings, configPath);
-      }
-      catch (RuntimeException e) {
-        console.warn("Failed to save config.");
-      }
-    }
-    return returnSettings;
-  }
   
   // Power modes
     private PowerMode powerMode = PowerMode.HIGH;
     private boolean noBattery = false;
-    private boolean doNotExceed = false;
     private boolean sleepyMode = false;
     private boolean dynamicFramerate = true;
     private boolean powerSaver = false;
@@ -349,16 +469,13 @@ class Engine {
 
     //println("Running in seperate thread.");
     // Config file
-    loadDefaultSettings();
-    settings = loadConfig(APPPATH+CONFIG_PATH, defaultSettings);
-    keybindings = loadConfig(APPPATH+KEYBIND_PATH, defaultKeybindings);
     getUpdateInfo();
 
 
-    scrollSensitivity = getSettingFloat("scrollSensitivity");
-    dynamicFramerate = getSettingBoolean("dynamicFramerate");
-    DEFAULT_FONT_NAME = getSettingString("defaultSystemFont");
-    DEFAULT_DIR  = getSettingString("homeDirectory");
+    scrollSensitivity = settings.getFloat("scrollSensitivity");
+    dynamicFramerate = settings.getBoolean("dynamicFramerate");
+    DEFAULT_FONT_NAME = settings.getString("defaultSystemFont");
+    DEFAULT_DIR  = settings.getString("homeDirectory");
     {
       File f = new File(DEFAULT_DIR);
       if (!f.exists()) {
@@ -368,17 +485,16 @@ class Engine {
       currentDir  = DEFAULT_DIR;
     }
     
-    USE_CPU_CANVAS = getSettingBoolean("fasterImageImport");
+    USE_CPU_CANVAS = settings.getBoolean("fasterImageImport");
     
-    
-    POWER_HIGH_BATTERY_THRESHOLD = int(getSettingFloat("lowBatteryPercent"));
+    POWER_HIGH_BATTERY_THRESHOLD = int(settings.getFloat("lowBatteryPercent"));
     DEFAULT_FONT = getFont(DEFAULT_FONT_NAME);
-    VOLUME_NORMAL = getSettingFloat("volumeNormal");
-    VOLUME_QUIET = getSettingFloat("volumeQuiet");
+    VOLUME_NORMAL = settings.getFloat("volumeNormal");
+    VOLUME_QUIET = settings.getFloat("volumeQuiet");
     setMasterVolume(VOLUME_NORMAL);
     checkDevMode();
 
-    String forcePowerMode = getSettingString("forcePowerMode");
+    String forcePowerMode = settings.getString("forcePowerMode");
     forcePowerModeEnabled = true;   // Temp set to true, if not enabled, it will reset to false.
     if (forcePowerMode.equals("HIGH"))
       forcedPowerMode = PowerMode.HIGH;
@@ -1596,8 +1712,8 @@ class Engine {
   }
 
   public void checkDevMode() {
-    if (getSettingBoolean("forceDevMode")) {
-      if (getSettingBoolean("repressDevMode")) {
+    if (settings.getBoolean("forceDevMode")) {
+      if (settings.getBoolean("repressDevMode")) {
         console.warn("Wut. Dev mode is both forced and repressed. Enabling by default.");
       }
       devMode = true;
@@ -1617,7 +1733,7 @@ class Engine {
     // Check if the last characters of path is "/timeway/out"
     if (path.substring(path.length()-12).equals("/timeway/out")) {
 
-      if (getSettingBoolean("repressDevMode")) {
+      if (settings.getBoolean("repressDevMode")) {
         devMode = false;
         console.log("Dev mode disabled by config.");
         return;
@@ -1653,95 +1769,6 @@ class Engine {
     errorImg.updatePixels();
   }
 
-  public boolean getSettingBoolean(String setting) {
-    boolean b = false;
-    try {
-      b = settings.getBoolean(setting);
-    }
-    catch (NullPointerException e) {
-      if (defaultSettings.containsKey(setting)) {
-        b = (boolean)defaultSettings.get(setting);
-      } else {
-        console.warnOnce("Setting "+setting+" does not exist.");
-        return false;
-      }
-    }
-    return b;
-  }
-
-  public float getSettingFloat(String setting) {
-    float f = 0.0;
-    try {
-      f = settings.getFloat(setting);
-    }
-    catch (RuntimeException e) {
-      if (defaultSettings.containsKey(setting)) {
-        f = (float)defaultSettings.get(setting);
-      } else {
-        console.warnOnce("Setting "+setting+" does not exist.");
-        return 0.;
-      }
-    }
-    return f;
-  }
-
-  public String getSettingString(String setting) {
-    String s = "";
-    s = settings.getString(setting);
-    if (s == null) {
-      if (defaultSettings.containsKey(setting)) {
-        s = (String)defaultSettings.get(setting);
-      } else {
-        console.warnOnce("Setting "+setting+" does not exist.");
-        return "";
-      }
-    }
-    return s;
-  }
-
-  public final int LEFT_CLICK = 1;
-  public final int RIGHT_CLICK = 2;
-  public void loadDefaultSettings() {
-    defaultSettings = new HashMap<String, Object>();
-    defaultSettings.putIfAbsent("forceDevMode", false);
-    defaultSettings.putIfAbsent("repressDevMode", false);
-    defaultSettings.putIfAbsent("fullscreen", false);
-    defaultSettings.putIfAbsent("scrollSensitivity", 20.0);
-    defaultSettings.putIfAbsent("dynamicFramerate", true);
-    defaultSettings.putIfAbsent("lowBatteryPercent", 50.0);
-    defaultSettings.putIfAbsent("autoScaleDown", true);
-    defaultSettings.putIfAbsent("defaultSystemFont", "Typewriter");
-    defaultSettings.putIfAbsent("homeDirectory", System.getProperty("user.home").replace('\\', '/'));
-    defaultSettings.putIfAbsent("forcePowerMode", "NONE");
-    defaultSettings.putIfAbsent("volumeNormal", 1.0);
-    defaultSettings.putIfAbsent("volumeQuiet", 0.0);
-    defaultSettings.putIfAbsent("fasterImageImport", false);
-
-    defaultKeybindings = new HashMap<String, Character>();
-    defaultKeybindings.putIfAbsent("CONFIG_VERSION", char(1));
-    defaultKeybindings.putIfAbsent("moveForewards", 'w');
-    defaultKeybindings.putIfAbsent("moveBackwards", 's');
-    defaultKeybindings.putIfAbsent("moveLeft", 'a');
-    defaultKeybindings.putIfAbsent("moveRight", 'd');
-    defaultKeybindings.putIfAbsent("lookLeft", 'q');
-    defaultKeybindings.putIfAbsent("lookRight", 'e');
-    defaultKeybindings.putIfAbsent("menu", '\t');
-    defaultKeybindings.putIfAbsent("menuSelect", '\t');
-    defaultKeybindings.putIfAbsent("jump", ' ');
-    defaultKeybindings.putIfAbsent("sneak", char(0x0F));
-    defaultKeybindings.putIfAbsent("dash", 'r');
-    defaultKeybindings.putIfAbsent("scaleUp", '=');
-    defaultKeybindings.putIfAbsent("scaleDown", '-');
-    defaultKeybindings.putIfAbsent("scaleUpSlow", '+');
-    defaultKeybindings.putIfAbsent("scaleDownSlow", '_');
-    defaultKeybindings.putIfAbsent("primaryAction", 'o');
-    defaultKeybindings.putIfAbsent("secondaryAction", 'p');
-    defaultKeybindings.putIfAbsent("inventorySelectLeft", ',');
-    defaultKeybindings.putIfAbsent("inventorySelectRight", '.');
-    defaultKeybindings.putIfAbsent("scaleDownSlow", '_');
-    defaultKeybindings.putIfAbsent("showCommandPrompt", '/');
-    for (int i = 0; i < 10; i++) defaultKeybindings.putIfAbsent("quickWarp"+str(i), str(i).charAt(0));
-  }
   //*************************************************************
   //*************************************************************
   //*******************LITERALLY EVERY CLASS*********************
@@ -1777,13 +1804,13 @@ class Engine {
         basicui = new BasicUI();
       }
 
-      public void enableUI() {
-        enableBasicUI = true;
-      }
+      //public void enableUI() {
+      //  enableBasicUI = true;
+      //}
 
-      public void disableUI() {
-        enableBasicUI = false;
-      }
+      //public void disableUI() {
+      //  enableBasicUI = false;
+      //}
 
       public void move() {
         this.pos++;
@@ -1793,13 +1820,13 @@ class Engine {
         return this.pos;
       }
 
-      public boolean isBusy() {
-        return (interval > 0);
-      }
+      //public boolean isBusy() {
+      //  return (interval > 0);
+      //}
 
-      public void kill() {
-        interval = 0;
-      }
+      //public void kill() {
+      //  interval = 0;
+      //}
 
       public void message(String message, color messageColor) {
         this.pos = 0;
@@ -1886,11 +1913,11 @@ class Engine {
       this.debugInfo = false;
     }
 
-    private void killLines() {
-      for (int i = 0; i < totalLines; i++) {
-        this.consoleLine[i].kill();
-      }
-    }
+    //private void killLines() {
+    //  for (int i = 0; i < totalLines; i++) {
+    //    this.consoleLine[i].kill();
+    //  }
+    //}
 
     public void display(boolean doDisplay) {
       if (doDisplay) {
@@ -2049,580 +2076,6 @@ class Engine {
       if (displayingWindow) {
         warningWindow();
       }
-    }
-  }
-
-  public class ReadEntryFailureException extends Exception {
-    public ReadEntryFailureException(String message) {
-      super(message);
-      console.error(message);
-    }
-  }
-
-  // public char PROPERTY_SEPERATOR_CHAR = 253;
-  // public char ELEMENT_END_CHAR = 254;
-  // public char DATA_HEAP_SEPERATOR_CHAR = 255;
-  public final char PROPERTY_SEPERATOR_CHAR = '_';
-  public final char ELEMENT_END_CHAR = '\n';
-  public final char DATA_HEAP_SEPERATOR_CHAR = '~';
-
-  public final int  POINTER_LENGTH = 4;
-  public final int  SIZE_LENGTH    = 4;
-
-  public final byte DATATYPE_INT         = 0;
-  public final byte DATATYPE_FLOAT       = 1;
-  public final byte DATATYPE_STRING      = 2;
-  public final byte DATATYPE_INT_ARRAY   = 3;
-  public final byte DATATYPE_BYTE_ARRAY  = 4;
-  public final byte DATATYPE_FLOAT_ARRAY = 5;
-
-  public void beginSaveEntry(String path) {
-    save = new SaveEntryProperties(path);
-  }
-
-  public void beginReadEntry(String path) {
-    read = new PlaceholderReadEntryProperties(path);
-  }
-
-  public class SaveEntryProperties {
-
-    String path = "";
-    ByteString properties;
-    ByteString heap;
-
-    // String array that can store 8 bit characters.
-
-    class ByteString
-    {
-      byte[] array;
-      int index = 0;
-      int length = 0;
-      public ByteString() {
-        // Inital size of 10KB bytes.
-        array = new byte[1024*10];
-        length = array.length;
-      }
-
-      public void append(byte b) {
-        array[index++] = b;
-
-        // Double the array size if the array is full.
-        if (index >= length) {
-          byte[] newArray = new byte[length*2];
-          for (int i = 0; i < length; i++) {
-            newArray[i] = array[i];
-          }
-          array = newArray;
-          length = newArray.length;
-        }
-      }
-
-      public void appendString(String s) {
-        for (int i = 0; i < s.length(); i++) {
-          append((byte) s.charAt(i));
-        }
-      }
-
-      public void appendInt(int i) {
-        append((byte) i);
-        append((byte) (i >> 8));
-        append((byte) (i >> 16));
-        append((byte) (i >> 24));
-      }
-    }
-
-    public SaveEntryProperties(String path) {
-      this.path = path;
-      // initialise properties to hold 8-bit characters
-
-      properties = new ByteString();
-      heap = new ByteString();
-    }
-
-    public void createStringProperty(String name, String value) {
-      int len = value.length();
-      int pointer = heap.index;
-
-      // Write data to properties.
-      properties.appendString(name);
-      properties.append((byte)PROPERTY_SEPERATOR_CHAR);
-      properties.append((byte)DATATYPE_STRING);
-      properties.appendInt(pointer);
-      properties.appendInt(len);
-
-      // Write the string value to the heap
-      heap.appendString(value);
-    }
-
-    public void createIntProperty(String name, int value) {
-      int pointer = heap.index;
-
-      // Write data to properties.
-      properties.appendString(name);
-      properties.append((byte)PROPERTY_SEPERATOR_CHAR);
-      properties.append((byte)DATATYPE_INT);
-      properties.appendInt(pointer);
-      properties.appendInt(0);
-
-      // Write the int value to the heap
-      heap.appendInt(value);
-    }
-
-    public void nextElement() {
-      properties.append((byte)ELEMENT_END_CHAR);
-    }
-
-    public void endProperties() {
-      properties.append((byte)DATA_HEAP_SEPERATOR_CHAR);
-    }
-
-    public void closeAndSave() {
-      // Combine the properties and heap into one byte array.
-      byte[] combined = new byte[properties.index + heap.index];
-      for (int i = 0; i < properties.index; i++) {
-        combined[i] = properties.array[i];
-      }
-      for (int i = 0; i < heap.index; i++) {
-        combined[i+properties.index] = heap.array[i];
-      }
-
-      // Write the combined byte array to the file.
-      try {
-        FileOutputStream fos = new FileOutputStream(new File(path));
-        fos.write(combined);
-        fos.close();
-      } 
-      catch (IOException e) {
-        console.error("Failed to save file: " + path);
-      }
-    }
-  }
-
-
-  // The save file system handler class for loading entries.
-  // This does not include sections, shall work on that later.
-  // For now, foreign characters shouldn't be used in the save file,
-  // only characters from 0-127 are supported.
-  // Any bytes outside of that range are used as seperators and control
-  // characters.
-  // Note: right now I'm using ints so the maximum file size this thing can
-  // access is prolly 4GB. Remind be to fix this later.
-  public class PlaceholderReadEntryProperties {
-
-
-
-    FileInputStream fis;
-    ElementProperties currElement = null;
-    Integer heapPosition = null;    // Integer object because I want it to throw a null
-    // pointer exception if it's not set.
-    ArrayList<ElementProperties> elements = new ArrayList<ElementProperties>();
-    ElementProperties selectedElement = null;
-
-
-    public class ElementProperties {
-
-      class PnL {
-        public int pointer;
-        public int len;
-        public byte type;
-        public PnL(int p, int l, byte t) {
-          this.pointer = p;
-          this.len = l;
-          this.type = t;
-        }
-      }
-
-      // Properties that can hold a string, int, float or other data type.
-      public HashMap<String, PnL> properties;
-      FileInputStream dataReader;
-      FileInputStream f;
-      public boolean moreToRead = true;
-
-      public ElementProperties(FileInputStream f) throws ReadEntryFailureException {
-        this.f = f;
-
-        try {
-          dataReader = new FileInputStream(f.getFD());
-        }
-        catch (IOException e) {
-          throw new ReadEntryFailureException("File system error "+e.getMessage());
-        }
-
-        // get the position of f
-        try {
-          int pos = (int)f.getChannel().position();
-          if (pos == 0) {
-            int b = f.read();
-
-            // If we ever come to this point then what are we even
-            // doing with our lives.
-            if (b == -1) {
-              throw new ReadEntryFailureException("What?! This entry file is just empty...");
-            }
-            position(f, 0);
-          }
-        }
-        catch (IOException e) {
-          throw new ReadEntryFailureException("File system error "+e.getMessage());
-        }
-
-        getProperties(0);
-      }
-
-      private void position(int pos) {
-        try {
-          f.getChannel().position(pos);
-        }
-        catch (IOException e) {
-          console.error("Oof.");
-        }
-      }
-
-      private void position(FileInputStream ff, int pos) {
-        try {
-          ff.getChannel().position(pos);
-        }
-        catch (IOException e) {
-          console.error("Oof.");
-        }
-      }
-
-
-      // The objective of the following code below is to simply read the bytes
-      // and put it into a buffer, until we reach readProperty() we don't do 
-      // any actual decoding. The reason it seems so complex is because we need
-      // to read until a marker byte, but raw bytes might unintentionally be the marker
-      // so we need to read the marker in the right place.
-      // We need to start at a newline character.
-      // Returns null if there are no lines.
-      public byte[] readFileElement() throws ReadEntryFailureException {
-        // Start with an initial byte buffer of size 10KB
-        byte[] elementBuffer = new byte[1024*10];
-
-        int b = 0;
-        int i = 0;
-        try {
-          // Read bytes until we hit ELEMENT_END_CHAR
-          // Weird ass bug prevention thing but heck i cant think straight lol
-          if (b == ELEMENT_END_CHAR || b == PROPERTY_SEPERATOR_CHAR || b == DATA_HEAP_SEPERATOR_CHAR) {
-            console.error("Woah there. You've got a bug in your file read code.");
-            return null;
-          }
-
-          while ((char) b != ELEMENT_END_CHAR 
-            && (char) b != DATA_HEAP_SEPERATOR_CHAR 
-            && b != -1) {
-
-            // Read property name
-            while ((char) b != PROPERTY_SEPERATOR_CHAR && b != -1 && b != DATA_HEAP_SEPERATOR_CHAR) {
-              b = f.read();
-              elementBuffer[i++] = (byte) b;
-              // println("Property name: " + (char) b);
-            }
-
-            // botch'd
-            if (b == DATA_HEAP_SEPERATOR_CHAR) {
-              // No more element properties to read.
-              moreToRead = false;
-              heapPosition = (int) f.getChannel().position();
-            }
-
-            // Read the data type.
-            b = f.read();
-            elementBuffer[i++] = (byte) b;
-            // println("Data type: " + (int) b);
-
-            // Read pointer and length bytes
-            for (int j = 0; j < POINTER_LENGTH+SIZE_LENGTH; j++) {
-              b = f.read();
-              elementBuffer[i++] = (byte) b;
-              // println("Pointer and length: " + (int) b);
-            }
-
-            // At the end of the property, read the byte to go to the next
-            // one.
-            b = f.read();
-            elementBuffer[i++] = (byte) b;
-            // println("Next: " + (char) b);
-
-            // Continue the while loop.
-          }
-
-          if (b == DATA_HEAP_SEPERATOR_CHAR) {
-            // No more element properties to read.
-            moreToRead = false;
-            heapPosition = (int) f.getChannel().position();
-          }
-
-          // Reduce the buffer array according to i and return the reduced the array
-        } 
-        catch (IOException e) {
-          throw new ReadEntryFailureException("File read error: " + e.getMessage());
-        }
-
-        byte[] reducedBuffer = new byte[i];
-        for (int j = 0; j < i; j++) {
-          reducedBuffer[j] = elementBuffer[j];
-        }
-        return reducedBuffer;
-
-
-        // if (b == DATA_HEAP_SEPERATOR_CHAR || b == -1) {
-        //     // No more element properties to read.
-        //     return false;
-        // }
-      }
-
-      // Returns true if we successfully got propeties.
-      // Returns false if we reached the end of the elements list..
-      public void getProperties(int i) throws ReadEntryFailureException {
-        properties = new HashMap<String, PnL>();
-
-        byte[] elementBuffer = readFileElement();
-        if (elementBuffer == null) {
-          return;
-        }
-
-        //idk the code is messy at this point here is a solution.
-        if (elementBuffer.length == 0) {
-          moreToRead = false;
-          return;
-        }
-
-        // Read each property, adding it to the hashmap
-        readProperty(i, elementBuffer);
-      }
-
-      // Returns true if the byte represents a type that exists.
-      // False if not.
-      private boolean checkDataType(byte b) {
-        switch (b) {
-        case DATATYPE_INT:
-        case DATATYPE_FLOAT:
-        case DATATYPE_STRING:
-        case DATATYPE_INT_ARRAY:
-        case DATATYPE_BYTE_ARRAY:
-        case DATATYPE_FLOAT_ARRAY:
-          return true;
-        default:
-          return false;
-        }
-      }
-
-      public String getStringProperty(String name) {
-        PnL p = properties.get(name);
-
-        // Warn if the property type is not a string.
-        if (p == null) {
-          console.bugWarn("Property " + name + " does not exist.");
-          return null;
-        }
-        if (p.type != DATATYPE_STRING) {
-          console.bugWarn("Property " + name + " is not a string.");
-        }
-
-        byte[] buffer = new byte[p.len];
-        position(dataReader, p.pointer+heapPosition);
-        try {
-          dataReader.read(buffer);
-          // for (int i = 0; i < buffer.length; i++) {
-          //     buffer[i] = (byte) dataReader.read();
-          // }
-        }
-        catch (IOException e) {
-          console.error("File read error: " + e.getMessage());
-        }
-
-        // Convert byte buffer to string
-        String out = new String(buffer);
-
-        return out;
-      }
-
-      public int getIntProperty(String name) {
-        PnL p = properties.get(name);
-        if (p == null) {
-          console.warn("Property " + name + " does not exist.");
-          return 0;
-        }
-        if (p.type != DATATYPE_INT) {
-          console.warn("Property " + name + " is not an int.");
-        }
-
-        // We only need 4 bytes for an int.
-        byte[] buffer = new byte[4];
-        position(dataReader, p.pointer+heapPosition);
-        try {
-          dataReader.read(buffer);
-        }
-        catch (IOException e) {
-          console.warn("File read error: " + e.getMessage());
-        }
-
-        // print out the bytes
-
-        // Convert byte buffer to int
-        int out = 0;
-        for (int i = 0; i < 4; i++) {
-          out = out | (buffer[i] << (i*8));
-        }
-        return out;
-      }
-
-      // public float getFloatProperty(String name) {
-      //     return (float) properties.get(name);
-      // }
-
-      // public int[] getIntArrayProperty(String name) {
-      //     return (int[]) properties.get(name);
-      // }
-
-      // This function is recursive.
-      private void readProperty(int i, byte[] buffer) throws ReadEntryFailureException {
-        // Read the property name
-        String propertyName = "";
-        char b = (char) buffer[i++];
-
-        if (b == ELEMENT_END_CHAR || b == DATA_HEAP_SEPERATOR_CHAR) {
-          // We've reached the end of the properties of this element.
-          return;
-        }
-
-        // Error detection code.
-        // Property name immediately ends, meaning there is no property name.
-        if (b == PROPERTY_SEPERATOR_CHAR) {
-          console.warn("Loading entry error, no property name. I'll try to keep going...");
-
-          // Attempt to recover by skipping the pointer bytes.
-          i += POINTER_LENGTH+SIZE_LENGTH;
-          i++;
-          readProperty(i, buffer);
-          return;
-          // We don't continue the rest of this function after this point.
-        }
-
-        // Read the property name
-        try {
-          while (b != PROPERTY_SEPERATOR_CHAR) {
-            propertyName += b;
-            b = (char) buffer[i++];
-          }
-        }
-        catch (ArrayIndexOutOfBoundsException e) {
-          // If we end up there then hoooooo something has seriously gone wrong.
-          throw new ReadEntryFailureException("Corrupted properties, cannot load entry :(");
-        }
-
-        // We should have the property name at that point.
-
-        // Read the data type.
-        byte dataType = buffer[i++];
-        // An unknown data type is an indication that the save function forgot
-        // to add the data type byte.
-        if (!checkDataType(dataType)) {
-          console.warn("Loading entry error, invalid or no type byte. I'll try to keep going...");
-          // Go back one byte and assume the data type is a string.
-          i--;
-          dataType = DATATYPE_STRING;
-        }
-
-        // Read the pointer and size bytes
-        int pointer = 0;
-        int size = 0;
-        for (int j = 0; j < POINTER_LENGTH; j++) {
-          // println(int(buffer[i++]));
-          pointer = pointer | (buffer[i++] << (8*j));
-        }
-        for (int j = 0; j < SIZE_LENGTH; j++) {
-          // println(int(buffer[i++]));
-          size = size | (buffer[i++] << (8*j));
-        }
-
-        // At this point we should be at the next property.
-
-        println("========================================");
-        println("Property name: " + propertyName);
-        println("Data type: " + dataType);
-        println("Pointer: " + pointer);
-        println("Size: " + size);
-
-        properties.put(propertyName, new PnL(pointer, size, dataType));
-
-
-
-        if (buffer[i] == ELEMENT_END_CHAR) {
-          // We've reached the end of the properties of this element.
-          return;
-        }
-
-        // Otherwise we keep going and read the next property.
-        readProperty(i, buffer);
-      }
-    }
-
-
-
-    public PlaceholderReadEntryProperties(String path) {
-
-      // Create the FileInputStream
-      try {
-        File file = new File(path);
-        if (!file.exists()) {
-          console.error("Save file does not exist!");
-          return;
-        }
-        fis = new FileInputStream(file);
-      }
-      catch (FileNotFoundException e) {
-        e.printStackTrace();
-      }
-
-      // Get all the properties of the entry.
-      try {
-        // Fis's state gets updated whenever we create a new object
-        elements = new ArrayList<ElementProperties>();
-
-        ElementProperties e = new ElementProperties(fis);
-        elements.add(e);
-        while (e.moreToRead) {
-          e = new ElementProperties(fis);
-          elements.add(e);
-        }
-      }
-      catch (ReadEntryFailureException e) {
-        console.error("What.");
-      }
-    }
-
-    public int getElementCount() {
-      return elements.size();
-    }
-
-    public void selectElement(int index) {
-      selectedElement = elements.get(index);
-    }
-
-    public String getStringProperty(String name) {
-      return selectedElement.getStringProperty(name);
-    }
-
-    public int getIntProperty(String name) {
-      return selectedElement.getIntProperty(name);
-    }
-
-
-
-    public void nextElementProperties() {
-      try {
-        currElement = new ElementProperties(fis);
-      }
-      catch (ReadEntryFailureException e) {
-        console.error("What.");
-      }
-    }
-
-    public void getStringProperty() {
-      currElement.getStringProperty("name");
     }
   }
 
@@ -3715,25 +3168,16 @@ class Engine {
   }
 
   public boolean keyAction(String keybindName) {
-    String s = keybindings.getString(keybindName);
-    char k;
-    if (s == null) {
-      if (defaultKeybindings.get(keybindName) != null) k = defaultKeybindings.get(keybindName);
-      else { console.bugWarnOnce("keyAction: unknown keyaction "+keybindName);
-      return false; }
-    }
-    else k = s.charAt(0);
+    char k = settings.getKeybinding(keybindName);
+    
     // Special keys/buttons
-    switch (int(k)) {
-    case LEFT_CLICK:
+    if (int(k) == settings.LEFT_CLICK)
       return this.leftClick;
-    case RIGHT_CLICK:
+    else if (int(k) == settings.RIGHT_CLICK)
       return this.rightClick;
-
+    else 
       // Otherwise just tell us if the key is down or not
-    default:
       return anyKeyDown(k);
-    }
   }
 
   private boolean keyActionPressed = false;
@@ -3752,7 +3196,9 @@ class Engine {
   }
 
   public boolean keybindPressed(String keybindName) {
-    return (this.keyPressed && int(key) == keybindings.getString(keybindName).charAt(0));
+    // Unnecessary note:
+    // Hey by implementing modules I just fixed a potential bug by accident! :3
+    return (this.keyPressed && int(key) == settings.getKeybinding(keybindName));
   }
 
   public boolean anyKeyDown(char k) {
@@ -3860,20 +3306,6 @@ class Engine {
     return mouseY/displayScale;
   }
 
-  private void displayOSError() {
-    background(0);
-    app.fill(color(255, 127, 127));
-    app.textSize(50);
-    app.textAlign(LEFT, TOP);
-    app.text(OSName+" is not supported on Timeway, sorry :(\n"+
-      "Press any button to exit"
-      , 10, 10);
-
-    if (keyPressed) {
-      exit();
-    }
-  }
-
   public SoundFile getSound(String name) {
     SoundFile sound = sounds.get(name);
     if (sound == null) {
@@ -3934,11 +3366,8 @@ class Engine {
   // or randomly accessed sounds.
   // This technically uses an unintended quirk of the Movie library, as passing an audio file
   // instead of a video file still plays the file streamed from the disk.
-  public void streamMusic(String path) {
-    streamMusic(path, true);
-  }
 
-  public void streamMusic(final String path, boolean loop) {
+  public void streamMusic(final String path) {
     if (musicReady.get() == false) {
       reloadMusic = true;
       reloadMusicPath = path;
@@ -3949,8 +3378,6 @@ class Engine {
     Thread t1 = new Thread(new Runnable() {
       public void run() {
         streamMusic = loadNewMusic(path);
-        if (currScreen != null) 
-        currScreen.myStreamMusic = streamMusic;
 
         if (streamMusic != null)
         streamMusic.play();
@@ -4724,7 +4151,6 @@ public abstract class Screen {
   protected float myAnimationSpeed = DEFAULT_ANIMATION_SPEED;
   protected int transitionState = NONE;
   protected float transitionTick = 0;
-  private Movie myStreamMusic;
 
   // ERS
   protected HashSet<RedrawElement> redrawElements = null;   // Only needed when the screen uses the efficient redraw system (ERS).
@@ -4848,39 +4274,6 @@ public abstract class Screen {
     }
   }
 
-  // Definitely ERS
-  private void calculateCollisionRedraw() {
-    // First, let's create a new hashmap of all our elements
-    ArrayList<RedrawElement> elements = new ArrayList<RedrawElement>(redrawElements);
-
-    // The optimisations:
-    // 1. Once a collision check is performed, there's no need to do the inverse check
-    // (a checks collision with b and c, a collision check b -> a, c -> a would be redundant)
-    // 2. Because we're only ever checking if an object needs to be redrawn, there's no
-    // need to continue checking the rest of the elements if a collision has been detected;
-    // it only takes 1 collision for both objects to be marked as "redraw required"
-
-    // SOLUTION TO PROBLEM:
-    // Use recursive checks.
-
-    while (elements.size() > 0) {
-      // "pop" the element
-      RedrawElement ea = elements.get(0);
-      elements.remove(0);
-      // Once we're done checking, we do not want this element in the list anymore.
-
-      for (RedrawElement eb : elements) {
-        // If both aren't marked for redrawing
-        if (ea.redraw() || ea.redraw()) {
-          // If a collision has been detected (I'm sorry for this clusterf**k)
-          if (ea.getX()+ea.getWidth() > eb.getX() && eb.getX()+eb.getWidth() < ea.getX()
-            && ea.getY()+ea.getHeight() > eb.getY() && eb.getY()+eb.getHeight() < ea.getY()) {
-            // Collision, both elements should be redrawn.
-          }
-        }
-      }
-    }
-  }
 
   protected void upperBar() {
     redrawInArea(0, 0, engine.WIDTH, myUpperBarWeight, myUpperBarColor);
@@ -4939,6 +4332,7 @@ public abstract class Screen {
   // A method where you can add your own custom commands.
   // Must return true if a command is found and false if a command
   // is not found.
+  @SuppressWarnings("unused")
   protected boolean customCommands(String command) {
     return false;
   }
