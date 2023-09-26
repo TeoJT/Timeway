@@ -40,7 +40,7 @@ class Engine {
   // Info and versioning
   public final String NAME        = "Timeway";
   public final String AUTHOR      = "Teo Taylor";
-  public final String VERSION     = "0.0.5-d10";
+  public final String VERSION     = "0.0.5-d12";
   public final String VERSION_DESCRIPTION = 
     "- Added shortcuts\n";
   // ***************************
@@ -103,15 +103,6 @@ class Engine {
   public Console console;
   public Sound soundSystem;
 
-  // Power modes
-  public PowerMode powerMode = PowerMode.HIGH;
-  public boolean noBattery = false;
-  public boolean doNotExceed = false;
-  public boolean sleepyMode = false;
-  public boolean dynamicFramerate = true;
-  public boolean powerSaver = false;
-  public int lastPowerCheck = 0;
-  //public Kernel32.SYSTEM_POWER_STATUS powerStatus;
 
   // Display system
   public float displayScale = 2.0;
@@ -330,6 +321,27 @@ class Engine {
     }
     return returnSettings;
   }
+  
+  // Power modes
+    private PowerMode powerMode = PowerMode.HIGH;
+    private boolean noBattery = false;
+    private boolean doNotExceed = false;
+    private boolean sleepyMode = false;
+    private boolean dynamicFramerate = true;
+    private boolean powerSaver = false;
+    private int lastPowerCheck = 0;
+    
+    public PowerMode getPowerMode() {
+      return powerMode;
+    }
+  
+  // Todo: THIS.
+  public class PowerModeModule {
+    
+    
+    
+    //public Kernel32.SYSTEM_POWER_STATUS powerStatus;
+  }
 
   public void setup() {
 
@@ -355,6 +367,8 @@ class Engine {
       }
       currentDir  = DEFAULT_DIR;
     }
+    
+    USE_CPU_CANVAS = getSettingBoolean("fasterImageImport");
     
     
     POWER_HIGH_BATTERY_THRESHOLD = int(getSettingFloat("lowBatteryPercent"));
@@ -1701,6 +1715,7 @@ class Engine {
     defaultSettings.putIfAbsent("forcePowerMode", "NONE");
     defaultSettings.putIfAbsent("volumeNormal", 1.0);
     defaultSettings.putIfAbsent("volumeQuiet", 0.0);
+    defaultSettings.putIfAbsent("fasterImageImport", false);
 
     defaultKeybindings = new HashMap<String, Character>();
     defaultKeybindings.putIfAbsent("CONFIG_VERSION", char(1));

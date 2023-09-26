@@ -147,7 +147,9 @@ public class Editor extends Screen {
     public TextPlaceable entryNameText;
     public boolean cameraMode = false;
     public boolean autoScaleDown = false;
+    // TODO: remove ERS, it doesn't work
     public boolean usingERS = false;           // Not ever changed during runtime, but useful to disable during debugging.
+    public boolean changesMade = false;
     public int upperBarDrop = INITIALISE_DROP_ANIMATION;
     public static final int INITIALISE_DROP_ANIMATION = 0;
     public static final int CAMERA_ON_ANIMATION = 1;
@@ -422,6 +424,8 @@ public class Editor extends Screen {
         }
 
         private boolean editing() {
+            if (editingPlaceable == this)
+              changesMade = true;
             return editingPlaceable == this;
         }
 
@@ -445,12 +449,15 @@ public class Editor extends Screen {
             //sprite.move(xview, yview);
 
             // move the text from top to bottom on the screen just for fun
-            if (placeables.selectedSprite != sprite) {
-                //sprite.offmove(0, 100);
-            }
-            else {
-                testy = 0;
-            }
+            
+            // Update 25/09/23:
+            // WOW that is old code
+            //if (placeables.selectedSprite != sprite) {
+            //    //sprite.offmove(0, 100);
+            //}
+            //else {
+            //    testy = 0;
+            //}
 
             String displayText = "";
             if (editing()) {
@@ -459,8 +466,8 @@ public class Editor extends Screen {
                 else
                     displayText = engine.keyboardMessage;
             }
-            else {
-                displayText = text;
+              else {
+                  displayText = text;
             }
             app.text(displayText, sprite.xpos, sprite.ypos-app.textDescent()+EXPAND_HITBOX/2+10);
         }
@@ -661,7 +668,10 @@ public class Editor extends Screen {
     //**************************SAVE PAGE******************************
     //*****************************************************************
     public void saveEntryJSON() {
-      numImages = 0;
+      // Only save if any changes were made.
+      if (changesMade) {
+        engine.playSound("chime");
+        numImages = 0;
         //JSONObject json = new JSONObject();
         JSONArray array = new JSONArray();
         for (Placeable p : placeableset) {
@@ -676,6 +686,7 @@ public class Editor extends Screen {
         }
 
         engine.app.saveJSONArray(array, entryPath);
+      }
     }
 
     private void saveTextPlaceable(Placeable p, JSONArray array) {
@@ -747,6 +758,9 @@ public class Editor extends Screen {
             String d = engine.appendZeros(day(), 2)+"/"+engine.appendZeros(month(), 2)+"/"+year()+"\n"+engine.appendZeros(hour(), 2)+":"+engine.appendZeros(minute(), 2)+":"+engine.appendZeros(second(), 2);
             date.sprite.move(engine.WIDTH-app.textWidth(d)*2., 250);
             date.text = d;
+            
+            // New entry, new default template, ofc we want to save changes!
+            changesMade = true;
             
             loading = false;
             return;
@@ -876,14 +890,20 @@ public class Editor extends Screen {
   
           //************BACK BUTTON************
           if (engine.button("back", "back_arrow_128", "Save & back")) {
-               engine.playSound("chime");
                saveEntryJSON();
                if (engine.prevScreen instanceof Explorer) {
                  Explorer prevExplorerScreen = (Explorer)engine.prevScreen;
                  prevExplorerScreen.refreshDir();
                }
+               
                // Remove all the images from this entry before we head back,
                // we don't wanna cause any memory leaks.
+               
+               // Update 25/09/23
+               // ... where's the code? Hmmmmmmmmmmmm
+               // Oh wait it's in the endAnimation function.
+               // Bit misleading there, past me.
+               
                previousScreen();
           }
   
@@ -1147,6 +1167,7 @@ public class Editor extends Screen {
           
           // Select the image we just pasted.
           editingPlaceable = imagePlaceable;
+          changesMade = true;
         }
       }
     }
@@ -1218,6 +1239,7 @@ public class Editor extends Screen {
         if (engine.keyPressed && key == DELETE) {
           if (editingPlaceable != null) {
             placeableset.remove(editingPlaceable);
+            changesMade = true;
           }
         }
         
@@ -1256,9 +1278,19 @@ public class Editor extends Screen {
         if (placeables.selectedSprite != null) {
           if (placeables.selectedSprite.repositionDrag.isDragging()) {
             engine.setAwake();
+            
+            // While we're here, a sprite is being dragged which means changes to the file.
+            changesMade = true;
           }
           else {
             engine.setSleepy();
+          }
+          
+          // Just check for changes
+          // Technically (as of now) just for images (text will never see this code)
+          // but can also apply to any new future placeables in the future.
+          if (placeables.selectedSprite.resizeDrag.isDragging()) {
+            changesMade = true;
           }
         }
     }

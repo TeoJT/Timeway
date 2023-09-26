@@ -1,4 +1,4 @@
-import java.util.concurrent.atomic.AtomicBoolean; //<>//
+import java.util.concurrent.atomic.AtomicBoolean; //<>// //<>// //<>// //<>//
 import javax.sound.midi.*;
 import java.io.BufferedInputStream;
 import processing.sound.*;
@@ -131,7 +131,7 @@ public class PixelRealm extends Screen {
   final float PLAYER_WIDTH  = 20;
 
 
-  Object3D coins[];
+  Object3D coins[] = null;
   FileObject[] files;
   public DirectoryPortal prevPortal;
   private int collectedCoins = 0;
@@ -1138,22 +1138,6 @@ public class PixelRealm extends Screen {
 
     refreshRealmInSeperateThread();
 
-
-    //Set the position of the coins.
-    coins = new Object3D[100];
-    float prevX = 0.;
-    float prevZ = 0.;
-    for (int i = 0; i < 100; i++) {
-      float x = prevX+random(0, 90);
-      float z = prevZ+random(-500, 500);
-      prevX = x;
-      prevZ = z;
-      Object3D coin = new Object3D(x, onSurface(x, z), z);
-      coin.img = img_coin[0];
-      coin.setSize(0.25);
-      coin.hitboxSize = BIG_HITBOX;
-      coins[i] = coin;
-    }
   }
 
   final int portPartNum = 90;
@@ -1183,6 +1167,7 @@ public class PixelRealm extends Screen {
     File f = new File(dir+REALM_TURF);
     boolean newTurf = false;
     DirectoryPortal fromPortal = null;
+    boolean createCoins = false;
     if (f.exists()) {
       if (!engine.openJSONObject(dir+REALM_TURF)) {
         console.warn("There's an error in the folder's turf file. Will now act as if the turf is new.");
@@ -1234,6 +1219,7 @@ public class PixelRealm extends Screen {
       setGroundSize(engine.getJSONFloat("ground_size", 400.));
       HILL_HEIGHT = engine.getJSONFloat("hill_height", 0.);
       HILL_FREQUENCY = engine.getJSONFloat("hill_frequency", 0.5);
+      createCoins = engine.getJSONBoolean("coins", true);
 
 
       int l = objects3d.size();
@@ -1273,6 +1259,23 @@ public class PixelRealm extends Screen {
       for (FileObject p : namesToObjects.values()) {
         engine.loadedJsonObject = new JSONObject();
         p.load();
+      }
+    }
+    
+    if (createCoins && coins == null) {
+      coins = new Object3D[100];
+      float prevX = 0.;
+      float prevZ = 0.;
+      for (int i = 0; i < 100; i++) {
+        float x = prevX+random(0, 90);
+        float z = prevZ+random(-500, 500);
+        prevX = x;
+        prevZ = z;
+        Object3D coin = new Object3D(x, onSurface(x, z), z);
+        coin.img = img_coin[0];
+        coin.setSize(0.25);
+        coin.hitboxSize = BIG_HITBOX;
+        coins[i] = coin;
       }
     }
 
@@ -2423,7 +2426,7 @@ public class PixelRealm extends Screen {
 
     engine.timestamp("render3DObjects");
 
-    render3DObjects();  //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>//
+    render3DObjects();  //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>//
     scene.hint(DISABLE_DEPTH_TEST);
 
     engine.timestamp("portal light");
@@ -2490,7 +2493,7 @@ public class PixelRealm extends Screen {
   private void render3DObjects() {
     engine.timestamp("Update distances");
     // Update the distances from the player for all nodes
-    Object3D currNode = headNode; //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>//
+    Object3D currNode = headNode; //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>//
     while (currNode != null) {
       currNode.calculateVal();
       currNode = currNode.next;
@@ -2547,7 +2550,7 @@ public class PixelRealm extends Screen {
 
   public void content() {
     if (engine.sleepyMode) engine.setAwake();
-    runPixelRealm();  //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>//
+    runPixelRealm();  //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>//
   }
   
   public void upperBar() {
@@ -2956,15 +2959,17 @@ public class PixelRealm extends Screen {
     }
 
     int l = img_coin.length;
-    for (int i = 0; i < 100; i++) {
-      if (coins[i] != null) {
-        coins[i].img = img_coin[((int(frameCount*n)/4))%l];
-        if (coins[i].touchingPlayer()) {
-          engine.playSound("coin");
-          coins[i].destroy();
-          coins[i] = null;
-          console.log("Coins: "+str(++collectedCoins));
-          if (collectedCoins == 100) engine.playSound("oneup");
+    if (coins != null) {
+      for (int i = 0; i < 100; i++) {
+        if (coins[i] != null) {
+          coins[i].img = img_coin[((int(frameCount*n)/4))%l];
+          if (coins[i].touchingPlayer()) {
+            engine.playSound("coin");
+            coins[i].destroy();
+            coins[i] = null;
+            console.log("Coins: "+str(++collectedCoins));
+            if (collectedCoins == 100) engine.playSound("oneup");
+          }
         }
       }
     }
