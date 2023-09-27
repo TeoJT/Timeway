@@ -2565,7 +2565,7 @@ public class PixelRealm extends Screen {
   public void upperBar() {
     super.upperBar();
     textFont(engine.DEFAULT_FONT);
-    textSize(40);
+    textSize(36);
     textAlign(LEFT, TOP);
     fill(0);
     text(engine.currentDir, 10, 10);

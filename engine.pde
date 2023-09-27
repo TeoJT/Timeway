@@ -22,6 +22,9 @@ import java.net.URL;
 import java.util.zip.*;
 import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
+import java.awt.datatransfer.StringSelection;
+import java.awt.Toolkit;
+import java.awt.datatransfer.Clipboard;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -3868,17 +3871,42 @@ class Engine {
     openDirInNewThread(currentDir);
   }
   
+  private Object cachedClipboardObject;
+  
+  public boolean clipboardIsImage() {
+    if (cachedClipboardObject == null) cachedClipboardObject = getFromClipboard(DataFlavor.imageFlavor);
+    
+    // If still false, is nothing so isn't an image.
+    if (cachedClipboardObject == null) return false;
+    return (cachedClipboardObject instanceof java.awt.Image);
+  }
 
   public String getTextFromClipboard()
   {
-    String text = (String) getFromClipboard(DataFlavor.stringFlavor);
+    if (cachedClipboardObject == null) cachedClipboardObject = getFromClipboard(DataFlavor.stringFlavor);
+    String text = (String) cachedClipboardObject;
+    cachedClipboardObject = null;
     return text;
+  }
+  
+  public boolean clipboardIsString() {
+    if (cachedClipboardObject == null) cachedClipboardObject = getFromClipboard(DataFlavor.stringFlavor);
+    
+    // If still false, is nothing so isn't an image.
+    if (cachedClipboardObject == null) return false;
+    return (cachedClipboardObject instanceof String);
   }
 
   public PImage getImageFromClipboard()
   {
     PImage img = null;
+    
+    if (cachedClipboardObject == null) cachedClipboardObject = getFromClipboard(DataFlavor.imageFlavor);
+    
     java.awt.Image image = (java.awt.Image) getFromClipboard(DataFlavor.imageFlavor);
+    
+    cachedClipboardObject = null;
+    
     if (image != null)
     {
       img = new PImage(image);
@@ -3911,12 +3939,28 @@ class Engine {
       }
       catch (java.io.IOException exi)
       {
-        println("Unavailable data: " + exi);
+        console.warn("(Copy/paste) Unavailable data: " + exi);
         //~  exi.printStackTrace();
       }
     }
     return obj;
   } 
+  
+  // Returns true if successful, false if not
+  public boolean copyStringToClipboard(String str) {
+    String myString = str;
+    try {
+      StringSelection stringSelection = new StringSelection(myString);
+      Clipboard clipboard = Toolkit.getDefaultToolkit().getSystemClipboard();
+      clipboard.setContents(stringSelection, null);
+    }
+    catch (RuntimeException e) {
+      console.warn(e.getMessage());
+      console.warn("Couldn't copy text to clipboard: ");
+      return false;
+    }
+    return true;
+  }
 
   public void processCaching() {
     if (cacheInfoTimeout > 0) {

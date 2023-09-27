@@ -1107,8 +1107,8 @@ public class Editor extends Screen {
       engine.defaultShader();
     }
     
-    public float insertedImagexpos = 10;
-    public float insertedImageypos = this.myUpperBarWeight;
+    public float insertedXpos = 10;
+    public float insertedYpos = this.myUpperBarWeight;
     
     private void insertImage(PImage img) {
       // Because this could potentially take a while to load and cache into the Processing engine,
@@ -1148,10 +1148,10 @@ public class Editor extends Screen {
           }
           else {
             // If no text is being edited then place the image in the default location.
-            imagePlaceable.sprite.xpos = insertedImagexpos;
-            imagePlaceable.sprite.ypos = insertedImageypos;
-            insertedImagexpos += 20;
-            insertedImageypos += 20;
+            imagePlaceable.sprite.xpos = insertedXpos;
+            imagePlaceable.sprite.ypos = insertedYpos;
+            insertedXpos += 20;
+            insertedYpos += 20;
           }
           // Dont want our image stretched
           imagePlaceable.sprite.wi = img.width;
@@ -1170,6 +1170,17 @@ public class Editor extends Screen {
           changesMade = true;
         }
       }
+    }
+    
+    private void insertText(String initText, float x, float y) {
+        TextPlaceable editingTextPlaceable = new TextPlaceable();
+        editingTextPlaceable.textColor = selectedColor;
+        placeables.selectedSprite = editingTextPlaceable.sprite;
+        editingTextPlaceable.sprite.xpos = x;
+        editingTextPlaceable.sprite.ypos = y;
+        editingPlaceable = editingTextPlaceable;
+        engine.keyboardMessage = initText;
+        engine.allowShowCommandPrompt = false;
     }
     
     private void renderEditor() {
@@ -1225,14 +1236,52 @@ public class Editor extends Screen {
             }
         }
         
+        if (engine.keyPressed && key == 3) { // Ctrl+c
+          if (editingPlaceable != null) {
+            if (editingPlaceable instanceof TextPlaceable) {
+              TextPlaceable t = (TextPlaceable)editingPlaceable;
+              boolean success = engine.copyStringToClipboard(t.text);
+              if (success)
+                console.log("Copied!");
+            }
+            else console.log("Copying of element not supported yet, sorry!");
+          }
+        }
         
         if (engine.keyPressed && key == 0x16) // Ctrl+v
         {
             // Timeout so that we don't immediately shrink our cpu canvas since a delay is expected.
             engine.smallerCanvasTimeout = 10;
-            PImage pastedImage = engine.getImageFromClipboard();
-            if (pastedImage == null) console.log("Can't paste image from clipboard!");
-            else insertImage(pastedImage);
+            
+            if (engine.clipboardIsImage()) {
+              PImage pastedImage = engine.getImageFromClipboard();
+              if (pastedImage == null) console.log("Can't paste image from clipboard!");
+              else insertImage(pastedImage);
+            }
+            else if (engine.clipboardIsString()) {
+              String pastedString = engine.getTextFromClipboard();
+              
+              if (editingPlaceable != null) {
+                // If we're currently editing text, append it
+                if (editingPlaceable instanceof TextPlaceable) {
+                  engine.keyboardMessage += pastedString;
+                }
+                else if (editingPlaceable instanceof ImagePlaceable) {
+                  // Place it just underneath the image.
+                  float imx = editingPlaceable.sprite.xpos;
+                  float imy = editingPlaceable.sprite.ypos;
+                  int imhi = editingPlaceable.sprite.hi;
+                  insertText(pastedString, imx, imy+imhi);
+                }
+              }
+              // No text or image being edited, just plonk it whereever.
+              else {
+                insertedXpos += 20;
+                insertedYpos += 20;
+                insertText(pastedString, insertedXpos, insertedYpos);
+              }
+            }
+            else console.log("Can't paste item from clipboard!");
         }
         
         
@@ -1260,14 +1309,7 @@ public class Editor extends Screen {
             // 1. There's no minimenu open
             // 2. There's no gui element being interacted with
             if (editingPlaceable == null && currMinimenu == null && !mouseInUpperbar) {
-                TextPlaceable editingTextPlaceable = new TextPlaceable();
-                editingTextPlaceable.textColor = selectedColor;
-                placeables.selectedSprite = editingTextPlaceable.sprite;
-                editingTextPlaceable.sprite.xpos = engine.mouseX();
-                editingTextPlaceable.sprite.ypos = engine.mouseY()-20;
-                editingPlaceable = editingTextPlaceable;
-                engine.keyboardMessage = "";
-                engine.allowShowCommandPrompt = false;
+                insertText("", engine.mouseX(), engine.mouseY()-20);
             }
         }
 
