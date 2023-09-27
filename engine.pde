@@ -40,7 +40,7 @@ class Engine {
   // Info and versioning
   public final String NAME        = "Timeway";
   public final String AUTHOR      = "Teo Taylor";
-  public final String VERSION     = "0.0.5-d13";
+  public final String VERSION     = "0.0.5-d14";
   public final String VERSION_DESCRIPTION = 
     "- Added shortcuts\n";
   // ***************************
@@ -75,6 +75,7 @@ class Engine {
   public static final int    PRESSED_KEY_ARRAY_LENGTH = 10;
   public static final String CACHE_COMPATIBILITY_VERSION = "0.1";
   public static final int    CACHE_SCALE_DOWN = 128;
+  public static final int    MAX_CPU_CANVAS = 8;
   
 
   // Dynamic constants (changes based on things like e.g. configuration file)
@@ -395,14 +396,6 @@ class Engine {
 
 
     generateErrorImg();
-    if (USE_CPU_CANVAS) {
-      CPUCanvas = new PGraphics[8];
-      CPUCanvas[0] = createGraphics(app.width, app.height);
-      CPUCanvas[0].beginDraw();
-      CPUCanvas[0].clear();
-      CPUCanvas[0].endDraw();
-      app.image(CPUCanvas[0], 0, 0);
-    }
     loadedContent = new HashSet<String>();
     systemImages = new HashMap<String, PImage>();
     fonts = new HashMap<String, PFont>();
@@ -462,6 +455,16 @@ class Engine {
     
     //public Kernel32.SYSTEM_POWER_STATUS powerStatus;
   }
+  
+  // Displaying it for the first time automatically caches it (and causes a massive ass delay)
+  public void cacheCPUCanvas() {
+    if (USE_CPU_CANVAS) {
+      CPUCanvas[0].beginDraw();
+      CPUCanvas[0].clear();
+      CPUCanvas[0].endDraw();
+      app.image(CPUCanvas[0], 0, 0);
+    }
+  }
 
   public void setup() {
 
@@ -486,6 +489,10 @@ class Engine {
     }
     
     USE_CPU_CANVAS = settings.getBoolean("fasterImageImport");
+    if (USE_CPU_CANVAS) {
+      CPUCanvas = new PGraphics[MAX_CPU_CANVAS];
+      CPUCanvas[0] = createGraphics(app.width, app.height);
+    }
     
     POWER_HIGH_BATTERY_THRESHOLD = int(settings.getFloat("lowBatteryPercent"));
     DEFAULT_FONT = getFont(DEFAULT_FONT_NAME);
@@ -512,7 +519,6 @@ class Engine {
     }
 
 
-    // TODO: remove
     updateBatteryStatus();
 
 
@@ -2401,7 +2407,15 @@ class Engine {
     }
     // If image is loaded render.
     if (image.width > 0 && image.height > 0) {
-      if (image.width > 1024 && image.height > 1024 && USE_CPU_CANVAS) {
+      
+      // Images which are large on some devices causes a large delay as OpenGL caches the image.
+      // A workaround is to render the image to a canvas rendered by the CPU instead, bypassing any caching.
+      // However, this comes at the cost of increased CPU usage and increased power use.
+      // Only use it if 
+      // 1. image is large enough
+      // 2. We've enabled the CPU canvas (obviously)
+      // 3. powerSaver is disabled (we'd rather have large caching delays than increased overall power usage)
+      if (image.width > 1024 && image.height > 1024 && USE_CPU_CANVAS && !powerSaver) {
         PGraphics canv = CPUCanvas[currentCPUCanvas];
         float canvDispSclX = canv.width/WIDTH;
         float canvDispSclY = canv.height/HEIGHT;
@@ -2411,12 +2425,13 @@ class Engine {
         canv.image(image, x*canvDispSclX, y*canvDispSclY, w*canvDispSclX, h*canvDispSclY);
         //CPUCanvas.noClip();
         canv.endDraw();
-        app.clip(x*displayScale, y*displayScale, w*displayScale, h*displayScale);
+        app.clip(x*displayScale+currScreen.screenx, y*displayScale+currScreen.screeny, w*displayScale, h*displayScale);
         app.image(canv, 0, 0, WIDTH, HEIGHT);
         app.noClip();
       }
       else app.image(image, x, y, w, h);
       
+      // TODO: failed experiment, remove this
       //final float IMG_MAX_CHUNK_X = 128;
       //final float IMG_MAX_CHUNK_Y = 128;
       
@@ -2909,10 +2924,10 @@ class Engine {
 
   public String getCachePath() {
     // Get a unique idenfifier for the file
-    String cachePath = CACHE_PATH+"cache-"+str(int(random(0, 2147483646)))+".png";
+    String cachePath = APPPATH+CACHE_PATH+"cache-"+str(int(random(0, 2147483646)))+".png";
     File f = new File(cachePath);
     while (f.exists()) {
-      cachePath = CACHE_PATH+"cache-"+str(int(random(0, 2147483646)))+".png";
+      cachePath = APPPATH+CACHE_PATH+"cache-"+str(int(random(0, 2147483646)))+".png";
       f = new File(cachePath);
     }
 
@@ -3223,25 +3238,25 @@ class Engine {
       switch (transitionDirection) {
       case RIGHT:
         app.pushMatrix();
-        app.translate(((WIDTH*transition)-WIDTH)*displayScale, 0);
+        prevScreen.screenx = ((WIDTH*transition)-WIDTH)*displayScale;
         prevScreen.display();
         app.popMatrix();
 
 
         app.pushMatrix();
-        app.translate((WIDTH*transition)*displayScale, 0);
+        currScreen.screenx = ((WIDTH*transition)*displayScale);
         currScreen.display();
         app.popMatrix();
         break;
       case LEFT:
         app.pushMatrix();
-        app.translate((WIDTH-(WIDTH*transition))*displayScale, 0);
+        prevScreen.screenx = ((WIDTH-(WIDTH*transition))*displayScale);
         prevScreen.display();
         app.popMatrix();
 
 
         app.pushMatrix();
-        app.translate((-WIDTH*transition)*displayScale, 0);
+        currScreen.screenx = ((-WIDTH*transition)*displayScale);
         currScreen.display();
         app.popMatrix();
         break;
@@ -3250,6 +3265,7 @@ class Engine {
       if (transition < 0.001) {
         transitionScreens = false;
         currScreen.startupAnimation();
+        prevScreen.endScreenAnimation();
 
         // If we're just getting started, we need to get a feel for the framerate since we don't want to start
         // slow and choppy. Once we're done transitioning to the first (well, after the startup) screen, go into
@@ -3960,9 +3976,9 @@ class Engine {
     // If we're struggling with our framerate, opt back to a smaller CPU canvas at the
     // cost of quality
     if (USE_CPU_CANVAS) {
-      if (frameRate < 13 && smallerCanvasTimeout < 1 && powerMode != PowerMode.MINIMAL) {
+      if ((frameRate < 13 || getLiveFPS() < 9) && smallerCanvasTimeout < 1 && powerMode != PowerMode.MINIMAL) {
         currentCPUCanvas++;
-        if (CPUCanvas[currentCPUCanvas] == null) {
+        if (currentCPUCanvas < MAX_CPU_CANVAS && CPUCanvas[currentCPUCanvas] == null) {
           int w = CPUCanvas[currentCPUCanvas-1].width;
           int h = CPUCanvas[currentCPUCanvas-1].height;
           CPUCanvas[currentCPUCanvas] = createGraphics(w/2, h/2);
@@ -4297,7 +4313,7 @@ public abstract class Screen {
     // right after calling startScreenTransition().
   }
 
-  protected void endScreenTransition() {
+  protected void endScreenAnimation() {
   }
 
   protected void previousReturnAnimation() {
@@ -4306,7 +4322,6 @@ public abstract class Screen {
 
   protected void requestScreen(Screen screen) {
     if (engine.currScreen == this && engine.transitionScreens == false) {
-      this.endScreenTransition();
       engine.prevScreen = this;
       engine.currScreen = screen;
       screen.startScreenTransition();

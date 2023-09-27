@@ -62,9 +62,12 @@ public class Startup extends Screen {
             engine.imgCentre("logo", engine.WIDTH/2, engine.HEIGHT/2 - floatIn*100);
 
             engine.loadingIcon(engine.WIDTH/2, engine.HEIGHT*0.8);
+            
+            // TODO: add loading notes, including "caching CPU canvas"
         }
         // Logo fade out as the screen moves away.
         else {
+            engine.cacheCPUCanvas();
             floatOut *= 0.9;
             app.tint(255, (255*floatOut));
             engine.imgCentre("logo", engine.WIDTH/2, engine.HEIGHT/2);

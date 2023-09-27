@@ -206,7 +206,6 @@ public class Explorer extends Screen {
             return;
           }
           String foldername = engine.currentDir+engine.keyboardMessage;
-          println(foldername);
           new File(foldername).mkdirs();
           refreshDir();
         }

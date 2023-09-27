@@ -1427,6 +1427,8 @@ public class Editor extends Screen {
        for (String s : imagesInEntry) {
          engine.systemImages.remove(s);
        }
+       
+       engine.allowShowCommandPrompt = true;
     }
 
     

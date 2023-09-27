@@ -1398,6 +1398,7 @@ public class PixelRealm extends Screen {
     turfJson.setFloat("ground_size", GROUND_SIZE);
     turfJson.setFloat("hill_height", HILL_HEIGHT);
     turfJson.setFloat("hill_frequency", HILL_FREQUENCY);
+    turfJson.setBoolean("coins", (coins != null));
 
     try {
       engine.backupAndSaveJSON(turfJson, engine.currentDir+REALM_TURF);
@@ -2078,11 +2079,19 @@ public class PixelRealm extends Screen {
     // Toggle between item reposition mode and free move mode
 
     // Tab pressed.
-    if (engine.keybindPressed("menu")) {
+    if (engine.keybindPressed("menu") && !engine.commandPromptShown) {
       menuShown = !menuShown;
       menuID = MENU_MAIN;
-      if (menuShown) engine.playSound("menu_appear");
+      // If we're editing a folder/entry name, pressing tab should make the menu disappear
+      // and then we can continue moving. If we forget to turn the inputPrompt off, the engine
+      // will think we're still typing and won't allow us to move.
+      engine.inputPromptShown = false;
+      if (menuShown)
+        engine.playSound("menu_appear");
     }
+    
+    // Allow the command prompt to be shown only if the menu isn't displayed.
+    engine.allowShowCommandPrompt = !menuShown;
 
     if (!menuShown) {
       for (int i = 0; i < n; i++) {
