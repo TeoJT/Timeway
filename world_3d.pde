@@ -161,6 +161,7 @@ public class PixelRealm extends Screen {
   Stack<Object3D> terrainObjects;
 
   public int worldThemeSky = 0;
+  private boolean legacyPortalEasteregg = false;
 
   private Object3D tailNode = null;
   private Object3D headNode = null;
@@ -182,7 +183,7 @@ public class PixelRealm extends Screen {
   public final Runnable generateQuickWarp = new Runnable() {
     public void run() {
       QuickWarpSaveInfo[] quickWarp = new QuickWarpSaveInfo[10];
-      engine.sharedResources.setSharedResource(QUICK_WARP_DATASET, quickWarp);
+      engine.sharedResources.set(QUICK_WARP_DATASET, quickWarp);
     }
   };
 
@@ -638,7 +639,7 @@ public class PixelRealm extends Screen {
     {
       this.hitboxSize = SMALL_HITBOX;
       this.img = portal;
-      setSize(1.);
+      setSize(legacyPortalEasteregg ? 1.0 : 0.8);
     }
 
 
@@ -660,7 +661,7 @@ public class PixelRealm extends Screen {
         //float w = img.width*size;
         if (lights) scene.noLights();
         scene.pushMatrix();
-        scene.translate(x, y-hi+40, z);
+        scene.translate(x, y-hi, z);
         scene.rotateY(d);
         scene.textSize(24);
         scene.textFont(engine.DEFAULT_FONT);
@@ -715,10 +716,31 @@ public class PixelRealm extends Screen {
     }
 
     public void calculateVal() {
-      float x = xpos-this.x;
-      float y = ypos-this.y;
-      float z = zpos-this.z;
-      this.val = x*x + y*y + z*z;
+      
+      // TODO: obvious optimisation required!
+      // Cache variables from display()!
+      float hwi = wi/2;
+      float sin_d = flatSinDirection*(hwi);
+      float cos_d = flatCosDirection*(hwi);
+      float xx1 = x + sin_d;
+      float zz1 = z + cos_d;
+      float xx2 = x - sin_d;
+      float zz2 = z - cos_d;
+      
+      float x1 = xpos-xx1;
+      float y1 = ypos-this.y;
+      float z1 = zpos-zz1;
+      
+      float x2 = xpos-xx2;
+      float y2 = y1;
+      float z2 = zpos-zz2;
+      
+      // BUG FIX:
+      // Calculate the edge with the furthest distance to the player (camera).
+      float val1 = x1*x1 + y1*y1 + z1*z1;
+      float val2 = x2*x2 + y2*y2 + z2*z2;
+      
+      this.val = val1 > val2 ? val1 : val2;
     }
 
     public boolean touchingPlayer() {
@@ -1072,7 +1094,7 @@ public class PixelRealm extends Screen {
   public PixelRealm(Engine engine, String dir) {
     super(engine);
     this.setup(dir, dir.substring(0, dir.lastIndexOf("/", dir.length()-2)));
-    engine.sharedResources.setSharedResource(QUICK_WARP_ID, 1);
+    engine.sharedResources.set(QUICK_WARP_ID, 1);
   }
 
   public void setup(String dir, String emergeFrom) {
@@ -1104,7 +1126,12 @@ public class PixelRealm extends Screen {
     worldThemeSky = 0;
 
     this.height = engine.HEIGHT-myLowerBarWeight-myUpperBarWeight;
+    
+    legacyPortalEasteregg = (boolean)engine.sharedResources.get("legacy_evolvinggateway_easteregg", false);
 
+    // TODO:
+    // OH MY GOD I CANT BELIEVE I DIDNT NOTICE IT NOW PUT THIS INTO SHARED RESOURCES
+    
     //Now craete those offscreen graphics so we can use them for all eternity!!!!
     scene = createGraphics((int(engine.WIDTH)/scale), int(this.height)/scale, P3D);
     //This strange code here just turns off smooth rendering because for some reason noSmooth() doesn't work.
@@ -1115,12 +1142,7 @@ public class PixelRealm extends Screen {
 
 
     //img_sky_1.resize(scene.width, scene.height);
-
-
-    //Reset the particles in the portal(s).
-    for (int i = 0; i < portPartNum; i++) {
-      portPartX[i] = -999;
-    }
+    setupLegacyPortal();
 
     String prevDir = dir.substring(0, dir.lastIndexOf('/', dir.length()-2)+1);
     //prevPortal = new DirectoryPortal(xpos-200, 0, zpos, 1., SMALL_HITBOX, prevDir, "[prev]");
@@ -1130,6 +1152,7 @@ public class PixelRealm extends Screen {
     // renderDistance in the z axis. Hope that makes sense.
     terrainObjects = new Stack<Object3D>(((RENDER_DISTANCE+5)*2)*((RENDER_DISTANCE+5)*2));
     autogenStuff = new HashSet<String>();
+    legacyPortalEasteregg = (boolean)engine.sharedResources.get("legacy_evolvinggateway_easteregg", false);
     init3DObjects();
 
     //loadTurfJson(dir, emergeFrom);
@@ -1139,13 +1162,6 @@ public class PixelRealm extends Screen {
     refreshRealmInSeperateThread();
 
   }
-
-  final int portPartNum = 90;
-  float portPartX[] = new float[portPartNum];
-  float portPartY[] = new float[portPartNum];
-  float portPartVX[] = new float[portPartNum];
-  float portPartVY[] = new float[portPartNum];
-  float portPartTick[] = new float[portPartNum];
 
 
   public void loadTurfJson(String dir, String emergeFrom) {
@@ -1767,93 +1783,40 @@ public class PixelRealm extends Screen {
 
     return hash;
   }
+  
+  private float portalUtime = 0.;
 
-  // Literally the only bit of code that (mostly) hasn't been changed since Evolving Gateway.
   public void renderPortal() {
     portal.beginDraw();
-    //portal.clear();
-    portal.background(color(0, 0, 255), 0);
-    portal.blendMode(ADD);
-
-    float w = 48, h = 48;
+    portal.clear();
 
     // Because framerates, we need to speed up portal animations if the framerate is slow.
-    int n = 1;
+    float n = 1.;
     switch (engine.powerMode) {
     case HIGH:
-      n = 1;
+      n = 1.;
       break;
     case NORMAL:
-      n = 2;
+      n = 2.;
       break;
     case SLEEPY:
-      n = 4;
+      n = 4.;
       break;
     case MINIMAL:
-      n = 1;
+      n = 1.;
       break;
     }
-
-    for (int j = 0; j < n; j++) {
-      if (int(random(0, 2)) == 0) {
-        int i = 0;
-        boolean finding = true;
-        while (finding) {
-          if (int(portPartX[i]) == -999) {
-            finding = false;
-            portPartVX[i] = random(-0.5, 0.5);
-            portPartVY[i] = random(-0.2, 0.2);
-
-            portPartX[i] = portal.width/2;
-            portPartY[i] = random(h, portal.height-60);
-
-            portPartTick[i] = 255;
-          }
-
-          i++;
-          if (i >= portPartNum) {
-            finding = false;
-          }
-        }
-      }
-
-      int particles = 0;
-
-      for (int i = 0; i < portPartNum; i++) {
-        if (int(portPartX[i]) != -999) {
-          portPartVX[i] *= 0.99;
-          portPartVY[i] *= 0.99;
-
-          portPartX[i] += portPartVX[i];
-          portPartY[i] += portPartVY[i];
-
-
-
-          //portal.fill(255);
-          //portal.rect(portPartX[i]-(w/2), portPartY[i]+(h/2), w, h);
-
-          portPartTick[i] -= 2;
-
-          if (portPartTick[i] <= 0) {
-            portPartX[i] = -999;
-          }
-
-          particles++;
-        }
-      }
-    }
-
-    for (int i = 0; i < portPartNum; i++) {
-      if (int(portPartX[i]) != -999) {
-        portal.tint(color(128, 128, 255), portPartTick[i]);
-        //portal.tint(255, portPartTick[i]);
-        portal.image(img_glow, portPartX[i]-(w/2), portPartY[i]+(h/2), w, h);
-      }
-    }
-
-    //println(particles);
-
-    portal.blendMode(NORMAL);
+    
+    portal.shader(
+      engine.getShaderWithParams("portal", "u_resolution", (float)portal.width, (float)portal.height, "u_time", portalUtime)
+    );
+    
+    portalUtime += n/60;
+    
+    portal.rect(0,0, portal.width, portal.height);
+    
+    portal.resetShader();
+    
     portal.endDraw();
   }
 
@@ -1988,7 +1951,10 @@ public class PixelRealm extends Screen {
 
     //This function assumes you have not called portal.beginDraw().
     engine.timestamp("Render portal");
-    renderPortal();
+    
+    if (legacyPortalEasteregg) evolvingGatewayRenderPortal();
+    else renderPortal();
+    
 
     engine.timestamp("atomicboolean get");
 
@@ -2240,18 +2206,18 @@ public class PixelRealm extends Screen {
       // Go through all the keys 0-9 and check if it's being pressed
       if (engine.keyActionOnce("quickWarp"+str(i))) {
         // Get the quick warp info from shared resources (creating the resource if it doesn't exist)
-        QuickWarpSaveInfo[] quickWarp = (QuickWarpSaveInfo[])engine.sharedResources.getSharedResource(QUICK_WARP_DATASET, generateQuickWarp);
+        QuickWarpSaveInfo[] quickWarp = (QuickWarpSaveInfo[])engine.sharedResources.get(QUICK_WARP_DATASET, generateQuickWarp);
 
         // If quick warp on the key pressed has been used before, go to it. Otherwise, start from the default dir.
         // Save our quickwarp first
         // If we pressed the same button as the warp we're already in, then go back to the default dir instead.
-        int myQuickWarpID = ((Integer)engine.sharedResources.getSharedResource(QUICK_WARP_ID)).intValue();
+        int myQuickWarpID = ((Integer)engine.sharedResources.get(QUICK_WARP_ID)).intValue();
 
         quickWarp[myQuickWarpID] = new QuickWarpSaveInfo(xpos, ypos, zpos, direction, engine.currentDir);
 
         // Now go to new warp
         endRealm();
-        engine.sharedResources.setSharedResource(QUICK_WARP_ID, new Integer(i));
+        engine.sharedResources.set(QUICK_WARP_ID, new Integer(i));
         portalLight = 255.;
         if (myQuickWarpID == i) console.log("Going back to default dir.");
         if (quickWarp[i] == null || (myQuickWarpID == i)) {
@@ -2268,13 +2234,6 @@ public class PixelRealm extends Screen {
       }
     }
 
-    // Go back to explorer if backspace pressed
-    if (engine.keyDown(BACKSPACE)) {
-      endRealm();
-      engine.fadeAndStopMusic();
-      requestScreen(new Explorer(engine, engine.currentDir));
-    }
-    
     
     engine.timestamp("render sky");
 
@@ -2537,24 +2496,48 @@ public class PixelRealm extends Screen {
       refreshRealm();
       return true;
     }
-    if (command.equals("/dropall")) {
+    else if (command.equals("/dropall")) {
       if (inventorySelectedItem != null && inventoryHead != null) {
         dropInventory();
         console.log("Dropping all items");
       } else console.log("No items to drop.");
       return true;
     }
-    if (command.equals("/blurrr")) {
+    else if (command.equals("/blurrr")) {
       blurrr = !blurrr;
       console.log("BLURRR");
       return true;
     }
-    if (command.equals("/editgui")) {
+    else if (command.equals("/editgui")) {
       guiMainToolbar.interactable = !guiMainToolbar.interactable;
       if (guiMainToolbar.interactable) console.log("GUI now interactable.");
       else  console.log("GUI is no longer interactable.");
       return true;
-    } else return false;
+    } 
+    else if (command.equals("/evolvinggateway")) {
+      if (legacyPortalEasteregg) {
+        engine.sharedResources.set("legacy_evolvinggateway_easteregg", new Boolean(false));
+        legacyPortalEasteregg = false;
+        console.log("Legacy Evolving Gateway style portals disabled.");
+        
+        // Resize all the portals to the modern size.
+        for (FileObject o : files) {if (o != null) {if (o instanceof DirectoryPortal) {
+              o.setSize(0.8);
+        }}}
+      }
+      else {
+        engine.sharedResources.set("legacy_evolvinggateway_easteregg", new Boolean(true));
+        legacyPortalEasteregg = true;
+        console.log("Welcome back to Evolving Gateway!");
+        
+        // Resize all the portals to the legacy size.
+        for (FileObject o : files) {if (o != null) {if (o instanceof DirectoryPortal) {
+              o.setSize(1.);
+        }}}
+      }
+      return true;
+    }
+    else return false;
   }
 
   public void content() {
@@ -3097,6 +3080,19 @@ public class PixelRealm extends Screen {
       }
     }
   }
+  
+  
+  final int portPartNum = 90;
+  float portPartX[] = new float[portPartNum];
+  float portPartY[] = new float[portPartNum];
+  float portPartVX[] = new float[portPartNum];
+  float portPartVY[] = new float[portPartNum];
+  float portPartTick[] = new float[portPartNum];
+  void setupLegacyPortal() {for (int i = 0; i < portPartNum; i++) {portPartX[i] = -999;}}
+  // Easter egg code
+  public void evolvingGatewayRenderPortal() {     portal.beginDraw(); portal.background(color(0, 0, 255), 0); portal.blendMode(ADD);     float w = 48, h = 48;     int n = 1;     switch (engine.powerMode) {     case HIGH:       n = 1;       break;     case NORMAL:       n = 2;       break;     case SLEEPY:       n = 4;       break;     case MINIMAL:       n = 1;       break;     }      for (int j = 0; j < n; j++) {       if (int(random(0, 2)) == 0) {         int i = 0;
+boolean finding = true;         while (finding) {           if (int(portPartX[i]) == -999) {             finding = false;             portPartVX[i] = random(-0.5, 0.5);             portPartVY[i] = random(-0.2, 0.2);              portPartX[i] = portal.width/2;             portPartY[i] = random(h, portal.height-60);              portPartTick[i] = 255;
+  }            i++;           if (i >= portPartNum) {             finding = false;           }         }       }               for (int i = 0; i < portPartNum; i++) {         if (int(portPartX[i]) != -999) {           portPartVX[i] *= 0.99;           portPartVY[i] *= 0.99;            portPartX[i] += portPartVX[i];           portPartY[i] += portPartVY[i];              portPartTick[i] -= 2;            if (portPartTick[i] <= 0) {             portPartX[i] = -999;           }    }       }     }      for (int i = 0; i < portPartNum; i++) {       if (int(portPartX[i]) != -999) {         portal.tint(color(128, 128, 255), portPartTick[i]);            portal.image(img_glow, portPartX[i]-(w/2), portPartY[i]+(h/2), w, h);       }     }      portal.blendMode(NORMAL);     portal.endDraw();   }
 }
 
 

@@ -49,12 +49,8 @@ class DCapture implements java.beans.PropertyChangeListener {
       return;
     }
     
-    Runnable useDefaultCamera = new Runnable() {
-      public void run() {
-        engine.sharedResources.setSharedResource("lastusedcamera", 0);
-      }
-    };
-    selectedCamera = (int)engine.sharedResources.getSharedResource("lastusedcamera", useDefaultCamera);
+    
+    selectedCamera = (int)engine.sharedResources.get("lastusedcamera", 0);
     activateCamera();
     
     ready.set(true);
@@ -1041,7 +1037,7 @@ public class Editor extends Screen {
       cameraMode = false;
       camera.turnOffCamera();
       myBackgroundColor = BACKGROUND_COLOR;       // Restore original background color
-      engine.sharedResources.setSharedResource("lastusedcamera", camera.selectedCamera);
+      engine.sharedResources.set("lastusedcamera", camera.selectedCamera);
     }
 
     // New name without the following path.
@@ -1088,7 +1084,9 @@ public class Editor extends Screen {
             if (upperbarExpand <= 0.001) engine.setSleepy();
         }
         
-        engine.useShader("fabric", "color",float((myUpperBarColor>>16)&0xFF)/255.,float((myUpperBarColor>>8)&0xFF)/255.,float((myUpperBarColor)&0xFF)/255.,1., "intensity",0.1);
+        app.shader(
+          engine.getShaderWithParams("fabric", "color",float((myUpperBarColor>>16)&0xFF)/255.,float((myUpperBarColor>>8)&0xFF)/255.,float((myUpperBarColor)&0xFF)/255.,1., "intensity",0.1)
+        );
         super.upperBar();
         engine.defaultShader();
 
@@ -1097,7 +1095,9 @@ public class Editor extends Screen {
     
     public void lowerBar() {
       
-      engine.useShader("fabric", "color",float((myUpperBarColor>>16)&0xFF)/255.,float((myUpperBarColor>>8)&0xFF)/255.,float((myUpperBarColor)&0xFF)/255.,1., "intensity",0.1);
+      app.shader(
+        engine.getShaderWithParams("fabric", "color",float((myUpperBarColor>>16)&0xFF)/255.,float((myUpperBarColor>>8)&0xFF)/255.,float((myUpperBarColor)&0xFF)/255.,1., "intensity",0.1)
+      );
       
       float LOWER_BAR_EXPAND = UPPER_BAR_DROP_WEIGHT;
       if (upperBarDrop == CAMERA_ON_ANIMATION) myLowerBarWeight = LOWER_BAR_WEIGHT+(LOWER_BAR_EXPAND * (1.-upperbarExpand));

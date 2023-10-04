@@ -43,7 +43,7 @@ class Engine {
   // Info and versioning
   public final String NAME        = "Timeway";
   public final String AUTHOR      = "Teo Taylor";
-  public final String VERSION     = "0.0.5-d14";
+  public final String VERSION     = "0.0.5-d16";
   public final String VERSION_DESCRIPTION = 
     "- Added shortcuts\n";
   // ***************************
@@ -185,26 +185,35 @@ class Engine {
       sharedResourcesMap = new HashMap<String, Object>();
     }
     
-    public void setSharedResource(String resourceName, Object val) {
+    public void set(String resourceName, Object val) {
       sharedResourcesMap.put(resourceName, val);
     }
     
-    public Object getSharedResource(String resourceName) {
+    public Object get(String resourceName) {
       Object o = sharedResourcesMap.get(resourceName);
-      if (o == null) console.bugWarn("getSharedResource: null object. Maybe use setSharedResource or add a runnable argument to getSharedResource?");
+      if (o == null) console.bugWarn("get: null object. Maybe use set or add a runnable argument to get?");
       return o;
     }
     
-    public Object getSharedResource(String resourceName, Runnable runIfAbsent) {
+    public Object get(String resourceName, Object addIfAbsent) {
+      Object o = sharedResourcesMap.get(resourceName);
+      if (o == null) this.set(resourceName, addIfAbsent);
+      o = sharedResourcesMap.get(resourceName);
+      // If it's still null after running, send a warning
+      if (o == null) console.bugWarn("get: You just passed a null object...?");
+      return o;
+    }
+    
+    public Object get(String resourceName, Runnable runIfAbsent) {
       Object o = sharedResourcesMap.get(resourceName);
       if (o == null) runIfAbsent.run();
       o = sharedResourcesMap.get(resourceName);
       // If it's still null after running, send a warning
-      if (o == null) console.bugWarn("getSharedResource: object still null after running runIfAbsent. Make sure to use setSharedResource in your runnable!");
+      if (o == null) console.bugWarn("get: object still null after running runIfAbsent. Make sure to use set in your runnable!");
       return o;
     }
     
-    public void deleteSharedResource(String resourceName) {
+    public void remove(String resourceName) {
       sharedResourcesMap.remove(resourceName);
     }
   }
@@ -778,7 +787,9 @@ class Engine {
       float hi = 128;
       float wi = 128*2;
       // TODO have some sort of fabric function instead of this mess.
-      useShader("fabric", "color", float((c>>16)&0xFF)/255., float((c>>8)&0xFF)/255., float((c)&0xFF)/255., 1., "intensity", 0.1);
+      app.shader(
+        getShaderWithParams("fabric", "color", float((c>>16)&0xFF)/255., float((c>>8)&0xFF)/255., float((c)&0xFF)/255., 1., "intensity", 0.1)
+      );
       rect(x1-wi, y1, wi*2, hi);
       defaultShader();
       loadingIcon(x1-wi+64, y1+64);
@@ -838,7 +849,9 @@ class Engine {
       float hi = 128;
       float wi = 128*2;
       // TODO have some sort of fabric function instead of this mess.
-      useShader("fabric", "color", float((c>>16)&0xFF)/255., float((c>>8)&0xFF)/255., float((c)&0xFF)/255., 1., "intensity", 0.1);
+      app.shader(
+        getShaderWithParams("fabric", "color", float((c>>16)&0xFF)/255., float((c>>8)&0xFF)/255., float((c)&0xFF)/255., 1., "intensity", 0.1)
+      );
       rect(x1-wi, y1, wi*2, hi);
       defaultShader();
       loadingIcon(x1-wi+64, y1+64);
@@ -909,7 +922,9 @@ class Engine {
       float hi = 128;
       float wi = 128*2;
       // TODO have some sort of fabric function instead of this mess.
-      useShader("fabric", "color", float((c>>16)&0xFF)/255., float((c>>8)&0xFF)/255., float((c)&0xFF)/255., 1., "intensity", 0.1);
+      app.shader(
+      getShaderWithParams("fabric", "color", float((c>>16)&0xFF)/255., float((c>>8)&0xFF)/255., float((c)&0xFF)/255., 1., "intensity", 0.1)
+      );
       rect(x1-wi, y1, wi*2, hi);
       defaultShader();
       
@@ -2324,28 +2339,28 @@ class Engine {
   public void defaultShader() {
     app.resetShader();
   }
-
-  public void useShader(String shaderName, Object... uniforms) {
+  
+  public PShader getShaderWithParams(String shaderName, Object... uniforms) {
     PShader sh = shaders.get(shaderName);
     if (sh == null) {
       console.warnOnce("Shader "+shaderName+" not found!");
-      app.resetShader();
-      return;
+      // TODO: return default shader
+      return null;
     }
     int l = uniforms.length;
-    app.shader(sh);
+    
     for (int i = 0; i < l; i++) {
       Object o = uniforms[i];
       if (o instanceof String) {
         if (i+1 < l) {
           if (!(uniforms[i+1] instanceof Float)) {
-            console.warnOnce("Invalid arguments ("+shaderName+"), uniform name needs to be followed by value.1");
+            console.bugWarn("Invalid arguments ("+shaderName+"), uniform name needs to be followed by value.1");
             println((uniforms[i+1]));
-            return;
+            return sh;
           }
         } else {
-          console.warnOnce("Invalid arguments ("+shaderName+"), uniform name needs to be followed by value.2");
-          return;
+          console.bugWarn("Invalid arguments ("+shaderName+"), uniform name needs to be followed by value.2");
+          return sh;
         }
 
         int numArgs = 0;
@@ -2354,12 +2369,12 @@ class Engine {
           if (uniforms[j] instanceof Float) args[numArgs++] = (float)uniforms[j];
           else if (uniforms[j] instanceof String) break;
           else {
-            console.warnOnce("Invalid uniform argument for shader "+shaderName+".");
-            return;
+            console.bugWarn("Invalid uniform argument for shader "+shaderName+".");
+            return sh;
           }
           if (numArgs > 4) {
-            console.warnOnce("There can only be at most 4 uniform args ("+shaderName+").");
-            return;
+            console.bugWarn("There can only be at most 4 uniform args ("+shaderName+").");
+            return sh;
           }
         }
 
@@ -2378,14 +2393,15 @@ class Engine {
           sh.set(uniformName, args[0], args[1], args[2], args[3]);
           break;
         default:
-          console.warnOnce("Uh oh, that might be a bug (useShader).");
-          return;
+          console.bugWarn("Uh oh, that might be a bug (useShader).");
+          return sh;
         }
         i += numArgs;
       } else {
-        console.warnOnce("Invalid uniform argument for shader "+shaderName+".");
+        console.bugWarn("Invalid uniform argument for shader "+shaderName+".");
       }
     }
+    return sh;
   }
   
   public void img(PImage image, float x, float y, float w, float h) {
@@ -3462,7 +3478,8 @@ class Engine {
     streamMusicFadeTo.playbin.setState(org.freedesktop.gstreamer.State.READY); 
     musicFadeOut = 0.99;
   }
-
+  
+  // TODO: Doesn't work totally.
   public void fadeAndStopMusic() {
     if (musicFadeOut < 1.) {
       if (streamMusicFadeTo != null) {

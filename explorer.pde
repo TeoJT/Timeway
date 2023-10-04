@@ -32,7 +32,7 @@ public class Explorer extends Screen {
         super(engine);
         DEFAULT_FONT = engine.DEFAULT_FONT_NAME;
         
-        engine.openDirInNewThread(engine.DEFAULT_DIR);
+        engine.openDirInNewThread(dir);
         gui = new SpriteSystemPlaceholder(engine, engine.APPPATH+engine.PATH_SPRITES_ATTRIB+"gui/explorer/");
         gui.repositionSpritesToScale();
         gui.interactable = false;
@@ -41,7 +41,7 @@ public class Explorer extends Screen {
         //myUpperBarColor   = color(120);
         myBackgroundColor = color(0);
         
-        engine.openDir(dir);
+        //engine.openDir(dir);
   }
   
   // This method shall render all the files in the current dir
@@ -219,8 +219,8 @@ public class Explorer extends Screen {
       exit();
     }
     
-    //***********WORLD BUTTON***********
-    if (button("world", "world_128", "World view")) {
+    //***********PIXeL REALM BUTTON***********
+    if (button("world", "world_128", "Pixel Realm")) {
       requestScreen(new PixelRealm(engine, engine.currentDir));
     }
     
@@ -236,7 +236,7 @@ public class Explorer extends Screen {
   }
   
   public void upperBar() {
-    engine.useShader("fabric", "color", 0.5,0.5,0.5,1., "intensity", 0.1);
+    app.shader(engine.getShaderWithParams("fabric", "color", 0.5,0.5,0.5,1., "intensity", 0.1));
     super.upperBar();
     app.resetShader();
     renderGui();
@@ -244,8 +244,7 @@ public class Explorer extends Screen {
   
     
   public void lowerBar() {
-    
-    engine.useShader("fabric", "color",0.5,0.5,0.5,1., "intensity",0.1);
+    app.shader(engine.getShaderWithParams("fabric", "color", 0.5,0.5,0.5,1., "intensity", 0.1));
     super.lowerBar();
     engine.defaultShader();
   }
