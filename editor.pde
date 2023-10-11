@@ -181,13 +181,13 @@ public class Editor extends Screen {
 
         public MiniMenu() {
             // idk what else to put there
-            engine.setAwake();
+            engine.power.setAwake();
             yappear = 1.;
         }
 
         public MiniMenu(float x, float y) {
             this();
-            engine.setAwake();
+            engine.power.setAwake();
             this.x = x;
             this.y = y;
         }
@@ -202,7 +202,7 @@ public class Editor extends Screen {
             // Only bother closing if we're not in any current animation
             if (!disappear && yappear <= 0.01) {
                 disappear = true;
-                engine.setSleepy();
+                engine.power.setSleepy();
                 yappear = 1.;
             }
         }
@@ -211,7 +211,7 @@ public class Editor extends Screen {
             app.noTint();
             tempDisableERS();
             // Sorry I'm lazy
-            switch (engine.powerMode) {
+            switch (engine.power.getPowerMode()) {
               case HIGH:
               yappear *= (1.-APPEAR_SPEED);
               break;
@@ -240,7 +240,7 @@ public class Editor extends Screen {
             else {
                 app.rect(x, y, this.width, this.height*yappear);
                 if (yappear <= 0.01) {
-                    engine.setSleepy();
+                    engine.power.setSleepy();
                     currMinimenu = null;
                 }
             }
@@ -1056,9 +1056,9 @@ public class Editor extends Screen {
     public void upperBar() {
         // The upper bar expand down animation when the screen loads.
         if (upperbarExpand > 0.001) {
-            engine.setAwake();
+            engine.power.setAwake();
             tempDisableERS();
-            switch (engine.powerMode) {
+            switch (engine.power.getPowerMode()) {
               case HIGH:
               upperbarExpand *= 0.8;
               break;
@@ -1081,7 +1081,7 @@ public class Editor extends Screen {
               
             
             
-            if (upperbarExpand <= 0.001) engine.setSleepy();
+            if (upperbarExpand <= 0.001) engine.power.setSleepy();
         }
         
         app.shader(
@@ -1113,7 +1113,7 @@ public class Editor extends Screen {
     private void insertImage(PImage img) {
       // Because this could potentially take a while to load and cache into the Processing engine,
       // we should expect framerate drops here.
-      engine.resetFPSSystem();
+      engine.power.resetFPSSystem();
       
       // TODO: Check whether we have text or image in the clipboard.
       if (currMinimenu == null) {
@@ -1319,13 +1319,13 @@ public class Editor extends Screen {
         // set framerates higher while we're dragging around.
         if (placeables.selectedSprite != null) {
           if (placeables.selectedSprite.repositionDrag.isDragging()) {
-            engine.setAwake();
+            engine.power.setAwake();
             
             // While we're here, a sprite is being dragged which means changes to the file.
             changesMade = true;
           }
           else {
-            engine.setSleepy();
+            engine.power.setSleepy();
           }
           
           // Just check for changes
@@ -1384,7 +1384,7 @@ public class Editor extends Screen {
           app.image(cameraDisplay, 0, 0, engine.WIDTH, engine.HEIGHT);
           if (takePhoto) {
             float n = 1.;
-            switch (engine.powerMode) {
+            switch (engine.power.getPowerMode()) {
                 case HIGH:
                 n = 1.;
                 break;
@@ -1425,7 +1425,7 @@ public class Editor extends Screen {
     }
     
     public void display() {
-      if (engine.powerMode != PowerMode.MINIMAL) {
+      if (engine.power.getPowerMode() != PowerMode.MINIMAL) {
         app.pushMatrix();
         app.translate(screenx,screeny);
         app.scale(engine.displayScale);

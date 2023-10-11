@@ -1,4 +1,4 @@
-import java.util.concurrent.atomic.AtomicBoolean; //<>// //<>// //<>// //<>// //<>//
+import java.util.concurrent.atomic.AtomicBoolean; //<>// //<>// //<>// //<>// //<>// //<>// //<>//
 import javax.sound.midi.*;
 import java.io.BufferedInputStream;
 import processing.sound.*;
@@ -1792,7 +1792,7 @@ public class PixelRealm extends Screen {
 
     // Because framerates, we need to speed up portal animations if the framerate is slow.
     float n = 1.;
-    switch (engine.powerMode) {
+    switch (engine.power.getPowerMode()) {
     case HIGH:
       n = 1.;
       break;
@@ -1965,7 +1965,7 @@ public class PixelRealm extends Screen {
       refreshRealm.set(false);
       // We may expect a delay, so put the fps tracking system into grace mode so that
       // it doesn't butcher the framerate just because of a drop.
-      engine.putFPSSystemIntoGraceMode();
+      engine.power.putFPSSystemIntoGraceMode();
       refreshRealm();
     }
 
@@ -1973,7 +1973,7 @@ public class PixelRealm extends Screen {
 
 
     int n = 1;
-    switch (engine.powerMode) {
+    switch (engine.power.getPowerMode()) {
     case HIGH:
       n = 1;
       break;
@@ -2394,7 +2394,7 @@ public class PixelRealm extends Screen {
 
     engine.timestamp("render3DObjects");
 
-    render3DObjects();  //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>//
+    render3DObjects();  //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>//
     scene.hint(DISABLE_DEPTH_TEST);
 
     engine.timestamp("portal light");
@@ -2416,7 +2416,7 @@ public class PixelRealm extends Screen {
     // Fade out the portal light
     float fade = 0.9;
     // Of course, it's an animation so we need to perform it n times
-    switch (engine.powerMode) {
+    switch (engine.power.getPowerMode()) {
     case HIGH:
       portalLight *= fade;
       break;
@@ -2461,7 +2461,7 @@ public class PixelRealm extends Screen {
   private void render3DObjects() {
     engine.timestamp("Update distances");
     // Update the distances from the player for all nodes
-    Object3D currNode = headNode; //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>//
+    Object3D currNode = headNode; //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>//
     while (currNode != null) {
       currNode.calculateVal();
       currNode = currNode.next;
@@ -2541,8 +2541,8 @@ public class PixelRealm extends Screen {
   }
 
   public void content() {
-    if (engine.sleepyMode) engine.setAwake();
-    runPixelRealm();  //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>//
+    if (engine.power.getSleepyMode()) engine.power.setAwake();
+    runPixelRealm();  //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>//
   }
   
   public void upperBar() {
@@ -2882,7 +2882,7 @@ public class PixelRealm extends Screen {
     // Cool coin thing!
     // This is very very temp code.
     int n = 1;
-    switch (engine.powerMode) {
+    switch (engine.power.getPowerMode()) {
     case HIGH:
       n = 1;
       break;
@@ -3090,7 +3090,7 @@ public class PixelRealm extends Screen {
   float portPartTick[] = new float[portPartNum];
   void setupLegacyPortal() {for (int i = 0; i < portPartNum; i++) {portPartX[i] = -999;}}
   // Easter egg code
-  public void evolvingGatewayRenderPortal() {     portal.beginDraw(); portal.background(color(0, 0, 255), 0); portal.blendMode(ADD);     float w = 48, h = 48;     int n = 1;     switch (engine.powerMode) {     case HIGH:       n = 1;       break;     case NORMAL:       n = 2;       break;     case SLEEPY:       n = 4;       break;     case MINIMAL:       n = 1;       break;     }      for (int j = 0; j < n; j++) {       if (int(random(0, 2)) == 0) {         int i = 0;
+  public void evolvingGatewayRenderPortal() {     portal.beginDraw(); portal.background(color(0, 0, 255), 0); portal.blendMode(ADD);     float w = 48, h = 48;     int n = 1;     switch (engine.power.getPowerMode()) {     case HIGH:       n = 1;       break;     case NORMAL:       n = 2;       break;     case SLEEPY:       n = 4;       break;     case MINIMAL:       n = 1;       break;     }      for (int j = 0; j < n; j++) {       if (int(random(0, 2)) == 0) {         int i = 0;
 boolean finding = true;         while (finding) {           if (int(portPartX[i]) == -999) {             finding = false;             portPartVX[i] = random(-0.5, 0.5);             portPartVY[i] = random(-0.2, 0.2);              portPartX[i] = portal.width/2;             portPartY[i] = random(h, portal.height-60);              portPartTick[i] = 255;
   }            i++;           if (i >= portPartNum) {             finding = false;           }         }       }               for (int i = 0; i < portPartNum; i++) {         if (int(portPartX[i]) != -999) {           portPartVX[i] *= 0.99;           portPartVY[i] *= 0.99;            portPartX[i] += portPartVX[i];           portPartY[i] += portPartVY[i];              portPartTick[i] -= 2;            if (portPartTick[i] <= 0) {             portPartX[i] = -999;           }    }       }     }      for (int i = 0; i < portPartNum; i++) {       if (int(portPartX[i]) != -999) {         portal.tint(color(128, 128, 255), portPartTick[i]);            portal.image(img_glow, portPartX[i]-(w/2), portPartY[i]+(h/2), w, h);       }     }      portal.blendMode(NORMAL);     portal.endDraw();   }
 }

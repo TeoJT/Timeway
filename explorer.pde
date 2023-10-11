@@ -100,14 +100,14 @@ public class Explorer extends Screen {
     final float ELASTIC_MAX = 100.;
     
     if (engine.scroll != 0.0) {
-      engine.setAwake();
+      engine.power.setAwake();
     }
     else {
-      engine.setSleepy();
+      engine.power.setSleepy();
     }
     
     int n = 1;
-    switch (engine.powerMode) {
+    switch (engine.power.getPowerMode()) {
           case HIGH:
           n = 1;
           break;

@@ -108,6 +108,7 @@ class Engine {
   public Sound soundSystem;
   public SharedResourcesModule sharedResources = new SharedResourcesModule();
   public SettingsModule settings = new SettingsModule(console);
+  public PowerModeModule power = new PowerModeModule();
 
 
   // Display system
@@ -448,6 +449,10 @@ class Engine {
   }
 
   
+  
+  // Todo: THIS.
+  public class PowerModeModule {
+    
   // Power modes
     private PowerMode powerMode = PowerMode.HIGH;
     private boolean noBattery = false;
@@ -459,11 +464,495 @@ class Engine {
     public PowerMode getPowerMode() {
       return powerMode;
     }
+    
+    final int MONITOR = 1;
+    final int RECOVERY = 2;
+    final int SLEEPY = 3;
+    final int GRACE  = 4;
+    int fpsTrackingMode = MONITOR;
+    float fpsScore = 0.;
+    float scoreDrain = 1.;
+    float recoveryScore = 1.;
+    
+    PowerMode prevPowerMode = PowerMode.HIGH;
+    int recoveryFrameCount = 0;
+    int graceTimer = 0;
+    int recoveryPhase = 1;
+    float framerateBuffer[];
+    private boolean forcePowerModeEnabled = false;
+    private PowerMode forcedPowerMode = PowerMode.HIGH;
+    private boolean fatalFPS = false;
   
-  // Todo: THIS.
-  public class PowerModeModule {
+    // The score that seperates the stable fps from the unstable fps.
+    // If you've got half a brain, it would make the most sense to keep it at 0.
+    final float FPS_SCORE_MIDDLE = 0.;
+  
+    // If the framerate is unstable, we "accelerate" draining of the score using this value.
+    // Think of it as acceleration rather than speed.
+    private final float UNSTABLE_CONSTANT = 2.5;
+  
+    // Once we reach this score, we drop down to the previous frame.
+    private final float FPS_SCORE_DROP = -3000;
+  
+    // If we gradually manage to make it to that score, we can go into RECOVERY mode to test what the framerate's like
+    // up a level.
+    private final float FPS_SCORE_RECOVERY = 200.;
+  
+    // We want to recover to a higher framerate only if we're able to achieve a pretty good framerate.
+    // The higher you make RECOVERY_NEGLIGENCE, the more it will neglect the possibility of recovery.
+    // For example, trying to achieve 60fps but actual is 40fps, the system will likely recover faster if
+    // RECOVERY_NEGLIGENCE is set to 1 but very unlikely if it's set to something higher like 5.
+    private final float RECOVERY_NEGLIGENCE = 2;
     
+    public PowerModeModule() {
+      setForcedPowerMode(settings.getString("forcePowerMode"));
+    }
     
+    public void setDynamicFramerate(boolean b) {
+      dynamicFramerate = b;
+    }
+    
+    public void setForcedPowerMode(String p) {
+      forcePowerModeEnabled = true;   // Temp set to true, if not enabled, it will reset to false.
+      if (p.equals("HIGH"))
+        forcedPowerMode = PowerMode.HIGH;
+      else if (p.equals("NORMAL"))
+        forcedPowerMode = PowerMode.NORMAL;
+      else if (p.equals("SLEEPY"))
+        forcedPowerMode = PowerMode.SLEEPY;
+      else if (p.equals("MINIMAL")) {
+        console.log("forcePowerMode set to MINIMAL, I wouldn't do that if I were you!");
+        forcedPowerMode = PowerMode.MINIMAL;
+      }
+      // Anything else (e.g. "NONE")
+      else {
+        forcePowerModeEnabled = false;
+      }
+    }
+    
+    public void setForcedPowerMode(PowerMode p) {
+      forcePowerModeEnabled = true;
+      forcedPowerMode = p;
+      if (p == PowerMode.MINIMAL) {
+        console.log("forcePowerMode set to MINIMAL, I wouldn't do that if I were you!");
+      }
+    }
+    
+    public void disableForcedPowerMode() {
+      forcePowerModeEnabled = false;
+    }
+    
+    public void setPowerSaver(boolean b) {
+      power.powerSaver = b;
+      
+      if (b)
+        forcePowerModeEnabled = false;
+      else {
+        setPowerMode(PowerMode.NORMAL);
+        forceFPSRecoveryMode();
+      }
+    }
+    
+    public boolean getPowerSaver() { return powerSaver; }
+    
+    public class NoBattery extends RuntimeException {
+      public NoBattery(String message) {
+        super(message);
+      }
+    }
+  
+    public void updateBatteryStatus() {
+      //powerStatus = new Kernel32.SYSTEM_POWER_STATUS();
+      //Kernel32.INSTANCE.GetSystemPowerStatus(powerStatus);
+    }
+  
+    public int batteryPercentage() throws NoBattery {
+      //String str = powerStatus.getBatteryLifePercent();
+      String str = "100";
+      str = str.substring(0, str.length()-1);
+      try {
+        int percent = Integer.parseInt(str);
+        return percent;
+      }
+      catch (NumberFormatException ex) {
+        throw new NoBattery("Battery not found..? ("+str+")");
+      }
+    }
+  
+    public boolean isCharging() {
+      //return (powerStatus.getACLineStatusString().equals("Online"));
+      return false;
+    }
+  
+    public void updatePowerModeNow() {
+      lastPowerCheck = millis();
+    }
+  
+    public void setSleepy() {
+      if (dynamicFramerate) {
+        if (!isCharging() && !noBattery && !sleepyMode) {
+          sleepyMode = true;
+          lastPowerCheck = millis()+POWER_CHECK_INTERVAL;
+        }
+      } else {
+        sleepyMode = false;
+      }
+    }
+  
+    // You shouldn't call this every frame
+    public void setAwake() {
+      sleepyMode = false;
+      if (fpsTrackingMode == SLEEPY) {
+        putFPSSystemIntoGraceMode();
+        updatePowerModeNow();
+      }
+    }
+  
+    private int powerModeSetTimeout = 0;
+    public void setPowerMode(PowerMode m) {
+      // Really just a debugging message to keep you using it appropriately.
+      //if (powerModeSetTimeout == 1)
+      //  console.warnOnce("You shouldn't call setPowerMode on every frame, otherwise Timeway will seriously stutter.");
+      //powerModeSetTimeout = 2;
+      // Only update if it's not already set to prevent a whole load of bugs
+      if (powerMode != m) {
+        powerMode = m;
+        switch (m) {
+        case HIGH:
+          frameRate(60);
+          //console.log("Power mode HIGH");
+          break;
+        case NORMAL:
+          frameRate(30);
+          //console.log("Power mode NORMAL");
+          break;
+        case SLEEPY:
+          frameRate(15);
+          //console.log("Power mode SLEEPY");
+          break;
+        case MINIMAL:
+          frameRate(1); //idk for now
+          //console.log("Power mode MINIMAL");
+          break;
+        }
+        redraw();
+      }
+    }
+  
+    // basically use when you expect a significant difference in fps from that point forward.
+    public void forceFPSRecoveryMode() {
+      fpsScore = FPS_SCORE_MIDDLE;
+      fpsTrackingMode = RECOVERY;
+      recoveryFrameCount = 0;
+      // Record the next 5 frames.
+      framerateBuffer = new float[5];
+      recoveryPhase = 1;
+    }
+  
+    // use before you expect a sudden delay, e.g. loading something during runtime or switching screens.
+    // We basically are telling the fps system to pause its score tracking as the average framerate drops.
+    public void putFPSSystemIntoGraceMode() {
+      fpsTrackingMode = GRACE;
+      graceTimer = 0;
+    }
+  
+    // Similar to putFPSSystemIntoGraceMode() but reset the score.
+    // Use when you expect a different average fps, e.g. switching screens.
+    // We are telling the fps system to pause so the average framerate can fill up,
+    // and then reset the score so it can fairly decide what fps the new scene/screen/whatever
+    // should run in.
+    public void resetFPSSystem() {
+      putFPSSystemIntoGraceMode();
+      fpsScore = FPS_SCORE_MIDDLE;
+      scoreDrain = 1.;
+      recoveryScore = 1.;
+    }
+    
+    public void updatePowerMode() {
+      // Just so we can provide a warning lol
+      powerModeSetTimeout = max(0, powerModeSetTimeout-1);
+  
+      // Rules:
+      // If plugged in or no battery, have it running at POWER_MODE_HIGH by default.
+      // If on battery, the rules are as follows:
+      // - POWER_MODE_HIGH    60fps
+      // - POWER_MODE_NORMAL  30fps
+      // - POWER_MODE_SLEEPY  15 fps
+      // - POWER_MODE_MINIMAL loop is turned off
+  
+      // - POWER_MODE_HIGH if power is above 30% and average fps over 2 seconds is over 58
+      // - POWER_MODE_NORMAL stays in 
+      // - POWER_MODE_SLEEPY if 30% or below and window isn't focussed
+      // - POWER_MODE_MINIMAL if minimised
+      // 
+      // Go into 1fps mode
+  
+      // If the window is not focussed, don't even bother doing anything lol.
+  
+      if (focused) {
+        if (!focusedMode) {
+          setPowerMode(prevPowerMode);
+          focusedMode = true;
+          putFPSSystemIntoGraceMode();
+          setMasterVolume(VOLUME_NORMAL);
+        }
+      } else {
+        if (focusedMode) {
+          prevPowerMode = powerMode;
+          setPowerMode(PowerMode.MINIMAL);
+          focusedMode = false;
+          
+          if (playWhileUnfocused)
+            setMasterVolume(VOLUME_QUIET);
+          else
+            setMasterVolume(0.);  // Mute
+        }
+        return;
+      }
+  
+      if (millis() > lastPowerCheck) {
+        lastPowerCheck = millis()+POWER_CHECK_INTERVAL;
+  
+        // If we specifically requested slow, then go right ahead.
+        if (powerSaver || sleepyMode) {
+          prevPowerMode = powerMode;
+          fpsTrackingMode = SLEEPY;
+          setPowerMode(PowerMode.SLEEPY);
+        }
+        //if (!isCharging() && !noBattery && sleepyMode) {
+        //  prevPowerMode = powerMode;
+        //  fpsTrackingMode = SLEEPY;
+        //  setPowerMode(PowerMode.SLEEPY);
+        //  return;
+        //}
+  
+        // TODO: run in seperate thread to prevent stutters. For the time being I'm only gonna
+        // run it once.
+        updateBatteryStatus();
+      }  
+  
+      // If forced power mode is enabled, don't bother with the powermode selection algorithm below.
+      if (forcePowerModeEnabled) {
+        if (powerMode != forcedPowerMode) setPowerMode(forcedPowerMode);
+        return;
+      }
+      
+  
+      if (powerSaver || sleepyMode) return;
+  
+      // How the fps algorithm works:
+      /*
+      There are 4 modes:
+       MONITOR:
+       - Use average framerate to determine framepoints.
+       - If the framerate is below the minimum required framerate, exponentially drain the score
+       until the framerate is stable or the drop zone has been reached.
+       - If in the unstable zone, linearly recover the score.
+       - If in the stable zone, increase the score by the recovery likelyhood (((30-framepoints)/30)**2) 
+       but only if we're lower than HIGH power mode. Otherwise max out at the stable threshold.
+       - If we reach the drop threshold, drop the power mode down a level and take note of the recovery likelyhood (((30-framepoints)/30)**2)
+       and reset the score to the stable threshold.
+       - If we reach the recovery threshold, enter fps recovery mode and go up a power level.
+       RECOVERY:
+       - Don't keep track of score.
+       - Use the real-time fps to take a small average of the current frame.
+       - Once the average buffer is filled, use the average fps to determine whether we stay in this power mode or drop back.
+       - Framerate at least 58, 28 etc, stay in this mode and go back into monitor mode, and reset the score to the stable threshold.
+       - Otherwise, update recovery likelyhood and drop back.
+       SLEEPY:
+       - If sleepy mode is enabled, the score is paused and we don't do any operations;
+       Wait until sleepy mode is disabled.
+       GRACE:
+       - A grace period where the score is not changed for a certain amount of time to allow the average framerate to fill up.
+       - Once the grace period ends, return to MONITOR mode.
+       */
+  
+      float stableFPS = 30.;
+      int n = 1;
+      switch (powerMode) {
+      case HIGH:
+        stableFPS = 57.;
+        n = 1;
+        break;
+      case NORMAL:
+        stableFPS = 27;
+        n = 2;
+        break;
+      case SLEEPY:
+        stableFPS = 13.;
+        n = 4;
+        break;
+        // We shouldn't need to come to this but hey, this is a 
+        // switch statement.
+      case MINIMAL:
+        stableFPS = 1.;
+        break;
+      }
+  
+      if (fpsTrackingMode == MONITOR) {
+        // Everything in monitor will take twice or 4 times long if the framerate is lower.
+        for (int i = 0; i < n; i++) {
+          if (frameRate < stableFPS) {
+            //console.log("Drain");
+            scoreDrain += (stableFPS-frameRate)/stableFPS;
+            fpsScore -= scoreDrain*scoreDrain;
+            //console.log(str(scoreDrain*scoreDrain));
+            //console.log(str(fpsScore));
+          } else {
+            scoreDrain = 0.;
+            // If in stable zone...
+            if (fpsScore > FPS_SCORE_MIDDLE) {
+              //console.log("stable zone");
+  
+              if (powerMode != PowerMode.HIGH)
+                fpsScore += recoveryScore;
+  
+              //console.log(str(recoveryScore));
+            }
+            // If in unstable zone...
+            else {
+              fpsScore += UNSTABLE_CONSTANT;
+            }
+          }
+  
+          if (fpsScore < FPS_SCORE_DROP) {
+            //console.log("DROP");
+            // The lower our framerate, the less likely (or rather longer it takes) to get back to it.
+            recoveryScore = pow((frameRate/stableFPS), RECOVERY_NEGLIGENCE);
+            // Reset the score.
+            fpsScore = FPS_SCORE_MIDDLE;
+            scoreDrain = 0.;
+  
+            // Set the power mode down a level.
+            switch (powerMode) {
+            case HIGH:
+              setPowerMode(PowerMode.NORMAL);
+              break;
+            case NORMAL:
+              setPowerMode(PowerMode.SLEEPY);
+              // Because sleepy is a pretty low framerate, chances are we just hit a slow
+              // spot and will speed up soon. Let's give ourselves a bit more recoveryScore
+              // so that we're not stuck slow forever.
+              //recoveryScore += 1;
+              break;
+            case SLEEPY:
+              // Raise this to true to enable any other bits of the code to perform performance-saving measures.
+              break;
+            case MINIMAL:
+              // This is not a power level we downgrade to.
+              // We shouldn't downgrade here, but if for whatever reason we're glitched out
+              // and stuck in this mode, get ourselves out of it.
+              setPowerMode(PowerMode.SLEEPY);
+              fpsScore = FPS_SCORE_MIDDLE;
+              break;
+            }
+          }
+  
+          if (fpsScore > FPS_SCORE_RECOVERY) {
+            //console.log("RECOVERY");
+            switch (powerMode) {
+            case HIGH:
+              // We shouldn't reach this here, but if we do, cap the
+              // score.
+              fpsScore = FPS_SCORE_RECOVERY;
+              break;
+            case NORMAL:
+              setPowerMode(PowerMode.HIGH);
+              break;
+            case SLEEPY:
+              setPowerMode(PowerMode.NORMAL);
+              break;
+            case MINIMAL:
+              // This is not a power level we upgrade to.
+              // We shouldn't downgrade here, but if for whatever reason we're glitched out
+              // and stuck in this mode, get ourselves out of it.
+              setPowerMode(PowerMode.SLEEPY);
+              break;
+            }
+            fpsScore = FPS_SCORE_MIDDLE;
+            fpsTrackingMode = RECOVERY;
+            recoveryFrameCount = 0;
+            // Record the next 5 frames.
+            framerateBuffer = new float[5];
+            recoveryPhase = 1;
+          }
+        }
+      } else if (fpsTrackingMode == RECOVERY) {
+        // Record the fps, as long as we're not waiting to go back into MONITOR mode.
+        if (recoveryPhase != 3)
+          framerateBuffer[recoveryFrameCount++] = getLiveFPS();
+  
+        // Once we're done recording...
+        int l = framerateBuffer.length;
+        if (recoveryFrameCount >= l) {
+  
+          // Calculate the average framerate.
+          float total = 0.;
+          for (int j = 0; j < l; j++) {
+            total += framerateBuffer[j];
+          }
+          float avg = total/float(l);
+          //console.log("Recovery average: "+str(avg));
+  
+          // If the framerate is at least 90%..
+          if (recoveryPhase == 1 && avg/stableFPS >= 0.9) {
+            //console.log("Recovery phase 1");
+            // Move on to phase 2 and get a little more data.
+            recoveryPhase = 2;
+            recoveryFrameCount = 0;
+            framerateBuffer = new float[30];
+          }
+  
+          // If the framerate is at least the minimum stable fps.
+          else if (recoveryPhase == 2 && avg >= stableFPS) {
+            //console.log("Recovery phase 2");
+            // Now wait a bit before going back to monitor.
+            graceTimer = 0;
+            recoveryFrameCount = 0;
+            fpsTrackingMode = GRACE;
+          }
+          // Otherwise drop back to the previous power mode.
+          else {
+            //console.log("Drop back");
+            switch (powerMode) {
+            case HIGH:
+              setPowerMode(PowerMode.NORMAL);
+              break;
+            case NORMAL:
+              setPowerMode(PowerMode.SLEEPY);
+              break;
+            case SLEEPY:
+              // Minimum power level, do nothing here.
+              // Hopefully framerates don't get that low.
+              break;
+            case MINIMAL:
+              // This is not a power level we downgrade to.
+              // We shouldn't downgrade here, but if for whatever reason we're glitched out
+              // and stuck in this mode, get ourselves out of it.
+              setPowerMode(PowerMode.SLEEPY);
+              fpsScore = FPS_SCORE_MIDDLE;
+              break;
+            }
+            recoveryScore = pow((avg/stableFPS), RECOVERY_NEGLIGENCE);
+            fpsTrackingMode = MONITOR;
+          }
+        }
+      } else if (fpsTrackingMode == SLEEPY) {
+      } else if (fpsTrackingMode == GRACE) {
+        graceTimer++;
+        if (graceTimer > (240/n))
+          fpsTrackingMode = MONITOR;
+      }
+      //console.log(str(fpsScore));
+    }
+    
+    public boolean getSleepyMode() {
+      return sleepyMode;
+    }
+    
+    public void setSleepyMode(boolean b) {
+      sleepyMode = b;
+    }
     
     //public Kernel32.SYSTEM_POWER_STATUS powerStatus;
   }
@@ -488,7 +977,7 @@ class Engine {
 
 
     scrollSensitivity = settings.getFloat("scrollSensitivity");
-    dynamicFramerate = settings.getBoolean("dynamicFramerate");
+    power.setDynamicFramerate(settings.getBoolean("dynamicFramerate"));
     DEFAULT_FONT_NAME = settings.getString("defaultSystemFont");
     DEFAULT_DIR  = settings.getString("homeDirectory");
     {
@@ -513,25 +1002,7 @@ class Engine {
     setMasterVolume(VOLUME_NORMAL);
     checkDevMode();
 
-    String forcePowerMode = settings.getString("forcePowerMode");
-    forcePowerModeEnabled = true;   // Temp set to true, if not enabled, it will reset to false.
-    if (forcePowerMode.equals("HIGH"))
-      forcedPowerMode = PowerMode.HIGH;
-    else if (forcePowerMode.equals("NORMAL"))
-      forcedPowerMode = PowerMode.NORMAL;
-    else if (forcePowerMode.equals("SLEEPY"))
-      forcedPowerMode = PowerMode.SLEEPY;
-    else if (forcePowerMode.equals("MINIMAL")) {
-      console.log("forcePowerMode set to MINIMAL, I wouldn't do that if I were you!");
-      forcedPowerMode = PowerMode.MINIMAL;
-    }
-    // Anything else (e.g. "NONE")
-    else {
-      forcePowerModeEnabled = false;
-    }
 
-
-    updateBatteryStatus();
 
 
     //spriteSystemPlaceholder = new SpriteSystemPlaceholder(this, APPPATH+PATH_SPRITES_ATTRIB+"gui/");
@@ -725,7 +1196,7 @@ class Engine {
 
   private void runUpdate() {
     int n = 1;
-    switch (powerMode) {
+    switch (power.powerMode) {
     case HIGH:
       n = 1;
       break;
@@ -1033,12 +1504,12 @@ class Engine {
   public void runCommand(String command) throws RuntimeException {
     // TODO: have a better system for commands.
     if (command.equals("/powersaver")) {
-      powerSaver = !powerSaver;
-      forcePowerModeEnabled = false;
-      if (powerSaver) console.log("Power saver enabled.");
+      if (!power.getPowerSaver()) {
+        power.setPowerSaver(true);
+        console.log("Power saver enabled.");
+      }
       else {
-        setPowerMode(PowerMode.NORMAL);
-        forceFPSRecoveryMode();
+        power.setPowerSaver(false);
         console.log("Power saver disabled.");
       }
     } else if (commandEquals(command, "/forcepowermode")) {
@@ -1048,25 +1519,11 @@ class Engine {
       if (command.length() > 16)
         arg = command.substring(16);
 
-      forcePowerModeEnabled = true;   // Temp set to true, if not enabled, it will reset to false.
-      if (arg.equals("HIGH")) {
-        forcedPowerMode = PowerMode.HIGH;
-        console.log("powermode forced to HIGH.");
-      } else if (arg.equals("NORMAL")) {
-        forcedPowerMode = PowerMode.NORMAL;
-        console.log("powermode forced to NORMAL.");
-      } else if (arg.equals("SLEEPY")) {
-        forcedPowerMode = PowerMode.SLEEPY;
-        console.log("powermode forced to SLEEPY.");
-      } else if (arg.equals("MINIMAL")) {
-        console.log("forcePowerMode set to MINIMAL, I wouldn't do that if I were you!");
-        forcedPowerMode = PowerMode.MINIMAL;
-      } else {
-        console.log("Invalid argument, options are: HIGH (60fps), NORMAL (30fps), SLEEPY (15fps).");
-      }
+      power.setForcedPowerMode(arg);
+      if (arg.equals("HIGH") || arg.equals("NORMAL") || arg.equals("SLEEPY") || arg.equals("MINIMAL")) console.log("Forced power mode set to "+arg);
     } else if (commandEquals(command, "/disableforcepowermode")) {
       console.log("Disabled forced powermode.");
-      forcePowerModeEnabled = false;
+      power.disableForcedPowerMode();
     } else if (commandEquals(command, "/benchmark")) {
       int runFor = 180;
       String arg = "";
@@ -1180,7 +1637,7 @@ class Engine {
   // time between the last frame and the current frame.
   public float getLiveFPS() {
     float fps = 60;
-    switch (powerMode) {
+    switch (power.powerMode) {
     case HIGH:
       fps = 60.;
       break;
@@ -1303,436 +1760,6 @@ class Engine {
 
       showUpdateScreen = update;
     }
-  }
-
-  public class NoBattery extends RuntimeException {
-    public NoBattery(String message) {
-      super(message);
-    }
-  }
-
-  public void updateBatteryStatus() {
-    //powerStatus = new Kernel32.SYSTEM_POWER_STATUS();
-    //Kernel32.INSTANCE.GetSystemPowerStatus(powerStatus);
-  }
-
-  public int batteryPercentage() throws NoBattery {
-    //String str = powerStatus.getBatteryLifePercent();
-    String str = "100";
-    str = str.substring(0, str.length()-1);
-    try {
-      int percent = Integer.parseInt(str);
-      return percent;
-    }
-    catch (NumberFormatException ex) {
-      throw new NoBattery("Battery not found..? ("+str+")");
-    }
-  }
-
-  public boolean isCharging() {
-    //return (powerStatus.getACLineStatusString().equals("Online"));
-    return false;
-  }
-
-  private void updatePowerModeNow() {
-    lastPowerCheck = millis();
-  }
-
-  public void setSleepy() {
-    if (dynamicFramerate) {
-      if (!isCharging() && !noBattery && !sleepyMode) {
-        sleepyMode = true;
-        lastPowerCheck = millis()+POWER_CHECK_INTERVAL;
-      }
-    } else {
-      sleepyMode = false;
-    }
-  }
-
-  // You shouldn't call this every frame
-  public void setAwake() {
-    sleepyMode = false;
-    if (fpsTrackingMode == SLEEPY) {
-      putFPSSystemIntoGraceMode();
-      updatePowerModeNow();
-    }
-  }
-
-  private int powerModeSetTimeout = 0;
-  public void setPowerMode(PowerMode m) {
-    // Really just a debugging message to keep you using it appropriately.
-    //if (powerModeSetTimeout == 1)
-    //  console.warnOnce("You shouldn't call setPowerMode on every frame, otherwise Timeway will seriously stutter.");
-    //powerModeSetTimeout = 2;
-    // Only update if it's not already set to prevent a whole load of bugs
-    if (powerMode != m) {
-      powerMode = m;
-      switch (m) {
-      case HIGH:
-        frameRate(60);
-        //console.log("Power mode HIGH");
-        break;
-      case NORMAL:
-        frameRate(30);
-        //console.log("Power mode NORMAL");
-        break;
-      case SLEEPY:
-        frameRate(15);
-        //console.log("Power mode SLEEPY");
-        break;
-      case MINIMAL:
-        frameRate(1); //idk for now
-        //console.log("Power mode MINIMAL");
-        break;
-      }
-      redraw();
-    }
-  }
-
-  final int MONITOR = 1;
-  final int RECOVERY = 2;
-  final int SLEEPY = 3;
-  final int GRACE  = 4;
-  int fpsTrackingMode = MONITOR;
-  float fpsScore = 0.;
-  float scoreDrain = 1.;
-  float recoveryScore = 1.;
-
-  // The score that seperates the stable fps from the unstable fps.
-  // If you've got half a brain, it would make the most sense to keep it at 0.
-  final float FPS_SCORE_MIDDLE = 0.;
-
-  // If the framerate is unstable, we "accelerate" draining of the score using this value.
-  // Think of it as acceleration rather than speed.
-  final float UNSTABLE_CONSTANT = 2.5;
-
-  // Once we reach this score, we drop down to the previous frame.
-  final float FPS_SCORE_DROP = -3000;
-
-  // If we gradually manage to make it to that score, we can go into RECOVERY mode to test what the framerate's like
-  // up a level.
-  final float FPS_SCORE_RECOVERY = 200.;
-
-  // We want to recover to a higher framerate only if we're able to achieve a pretty good framerate.
-  // The higher you make RECOVERY_NEGLIGENCE, the more it will neglect the possibility of recovery.
-  // For example, trying to achieve 60fps but actual is 40fps, the system will likely recover faster if
-  // RECOVERY_NEGLIGENCE is set to 1 but very unlikely if it's set to something higher like 5.
-  final float RECOVERY_NEGLIGENCE = 5;    
-
-  PowerMode prevPowerMode = PowerMode.HIGH;
-  int recoveryFrameCount = 0;
-  int graceTimer = 0;
-  int recoveryPhase = 1;
-  float framerateBuffer[];
-  public boolean forcePowerModeEnabled = false;
-  public PowerMode forcedPowerMode = PowerMode.HIGH;
-  public boolean fatalFPS = false;
-
-  // basically use when you expect a significant difference in fps from that point forward.
-  public void forceFPSRecoveryMode() {
-    fpsScore = FPS_SCORE_MIDDLE;
-    fpsTrackingMode = RECOVERY;
-    recoveryFrameCount = 0;
-    // Record the next 5 frames.
-    framerateBuffer = new float[5];
-    recoveryPhase = 1;
-  }
-
-  // use before you expect a sudden delay, e.g. loading something during runtime or switching screens.
-  // We basically are telling the fps system to pause its score tracking as the average framerate drops.
-  public void putFPSSystemIntoGraceMode() {
-    fpsTrackingMode = GRACE;
-    graceTimer = 0;
-  }
-
-  // Similar to putFPSSystemIntoGraceMode() but reset the score.
-  // Use when you expect a different average fps, e.g. switching screens.
-  // We are telling the fps system to pause so the average framerate can fill up,
-  // and then reset the score so it can fairly decide what fps the new scene/screen/whatever
-  // should run in.
-  public void resetFPSSystem() {
-    putFPSSystemIntoGraceMode();
-    fpsScore = FPS_SCORE_MIDDLE;
-    scoreDrain = 1.;
-    recoveryScore = 1.;
-  }
-  
-  public void updatePowerMode() {
-    // Just so we can provide a warning lol
-    powerModeSetTimeout = max(0, powerModeSetTimeout-1);
-
-    // Rules:
-    // If plugged in or no battery, have it running at POWER_MODE_HIGH by default.
-    // If on battery, the rules are as follows:
-    // - POWER_MODE_HIGH    60fps
-    // - POWER_MODE_NORMAL  30fps
-    // - POWER_MODE_SLEEPY  15 fps
-    // - POWER_MODE_MINIMAL loop is turned off
-
-    // - POWER_MODE_HIGH if power is above 30% and average fps over 2 seconds is over 58
-    // - POWER_MODE_NORMAL stays in 
-    // - POWER_MODE_SLEEPY if 30% or below and window isn't focussed
-    // - POWER_MODE_MINIMAL if minimised
-    // 
-    // Go into 1fps mode
-
-    // If the window is not focussed, don't even bother doing anything lol.
-
-    if (focused) {
-      if (!focusedMode) {
-        setPowerMode(prevPowerMode);
-        focusedMode = true;
-        putFPSSystemIntoGraceMode();
-        setMasterVolume(VOLUME_NORMAL);
-      }
-    } else {
-      if (focusedMode) {
-        prevPowerMode = powerMode;
-        setPowerMode(PowerMode.MINIMAL);
-        focusedMode = false;
-        
-        if (playWhileUnfocused)
-          setMasterVolume(VOLUME_QUIET);
-        else
-          setMasterVolume(0.);  // Mute
-      }
-      return;
-    }
-
-    if (millis() > lastPowerCheck) {
-      lastPowerCheck = millis()+POWER_CHECK_INTERVAL;
-
-      // If we specifically requested slow, then go right ahead.
-      if (powerSaver || sleepyMode) {
-        prevPowerMode = powerMode;
-        fpsTrackingMode = SLEEPY;
-        setPowerMode(PowerMode.SLEEPY);
-      }
-      //if (!isCharging() && !noBattery && sleepyMode) {
-      //  prevPowerMode = powerMode;
-      //  fpsTrackingMode = SLEEPY;
-      //  setPowerMode(PowerMode.SLEEPY);
-      //  return;
-      //}
-
-      // TODO: run in seperate thread to prevent stutters. For the time being I'm only gonna
-      // run it once.
-      updateBatteryStatus();
-    }  
-
-    // If forced power mode is enabled, don't bother with the powermode selection algorithm below.
-    if (forcePowerModeEnabled) {
-      if (powerMode != forcedPowerMode) setPowerMode(forcedPowerMode);
-      return;
-    }
-    
-
-    if (powerSaver || sleepyMode) return;
-
-    // How the fps algorithm works:
-    /*
-    There are 4 modes:
-     MONITOR:
-     - Use average framerate to determine framepoints.
-     - If the framerate is below the minimum required framerate, exponentially drain the score
-     until the framerate is stable or the drop zone has been reached.
-     - If in the unstable zone, linearly recover the score.
-     - If in the stable zone, increase the score by the recovery likelyhood (((30-framepoints)/30)**2) 
-     but only if we're lower than HIGH power mode. Otherwise max out at the stable threshold.
-     - If we reach the drop threshold, drop the power mode down a level and take note of the recovery likelyhood (((30-framepoints)/30)**2)
-     and reset the score to the stable threshold.
-     - If we reach the recovery threshold, enter fps recovery mode and go up a power level.
-     RECOVERY:
-     - Don't keep track of score.
-     - Use the real-time fps to take a small average of the current frame.
-     - Once the average buffer is filled, use the average fps to determine whether we stay in this power mode or drop back.
-     - Framerate at least 58, 28 etc, stay in this mode and go back into monitor mode, and reset the score to the stable threshold.
-     - Otherwise, update recovery likelyhood and drop back.
-     SLEEPY:
-     - If sleepy mode is enabled, the score is paused and we don't do any operations;
-     Wait until sleepy mode is disabled.
-     GRACE:
-     - A grace period where the score is not changed for a certain amount of time to allow the average framerate to fill up.
-     - Once the grace period ends, return to MONITOR mode.
-     */
-
-    float stableFPS = 30.;
-    int n = 1;
-    switch (powerMode) {
-    case HIGH:
-      stableFPS = 57.;
-      n = 1;
-      break;
-    case NORMAL:
-      stableFPS = 27;
-      n = 2;
-      break;
-    case SLEEPY:
-      stableFPS = 13.;
-      n = 4;
-      break;
-      // We shouldn't need to come to this but hey, this is a 
-      // switch statement.
-    case MINIMAL:
-      stableFPS = 1.;
-      break;
-    }
-
-    if (fpsTrackingMode == MONITOR) {
-      // Everything in monitor will take twice or 4 times long if the framerate is lower.
-      for (int i = 0; i < n; i++) {
-        if (frameRate < stableFPS) {
-          //console.log("Drain");
-          scoreDrain += (stableFPS-frameRate)/stableFPS;
-          fpsScore -= scoreDrain*scoreDrain;
-          //console.log(str(scoreDrain*scoreDrain));
-          //console.log(str(fpsScore));
-        } else {
-          scoreDrain = 0.;
-          // If in stable zone...
-          if (fpsScore > FPS_SCORE_MIDDLE) {
-            //console.log("stable zone");
-
-            if (powerMode != PowerMode.HIGH)
-              fpsScore += recoveryScore;
-
-            //console.log(str(recoveryScore));
-          }
-          // If in unstable zone...
-          else {
-            fpsScore += UNSTABLE_CONSTANT;
-          }
-        }
-
-        if (fpsScore < FPS_SCORE_DROP) {
-          //console.log("DROP");
-          // The lower our framerate, the less likely (or rather longer it takes) to get back to it.
-          recoveryScore = pow((frameRate/stableFPS), RECOVERY_NEGLIGENCE);
-          // Reset the score.
-          fpsScore = FPS_SCORE_MIDDLE;
-          scoreDrain = 0.;
-
-          // Set the power mode down a level.
-          switch (powerMode) {
-          case HIGH:
-            setPowerMode(PowerMode.NORMAL);
-            break;
-          case NORMAL:
-            setPowerMode(PowerMode.SLEEPY);
-            // Because sleepy is a pretty low framerate, chances are we just hit a slow
-            // spot and will speed up soon. Let's give ourselves a bit more recoveryScore
-            // so that we're not stuck slow forever.
-            //recoveryScore += 1;
-            break;
-          case SLEEPY:
-            // Raise this to true to enable any other bits of the code to perform performance-saving measures.
-            break;
-          case MINIMAL:
-            // This is not a power level we downgrade to.
-            // We shouldn't downgrade here, but if for whatever reason we're glitched out
-            // and stuck in this mode, get ourselves out of it.
-            setPowerMode(PowerMode.SLEEPY);
-            fpsScore = FPS_SCORE_MIDDLE;
-            break;
-          }
-        }
-
-        if (fpsScore > FPS_SCORE_RECOVERY) {
-          //console.log("RECOVERY");
-          switch (powerMode) {
-          case HIGH:
-            // We shouldn't reach this here, but if we do, cap the
-            // score.
-            fpsScore = FPS_SCORE_RECOVERY;
-            break;
-          case NORMAL:
-            setPowerMode(PowerMode.HIGH);
-            break;
-          case SLEEPY:
-            setPowerMode(PowerMode.NORMAL);
-            break;
-          case MINIMAL:
-            // This is not a power level we upgrade to.
-            // We shouldn't downgrade here, but if for whatever reason we're glitched out
-            // and stuck in this mode, get ourselves out of it.
-            setPowerMode(PowerMode.SLEEPY);
-            break;
-          }
-          fpsScore = FPS_SCORE_MIDDLE;
-          fpsTrackingMode = RECOVERY;
-          recoveryFrameCount = 0;
-          // Record the next 5 frames.
-          framerateBuffer = new float[5];
-          recoveryPhase = 1;
-        }
-      }
-    } else if (fpsTrackingMode == RECOVERY) {
-      // Record the fps, as long as we're not waiting to go back into MONITOR mode.
-      if (recoveryPhase != 3)
-        framerateBuffer[recoveryFrameCount++] = getLiveFPS();
-
-      // Once we're done recording...
-      int l = framerateBuffer.length;
-      if (recoveryFrameCount >= l) {
-
-        // Calculate the average framerate.
-        float total = 0.;
-        for (int j = 0; j < l; j++) {
-          total += framerateBuffer[j];
-        }
-        float avg = total/float(l);
-        //console.log("Recovery average: "+str(avg));
-
-        // If the framerate is at least 90%..
-        if (recoveryPhase == 1 && avg/stableFPS >= 0.9) {
-          //console.log("Recovery phase 1");
-          // Move on to phase 2 and get a little more data.
-          recoveryPhase = 2;
-          recoveryFrameCount = 0;
-          framerateBuffer = new float[30];
-        }
-
-        // If the framerate is at least the minimum stable fps.
-        else if (recoveryPhase == 2 && avg >= stableFPS) {
-          //console.log("Recovery phase 2");
-          // Now wait a bit before going back to monitor.
-          graceTimer = 0;
-          recoveryFrameCount = 0;
-          fpsTrackingMode = GRACE;
-        }
-        // Otherwise drop back to the previous power mode.
-        else {
-          //console.log("Drop back");
-          switch (powerMode) {
-          case HIGH:
-            setPowerMode(PowerMode.NORMAL);
-            break;
-          case NORMAL:
-            setPowerMode(PowerMode.SLEEPY);
-            break;
-          case SLEEPY:
-            // Minimum power level, do nothing here.
-            // Hopefully framerates don't get that low.
-            break;
-          case MINIMAL:
-            // This is not a power level we downgrade to.
-            // We shouldn't downgrade here, but if for whatever reason we're glitched out
-            // and stuck in this mode, get ourselves out of it.
-            setPowerMode(PowerMode.SLEEPY);
-            fpsScore = FPS_SCORE_MIDDLE;
-            break;
-          }
-          recoveryScore = pow((avg/stableFPS), RECOVERY_NEGLIGENCE);
-          fpsTrackingMode = MONITOR;
-        }
-      }
-    } else if (fpsTrackingMode == SLEEPY) {
-    } else if (fpsTrackingMode == GRACE) {
-      graceTimer++;
-      if (graceTimer > (240/n))
-        fpsTrackingMode = MONITOR;
-    }
-    //console.log(str(fpsScore));
   }
 
   public void checkDevMode() {
@@ -2434,7 +2461,7 @@ class Engine {
       // 1. image is large enough
       // 2. We've enabled the CPU canvas (obviously)
       // 3. powerSaver is disabled (we'd rather have large caching delays than increased overall power usage)
-      if (image.width > 1024 && image.height > 1024 && USE_CPU_CANVAS && !powerSaver) {
+      if (image.width > 1024 && image.height > 1024 && USE_CPU_CANVAS && !power.getPowerSaver()) {
         PGraphics canv = CPUCanvas[currentCPUCanvas];
         float canvDispSclX = canv.width/WIDTH;
         float canvDispSclY = canv.height/HEIGHT;
@@ -2565,7 +2592,7 @@ class Engine {
 
   public int counter(int max, int interval) {
     float n = 1.;
-    switch (powerMode) {
+    switch (power.getPowerMode()) {
     case HIGH:
       n = 1.;
       break;
@@ -2660,7 +2687,7 @@ class Engine {
 
   public float smoothLikeButter(float i) {
 
-    switch (powerMode) {
+    switch (power.getPowerMode()) {
     case HIGH:
       i *= 0.9;
       break;
@@ -3027,7 +3054,7 @@ class Engine {
       keyActionPressed = false;
 
     if (keyHoldCounter >= 1) {
-      switch (powerMode) {
+      switch (power.getPowerMode()) {
       case HIGH:
         keyHoldCounter++;
         break;
@@ -3045,7 +3072,7 @@ class Engine {
 
     if (keyHoldCounter > KEY_HOLD_TIME) {
 
-      switch (powerMode) {
+      switch (power.getPowerMode()) {
       case HIGH:
         // Reduce speed of repeated key presses when holding key.
         if (app.frameCount % 2 == 0) {
@@ -3250,7 +3277,7 @@ class Engine {
 
   public void displayScreens() {
     if (transitionScreens) {
-      setAwake();
+      power.setAwake();
       transition = smoothLikeButter(transition);
 
       // Sorry for the code duplication!
@@ -3291,8 +3318,8 @@ class Engine {
         // FPS recovery mode.
         if (initialScreen) {
           initialScreen = false;
-          setPowerMode(PowerMode.NORMAL);
-          forceFPSRecoveryMode();
+          power.setPowerMode(PowerMode.NORMAL);
+          power.forceFPSRecoveryMode();
         }
         //prevScreen = null;
       }
@@ -3318,7 +3345,7 @@ class Engine {
         "\nFPS: "+int(app.frameRate)+
         "\nX: "+mouseX()+
         "\nY: "+mouseY()+
-        "\nSleepy:  "+sleepyMode
+        "\nSleepy:  "+power.getSleepyMode()
         , 10, 20);
     }
 
@@ -3494,7 +3521,7 @@ class Engine {
 
   public void processSound() {
     float n = 1.;
-    switch (powerMode) {
+    switch (power.getPowerMode()) {
     case HIGH:
       n = 1.;
       break;
@@ -4001,7 +4028,7 @@ class Engine {
     // Run benchmark if it's active.
     runBenchmark();
 
-    updatePowerMode();
+    power.updatePowerMode();
 
     processSound();
     processCaching();
@@ -4010,7 +4037,7 @@ class Engine {
     processUpdate();
 
     int n = 1;
-    switch (powerMode) {
+    switch (power.getPowerMode()) {
     case HIGH:
       n = 1;
       break;
@@ -4037,7 +4064,7 @@ class Engine {
     // If we're struggling with our framerate, opt back to a smaller CPU canvas at the
     // cost of quality
     if (USE_CPU_CANVAS) {
-      if ((frameRate < 13 || getLiveFPS() < 9) && smallerCanvasTimeout < 1 && powerMode != PowerMode.MINIMAL) {
+      if ((frameRate < 13 || getLiveFPS() < 9) && smallerCanvasTimeout < 1 && power.getPowerMode() != PowerMode.MINIMAL) {
         currentCPUCanvas++;
         if (currentCPUCanvas < MAX_CPU_CANVAS && CPUCanvas[currentCPUCanvas] == null) {
           int w = CPUCanvas[currentCPUCanvas-1].width;
@@ -4187,6 +4214,7 @@ class Engine {
 //    public int GetSystemPowerStatus(SYSTEM_POWER_STATUS result);
 //}
 
+// TODO: Remove ERS
 interface RedrawElement {
   public float getX();
   public float getY();
@@ -4387,7 +4415,7 @@ public abstract class Screen {
       engine.currScreen = screen;
       screen.startScreenTransition();
       engine.clearKeyBuffer();
-      engine.resetFPSSystem();
+      engine.power.resetFPSSystem();
       engine.allowShowCommandPrompt = true;
       //engine.setAwake();
     }
@@ -4399,7 +4427,7 @@ public abstract class Screen {
       engine.prevScreen.previousReturnAnimation();
       requestScreen(this.engine.prevScreen);
       engine.transitionDirection = LEFT;
-      engine.setAwake();
+      engine.power.setAwake();
       engine.clearKeyBuffer();
     }
   }
@@ -4426,7 +4454,7 @@ public abstract class Screen {
   // of the screen and mashes it all into one complete screen,
   // ready for the engine to display. Simple as.
   public void display() {
-    if (engine.powerMode != PowerMode.MINIMAL) {
+    if (engine.power.powerMode != PowerMode.MINIMAL) {
       app.pushMatrix();
       app.translate(screenx, screeny);
       app.scale(engine.displayScale);

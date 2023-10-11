@@ -38,7 +38,7 @@ public class Startup extends Screen {
 
     public void content() {
         
-        switch (engine.powerMode) {
+        switch (engine.power.getPowerMode()) {
           case HIGH:
           timeFromStart++;
           break;
