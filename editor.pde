@@ -416,7 +416,7 @@ public class Editor extends Screen {
         public TextPlaceable() {
             super();
             sprite.allowResizing = false;
-            fontStyle = engine.getFont(DEFAULT_FONT);
+            fontStyle = display.getFont(DEFAULT_FONT);
         }
 
         private boolean editing() {
@@ -525,13 +525,13 @@ public class Editor extends Screen {
             
             // I feel so bad using systemImages because it was only ever intended
             // for images loaded by the engine only >.<
-            engine.systemImages.put(name, i);
+            display.systemImages.put(name, i);
             imagesInEntry.add(name);
         }
         
         public void setImage(PImage img, String imgName) {
           this.imageName = imgName;
-          engine.systemImages.put(imgName, img);
+          display.systemImages.put(imgName, img);
           //app.image(img,0,0);
           imagesInEntry.add(imgName);
         }
@@ -563,13 +563,13 @@ public class Editor extends Screen {
         camera = new DCapture(engine);
         
         // Reset cpu canvas to original size, it will automatically shrink as needed.
-        engine.currentCPUCanvas = 0;
+        display.currentCPUCanvas = 0;
         
         // Because of the really annoying delay thing, we wanna create a canvas that uses the cpu to draw the frame instead
         // of the P2D renderer struggling to draw things. In the future, we can implement this into the engine so that it can
         // be used in other places and not just for the camera.
         int SIZE_DIVIDER = 2;
-        cameraDisplay = createGraphics(int(engine.WIDTH)/SIZE_DIVIDER, int(engine.HEIGHT)/SIZE_DIVIDER);
+        cameraDisplay = createGraphics(int(WIDTH)/SIZE_DIVIDER, int(HEIGHT)/SIZE_DIVIDER);
 
         // Get the path without the file name
         int lindex = entryPath.lastIndexOf('/');
@@ -704,7 +704,7 @@ public class Editor extends Screen {
     private void saveImagePlaceable(Placeable p, JSONArray array) {
         // First, we need the png image data.
         ImagePlaceable imgPlaceable = (ImagePlaceable)p;
-        PImage image = engine.systemImages.get(imgPlaceable.sprite.imgName);
+        PImage image = display.systemImages.get(imgPlaceable.sprite.imgName);
         if (image == null) {
           console.bugWarn("Trying to save image placeable, and image doesn't exist in memory?? Possible bug??");
           return;
@@ -752,7 +752,7 @@ public class Editor extends Screen {
             // Create date
             TextPlaceable date = new TextPlaceable();
             String d = engine.appendZeros(day(), 2)+"/"+engine.appendZeros(month(), 2)+"/"+year()+"\n"+engine.appendZeros(hour(), 2)+":"+engine.appendZeros(minute(), 2)+":"+engine.appendZeros(second(), 2);
-            date.sprite.move(engine.WIDTH-app.textWidth(d)*2., 250);
+            date.sprite.move(WIDTH-app.textWidth(d)*2., 250);
             date.text = d;
             
             // New entry, new default template, ofc we want to save changes!
@@ -788,8 +788,8 @@ public class Editor extends Screen {
     }
     private TextPlaceable readTextPlaceable(int i) {
         TextPlaceable t = new TextPlaceable();
-        t.sprite.xpos = (float)engine.getJSONArrayInt(i, "x", (int)engine.WIDTH/2);
-        t.sprite.ypos = (float)engine.getJSONArrayInt(i, "y", (int)engine.HEIGHT/2);
+        t.sprite.xpos = (float)engine.getJSONArrayInt(i, "x", (int)WIDTH/2);
+        t.sprite.ypos = (float)engine.getJSONArrayInt(i, "y", (int)HEIGHT/2);
         t.sprite.name = engine.getJSONArrayString(i, "ID", "");
         t.text = engine.getJSONArrayString(i, "text", "");
         t.fontSize = engine.getJSONArrayFloat(i, "size", 12.);
@@ -799,8 +799,8 @@ public class Editor extends Screen {
     }
     private ImagePlaceable readImagePlaceable(final int i) {
         ImagePlaceable im = new ImagePlaceable();
-        im.sprite.xpos = (float)engine.getJSONArrayInt(i, "x", (int)engine.WIDTH/2);
-        im.sprite.ypos = (float)engine.getJSONArrayInt(i, "y", (int)engine.HEIGHT/2);
+        im.sprite.xpos = (float)engine.getJSONArrayInt(i, "x", (int)WIDTH/2);
+        im.sprite.ypos = (float)engine.getJSONArrayInt(i, "y", (int)HEIGHT/2);
         im.sprite.wi   = engine.getJSONArrayInt(i, "wi", 512);
         im.sprite.hi   = engine.getJSONArrayInt(i, "hi", 512);
         String imageName = engine.getJSONArrayString(i, "imgName", "");
@@ -1011,15 +1011,15 @@ public class Editor extends Screen {
       // Because rendering cameraDisplay takes time on the first run, we should prompt the user
       // that the display is getting set up. I hate this so much.
       app.textFont(engine.DEFAULT_FONT);
-      engine.loadingIcon(engine.WIDTH/2, engine.HEIGHT/2);
+      engine.loadingIcon(WIDTH/2, HEIGHT/2);
       fill(255);
       textSize(30);
       textAlign(CENTER, CENTER);
-      text("Starting camera display...", engine.WIDTH/2, engine.HEIGHT/2+120);
+      text("Starting camera display...", WIDTH/2, HEIGHT/2+120);
       cameraDisplay.beginDraw();
       cameraDisplay.clear();
       cameraDisplay.endDraw();
-      app.image(cameraDisplay, 0, 0, engine.WIDTH, engine.HEIGHT);
+      app.image(cameraDisplay, 0, 0, WIDTH, HEIGHT);
       
       // Start up the camera.
       Thread t = new Thread(new Runnable() {
@@ -1085,10 +1085,10 @@ public class Editor extends Screen {
         }
         
         app.shader(
-          engine.getShaderWithParams("fabric", "color",float((myUpperBarColor>>16)&0xFF)/255.,float((myUpperBarColor>>8)&0xFF)/255.,float((myUpperBarColor)&0xFF)/255.,1., "intensity",0.1)
+          display.getShaderWithParams("fabric", "color",float((myUpperBarColor>>16)&0xFF)/255.,float((myUpperBarColor>>8)&0xFF)/255.,float((myUpperBarColor)&0xFF)/255.,1., "intensity",0.1)
         );
         super.upperBar();
-        engine.defaultShader();
+        display.defaultShader();
 
         runGUI();
     }
@@ -1096,7 +1096,7 @@ public class Editor extends Screen {
     public void lowerBar() {
       
       app.shader(
-        engine.getShaderWithParams("fabric", "color",float((myUpperBarColor>>16)&0xFF)/255.,float((myUpperBarColor>>8)&0xFF)/255.,float((myUpperBarColor)&0xFF)/255.,1., "intensity",0.1)
+        display.getShaderWithParams("fabric", "color",float((myUpperBarColor>>16)&0xFF)/255.,float((myUpperBarColor>>8)&0xFF)/255.,float((myUpperBarColor)&0xFF)/255.,1., "intensity",0.1)
       );
       
       float LOWER_BAR_EXPAND = UPPER_BAR_DROP_WEIGHT;
@@ -1104,7 +1104,7 @@ public class Editor extends Screen {
       if (upperBarDrop == CAMERA_OFF_ANIMATION) myLowerBarWeight = LOWER_BAR_WEIGHT+(LOWER_BAR_EXPAND * (upperbarExpand));
       
       super.lowerBar();
-      engine.defaultShader();
+      display.defaultShader();
     }
     
     public float insertedXpos = 10;
@@ -1160,9 +1160,9 @@ public class Editor extends Screen {
           
           float aspect = float(img.height)/float(img.width);
           // If the image is too large, make it smaller quickly
-          if (imagePlaceable.sprite.wi > engine.WIDTH*0.5) {
-            imagePlaceable.sprite.wi = int((engine.WIDTH*0.5));
-            imagePlaceable.sprite.hi = int((engine.WIDTH*0.5)*aspect);
+          if (imagePlaceable.sprite.wi > WIDTH*0.5) {
+            imagePlaceable.sprite.wi = int((WIDTH*0.5));
+            imagePlaceable.sprite.hi = int((WIDTH*0.5)*aspect);
           }
           
           // Select the image we just pasted.
@@ -1251,7 +1251,7 @@ public class Editor extends Screen {
         if (engine.keyPressed && key == 0x16) // Ctrl+v
         {
             // Timeout so that we don't immediately shrink our cpu canvas since a delay is expected.
-            engine.smallerCanvasTimeout = 10;
+            display.smallerCanvasTimeout = 10;
             
             if (engine.clipboardIsImage()) {
               PImage pastedImage = engine.getImageFromClipboard();
@@ -1347,7 +1347,7 @@ public class Editor extends Screen {
         textAlign(CENTER, CENTER);
         textSize(30);
         if (camera.error.get() == true) {
-          engine.loadingIcon(engine.WIDTH/2, engine.HEIGHT/2);
+          engine.loadingIcon(WIDTH/2, HEIGHT/2);
           String errorMessage = "";
           fill(255, 0, 0);
           switch (camera.errorCode.get()) {
@@ -1365,12 +1365,12 @@ public class Editor extends Screen {
               console.bugWarn("renderPhotoTaker: Unused error code.");
             break;
           }
-          text(errorMessage, engine.WIDTH/2, engine.HEIGHT/2+120);
+          text(errorMessage, WIDTH/2, HEIGHT/2+120);
         }
         else {
-          engine.loadingIcon(engine.WIDTH/2, engine.HEIGHT/2);
+          engine.loadingIcon(WIDTH/2, HEIGHT/2);
           fill(255);
-          text("Starting camera...", engine.WIDTH/2, engine.HEIGHT/2+120);
+          text("Starting camera...", WIDTH/2, HEIGHT/2+120);
         }
       }
       else {
@@ -1381,7 +1381,7 @@ public class Editor extends Screen {
           cameraDisplay.beginDraw();
           cameraDisplay.image(pic, 0, 0, float(cameraDisplay.width), float(cameraDisplay.width)*aspect);
           cameraDisplay.endDraw();
-          app.image(cameraDisplay, 0, 0, engine.WIDTH, engine.HEIGHT);
+          app.image(cameraDisplay, 0, 0, WIDTH, HEIGHT);
           if (takePhoto) {
             float n = 1.;
             switch (engine.power.getPowerMode()) {
@@ -1401,7 +1401,7 @@ public class Editor extends Screen {
             app.blendMode(ADD);
             app.noStroke();
             app.fill(cameraFlashEffect);
-            app.rect(0,0, engine.WIDTH, engine.HEIGHT);
+            app.rect(0,0, WIDTH, HEIGHT);
             app.blendMode(NORMAL);
             cameraFlashEffect -= 20.*n;
             if (cameraFlashEffect < 10.) {
@@ -1428,7 +1428,7 @@ public class Editor extends Screen {
       if (engine.power.getPowerMode() != PowerMode.MINIMAL) {
         app.pushMatrix();
         app.translate(screenx,screeny);
-        app.scale(engine.displayScale);
+        app.scale(display.getScale());
         this.backg();
         
         engine.timestamp("begin content");
@@ -1444,7 +1444,7 @@ public class Editor extends Screen {
 
     public void content() {
       if (loading) {
-        engine.loadingIcon(engine.WIDTH/2, engine.HEIGHT/2);
+        engine.loadingIcon(WIDTH/2, HEIGHT/2);
       }
       else {
         if (cameraMode) {
@@ -1467,7 +1467,7 @@ public class Editor extends Screen {
     public void endScreenAnimation() {
        // Clear the images from systemimages to clear up used images.
        for (String s : imagesInEntry) {
-         engine.systemImages.remove(s);
+         display.systemImages.remove(s);
        }
        
        engine.allowShowCommandPrompt = true;

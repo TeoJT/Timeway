@@ -29,7 +29,7 @@ public class Startup extends Screen {
     public void backg() {
         app.fill(myBackgroundColor);
         app.noStroke();
-        app.rect(0, 0, engine.WIDTH, engine.HEIGHT);
+        app.rect(0, 0, WIDTH, HEIGHT);
     }
 
     public void transitionAnimation() {
@@ -59,18 +59,18 @@ public class Startup extends Screen {
         if (engine.isLoading() || timeFromStart < 60) {
             floatIn *= 0.9;
             app.tint(255, 255-(255*floatIn));
-            engine.imgCentre("logo", engine.WIDTH/2, engine.HEIGHT/2 - floatIn*100);
+            display.imgCentre("logo", WIDTH/2, HEIGHT/2 - floatIn*100);
 
-            engine.loadingIcon(engine.WIDTH/2, engine.HEIGHT*0.8);
+            engine.loadingIcon(WIDTH/2, HEIGHT*0.8);
             
             // TODO: add loading notes, including "caching CPU canvas"
         }
         // Logo fade out as the screen moves away.
         else {
-            engine.cacheCPUCanvas();
+            display.cacheCPUCanvas();
             floatOut *= 0.9;
             app.tint(255, (255*floatOut));
-            engine.imgCentre("logo", engine.WIDTH/2, engine.HEIGHT/2);
+            display.imgCentre("logo", WIDTH/2, HEIGHT/2);
             
             // Only executes once
             if (!nextScreen) {
@@ -92,7 +92,7 @@ public class Startup extends Screen {
         app.textAlign(CENTER, CENTER);
         app.textFont(engine.DEFAULT_FONT);
         app.textSize(34);
-        app.text("by "+engine.AUTHOR, engine.WIDTH/2, engine.HEIGHT/2+150);
+        app.text("by "+engine.AUTHOR, WIDTH/2, HEIGHT/2+150);
         
         app.noTint();
         // Version in bottom-right.
@@ -101,7 +101,7 @@ public class Startup extends Screen {
         app.textAlign(LEFT, CENTER);
         app.textFont(engine.DEFAULT_FONT);
         app.textSize(30);
-        app.text(engine.VERSION, 10, engine.HEIGHT-60);
+        app.text(engine.VERSION, 10, HEIGHT-60);
         
     }
 }

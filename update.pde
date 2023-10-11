@@ -41,14 +41,14 @@ public class Updater extends Screen {
     textSize(50);
     textAlign(CENTER, TOP);
     fill(0);
-    text("Update", engine.WIDTH/2, 10);
+    text("Update", WIDTH/2, 10);
   }
   
   public boolean button(String display, float x, float y) {
     color c = color(200);
     
     x = x+10;
-    float wi = (engine.WIDTH/2)-40;    // idk why 40
+    float wi = (WIDTH/2)-40;    // idk why 40
     float hi = 50;
     boolean hovering = (engine.mouseX() > x && engine.mouseY() > y && engine.mouseX() < x+wi && engine.mouseY() < y+hi);
     if (hovering) c = color(255);
@@ -85,26 +85,26 @@ public class Updater extends Screen {
     fill(255);
     x = 10;
     y = myUpperBarWeight+150;
-    text(displayMessage, x, y, engine.WIDTH-x*2, 100);
+    text(displayMessage, x, y, WIDTH-x*2, 100);
     
     textSize(20);
     fill(255);
     x = 10;
     y = myUpperBarWeight+250;
     float footerY = 150;
-    text(patchNotes, x, y, engine.WIDTH-x*2, engine.HEIGHT-myLowerBarWeight-y-footerY);
+    text(patchNotes, x, y, WIDTH-x*2, HEIGHT-myLowerBarWeight-y-footerY);
     
     textSize(20);
     fill(200);
     x = 10;
-    y = engine.HEIGHT-myLowerBarWeight-footerY;
-    text(footerMessage, x, y, engine.WIDTH-x*2, footerY);
+    y = HEIGHT-myLowerBarWeight-footerY;
+    text(footerMessage, x, y, WIDTH-x*2, footerY);
     
-    if (button("Later", 0, engine.HEIGHT-myLowerBarWeight-60)) {
+    if (button("Later", 0, HEIGHT-myLowerBarWeight-60)) {
       previousScreen();
     }
       
-    if (button("Update", engine.WIDTH/2, engine.HEIGHT-myLowerBarWeight-60)) {
+    if (button("Update", WIDTH/2, HEIGHT-myLowerBarWeight-60)) {
       String downloadURL = "";
       String downloadLocation = engine.getMyDir()+"timeway-update-download.zip";
       switch (platform) {

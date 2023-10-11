@@ -277,7 +277,7 @@ public final class SpriteSystemPlaceholder {
                 return lock;
             }
             public void setImg(String name) {
-                PImage im = engine.getImg(name);
+                PImage im = engine.display.getImg(name);
                 imgName = name;
                 if (wi == 0) { 
                 wi = (int)im.width;
@@ -916,7 +916,7 @@ public final class SpriteSystemPlaceholder {
             
             switch (s.mode) {
             case SINGLE:
-            engine.img(s.imgName, s.getX(), s.getY()+s.getHeight()*s.getBop(), s.getWidth(), s.getHeight()-int((float)s.getHeight()*s.getBop()));
+            engine.display.img(s.imgName, s.getX(), s.getY()+s.getHeight()*s.getBop(), s.getWidth(), s.getHeight()-int((float)s.getHeight()*s.getBop()));
             break;
             case VERTEX:  // We don't need vertices in our program so let's just sweep this under the rug.
             //draw.autoImgVertex(s);

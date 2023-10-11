@@ -103,31 +103,17 @@ class Engine {
   public PApplet app;
   public String APPPATH = sketchPath().replace('\\', '/')+"/";
   public String OSName;
-  public int usingOS;
-  public Console console = new Console();
   public Sound soundSystem;
+  public Console console = new Console();
   public SharedResourcesModule sharedResources = new SharedResourcesModule();
-  public SettingsModule settings = new SettingsModule(console);
+  public SettingsModule settings = new SettingsModule();
+  public DisplayModule display = new DisplayModule();
   public PowerModeModule power = new PowerModeModule();
 
 
-  // Display system
-  public float displayScale = 2.0;
-  PImage errorImg;
-  public HashMap<String, PImage> systemImages;
-  public HashSet<String> loadedContent;
-  public HashMap<String, PFont> fonts;
-  public HashMap<String, PShader> shaders;
+  
+  
   public HashMap<String, SoundFile> sounds;
-  public float WIDTH = 0, HEIGHT = 0;
-  public int loadingFramesLength = 0;
-  public int pastedImageCount = 0;
-  public int lastFrameMillis = 0;
-  public int thisFrameMillis = 0;
-  public PGraphics[] CPUCanvas;
-  public int usedCPUCanvases = 0;
-  public int currentCPUCanvas = 0;
-  public int smallerCanvasTimeout = 300;
   
 
   // Screens
@@ -179,6 +165,30 @@ class Engine {
   public boolean playWhileUnfocused = true;
   
   
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
   public class SharedResourcesModule {
     private HashMap<String, Object> sharedResourcesMap;
     
@@ -221,15 +231,34 @@ class Engine {
 
   
   
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
   public class SettingsModule {
       private JSONObject settings;
       private JSONObject keybindings;
       private HashMap <String, Object> defaultSettings;
       private HashMap <String, Character> defaultKeybindings;
-      private Console console;
       
-      public SettingsModule(Console c) {
-        console = c;
+      public SettingsModule() {
         loadDefaultSettings();
         settings = loadConfig(APPPATH+CONFIG_PATH, defaultSettings);
         keybindings = loadConfig(APPPATH+KEYBIND_PATH, defaultKeybindings);
@@ -400,21 +429,6 @@ class Engine {
     app.background(0);
     
 
-    // Set the display scale; since I've been programming this with my Surface Book 2 at high density resolution,
-    // the original display area is 1500x1000, so we simply divide this device's display resolution by 1500 to
-    // get the scale.
-    displayScale = app.width/1500.;
-    WIDTH = app.width/displayScale;
-    HEIGHT = app.height/displayScale;
-
-
-    generateErrorImg();
-    loadedContent = new HashSet<String>();
-    systemImages = new HashMap<String, PImage>();
-    fonts = new HashMap<String, PFont>();
-    shaders = new HashMap<String, PShader>();
-    sounds = new HashMap<String, SoundFile>();
-
     // First, load the logo and loading symbol.
     loadAsset(APPPATH+IMG_PATH+"logo.png");
     loadAllAssets(APPPATH+IMG_PATH+"loadingmorph/");
@@ -423,7 +437,7 @@ class Engine {
     // Console stuff
     //console = new Console();
     console.info("Hello console");
-    console.info("init: width/height set to "+str(WIDTH)+", "+str(HEIGHT));
+    console.info("init: width/height set to "+str(display.WIDTH)+", "+str(display.HEIGHT));
     
     soundSystem = new Sound(app);
     
@@ -450,7 +464,29 @@ class Engine {
 
   
   
-  // Todo: THIS.
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
   public class PowerModeModule {
     
   // Power modes
@@ -481,7 +517,6 @@ class Engine {
     float framerateBuffer[];
     private boolean forcePowerModeEnabled = false;
     private PowerMode forcedPowerMode = PowerMode.HIGH;
-    private boolean fatalFPS = false;
   
     // The score that seperates the stable fps from the unstable fps.
     // If you've got half a brain, it would make the most sense to keep it at 0.
@@ -502,7 +537,7 @@ class Engine {
     // The higher you make RECOVERY_NEGLIGENCE, the more it will neglect the possibility of recovery.
     // For example, trying to achieve 60fps but actual is 40fps, the system will likely recover faster if
     // RECOVERY_NEGLIGENCE is set to 1 but very unlikely if it's set to something higher like 5.
-    private final float RECOVERY_NEGLIGENCE = 2;
+    private final float RECOVERY_NEGLIGENCE = 1;
     
     public PowerModeModule() {
       setForcedPowerMode(settings.getString("forcePowerMode"));
@@ -880,7 +915,7 @@ class Engine {
       } else if (fpsTrackingMode == RECOVERY) {
         // Record the fps, as long as we're not waiting to go back into MONITOR mode.
         if (recoveryPhase != 3)
-          framerateBuffer[recoveryFrameCount++] = getLiveFPS();
+          framerateBuffer[recoveryFrameCount++] = display.getLiveFPS();
   
         // Once we're done recording...
         int l = framerateBuffer.length;
@@ -957,23 +992,493 @@ class Engine {
     //public Kernel32.SYSTEM_POWER_STATUS powerStatus;
   }
   
-  // Displaying it for the first time automatically caches it (and causes a massive ass delay)
-  public void cacheCPUCanvas() {
-    if (USE_CPU_CANVAS) {
-      CPUCanvas[0].beginDraw();
-      CPUCanvas[0].clear();
-      CPUCanvas[0].endDraw();
-      app.image(CPUCanvas[0], 0, 0);
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  private HashSet<String> loadedContent;
+  
+  public class DisplayModule {
+    // Display system
+    private float displayScale = 2.0;
+    public PImage errorImg;
+    private HashMap<String, PImage> systemImages;
+    public HashMap<String, PFont> fonts;
+    private HashMap<String, PShader> shaders;
+    public  float WIDTH = 0, HEIGHT = 0;
+    private int loadingFramesLength = 0;
+    private int lastFrameMillis = 0;
+    private int thisFrameMillis = 0;
+    private PGraphics[] CPUCanvas;
+    private int currentCPUCanvas = 0;
+    public int smallerCanvasTimeout = 300;
+    
+    public DisplayModule() {
+        // Set the display scale; since I've been programming this with my Surface Book 2 at high density resolution,
+        // the original display area is 1500x1000, so we simply divide this device's display resolution by 1500 to
+        // get the scale.
+        displayScale = width/1500.;
+        WIDTH = width/displayScale;
+        HEIGHT = height/displayScale;
+    
+    
+        generateErrorImg();
+        loadedContent = new HashSet<String>();
+        systemImages = new HashMap<String, PImage>();
+        fonts = new HashMap<String, PFont>();
+        shaders = new HashMap<String, PShader>();
+        
+        USE_CPU_CANVAS = settings.getBoolean("fasterImageImport");
+        if (USE_CPU_CANVAS) {
+          CPUCanvas = new PGraphics[MAX_CPU_CANVAS];
+          CPUCanvas[0] = createGraphics(app.width, app.height);
+        }
     }
+    
+    // Displaying it for the first time automatically caches it (and causes a massive ass delay)
+    public void cacheCPUCanvas() {
+      if (USE_CPU_CANVAS) {
+        CPUCanvas[0].beginDraw();
+        CPUCanvas[0].clear();
+        CPUCanvas[0].endDraw();
+        app.image(CPUCanvas[0], 0, 0);
+      }
+    }
+    
+    private void generateErrorImg() {
+      errorImg = createImage(32, 32, RGB);
+      errorImg.loadPixels();
+      for (int i = 0; i < errorImg.pixels.length; i++) {
+        errorImg.pixels[i] = color(255, 0, 0);
+      }
+      errorImg.updatePixels();
+    }
+    
+    public float getScale() {
+      return displayScale;
+    }
+    
+    // Since loading essential content only really takes place at the beginning,
+    // we can free some memory by clearing the temp info in loadedcontent.
+    // Just make sure not to load all content again!
+    public void clearLoadingVars() {
+      loadedContent.clear();
+      systemImages.clear();
+    }
+  
+    public PImage getImg(String name) {
+      if (systemImages.get(name) != null) {
+        return systemImages.get(name);
+      } else {
+        console.warnOnce("Image "+name+" doesn't exist.");
+        return errorImg;
+      }
+    }
+  
+    public void defaultShader() {
+      app.resetShader();
+    }
+    
+    public PShader getShaderWithParams(String shaderName, Object... uniforms) {
+      PShader sh = shaders.get(shaderName);
+      if (sh == null) {
+        console.warnOnce("Shader "+shaderName+" not found!");
+        // TODO: return default shader
+        return null;
+      }
+      int l = uniforms.length;
+      
+      for (int i = 0; i < l; i++) {
+        Object o = uniforms[i];
+        if (o instanceof String) {
+          if (i+1 < l) {
+            if (!(uniforms[i+1] instanceof Float)) {
+              console.bugWarn("Invalid arguments ("+shaderName+"), uniform name needs to be followed by value.1");
+              println((uniforms[i+1]));
+              return sh;
+            }
+          } else {
+            console.bugWarn("Invalid arguments ("+shaderName+"), uniform name needs to be followed by value.2");
+            return sh;
+          }
+  
+          int numArgs = 0;
+          float args[] = new float[4];   // There can only ever be at most 4 args.
+          for (int j = i+1; j < l; j++) {
+            if (uniforms[j] instanceof Float) args[numArgs++] = (float)uniforms[j];
+            else if (uniforms[j] instanceof String) break;
+            else {
+              console.bugWarn("Invalid uniform argument for shader "+shaderName+".");
+              return sh;
+            }
+            if (numArgs > 4) {
+              console.bugWarn("There can only be at most 4 uniform args ("+shaderName+").");
+              return sh;
+            }
+          }
+  
+          String uniformName = (String)uniforms[i];
+          switch (numArgs) {
+          case 1:
+            sh.set(uniformName, args[0]);
+            break;
+          case 2:
+            sh.set(uniformName, args[0], args[1]);
+            break;
+          case 3:
+            sh.set(uniformName, args[0], args[1], args[2]);
+            break;
+          case 4:
+            sh.set(uniformName, args[0], args[1], args[2], args[3]);
+            break;
+          default:
+            console.bugWarn("Uh oh, that might be a bug (useShader).");
+            return sh;
+          }
+          i += numArgs;
+        } else {
+          console.bugWarn("Invalid uniform argument for shader "+shaderName+".");
+        }
+      }
+      return sh;
+    }
+    
+    public void img(PImage image, float x, float y, float w, float h) {
+      if (wireframe) {
+        app.stroke(sin(app.frameCount*0.1)*127+127, 100);
+        app.strokeWeight(3);
+        app.noFill();
+        app.rect(x, y, w, h);
+        app.noStroke();
+      } else {
+        app.noStroke();
+      }
+      if (image == null) {
+        app.image(errorImg, x, y, w, h);
+        console.warnOnce("Image listed as 'loaded' but image doesn't seem to exist.");
+        return;
+      }
+      if (image.width == -1 || image.height == -1) {
+        app.image(errorImg, x, y, w, h);
+        console.warnOnce("Corrupted image.");
+        return;
+      }
+      // If image is loaded render.
+      if (image.width > 0 && image.height > 0) {
+        
+        // Images which are large on some devices causes a large delay as OpenGL caches the image.
+        // A workaround is to render the image to a canvas rendered by the CPU instead, bypassing any caching.
+        // However, this comes at the cost of increased CPU usage and increased power use.
+        // Only use it if 
+        // 1. image is large enough
+        // 2. We've enabled the CPU canvas (obviously)
+        // 3. powerSaver is disabled (we'd rather have large caching delays than increased overall power usage)
+        if (image.width > 1024 && image.height > 1024 && USE_CPU_CANVAS && !power.getPowerSaver()) {
+          PGraphics canv = CPUCanvas[currentCPUCanvas];
+          float canvDispSclX = canv.width/WIDTH;
+          float canvDispSclY = canv.height/HEIGHT;
+          canv.beginDraw();
+          //CPUCanvas.clear();
+          //CPUCanvas.clip(x*canvDispSclX,y*canvDispSclY,w*canvDispSclX,h*canvDispSclY);
+          canv.image(image, x*canvDispSclX, y*canvDispSclY, w*canvDispSclX, h*canvDispSclY);
+          //CPUCanvas.noClip();
+          canv.endDraw();
+          app.clip(x*displayScale+currScreen.screenx, y*displayScale+currScreen.screeny, w*displayScale, h*displayScale);
+          app.image(canv, 0, 0, WIDTH, HEIGHT);
+          app.noClip();
+        }
+        else app.image(image, x, y, w, h);
+        
+        // TODO: failed experiment, remove this
+        //final float IMG_MAX_CHUNK_X = 128;
+        //final float IMG_MAX_CHUNK_Y = 128;
+        
+        //float scalex = w/image.width;
+        //float scaley = h/image.height;
+        
+        //for (float iy = 0; iy < image.height; iy += IMG_MAX_CHUNK_Y) {
+        //  float maxy = IMG_MAX_CHUNK_Y;
+        //  float textop = iy/image.height;
+        //  float texbottom = (iy+maxy)/image.height;
+        //  for (float ix = 0; ix < image.width; ix += IMG_MAX_CHUNK_X) {
+        //    float maxx = IMG_MAX_CHUNK_X;
+            
+        //    float texleft = ix/image.width;
+        //    float texright = (ix+maxx)/image.width;
+            
+        //    float iix = x+(ix*scalex);
+        //    float iixw = iix+(maxx*scalex);
+        //    float iiy = y+(iy*scaley);
+        //    float iiyh = iiy+(maxy*scaley);
+            
+            
+        //    app.beginShape();
+        //    app.textureMode(NORMAL);
+        //    app.textureWrap(CLAMP);
+        //    app.texture(image);
+        //    app.vertex(iix, iiy, texleft, textop);
+        //    app.vertex(iixw, iiy, texright, textop);
+        //    app.vertex(iixw, iiyh, texright, texbottom);
+        //    app.vertex(iix, iiyh, texleft, texbottom);
+        //    app.endShape();
+        //  }
+        //}
+        
+        //timestamp("ok good");
+        return;
+      } else {
+        app.noStroke();
+        return;
+      }
+    }
+  
+    public void imgOld(PImage image, float x, float y, float w, float h) {
+      if (wireframe) {
+        app.stroke(sin(app.frameCount*0.1)*127+127, 100);
+        app.strokeWeight(3);
+        app.noFill();
+        app.rect(x, y, w, h);
+        app.noStroke();
+      } else {
+        app.noStroke();
+      }
+      if (image == null) {
+        app.image(errorImg, x, y, w, h);
+        console.warnOnce("Image listed as 'loaded' but image doesn't seem to exist.");
+        return;
+      }
+      if (image.width == -1 || image.height == -1) {
+        app.image(errorImg, x, y, w, h);
+        console.warnOnce("Corrupted image.");
+        return;
+      }
+      // If image is loaded render.
+      if (image.width > 0 && image.height > 0) {
+        img(image, x, y, w, h);
+        return;
+      } else {
+        app.noStroke();
+        return;
+      }
+    }
+  
+    public void img(String name, float x, float y, float w, float h) {
+      if (systemImages.get(name) != null) {
+        img(systemImages.get(name), x, y, w, h);
+      } else {
+        app.image(errorImg, x, y, w, h);
+        console.warnOnce("Image "+name+" does not exist");
+      }
+    }
+  
+    public void img(String name, float x, float y) {
+      PImage image = systemImages.get(name);
+      if (image != null) {
+        img(systemImages.get(name), x, y, image.width, image.height);
+      } else {
+        app.image(errorImg, x, y, errorImg.width, errorImg.height);
+        console.warnOnce("Image "+name+" does not exist");
+      }
+    }
+  
+  
+    public void imgCentre(String name, float x, float y, float w, float h) {
+      PImage image = systemImages.get(name);
+      if (image == null) {
+        img(errorImg, x-errorImg.width/2, y-errorImg.height/2, w, h);
+      } else {
+        img(image, x-image.width/2, y-image.height/2, w, h);
+      }
+    }
+  
+    public void imgCentre(String name, float x, float y) {
+      PImage image = systemImages.get(name);
+      if (image == null) {
+        img(errorImg, x-errorImg.width/2, y-errorImg.height/2, errorImg.width, errorImg.height);
+      } else {
+        img(image, x-image.width/2, y-image.height/2, image.width, image.height);
+      }
+    }
+    
+    // TODO: Allow all os system fonts
+    // PFont.list()
+    public PFont getFont(String name) {
+      PFont f = display.fonts.get(name);
+      if (f == null) {
+        console.warnOnce("Couldn't find font "+name+"!");
+        // Idk just use this font as a placeholder instead.
+        return createFont("Monospace", 128);
+      } else return f;
+    }
+    
+    public float getLiveFPS() {
+      float fps = 60;
+      switch (power.powerMode) {
+      case HIGH:
+        fps = 60.;
+        break;
+      case NORMAL:
+        fps = 30.;
+        break;
+      case SLEEPY:
+        fps = 15.;
+        break;
+      case MINIMAL:
+        fps = 1.;
+        break;
+      }
+      float timeframe = 1000/fps;
+  
+      return (timeframe/float(thisFrameMillis-lastFrameMillis))*fps;
+    }
+    
+    public void displayScreens() {
+      if (transitionScreens) {
+        power.setAwake();
+        transition = smoothLikeButter(transition);
+  
+        // Sorry for the code duplication!
+        switch (transitionDirection) {
+        case RIGHT:
+          app.pushMatrix();
+          prevScreen.screenx = ((WIDTH*transition)-WIDTH)*displayScale;
+          prevScreen.display();
+          app.popMatrix();
+  
+  
+          app.pushMatrix();
+          currScreen.screenx = ((WIDTH*transition)*displayScale);
+          currScreen.display();
+          app.popMatrix();
+          break;
+        case LEFT:
+          app.pushMatrix();
+          prevScreen.screenx = ((WIDTH-(WIDTH*transition))*displayScale);
+          prevScreen.display();
+          app.popMatrix();
+  
+  
+          app.pushMatrix();
+          currScreen.screenx = ((-WIDTH*transition)*displayScale);
+          currScreen.display();
+          app.popMatrix();
+          break;
+        }
+  
+        if (transition < 0.001) {
+          transitionScreens = false;
+          currScreen.startupAnimation();
+          prevScreen.endScreenAnimation();
+  
+          // If we're just getting started, we need to get a feel for the framerate since we don't want to start
+          // slow and choppy. Once we're done transitioning to the first (well, after the startup) screen, go into
+          // FPS recovery mode.
+          if (initialScreen) {
+            initialScreen = false;
+            power.setPowerMode(PowerMode.NORMAL);
+            power.forceFPSRecoveryMode();
+          }
+          //prevScreen = null;
+        }
+      } else {
+        currScreen.display();
+      }
+      timestamp("end display");
+    }
+    
+    public void controlCPUCanvas() {
+      int n = 1;
+      switch (power.getPowerMode()) {
+        case HIGH:
+          n = 1;
+          break;
+        case NORMAL:
+          n = 2;
+          break;
+        case SLEEPY:
+          n = 4;
+          break;
+        case MINIMAL:
+          n = 1;
+          break;
+      }
+      
+      if (USE_CPU_CANVAS) {
+        if ((frameRate < 13 || getLiveFPS() < 9) && smallerCanvasTimeout < 1 && power.getPowerMode() != PowerMode.MINIMAL) {
+          currentCPUCanvas++;
+          if (currentCPUCanvas < MAX_CPU_CANVAS && CPUCanvas[currentCPUCanvas] == null) {
+            int w = CPUCanvas[currentCPUCanvas-1].width;
+            int h = CPUCanvas[currentCPUCanvas-1].height;
+            CPUCanvas[currentCPUCanvas] = createGraphics(w/2, h/2);
+          }
+          smallerCanvasTimeout = 120;
+        }
+        else smallerCanvasTimeout -= n;
+      }
+    }
+    
+    public void updateFrameMillis() {
+      lastFrameMillis = thisFrameMillis;
+      thisFrameMillis = app.millis();
+    }
+    
+  
   }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
   public void setup() {
+    
+    sounds = new HashMap<String, SoundFile>();
 
     loadEverything();
 
     //println("Running in seperate thread.");
     // Config file
     getUpdateInfo();
+    
 
 
     scrollSensitivity = settings.getFloat("scrollSensitivity");
@@ -989,14 +1494,10 @@ class Engine {
       currentDir  = DEFAULT_DIR;
     }
     
-    USE_CPU_CANVAS = settings.getBoolean("fasterImageImport");
-    if (USE_CPU_CANVAS) {
-      CPUCanvas = new PGraphics[MAX_CPU_CANVAS];
-      CPUCanvas[0] = createGraphics(app.width, app.height);
-    }
+    
     
     POWER_HIGH_BATTERY_THRESHOLD = int(settings.getFloat("lowBatteryPercent"));
-    DEFAULT_FONT = getFont(DEFAULT_FONT_NAME);
+    DEFAULT_FONT = display.getFont(DEFAULT_FONT_NAME);
     VOLUME_NORMAL = settings.getFloat("volumeNormal");
     VOLUME_QUIET = settings.getFloat("volumeQuiet");
     setMasterVolume(VOLUME_NORMAL);
@@ -1039,9 +1540,9 @@ class Engine {
       app.fill(255);
       app.textAlign(CENTER, CENTER);
       app.textFont(DEFAULT_FONT, 60);
-      app.text(promptText, WIDTH/2, HEIGHT/2-100);
+      app.text(promptText, display.WIDTH/2, display.HEIGHT/2-100);
       app.textSize(30);
-      app.text(keyboardMessage, WIDTH/2, HEIGHT/2);
+      app.text(keyboardMessage, display.WIDTH/2, display.HEIGHT/2);
 
       if (enterPressed) {
         // Remove enter character at end
@@ -1250,19 +1751,19 @@ class Engine {
       }
       // Render the UI
       pushMatrix();
-      scale(displayScale);
+      scale(display.getScale());
       noStroke();
       color c = color(127);
-      float x1 = WIDTH/2;
+      float x1 = display.WIDTH/2;
       float y1 = 0;
       float hi = 128;
       float wi = 128*2;
       // TODO have some sort of fabric function instead of this mess.
       app.shader(
-        getShaderWithParams("fabric", "color", float((c>>16)&0xFF)/255., float((c>>8)&0xFF)/255., float((c)&0xFF)/255., 1., "intensity", 0.1)
+        display.getShaderWithParams("fabric", "color", float((c>>16)&0xFF)/255., float((c>>8)&0xFF)/255., float((c)&0xFF)/255., 1., "intensity", 0.1)
       );
       rect(x1-wi, y1, wi*2, hi);
-      defaultShader();
+      display.defaultShader();
       loadingIcon(x1-wi+64, y1+64);
 
       fill(255);
@@ -1312,19 +1813,19 @@ class Engine {
       
     } else if (updatePhase == 2) {
       pushMatrix();
-      scale(displayScale);
+      scale(display.getScale());
       noStroke();
       color c = color(127);
-      float x1 = WIDTH/2;
+      float x1 = display.WIDTH/2;
       float y1 = 0;
       float hi = 128;
       float wi = 128*2;
       // TODO have some sort of fabric function instead of this mess.
       app.shader(
-        getShaderWithParams("fabric", "color", float((c>>16)&0xFF)/255., float((c>>8)&0xFF)/255., float((c)&0xFF)/255., 1., "intensity", 0.1)
+        display.getShaderWithParams("fabric", "color", float((c>>16)&0xFF)/255., float((c>>8)&0xFF)/255., float((c)&0xFF)/255., 1., "intensity", 0.1)
       );
       rect(x1-wi, y1, wi*2, hi);
-      defaultShader();
+      display.defaultShader();
       loadingIcon(x1-wi+64, y1+64);
 
       fill(255);
@@ -1385,21 +1886,21 @@ class Engine {
     }
     else if (updatePhase == 666) {
       pushMatrix();
-      scale(displayScale);
+      scale(display.getScale());
       noStroke();
       color c = color(127);
-      float x1 = WIDTH/2;
+      float x1 = display.WIDTH/2;
       float y1 = 0;
       float hi = 128;
       float wi = 128*2;
       // TODO have some sort of fabric function instead of this mess.
       app.shader(
-      getShaderWithParams("fabric", "color", float((c>>16)&0xFF)/255., float((c>>8)&0xFF)/255., float((c)&0xFF)/255., 1., "intensity", 0.1)
+      display.getShaderWithParams("fabric", "color", float((c>>16)&0xFF)/255., float((c>>8)&0xFF)/255., float((c)&0xFF)/255., 1., "intensity", 0.1)
       );
       rect(x1-wi, y1, wi*2, hi);
-      defaultShader();
+      display.defaultShader();
       
-      imgCentre("error", x1-wi+64, y1+64);
+      display.imgCentre("error", x1-wi+64, y1+64);
       
       fill(255);
       textAlign(LEFT, TOP);
@@ -1582,17 +2083,6 @@ class Engine {
     }
   }
 
-  // TODO: Allow all os system fonts
-  // PFont.list()
-  public PFont getFont(String name) {
-    PFont f = this.fonts.get(name);
-    if (f == null) {
-      console.warnOnce("Couldn't find font "+name+"!");
-      // Idk just use this font as a placeholder instead.
-      return createFont("Monospace", 128);
-    } else return f;
-  }
-
 
   public final int MAX_TIMESTAMPS = 1024;
   public boolean benchmark = false;
@@ -1635,26 +2125,6 @@ class Engine {
 
   // custom fps function that gets the fps depending on the
   // time between the last frame and the current frame.
-  public float getLiveFPS() {
-    float fps = 60;
-    switch (power.powerMode) {
-    case HIGH:
-      fps = 60.;
-      break;
-    case NORMAL:
-      fps = 30.;
-      break;
-    case SLEEPY:
-      fps = 15.;
-      break;
-    case MINIMAL:
-      fps = 1.;
-      break;
-    }
-    float timeframe = 1000/fps;
-
-    return (timeframe/float(thisFrameMillis-lastFrameMillis))*fps;
-  }
 
 
   // This is a debug function used for measuring performance at certain points.
@@ -1808,17 +2278,10 @@ class Engine {
 
     // Find out how many images there are in loadingmorph
     File f = new File(APPPATH+IMG_PATH+"loadingmorph/");
-    loadingFramesLength = f.listFiles().length;
+    display.loadingFramesLength = f.listFiles().length;
   }
 
-  public void generateErrorImg() {
-    errorImg = app.createImage(32, 32, RGB);
-    errorImg.loadPixels();
-    for (int i = 0; i < errorImg.pixels.length; i++) {
-      errorImg.pixels[i] = color(255, 0, 0);
-    }
-    errorImg.updatePixels();
-  }
+  
 
   //*************************************************************
   //*************************************************************
@@ -1896,7 +2359,7 @@ class Engine {
           int ypos = pos*32;
           noStroke();
           fill(0);
-          int recWidth = int(WIDTH/2.);
+          int recWidth = int(display.WIDTH/2.);
           if (recWidth < textWidth(this.message)) {
             recWidth = (int)textWidth(this.message)+10;
           }
@@ -1915,7 +2378,7 @@ class Engine {
             } else {
               fill(0);
             }
-            int recWidth = int(WIDTH/2.);
+            int recWidth = int(display.WIDTH/2.);
             if (recWidth < app.textWidth(this.message)) {
               recWidth = (int)app.textWidth(this.message)+10;
             }
@@ -2090,16 +2553,16 @@ class Engine {
       stroke(0);
       strokeWeight(4);
       fill(200);
-      rect(200+offsetX, 300+offsetY, WIDTH-400, HEIGHT-500);
+      rect(200+offsetX, 300+offsetY, display.WIDTH-400, display.HEIGHT-500);
       fill(color(255, 127, 0));
-      rect(200+offsetX, 200+offsetY, WIDTH-400, 100);
+      rect(200+offsetX, 200+offsetY, display.WIDTH-400, 100);
 
       noStroke();
 
       textAlign(CENTER, CENTER);
       textSize(62);
       fill(255);
-      text("WARNING!!", WIDTH/2+offsetX, 240+offsetY);
+      text("WARNING!!", display.WIDTH/2+offsetX, 240+offsetY);
 
       textAlign(LEFT, LEFT);
 
@@ -2304,18 +2767,18 @@ class Engine {
     // if extension is image
     if (ext.equals("png") || ext.equals("jpg") || ext.equals("gif") || ext.equals("bmp")) {
       // load image and add it to the systemImages hashmap.
-      if (systemImages.get(name) == null) {
-        systemImages.put(name, app.requestImage(path));
+      if (display.systemImages.get(name) == null) {
+        display.systemImages.put(name, app.requestImage(path));
         loadedContent.add(name);
       } else {
         console.warn("Image "+name+" already exists, skipping.");
       }
     } else if (ext.equals("otf") || ext.equals("ttf")) {       // Load font.
-      fonts.put(name, app.createFont(path, 32));
+      display.fonts.put(name, app.createFont(path, 32));
     } else if (ext.equals("vlw")) {
-      fonts.put(name, app.loadFont(path));
+      display.fonts.put(name, app.loadFont(path));
     } else if (ext.equals("glsl")) {
-      shaders.put(name, app.loadShader(path));
+      display.shaders.put(name, app.loadShader(path));
     } else if (ext.equals("wav") || ext.equals("ogg") || ext.equals("mp3")) {
       sounds.put(name, new SoundFile(app, path));
     } else {
@@ -2346,247 +2809,7 @@ class Engine {
     else console.warn("Missing assets, was the files tampered with?");
   }
 
-  // Since loading essential content only really takes place at the beginning,
-  // we can free some memory by clearing the temp info in loadedcontent.
-  // Just make sure not to load all content again!
-  public void clearLoadingVars() {
-    loadedContent.clear();
-    systemImages.clear();
-  }
-
-  public PImage getImg(String name) {
-    if (systemImages.get(name) != null) {
-      return systemImages.get(name);
-    } else {
-      console.warnOnce("Image "+name+" doesn't exist.");
-      return errorImg;
-    }
-  }
-
-  public void defaultShader() {
-    app.resetShader();
-  }
   
-  public PShader getShaderWithParams(String shaderName, Object... uniforms) {
-    PShader sh = shaders.get(shaderName);
-    if (sh == null) {
-      console.warnOnce("Shader "+shaderName+" not found!");
-      // TODO: return default shader
-      return null;
-    }
-    int l = uniforms.length;
-    
-    for (int i = 0; i < l; i++) {
-      Object o = uniforms[i];
-      if (o instanceof String) {
-        if (i+1 < l) {
-          if (!(uniforms[i+1] instanceof Float)) {
-            console.bugWarn("Invalid arguments ("+shaderName+"), uniform name needs to be followed by value.1");
-            println((uniforms[i+1]));
-            return sh;
-          }
-        } else {
-          console.bugWarn("Invalid arguments ("+shaderName+"), uniform name needs to be followed by value.2");
-          return sh;
-        }
-
-        int numArgs = 0;
-        float args[] = new float[4];   // There can only ever be at most 4 args.
-        for (int j = i+1; j < l; j++) {
-          if (uniforms[j] instanceof Float) args[numArgs++] = (float)uniforms[j];
-          else if (uniforms[j] instanceof String) break;
-          else {
-            console.bugWarn("Invalid uniform argument for shader "+shaderName+".");
-            return sh;
-          }
-          if (numArgs > 4) {
-            console.bugWarn("There can only be at most 4 uniform args ("+shaderName+").");
-            return sh;
-          }
-        }
-
-        String uniformName = (String)uniforms[i];
-        switch (numArgs) {
-        case 1:
-          sh.set(uniformName, args[0]);
-          break;
-        case 2:
-          sh.set(uniformName, args[0], args[1]);
-          break;
-        case 3:
-          sh.set(uniformName, args[0], args[1], args[2]);
-          break;
-        case 4:
-          sh.set(uniformName, args[0], args[1], args[2], args[3]);
-          break;
-        default:
-          console.bugWarn("Uh oh, that might be a bug (useShader).");
-          return sh;
-        }
-        i += numArgs;
-      } else {
-        console.bugWarn("Invalid uniform argument for shader "+shaderName+".");
-      }
-    }
-    return sh;
-  }
-  
-  public void img(PImage image, float x, float y, float w, float h) {
-    if (wireframe) {
-      app.stroke(sin(app.frameCount*0.1)*127+127, 100);
-      app.strokeWeight(3);
-      app.noFill();
-      app.rect(x, y, w, h);
-      app.noStroke();
-    } else {
-      app.noStroke();
-    }
-    if (image == null) {
-      app.image(errorImg, x, y, w, h);
-      console.warnOnce("Image listed as 'loaded' but image doesn't seem to exist.");
-      return;
-    }
-    if (image.width == -1 || image.height == -1) {
-      app.image(errorImg, x, y, w, h);
-      console.warnOnce("Corrupted image.");
-      return;
-    }
-    // If image is loaded render.
-    if (image.width > 0 && image.height > 0) {
-      
-      // Images which are large on some devices causes a large delay as OpenGL caches the image.
-      // A workaround is to render the image to a canvas rendered by the CPU instead, bypassing any caching.
-      // However, this comes at the cost of increased CPU usage and increased power use.
-      // Only use it if 
-      // 1. image is large enough
-      // 2. We've enabled the CPU canvas (obviously)
-      // 3. powerSaver is disabled (we'd rather have large caching delays than increased overall power usage)
-      if (image.width > 1024 && image.height > 1024 && USE_CPU_CANVAS && !power.getPowerSaver()) {
-        PGraphics canv = CPUCanvas[currentCPUCanvas];
-        float canvDispSclX = canv.width/WIDTH;
-        float canvDispSclY = canv.height/HEIGHT;
-        canv.beginDraw();
-        //CPUCanvas.clear();
-        //CPUCanvas.clip(x*canvDispSclX,y*canvDispSclY,w*canvDispSclX,h*canvDispSclY);
-        canv.image(image, x*canvDispSclX, y*canvDispSclY, w*canvDispSclX, h*canvDispSclY);
-        //CPUCanvas.noClip();
-        canv.endDraw();
-        app.clip(x*displayScale+currScreen.screenx, y*displayScale+currScreen.screeny, w*displayScale, h*displayScale);
-        app.image(canv, 0, 0, WIDTH, HEIGHT);
-        app.noClip();
-      }
-      else app.image(image, x, y, w, h);
-      
-      // TODO: failed experiment, remove this
-      //final float IMG_MAX_CHUNK_X = 128;
-      //final float IMG_MAX_CHUNK_Y = 128;
-      
-      //float scalex = w/image.width;
-      //float scaley = h/image.height;
-      
-      //for (float iy = 0; iy < image.height; iy += IMG_MAX_CHUNK_Y) {
-      //  float maxy = IMG_MAX_CHUNK_Y;
-      //  float textop = iy/image.height;
-      //  float texbottom = (iy+maxy)/image.height;
-      //  for (float ix = 0; ix < image.width; ix += IMG_MAX_CHUNK_X) {
-      //    float maxx = IMG_MAX_CHUNK_X;
-          
-      //    float texleft = ix/image.width;
-      //    float texright = (ix+maxx)/image.width;
-          
-      //    float iix = x+(ix*scalex);
-      //    float iixw = iix+(maxx*scalex);
-      //    float iiy = y+(iy*scaley);
-      //    float iiyh = iiy+(maxy*scaley);
-          
-          
-      //    app.beginShape();
-      //    app.textureMode(NORMAL);
-      //    app.textureWrap(CLAMP);
-      //    app.texture(image);
-      //    app.vertex(iix, iiy, texleft, textop);
-      //    app.vertex(iixw, iiy, texright, textop);
-      //    app.vertex(iixw, iiyh, texright, texbottom);
-      //    app.vertex(iix, iiyh, texleft, texbottom);
-      //    app.endShape();
-      //  }
-      //}
-      
-      //timestamp("ok good");
-      return;
-    } else {
-      app.noStroke();
-      return;
-    }
-  }
-
-  public void imgOld(PImage image, float x, float y, float w, float h) {
-    if (wireframe) {
-      app.stroke(sin(app.frameCount*0.1)*127+127, 100);
-      app.strokeWeight(3);
-      app.noFill();
-      app.rect(x, y, w, h);
-      app.noStroke();
-    } else {
-      app.noStroke();
-    }
-    if (image == null) {
-      app.image(errorImg, x, y, w, h);
-      console.warnOnce("Image listed as 'loaded' but image doesn't seem to exist.");
-      return;
-    }
-    if (image.width == -1 || image.height == -1) {
-      app.image(errorImg, x, y, w, h);
-      console.warnOnce("Corrupted image.");
-      return;
-    }
-    // If image is loaded render.
-    if (image.width > 0 && image.height > 0) {
-      img(image, x, y, w, h);
-      return;
-    } else {
-      app.noStroke();
-      return;
-    }
-  }
-
-  public void img(String name, float x, float y, float w, float h) {
-    if (systemImages.get(name) != null) {
-      img(systemImages.get(name), x, y, w, h);
-    } else {
-      app.image(errorImg, x, y, w, h);
-      console.warnOnce("Image "+name+" does not exist");
-    }
-  }
-
-  public void img(String name, float x, float y) {
-    PImage image = systemImages.get(name);
-    if (image != null) {
-      img(systemImages.get(name), x, y, image.width, image.height);
-    } else {
-      app.image(errorImg, x, y, errorImg.width, errorImg.height);
-      console.warnOnce("Image "+name+" does not exist");
-    }
-  }
-
-
-  public void imgCentre(String name, float x, float y, float w, float h) {
-    PImage image = systemImages.get(name);
-    if (image == null) {
-      img(errorImg, x-errorImg.width/2, y-errorImg.height/2, w, h);
-    } else {
-      img(image, x-image.width/2, y-image.height/2, w, h);
-    }
-  }
-
-  public void imgCentre(String name, float x, float y) {
-    PImage image = systemImages.get(name);
-    if (image == null) {
-      img(errorImg, x-errorImg.width/2, y-errorImg.height/2, errorImg.width, errorImg.height);
-    } else {
-      img(image, x-image.width/2, y-image.height/2, image.width, image.height);
-    }
-  }
 
 
 
@@ -2618,7 +2841,7 @@ class Engine {
   }
 
   public boolean isLoading() {
-    for (PImage p : systemImages.values()) {
+    for (PImage p : display.systemImages.values()) {
       if (p.width == 0 || p.height == 0) {
         return true;
       }
@@ -2682,7 +2905,7 @@ class Engine {
   }
 
   public void loadingIcon(float x, float y) {
-    imgCentre("load-"+appendZeros(counter(loadingFramesLength, 3), 4), x, y);
+    display.imgCentre("load-"+appendZeros(counter(display.loadingFramesLength, 3), 4), x, y);
   }
 
   public float smoothLikeButter(float i) {
@@ -3275,59 +3498,7 @@ class Engine {
     return false;
   }
 
-  public void displayScreens() {
-    if (transitionScreens) {
-      power.setAwake();
-      transition = smoothLikeButter(transition);
-
-      // Sorry for the code duplication!
-      switch (transitionDirection) {
-      case RIGHT:
-        app.pushMatrix();
-        prevScreen.screenx = ((WIDTH*transition)-WIDTH)*displayScale;
-        prevScreen.display();
-        app.popMatrix();
-
-
-        app.pushMatrix();
-        currScreen.screenx = ((WIDTH*transition)*displayScale);
-        currScreen.display();
-        app.popMatrix();
-        break;
-      case LEFT:
-        app.pushMatrix();
-        prevScreen.screenx = ((WIDTH-(WIDTH*transition))*displayScale);
-        prevScreen.display();
-        app.popMatrix();
-
-
-        app.pushMatrix();
-        currScreen.screenx = ((-WIDTH*transition)*displayScale);
-        currScreen.display();
-        app.popMatrix();
-        break;
-      }
-
-      if (transition < 0.001) {
-        transitionScreens = false;
-        currScreen.startupAnimation();
-        prevScreen.endScreenAnimation();
-
-        // If we're just getting started, we need to get a feel for the framerate since we don't want to start
-        // slow and choppy. Once we're done transitioning to the first (well, after the startup) screen, go into
-        // FPS recovery mode.
-        if (initialScreen) {
-          initialScreen = false;
-          power.setPowerMode(PowerMode.NORMAL);
-          power.forceFPSRecoveryMode();
-        }
-        //prevScreen = null;
-      }
-    } else {
-      currScreen.display();
-    }
-    timestamp("end display");
-  }
+  
 
 
 
@@ -3361,11 +3532,11 @@ class Engine {
   }
 
   public float mouseX() {
-    return mouseX/displayScale;
+    return mouseX/display.getScale();
   }
 
   public float mouseY() {
-    return mouseY/displayScale;
+    return mouseY/display.getScale();
   }
 
   public SoundFile getSound(String name) {
@@ -4059,23 +4230,11 @@ class Engine {
     inputManagement();
 
     // Show the current GUI.
-    displayScreens();
+    display.displayScreens();
     
     // If we're struggling with our framerate, opt back to a smaller CPU canvas at the
     // cost of quality
-    if (USE_CPU_CANVAS) {
-      if ((frameRate < 13 || getLiveFPS() < 9) && smallerCanvasTimeout < 1 && power.getPowerMode() != PowerMode.MINIMAL) {
-        currentCPUCanvas++;
-        if (currentCPUCanvas < MAX_CPU_CANVAS && CPUCanvas[currentCPUCanvas] == null) {
-          int w = CPUCanvas[currentCPUCanvas-1].width;
-          int h = CPUCanvas[currentCPUCanvas-1].height;
-          CPUCanvas[currentCPUCanvas] = createGraphics(w/2, h/2);
-          usedCPUCanvases++;
-        }
-        smallerCanvasTimeout = 120;
-      }
-      else smallerCanvasTimeout -= n;
-    }
+    display.controlCPUCanvas();
     
     
     
@@ -4092,21 +4251,20 @@ class Engine {
     if (commandPromptShown) {
       // Display the command prompt if shown.
       app.pushMatrix();
-      app.scale(displayScale);
+      app.scale(display.getScale());
       noStroke();
       app.fill(0, 127);
       app.noStroke();
       float promptWi = 600;
       float promptHi = 250;
-      app.rect(WIDTH/2-promptWi/2, HEIGHT/2-promptHi/2, promptWi, promptHi);
+      app.rect(display.WIDTH/2-promptWi/2, display.HEIGHT/2-promptHi/2, promptWi, promptHi);
       displayInputPrompt();
       app.noFill();
       app.popMatrix();
     }
 
     // Update times so we can calculate live fps.
-    lastFrameMillis = thisFrameMillis;
-    thisFrameMillis = app.millis();
+    display.updateFrameMillis();
 
     devInfo();
 
@@ -4246,6 +4404,11 @@ public abstract class Screen {
   protected Engine engine;
   protected Engine.Console console;
   protected PApplet app;
+  protected Engine.SharedResourcesModule sharedResources;
+  protected Engine.SettingsModule settings;
+  protected Engine.DisplayModule display;
+  protected Engine.PowerModeModule power;
+  
   protected float screenx = 0;
   protected float screeny = 0;
   protected color myUpperBarColor = UPPER_BAR_DEFAULT_COLOR;
@@ -4256,6 +4419,9 @@ public abstract class Screen {
   protected float myAnimationSpeed = DEFAULT_ANIMATION_SPEED;
   protected int transitionState = NONE;
   protected float transitionTick = 0;
+  
+  protected float WIDTH = 0.;
+  protected float HEIGHT = 0.;
 
   // ERS
   protected HashSet<RedrawElement> redrawElements = null;   // Only needed when the screen uses the efficient redraw system (ERS).
@@ -4266,6 +4432,14 @@ public abstract class Screen {
     this.engine = engine;
     this.console = engine.console;
     this.app = engine.app;
+    
+    this.sharedResources = engine.sharedResources;
+    this.settings = engine.settings;
+    this.display = engine.display;
+    this.power = engine.power;
+    
+    this.WIDTH = engine.display.WIDTH;
+    this.HEIGHT = engine.display.HEIGHT;
   }
 
   // ERS
@@ -4381,15 +4555,15 @@ public abstract class Screen {
 
 
   protected void upperBar() {
-    redrawInArea(0, 0, engine.WIDTH, myUpperBarWeight, myUpperBarColor);
+    redrawInArea(0, 0, WIDTH, myUpperBarWeight, myUpperBarColor);
   }
 
   protected void lowerBar() {
-    redrawInArea(0, engine.HEIGHT-myLowerBarWeight, engine.WIDTH, myLowerBarWeight, myLowerBarColor);
+    redrawInArea(0, HEIGHT-myLowerBarWeight, WIDTH, myLowerBarWeight, myLowerBarColor);
   }
 
   protected void backg() {
-    redrawInArea(0, myUpperBarWeight, engine.WIDTH, engine.HEIGHT-myUpperBarWeight-myLowerBarWeight, myBackgroundColor);
+    redrawInArea(0, myUpperBarWeight, WIDTH, HEIGHT-myUpperBarWeight-myLowerBarWeight, myBackgroundColor);
   }
 
   public void startupAnimation() {
@@ -4454,10 +4628,12 @@ public abstract class Screen {
   // of the screen and mashes it all into one complete screen,
   // ready for the engine to display. Simple as.
   public void display() {
+    this.WIDTH = engine.display.WIDTH;
+    this.HEIGHT = engine.display.HEIGHT;
     if (engine.power.powerMode != PowerMode.MINIMAL) {
       app.pushMatrix();
       app.translate(screenx, screeny);
-      app.scale(engine.displayScale);
+      app.scale(engine.display.getScale());
       this.backg();
 
       // Reset the redraw property on sprites if ERS

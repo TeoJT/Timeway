@@ -79,7 +79,7 @@ public class Explorer extends Screen {
           }
           
           if (engine.currentFiles[i].icon != null)
-            engine.img(engine.currentFiles[i].icon, 50, y, TEXT_SIZE, TEXT_SIZE);
+            display.img(engine.currentFiles[i].icon, 50, y, TEXT_SIZE, TEXT_SIZE);
           app.textAlign(LEFT, TOP);
           app.text(engine.currentFiles[i].filename, x + wi, y);
           app.noTint();
@@ -93,7 +93,7 @@ public class Explorer extends Screen {
       }
     }
     
-    scrollBottom = max(0, (engine.currentFiles.length*TEXT_SIZE-engine.HEIGHT+BOTTOM_SCROLL_EXTEND));
+    scrollBottom = max(0, (engine.currentFiles.length*TEXT_SIZE-HEIGHT+BOTTOM_SCROLL_EXTEND));
   }
   
   private void processScroll(float top, float bottom) {
@@ -232,11 +232,11 @@ public class Explorer extends Screen {
   public void backg() {
         app.fill(myBackgroundColor);
         app.noStroke();
-        app.rect(0, 0, engine.WIDTH, engine.HEIGHT);
+        app.rect(0, 0, WIDTH, HEIGHT);
   }
   
   public void upperBar() {
-    app.shader(engine.getShaderWithParams("fabric", "color", 0.5,0.5,0.5,1., "intensity", 0.1));
+    app.shader(display.getShaderWithParams("fabric", "color", 0.5,0.5,0.5,1., "intensity", 0.1));
     super.upperBar();
     app.resetShader();
     renderGui();
@@ -244,9 +244,9 @@ public class Explorer extends Screen {
   
     
   public void lowerBar() {
-    app.shader(engine.getShaderWithParams("fabric", "color", 0.5,0.5,0.5,1., "intensity", 0.1));
+    app.shader(display.getShaderWithParams("fabric", "color", 0.5,0.5,0.5,1., "intensity", 0.1));
     super.lowerBar();
-    engine.defaultShader();
+    display.defaultShader();
   }
     
   
@@ -265,7 +265,7 @@ public class Explorer extends Screen {
       app.text("Explorer", 50, 80);
       
       if (engine.loading) {
-        engine.loadingIcon(engine.WIDTH/2, engine.HEIGHT/2);
+        engine.loadingIcon(WIDTH/2, HEIGHT/2);
       }
       else {
         processScroll(0., scrollBottom+1.0);

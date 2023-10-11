@@ -29,6 +29,11 @@ Engine timewayEngine;
 boolean sketch_showCrashScreen = false;
 String sketch_ERR_LOG_PATH;
 
+// Set to true if you want to show the error log like in an exported build
+// rather than throw the error to processing (can be useful if you need more
+// error info)
+final boolean sketch_FORCE_CRASH_SCREEN = true;
+
 // TODO: Sorry ill put that in the engine code later.
 
 void settings() {
@@ -37,6 +42,9 @@ void settings() {
     size(displayWidth, displayHeight, P2D);
     //size(1500, 1000, P2D);
     smooth(1);
+    
+    // Ugly, I know. But we're at the most low level point in the program, so ain't
+    // much we can do.
     PJOGL.setIcon("data/engine/img/icon.png");
   }
   catch (Exception e) {
@@ -100,7 +108,7 @@ void draw() {
   }
   else {
       // Show error message on crash
-      if (sketch_showCrashScreen) {
+      if (sketch_showCrashScreen || sketch_FORCE_CRASH_SCREEN) {
         
         try {
           timewayEngine.engine();
