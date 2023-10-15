@@ -209,7 +209,6 @@ public class Editor extends Screen {
 
         public void display() {
             app.noTint();
-            tempDisableERS();
             // Sorry I'm lazy
             switch (engine.power.getPowerMode()) {
               case HIGH:
@@ -380,7 +379,6 @@ public class Editor extends Screen {
             if (!placeableset.contains(this)) {
                 placeableset.add(this);
             }
-            if (usingERS) addToERS(sprite);
         }
         
         
@@ -594,11 +592,6 @@ public class Editor extends Screen {
         myUpperBarColor   = myLowerBarColor;
         myBackgroundColor = BACKGROUND_COLOR;
         //myBackgroundColor = color(255,0,0);
-        
-        if (usingERS) {
-          initERS();
-          addToERS(gui);
-        }
 
         readEntryJSONInSeperateThread();
     }
@@ -666,7 +659,7 @@ public class Editor extends Screen {
     public void saveEntryJSON() {
       // Only save if any changes were made.
       if (changesMade) {
-        engine.playSound("chime");
+        sound.playSound("chime");
         numImages = 0;
         //JSONObject json = new JSONObject();
         JSONArray array = new JSONArray();
@@ -1057,7 +1050,6 @@ public class Editor extends Screen {
         // The upper bar expand down animation when the screen loads.
         if (upperbarExpand > 0.001) {
             engine.power.setAwake();
-            tempDisableERS();
             switch (engine.power.getPowerMode()) {
               case HIGH:
               upperbarExpand *= 0.8;

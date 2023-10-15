@@ -11,7 +11,7 @@ public class Updater extends Screen {
   public Updater(Engine engine, JSONObject updateInfo) {
     super(engine);
     this.updateInfo = updateInfo;
-    engine.streamMusicWithFade(engine.APPPATH+UPDATE_MUSIC);
+    sound.streamMusicWithFade(engine.APPPATH+UPDATE_MUSIC);
     myUpperBarWeight = 70;
     try {
       updateName = updateInfo.getString("update-name");

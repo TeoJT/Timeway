@@ -130,7 +130,7 @@ public final class SpriteSystemPlaceholder {
         }
         
         // Added implements RedrawElement so that we can use sprite with ERS
-        class Sprite implements RedrawElement {
+        class Sprite {
 
             public String imgName = "";
             public String name;

@@ -82,12 +82,9 @@ class Engine {
   
 
   // Dynamic constants (changes based on things like e.g. configuration file)
-  public       int    POWER_HIGH_BATTERY_THRESHOLD = 50;
   public       PFont  DEFAULT_FONT;
   public       String DEFAULT_DIR;
   public       String DEFAULT_FONT_NAME = "Typewriter";
-  public       float  VOLUME_NORMAL = 1.;
-  public       float  VOLUME_QUIET = 0.;
   
   // EXPERIMENTAL THING STILL
   public      boolean USE_CPU_CANVAS = false;
@@ -102,18 +99,17 @@ class Engine {
   // Core stuff
   public PApplet app;
   public String APPPATH = sketchPath().replace('\\', '/')+"/";
-  public String OSName;
-  public Sound soundSystem;
-  public Console console = new Console();
-  public SharedResourcesModule sharedResources = new SharedResourcesModule();
-  public SettingsModule settings = new SettingsModule();
-  public DisplayModule display = new DisplayModule();
-  public PowerModeModule power = new PowerModeModule();
+  
+  public Console console;
+  public SharedResourcesModule sharedResources;
+  public SettingsModule settings;
+  public DisplayModule display;
+  public PowerModeModule power;
+  public AudioModule sound;
 
 
   
   
-  public HashMap<String, SoundFile> sounds;
   
 
   // Screens
@@ -340,6 +336,7 @@ class Engine {
         defaultSettings.putIfAbsent("volumeNormal", 1.0);
         defaultSettings.putIfAbsent("volumeQuiet", 0.0);
         defaultSettings.putIfAbsent("fasterImageImport", false);
+        defaultSettings.putIfAbsent("waitForGStreamerStartup", true);
     
         defaultKeybindings = new HashMap<String, Character>();
         defaultKeybindings.putIfAbsent("CONFIG_VERSION", char(1));
@@ -420,47 +417,7 @@ class Engine {
   
 
 
-  // *************************************************************
-  // *********************Begin engine code***********************
-  // *************************************************************
-  public Engine(PApplet p) {
-    // PApplet & engine init stuff
-    app = p;
-    app.background(0);
-    
-
-    // First, load the logo and loading symbol.
-    loadAsset(APPPATH+IMG_PATH+"logo.png");
-    loadAllAssets(APPPATH+IMG_PATH+"loadingmorph/");
-
-
-    // Console stuff
-    //console = new Console();
-    console.info("Hello console");
-    console.info("init: width/height set to "+str(display.WIDTH)+", "+str(display.HEIGHT));
-    
-    soundSystem = new Sound(app);
-    
-
-
-    // Run the setup method in a seperate thread
-    //Thread t = new Thread(new Runnable() {
-    //    public void run() {
-    //        setup();
-    //    }
-    //});
-    //t.start();
-
-    clearKeyBuffer();
-
-
-    console.info("init: Running setup in main thread");
-    this.setup();
-
-
-    // Init loading screen.
-    currScreen = new Startup(this);
-  }
+  
 
   
   
@@ -729,7 +686,7 @@ class Engine {
           setPowerMode(prevPowerMode);
           focusedMode = true;
           putFPSSystemIntoGraceMode();
-          setMasterVolume(VOLUME_NORMAL);
+          sound.setNormalVolume();
         }
       } else {
         if (focusedMode) {
@@ -738,9 +695,9 @@ class Engine {
           focusedMode = false;
           
           if (playWhileUnfocused)
-            setMasterVolume(VOLUME_QUIET);
+            sound.setQuietVolume();
           else
-            setMasterVolume(0.);  // Mute
+            sound.setMasterVolume(0.);  // Mute
         }
         return;
       }
@@ -1023,9 +980,9 @@ class Engine {
     // Display system
     private float displayScale = 2.0;
     public PImage errorImg;
-    private HashMap<String, PImage> systemImages;
-    public HashMap<String, PFont> fonts;
-    private HashMap<String, PShader> shaders;
+    private HashMap<String, PImage> systemImages = new HashMap<String, PImage>();;
+    public HashMap<String, PFont> fonts = new HashMap<String, PFont>();;
+    private HashMap<String, PShader> shaders = new HashMap<String, PShader>();;
     public  float WIDTH = 0, HEIGHT = 0;
     private int loadingFramesLength = 0;
     private int lastFrameMillis = 0;
@@ -1041,13 +998,9 @@ class Engine {
         displayScale = width/1500.;
         WIDTH = width/displayScale;
         HEIGHT = height/displayScale;
-    
+        console.info("init: width/height set to "+str(WIDTH)+", "+str(HEIGHT));
     
         generateErrorImg();
-        loadedContent = new HashSet<String>();
-        systemImages = new HashMap<String, PImage>();
-        fonts = new HashMap<String, PFont>();
-        shaders = new HashMap<String, PShader>();
         
         USE_CPU_CANVAS = settings.getBoolean("fasterImageImport");
         if (USE_CPU_CANVAS) {
@@ -1468,10 +1421,326 @@ class Engine {
 
 
 
-
-  public void setup() {
+  public class AudioModule {
+    private Movie streamMusic;
+    private Movie streamMusicFadeTo;
+    private float musicFadeOut = 1.;
+    public final float MUSIC_FADE_SPEED = 0.95;
+    public final float PLAY_DELAY = 0.3;
+    public HashMap<String, SoundFile> sounds;
+    private AtomicBoolean musicReady = new AtomicBoolean(true);
+    private boolean startupGStreamer = true;
+    private boolean reloadMusic = false;
+    private String reloadMusicPath = "";
+    public       float  VOLUME_NORMAL = 1.;
+    public       float  VOLUME_QUIET = 0.;
+    public boolean WAIT_FOR_GSTREAMER_START = true;
+    private Sound soundSystem;
     
-    sounds = new HashMap<String, SoundFile>();
+    public AudioModule() {
+      soundSystem = new Sound(app);
+      sounds = new HashMap<String, SoundFile>();
+      VOLUME_NORMAL = settings.getFloat("volumeNormal");
+      VOLUME_QUIET = settings.getFloat("volumeQuiet");
+      WAIT_FOR_GSTREAMER_START = settings.getBoolean("waitForGStreamerStartup");
+      setMasterVolume(VOLUME_NORMAL);
+      startupGStreamer = true;
+    }
+    
+    public void setNormalVolume() {
+      setMasterVolume(VOLUME_NORMAL);
+    }
+    
+    public void setQuietVolume() {
+      setMasterVolume(VOLUME_QUIET);
+    }
+    
+    public boolean loadingMusic() {
+      // If we want to load the intro screen faster we can skip waiting for the music to init
+      // (at the cost of the music not being present for the first few seconds of running)
+      if (!WAIT_FOR_GSTREAMER_START) return false;
+      return !musicReady.get();
+    }
+    
+    
+    public SoundFile getSound(String name) {
+      SoundFile sound = sounds.get(name);
+      if (sound == null) {
+        console.bugWarn("playSound: Sound "+name+" doesn't exist!");
+        return null;
+      } else return sound;
+    }
+  
+    public void playSound(String name) {
+      SoundFile s = getSound(name);
+      if (s != null) {
+        s.play();
+      }
+    }
+    
+    public void playSound(String name, float pitch) {
+      SoundFile s = getSound(name);
+      if (s != null) {
+        s.play(pitch);
+      }
+    }
+  
+    public void loopSound(String name) {
+      // Don't want loads of annoying loops
+      SoundFile s = getSound(name);
+      if (s != null) {
+        if (!s.isPlaying())
+          s.loop();
+      }
+    }
+  
+    public void setSoundVolume(String name, float vol) {
+      SoundFile s = getSound(name);
+      if (s != null) s.amp(vol);
+    }
+    
+    private float masterVolume = 1.;
+    public void setMasterVolume(float vol) {
+      masterVolume = vol;
+      soundSystem.volume(vol);
+    }
+  
+  
+    // Plays background music directly from the hard drive without loading it into memory, and
+    // loops the music when the end of the audio has been reached.
+    // This is useful for playing background music, but shouldn't be used for sound effects
+    // or randomly accessed sounds.
+    // This technically uses an unintended quirk of the Movie library, as passing an audio file
+    // instead of a video file still plays the file streamed from the disk.
+  
+    public void streamMusic(final String path) {
+      if (musicReady.get() == false) {
+        reloadMusic = true;
+        reloadMusicPath = path;
+        return;
+      }
+  
+      musicReady.set(false);
+      if (startupGStreamer) {
+        // Start music and don't play anything (just want it to get past the inital delay of starting gstreamer.
+        Thread t1 = new Thread(new Runnable() {
+          public void run() {
+            streamMusic = loadNewMusic(path);
+    
+            musicReady.set(true);
+          }
+        }
+        );
+        t1.start();
+        startupGStreamer = false;
+      }
+      else {
+        // Play as normal
+        Thread t1 = new Thread(new Runnable() {
+        public void run() {
+          streamMusic = loadNewMusic(path);
+  
+          if (streamMusic != null)
+            streamMusic.play();
+            musicReady.set(true);
+          }
+        }
+        );
+        t1.start();
+      }
+    }
+  
+    private Movie loadNewMusic(String path) {
+      // Doesn't seem to throw an exception or report an error is the file isn't
+      // found so let's do it ourselves.
+      File f = new File(path);
+      if (!f.exists()) {
+        console.bugWarn("loadNewMusic: "+path+" doesn't exist!");
+        return null;
+      }
+  
+      Movie newMusic = null;
+  
+      console.info("loadNewMusic: Starting "+path);
+      try {
+        newMusic = new Movie(app, path);
+      }
+      catch (Exception e) {
+        console.warn("Error while reading music: "+e.getClass().toString()+", "+e.getMessage());
+      }
+  
+      if (newMusic == null) console.bugWarn("Couldn't read music; null returned");
+  
+      //  We're creating a new sound streamer, not a movie lmao.
+      return newMusic;
+    }
+  
+    public void stopMusic() {
+      if (streamMusic != null)
+        streamMusic.stop();
+    }
+  
+    public void streamMusicWithFade(String path) {
+      if (musicReady.get() == false) {
+        reloadMusic = true;
+        reloadMusicPath = path;
+        return;
+      }
+  
+      // Temporary fix
+      if (musicFadeOut < 1.) {
+        if (streamMusicFadeTo != null) {
+          streamMusicFadeTo.stop();
+        }
+      }
+  
+      // If no music is currently playing, don't bother fading out the music, just
+      // start the music as normal.
+      if (streamMusic == null) {
+        streamMusic(path);
+        return;
+      }
+      streamMusicFadeTo = loadNewMusic(path);
+      streamMusicFadeTo.volume(0.);
+      streamMusicFadeTo.playbin.setState(org.freedesktop.gstreamer.State.READY); 
+      musicFadeOut = 0.99;
+    }
+    
+    // TODO: Doesn't work totally.
+    public void fadeAndStopMusic() {
+      if (musicFadeOut < 1.) {
+        if (streamMusicFadeTo != null) {
+          streamMusicFadeTo.stop();
+          streamMusicFadeTo = null;
+        }
+        return;
+      }
+      musicFadeOut = 0.99;
+    }
+  
+  
+    public void processSound() {
+      float n = 1.;
+      switch (power.getPowerMode()) {
+      case HIGH:
+        n = 1.;
+        break;
+      case NORMAL:
+        n = 2.;
+        break;
+      case SLEEPY:
+        n = 4.;
+        break;
+      case MINIMAL:
+        n = 60.;
+        break;
+      }
+  
+      if (musicReady.get() == true) {
+        if (reloadMusic) {
+          stopMusic();
+          streamMusic(reloadMusicPath);
+          reloadMusic = false;
+        }
+  
+        // Fade the music.
+        if (musicFadeOut < 1.) {
+          if (musicFadeOut > 0.005) {
+            // Fade the old music out
+            float vol = musicFadeOut *= pow(MUSIC_FADE_SPEED, n);
+            streamMusic.playbin.setVolume(vol*masterVolume);
+            streamMusic.playbin.getState();   
+  
+  
+            // Fade the new music in.
+            if (streamMusicFadeTo != null) {
+              streamMusicFadeTo.play();
+              streamMusicFadeTo.volume((1.-vol)*masterVolume);
+            } else 
+            console.bugWarnOnce("streamMusicFadeTo shouldn't be null here.");
+          } else {
+            stopMusic();
+            if (streamMusicFadeTo != null) streamMusic = streamMusicFadeTo;
+            musicFadeOut = 1.;
+          }
+        }
+  
+  
+  
+        if (streamMusic != null) {
+          streamMusic.volume(masterVolume);
+          if (streamMusic.available() == true) {
+            streamMusic.read();
+          }
+          float error = 0.1;
+  
+          // PERFORMANCE ISSUE: streamMusic.time()
+          
+          // If the music has finished playing, jump to beginning to play again.
+          if (streamMusic.time() >= streamMusic.duration()-error) {
+            streamMusic.jump(0.);
+            if (!streamMusic.isPlaying()) {
+              streamMusic.play();
+            }
+          }
+        }
+      }
+    }
+  }
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  // *************************************************************
+  // *********************Begin engine code***********************
+  // *************************************************************
+  public Engine(PApplet p) {
+    // PApplet & engine init stuff
+    app = p;
+    app.background(0);
+    
+    loadedContent = new HashSet<String>();
+    
+    console = new Console();
+    console.info("Hello console");
+    
+    sharedResources = new SharedResourcesModule();
+    settings = new SettingsModule();
+    display = new DisplayModule();
+    power = new PowerModeModule();
+    sound = new AudioModule();
+    
+    
+    // First, load the logo and loading symbol.
+    loadAsset(APPPATH+IMG_PATH+"logo.png");
+    loadAllAssets(APPPATH+IMG_PATH+"loadingmorph/");
+    
 
     loadEverything();
 
@@ -1495,20 +1764,16 @@ class Engine {
     }
     
     
-    
-    POWER_HIGH_BATTERY_THRESHOLD = int(settings.getFloat("lowBatteryPercent"));
     DEFAULT_FONT = display.getFont(DEFAULT_FONT_NAME);
-    VOLUME_NORMAL = settings.getFloat("volumeNormal");
-    VOLUME_QUIET = settings.getFloat("volumeQuiet");
-    setMasterVolume(VOLUME_NORMAL);
     checkDevMode();
+    
+    
+
+    clearKeyBuffer();
 
 
-
-
-    //spriteSystemPlaceholder = new SpriteSystemPlaceholder(this, APPPATH+PATH_SPRITES_ATTRIB+"gui/");
-
-    // PlaceholderReadEntryProperties p = new PlaceholderReadEntryProperties(APPPATH+"data/entry/exampleentry");
+    // Init loading screen.
+    currScreen = new Startup(this);
   }
 
   public void clearKeyBuffer() {
@@ -2780,7 +3045,7 @@ class Engine {
     } else if (ext.equals("glsl")) {
       display.shaders.put(name, app.loadShader(path));
     } else if (ext.equals("wav") || ext.equals("ogg") || ext.equals("mp3")) {
-      sounds.put(name, new SoundFile(app, path));
+      sound.sounds.put(name, new SoundFile(app, path));
     } else {
       console.warn("Unknown file type "+ext+" for file "+name+", skipping.");
     }
@@ -2846,7 +3111,7 @@ class Engine {
         return true;
       }
     }
-    if (!musicReady.get()) return true;
+    if (sound.loadingMusic()) return true;
     return false;
   }
 
@@ -3539,224 +3804,6 @@ class Engine {
     return mouseY/display.getScale();
   }
 
-  public SoundFile getSound(String name) {
-    SoundFile sound = sounds.get(name);
-    if (sound == null) {
-      console.bugWarn("playSound: Sound "+name+" doesn't exist!");
-      return null;
-    } else return sound;
-  }
-
-  public void playSound(String name) {
-    SoundFile s = getSound(name);
-    if (s != null) {
-      s.play();
-    }
-  }
-  
-  public void playSound(String name, float pitch) {
-    SoundFile s = getSound(name);
-    if (s != null) {
-      s.play(pitch);
-    }
-  }
-
-  public void loopSound(String name) {
-    // Don't want loads of annoying loops
-    SoundFile s = getSound(name);
-    if (s != null) {
-      if (!s.isPlaying())
-        s.loop();
-    }
-  }
-
-  public void setSoundVolume(String name, float vol) {
-    SoundFile s = getSound(name);
-    if (s != null) s.amp(vol);
-  }
-
-
-  public Movie streamMusic;
-  public Movie streamMusicFadeTo;
-  public float musicFadeOut = 1.;
-  public final float MUSIC_FADE_SPEED = 0.95;
-  public String musicFadeToPath = "";
-  public final float PLAY_DELAY = 0.3;
-  public AtomicBoolean musicReady = new AtomicBoolean(true);
-  public boolean reloadMusic = false;
-  public String reloadMusicPath = "";
-  
-  private float masterVolume = 1.;
-  public void setMasterVolume(float vol) {
-    masterVolume = vol;
-    soundSystem.volume(vol);
-  }
-
-
-  // Plays background music directly from the hard drive without loading it into memory, and
-  // loops the music when the end of the audio has been reached.
-  // This is useful for playing background music, but shouldn't be used for sound effects
-  // or randomly accessed sounds.
-  // This technically uses an unintended quirk of the Movie library, as passing an audio file
-  // instead of a video file still plays the file streamed from the disk.
-
-  public void streamMusic(final String path) {
-    if (musicReady.get() == false) {
-      reloadMusic = true;
-      reloadMusicPath = path;
-      return;
-    }
-
-    musicReady.set(false);
-    Thread t1 = new Thread(new Runnable() {
-      public void run() {
-        streamMusic = loadNewMusic(path);
-
-        if (streamMusic != null)
-        streamMusic.play();
-        musicReady.set(true);
-      }
-    }
-    );
-    t1.start();
-  }
-
-  private Movie loadNewMusic(String path) {
-    // Doesn't seem to throw an exception or report an error is the file isn't
-    // found so let's do it ourselves.
-    File f = new File(path);
-    if (!f.exists()) {
-      console.bugWarn("loadNewMusic: "+path+" doesn't exist!");
-      return null;
-    }
-
-    Movie newMusic = null;
-
-    console.info("loadNewMusic: Starting "+path);
-    try {
-      newMusic = new Movie(app, path);
-    }
-    catch (Exception e) {
-      console.warn("Error while reading music: "+e.getClass().toString()+", "+e.getMessage());
-    }
-
-    if (newMusic == null) console.bugWarn("Couldn't read music; null returned");
-
-    //  We're creating a new sound streamer, not a movie lmao.
-    return newMusic;
-  }
-
-  public void stopMusic() {
-    if (streamMusic != null)
-      streamMusic.stop();
-  }
-
-  public void streamMusicWithFade(String path) {
-    if (musicReady.get() == false) {
-      reloadMusic = true;
-      reloadMusicPath = path;
-      return;
-    }
-
-    // Temporary fix
-    if (musicFadeOut < 1.) {
-      if (streamMusicFadeTo != null) {
-        streamMusicFadeTo.stop();
-      }
-    }
-
-    // If no music is currently playing, don't bother fading out the music, just
-    // start the music as normal.
-    if (streamMusic == null) {
-      streamMusic(path);
-      return;
-    }
-    streamMusicFadeTo = loadNewMusic(path);
-    streamMusicFadeTo.volume(0.);
-    streamMusicFadeTo.playbin.setState(org.freedesktop.gstreamer.State.READY); 
-    musicFadeOut = 0.99;
-  }
-  
-  // TODO: Doesn't work totally.
-  public void fadeAndStopMusic() {
-    if (musicFadeOut < 1.) {
-      if (streamMusicFadeTo != null) {
-        streamMusicFadeTo.stop();
-        streamMusicFadeTo = null;
-      }
-      return;
-    }
-    musicFadeOut = 0.99;
-  }
-
-
-  public void processSound() {
-    float n = 1.;
-    switch (power.getPowerMode()) {
-    case HIGH:
-      n = 1.;
-      break;
-    case NORMAL:
-      n = 2.;
-      break;
-    case SLEEPY:
-      n = 4.;
-      break;
-    case MINIMAL:
-      n = 60.;
-      break;
-    }
-
-    if (musicReady.get() == true) {
-      if (reloadMusic) {
-        stopMusic();
-        streamMusic(reloadMusicPath);
-        reloadMusic = false;
-      }
-
-      // Fade the music.
-      if (musicFadeOut < 1.) {
-        if (musicFadeOut > 0.005) {
-          // Fade the old music out
-          float vol = musicFadeOut *= pow(MUSIC_FADE_SPEED, n);
-          streamMusic.playbin.setVolume(vol*masterVolume);
-          streamMusic.playbin.getState();   
-
-
-          // Fade the new music in.
-          if (streamMusicFadeTo != null) {
-            streamMusicFadeTo.play();
-            streamMusicFadeTo.volume((1.-vol)*masterVolume);
-          } else 
-          console.bugWarnOnce("streamMusicFadeTo shouldn't be null here.");
-        } else {
-          stopMusic();
-          if (streamMusicFadeTo != null) streamMusic = streamMusicFadeTo;
-          musicFadeOut = 1.;
-        }
-      }
-
-
-
-      if (streamMusic != null) {
-        streamMusic.volume(masterVolume);
-        if (streamMusic.available() == true) {
-          streamMusic.read();
-        }
-        float error = 0.1;
-
-        // PERFORMANCE ISSUE: streamMusic.time()
-        
-        // If the music has finished playing, jump to beginning to play again.
-        if (streamMusic.time() >= streamMusic.duration()-error) {
-          streamMusic.jump(0.);
-          if (!streamMusic.isPlaying()) {
-            streamMusic.play();
-          }
-        }
-      }
-    }
-  }
 
   //void keyPressed()
   //{
@@ -4201,7 +4248,7 @@ class Engine {
 
     power.updatePowerMode();
 
-    processSound();
+    sound.processSound();
     processCaching();
 
     // Get updates
@@ -4280,108 +4327,6 @@ class Engine {
   }
 }
 
-// Unused because only supported on Windows.
-//public interface Kernel32 extends StdCallLibrary {
-
-//    public Kernel32 INSTANCE = Native.load("Kernel32", Kernel32.class);
-
-//    /**
-//     * @see https://learn.microsoft.com/en-us/windows/win32/api/winbase/ns-winbase-system_power_status
-//     */
-//    public class SYSTEM_POWER_STATUS extends Structure {
-//        public byte ACLineStatus;
-//        public byte BatteryFlag;
-//        public byte BatteryLifePercent;
-//        public byte Reserved1;
-//        public int BatteryLifeTime;
-//        public int BatteryFullLifeTime;
-
-//        @Override
-//        protected List<String> getFieldOrder() {
-//            ArrayList<String> fields = new ArrayList<String>();
-//            fields.add("ACLineStatus");
-//            fields.add("BatteryFlag");
-//            fields.add("BatteryLifePercent");
-//            fields.add("Reserved1");
-//            fields.add("BatteryLifeTime");
-//            fields.add("BatteryFullLifeTime");
-//            return fields;
-//        }
-
-//        /**
-//         * The AC power status
-//         */
-//        public String getACLineStatusString() {
-//            switch (ACLineStatus) {
-//                case (0): return "Offline";
-//                case (1): return "Online";
-//                default: return "Unknown";
-//            }
-//        }
-
-//        /**
-//         * The battery charge status
-//         */
-//        public String getBatteryFlagString() {
-//            switch (BatteryFlag) {
-//                case (1): return "High, more than 66 percent";
-//                case (2): return "Low, less than 33 percent";
-//                case (4): return "Critical, less than five percent";
-//                case (8): return "Charging";
-//                case ((byte) 128): return "No system battery";
-//                default: return "Unknown";
-//            }
-//        }
-
-//        /**
-//         * The percentage of full battery charge remaining
-//         */
-//        public String getBatteryLifePercent() {
-//            return (BatteryLifePercent == (byte) 255) ? "Unknown" : BatteryLifePercent + "%";
-//        }
-
-//        /**
-//         * The number of seconds of battery life remaining
-//         */
-//        public String getBatteryLifeTime() {
-//            return (BatteryLifeTime == -1) ? "Unknown" : BatteryLifeTime + " seconds";
-//        }
-
-//        /**
-//         * The number of seconds of battery life when at full charge
-//         */
-//        public String getBatteryFullLifeTime() {
-//            return (BatteryFullLifeTime == -1) ? "Unknown" : BatteryFullLifeTime + " seconds";
-//        }
-
-//        @Override
-//        public String toString() {
-//            StringBuilder sb = new StringBuilder();
-//            sb.append("ACLineStatus: " + getACLineStatusString() + "\n");
-//            sb.append("Battery Flag: " + getBatteryFlagString() + "\n");
-//            sb.append("Battery Life: " + getBatteryLifePercent() + "\n");
-//            sb.append("Battery Left: " + getBatteryLifeTime() + "\n");
-//            sb.append("Battery Full: " + getBatteryFullLifeTime() + "\n");
-//            return sb.toString();
-//        }
-//    }
-
-//    /**
-//     * Fill the structure.
-//     */
-//    public int GetSystemPowerStatus(SYSTEM_POWER_STATUS result);
-//}
-
-// TODO: Remove ERS
-interface RedrawElement {
-  public float getX();
-  public float getY();
-  public int getWidth();
-  public int getHeight();
-  public boolean redraw();
-  public void setRedraw(boolean b);
-}
-
 //*******************************************
 //****************SCREEN CODE****************
 //*******************************************
@@ -4400,7 +4345,6 @@ public abstract class Screen {
   protected final int START = 1;
   protected final int END = 2;
 
-
   protected Engine engine;
   protected Engine.Console console;
   protected PApplet app;
@@ -4408,6 +4352,7 @@ public abstract class Screen {
   protected Engine.SettingsModule settings;
   protected Engine.DisplayModule display;
   protected Engine.PowerModeModule power;
+  protected Engine.AudioModule sound;
   
   protected float screenx = 0;
   protected float screeny = 0;
@@ -4423,11 +4368,6 @@ public abstract class Screen {
   protected float WIDTH = 0.;
   protected float HEIGHT = 0.;
 
-  // ERS
-  protected HashSet<RedrawElement> redrawElements = null;   // Only needed when the screen uses the efficient redraw system (ERS).
-  protected boolean ERSenabled = false;
-  protected boolean tempERS = false;
-
   public Screen(Engine engine) {
     this.engine = engine;
     this.console = engine.console;
@@ -4437,133 +4377,28 @@ public abstract class Screen {
     this.settings = engine.settings;
     this.display = engine.display;
     this.power = engine.power;
+    this.sound = engine.sound;
     
     this.WIDTH = engine.display.WIDTH;
     this.HEIGHT = engine.display.HEIGHT;
   }
 
-  // ERS
-  // Optional, enable the efficient redraw system (ERS) so that
-  // the background is redrawn in sprites only.
-  public void initERS() {
-    redrawElements = new HashSet<RedrawElement>();
-    ERSenabled = true;
-  }
-
-  // ERS
-  public void addToERS(ArrayList<SpriteSystemPlaceholder.Sprite> existingList) {
-    if (ERSenabled) {
-      for (SpriteSystemPlaceholder.Sprite s : existingList) {
-        if (!redrawElements.contains(s)) redrawElements.add(s);
-      }
-    }
-  }
-
-  public void addToERS(HashSet<SpriteSystemPlaceholder.Sprite> existingList) {
-    if (ERSenabled) {
-      for (SpriteSystemPlaceholder.Sprite s : existingList) {
-        if (!redrawElements.contains(s)) redrawElements.add(s);
-      }
-    }
-  }
-
-  // ERS
-  public void addToERS(SpriteSystemPlaceholder existingSpriteSystemList) {
-    if (ERSenabled) {
-      for (SpriteSystemPlaceholder.Sprite s : existingSpriteSystemList.sprites) {
-        if (!redrawElements.contains(s)) redrawElements.add(s);
-      }
-    }
-  }
-
-  // ERS
-  public void addToERS(SpriteSystemPlaceholder.Sprite s) {
-    if (ERSenabled)
-      if (!redrawElements.contains(s)) redrawElements.add(s);
-  }
-
-  // ERS
-  // While in screen transitions, we need to redraw the whole screen.
-  private boolean ERSenabled() { 
-    return !engine.transitionScreens && ERSenabled;
-  }
-
-  // ERS
-  public void redraw() {
-    // Temporarily disable ERS, call display, and then enable it again. If it's
-    // even enabled in the first place.
-    boolean temp = ERSenabled;
-    ERSenabled = false;
-    display();
-    ERSenabled = temp;
-  }
-
-  // ERS
-  public void tempDisableERS() {
-    tempERS = ERSenabled;
-    ERSenabled = false;
-  }
-
-  // Kinda ERS
-  protected void redrawInArea(float x, float y, float wi, float hi, color c) {
-    // Stroke lines can increase actual rendered area, so we need to account for that.
-    float EXTRA_PADDING = 2.;
-    float EXTRA_LEFT = 10.;// Because blinking cursor
-    app.noStroke();
-    // In ERS mode
-    if (ERSenabled()) {
-      // Only clear what's necessary.
-      for (RedrawElement s : redrawElements) {
-        //println(s.redraw()); 
-        if (s.redraw()) {
-          // Get positions
-          float sx = s.getX()-EXTRA_PADDING;
-          float sy = s.getY()-EXTRA_PADDING;
-          float swi  = float(s.getWidth())+EXTRA_PADDING*2+EXTRA_LEFT;
-          float shi  = float(s.getHeight())+EXTRA_PADDING*2;
-
-          // Only bother drawing any rectangles if within the render zone.
-          //println((sx+swi > x && sx < x+wi && sy+shi > y && sy < y+hi));
-          //println((sx+swi));
-          //println((sx < x+wi));
-          //println((sy+shi > y));
-          //println((sy < y+hi));
-          if (sx+swi > x && sx < x+wi && sy+shi > y && sy < y+hi) {
-            // If the right edge of the element exceeds the rectangle
-            // Limit the sprite's render width
-            if (sx+swi > x+wi) swi = (x+wi)-sx;
-
-            // If the bottom of the element exceeds the bottom of the rectangle
-            // Limit the sprite's render height
-            if (sy+shi > y+hi) shi = (y+hi)-sy;
-
-            // Finally, fill clear the area.
-            app.fill(c);
-            app.rect(sx, sy, swi, shi);
-          }
-        }
-      }
-    }
-
-    // Otherwise, just draw the whole thing. 
-    // This is the standard non-ERS action!
-    else {
-      app.fill(c);
-      app.rect(x, y, wi, hi);
-    }
-  }
-
-
   protected void upperBar() {
-    redrawInArea(0, 0, WIDTH, myUpperBarWeight, myUpperBarColor);
+    fill(myUpperBarColor);
+    noStroke();
+    rect(0, 0, WIDTH, myUpperBarWeight);
   }
 
   protected void lowerBar() {
-    redrawInArea(0, HEIGHT-myLowerBarWeight, WIDTH, myLowerBarWeight, myLowerBarColor);
+    fill(myLowerBarColor);
+    noStroke();
+    rect(0, HEIGHT-myLowerBarWeight, WIDTH, myLowerBarWeight);
   }
 
   protected void backg() {
-    redrawInArea(0, myUpperBarWeight, WIDTH, HEIGHT-myUpperBarWeight-myLowerBarWeight, myBackgroundColor);
+    fill(myBackgroundColor);
+    noStroke();
+    rect(0, myUpperBarWeight, WIDTH, HEIGHT-myUpperBarWeight-myLowerBarWeight);
   }
 
   public void startupAnimation() {
@@ -4630,31 +4465,23 @@ public abstract class Screen {
   public void display() {
     this.WIDTH = engine.display.WIDTH;
     this.HEIGHT = engine.display.HEIGHT;
-    if (engine.power.powerMode != PowerMode.MINIMAL) {
+    if (power.powerMode != PowerMode.MINIMAL) {
       app.pushMatrix();
+      //float scl = display.getScale();
       app.translate(screenx, screeny);
-      app.scale(engine.display.getScale());
+      app.scale(display.getScale());
       this.backg();
-
-      // Reset the redraw property on sprites if ERS
-      if (ERSenabled) {
-        for (RedrawElement s : redrawElements) {
-          s.setRedraw(false);
-        }
-      }
 
       this.content();
       this.upperBar();
       this.lowerBar();
       app.popMatrix();
-
-      if (tempERS && !ERSenabled) ERSenabled = true;
     }
   }
 }
 
 public enum PowerMode {
-  HIGH, 
+    HIGH, 
     NORMAL, 
     SLEEPY, 
     MINIMAL

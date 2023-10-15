@@ -1111,7 +1111,7 @@ public class PixelRealm extends Screen {
     img_tree = new PImage[1];
     img_tree[0]  = display.systemImages.get("tree");
     img_sky_1    = display.systemImages.get("sky_1");
-    portalSound  = engine.getSound("portal");
+    portalSound  = sound.getSound("portal");
     if (portalSound != null) portalSound.loop();
     REALM_GRASS_DEFAULT = img_grass;
     REALM_MUSIC_DEFAULT = null;
@@ -1713,13 +1713,13 @@ public class PixelRealm extends Screen {
       File f = new File(engine.currentDir+REALM_BGM+ext);
       if (f.exists()) {
         found = true;
-        engine.streamMusicWithFade(engine.currentDir+REALM_BGM+ext);
+        sound.streamMusicWithFade(engine.currentDir+REALM_BGM+ext);
       }
     }
 
     // If none found use default bgm
     if (!found)
-      engine.streamMusicWithFade(engine.APPPATH+REALM_BGM_DEFAULT);
+      sound.streamMusicWithFade(engine.APPPATH+REALM_BGM_DEFAULT);
     loadedMusic = true;
     //}
 
@@ -2046,7 +2046,7 @@ public class PixelRealm extends Screen {
       // will think we're still typing and won't allow us to move.
       engine.inputPromptShown = false;
       if (menuShown)
-        engine.playSound("menu_appear");
+        sound.playSound("menu_appear");
     }
     
     // Allow the command prompt to be shown only if the menu isn't displayed.
@@ -2119,7 +2119,7 @@ public class PixelRealm extends Screen {
             bob += 1.;
             if (bob-HALF_PI > TWO_PI-HALF_PI) {
               bob = 0.;
-              engine.playSound("step", random(0.9, 1.2));
+              sound.playSound("step", random(0.9, 1.2));
             }
           }
         }
@@ -2150,7 +2150,7 @@ public class PixelRealm extends Screen {
         if (engine.keyAction("jump") && onGround() && jumpTimeout < 1) {
           yvel = JUMP_STRENGTH;
           ypos -= 10;
-          engine.playSound("jump");
+          sound.playSound("jump");
           jumpTimeout = 10;
         }
 
@@ -2190,7 +2190,7 @@ public class PixelRealm extends Screen {
 
     if (engine.keyDown(BACKSPACE)) {
       endRealm();
-      engine.fadeAndStopMusic();
+      sound.fadeAndStopMusic();
       requestScreen(new Explorer(engine, engine.currentDir));
     }
 
@@ -2628,13 +2628,13 @@ public class PixelRealm extends Screen {
         if (inventorySelectedItem.prev != null) {
           inventorySelectedItem.carrying.x = -999999;
           inventorySelectedItem = inventorySelectedItem.prev;
-          engine.playSound("pickup");
+          sound.playSound("pickup");
         }
       } else if (engine.keyActionOnce("inventorySelectRight")) {
         if (inventorySelectedItem.next != null) {
           inventorySelectedItem.carrying.x = -999999;
           inventorySelectedItem = inventorySelectedItem.next;
-          engine.playSound("pickup");
+          sound.playSound("pickup");
         }
       }
       inventorySelectedItem.carrying.visible = true;
@@ -2674,16 +2674,16 @@ public class PixelRealm extends Screen {
           currentTool = TOOL_NORMAL;
           menuShown = false;
           dropInventory();
-          engine.playSound("menu_select");
+          sound.playSound("menu_select");
         }
         if (engine.button("grabber_1", "grabber_tool_128", "Grabber")) {
           currentTool = TOOL_GRABBER_NORMAL;
           menuShown = false;
-          engine.playSound("menu_select");
+          sound.playSound("menu_select");
         }
         if (engine.button("creator_1", "new_entry_128", "Creator")) {
           currentTool = TOOL_CREATOR;
-          engine.playSound("menu_select");
+          sound.playSound("menu_select");
           menuID = MENU_CREATOR;
         }
         if (engine.button("cuber_1", "cuber_tool_128", "Cuber")) {
@@ -2703,7 +2703,7 @@ public class PixelRealm extends Screen {
         app.noStroke();
         app.rect(WIDTH/2-promptWi/2, HEIGHT/2-promptHi/2, promptWi, promptHi);
         if (engine.button("newentry", "new_entry_128", "New entry")) {
-          engine.playSound("menu_select");
+          sound.playSound("menu_select");
 
           Runnable r = new Runnable() {
             public void run() {
@@ -2735,7 +2735,7 @@ public class PixelRealm extends Screen {
               //engine.currScreen = new PixelRealm(engine, engine.currentDir, engine.currentDir);
               //endRealm();
               menuShown = false;
-              engine.playSound("menu_select");
+              sound.playSound("menu_select");
             }
           };
 
@@ -2746,7 +2746,7 @@ public class PixelRealm extends Screen {
         }
 
         if (engine.button("newfolder", "new_folder_128", "New folder")) {
-          engine.playSound("menu_select");
+          sound.playSound("menu_select");
 
           Runnable r = new Runnable() {
             public void run() {
@@ -2761,7 +2761,7 @@ public class PixelRealm extends Screen {
               pickupItem(foldername);
 
               menuShown = false;
-              engine.playSound("menu_select");
+              sound.playSound("menu_select");
             }
           };
 
@@ -2770,7 +2770,7 @@ public class PixelRealm extends Screen {
         }
         
         if (engine.button("newshortcut", "create_shortcut_128", "New shortcut")) {
-          engine.playSound("menu_select");
+          sound.playSound("menu_select");
           String shortcutPath = createShortcut(engine.currentDir);
           refreshRealm();
           pickupItem(shortcutPath);
@@ -2949,11 +2949,11 @@ public class PixelRealm extends Screen {
         if (coins[i] != null) {
           coins[i].img = img_coin[((int(frameCount*n)/4))%l];
           if (coins[i].touchingPlayer()) {
-            engine.playSound("coin");
+            sound.playSound("coin");
             coins[i].destroy();
             coins[i] = null;
             console.log("Coins: "+str(++collectedCoins));
-            if (collectedCoins == 100) engine.playSound("oneup");
+            if (collectedCoins == 100) sound.playSound("oneup");
           }
         }
       }
@@ -2983,7 +2983,7 @@ public class PixelRealm extends Screen {
               if (portalCoolDown <= 0) {
                 // For now just create an entirely new screen object lmao.
                 endRealm();
-                engine.playSound("shift");
+                sound.playSound("shift");
 
                 // Go into the new world
                 // If it's a shortcut, go to where the shortcut points to.
@@ -3030,7 +3030,7 @@ public class PixelRealm extends Screen {
 
           pickupItem(p);
 
-          engine.playSound("pickup");
+          sound.playSound("pickup");
         }
       }
     }
@@ -3043,7 +3043,7 @@ public class PixelRealm extends Screen {
         String itemPath = inventorySelectedItem.carrying.dir;
 
         inventorySelectedItem.remove();
-        engine.playSound("plonk");
+        sound.playSound("plonk");
 
         // If not null here, inventory's not empty and we can plonk down next item.
         if (inventorySelectedItem != null) {

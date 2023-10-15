@@ -12,10 +12,10 @@ public class Startup extends Screen {
         
         File f = new File(engine.DEFAULT_DIR+PixelRealm.REALM_BGM);
         if (f.exists())
-          engine.streamMusic(engine.DEFAULT_DIR+PixelRealm.REALM_BGM);
+          sound.streamMusic(engine.DEFAULT_DIR+PixelRealm.REALM_BGM);
         else
-          engine.streamMusic(engine.APPPATH+PixelRealm.REALM_BGM_DEFAULT);
-        engine.playSound("intro");
+          sound.streamMusic(engine.APPPATH+PixelRealm.REALM_BGM_DEFAULT);
+        sound.playSound("intro");
     }
 
     public void upperBar() {
@@ -80,8 +80,6 @@ public class Startup extends Screen {
               // Setting this to true will tell the engine to give a quick fps test to the first
               // screen we go into so that we can smoothly go into a suitable framerate.
               engine.initialScreen = true;
-              
-              engine.stopMusic();
               
               // This is the part where we exit the welcome screen and go to our main screen.
               requestScreen(new PixelRealm(engine, dir));
