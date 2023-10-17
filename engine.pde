@@ -25,6 +25,7 @@ import java.nio.channels.ReadableByteChannel;
 import java.awt.datatransfer.StringSelection;
 import java.awt.Toolkit;
 import java.awt.datatransfer.Clipboard;
+import gifAnimation.*;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -76,8 +77,7 @@ class Engine {
   public static final int    KEY_HOLD_TIME       = 30; // 30 frames
   public static final int    POWER_CHECK_INTERVAL = 5000;  // Currently unused  TODO: remember to change this comment
   public static final int    PRESSED_KEY_ARRAY_LENGTH = 10;
-  public static final String CACHE_COMPATIBILITY_VERSION = "0.1";
-  public static final int    CACHE_SCALE_DOWN = 128;
+  public static final String CACHE_COMPATIBILITY_VERSION = "0.3";
   public static final int    MAX_CPU_CANVAS = 8;
   
 
@@ -106,6 +106,9 @@ class Engine {
   public DisplayModule display;
   public PowerModeModule power;
   public AudioModule sound;
+  public FilemanagerModule file;
+  
+  PGraphics CPU = createGraphics(512, 512);
 
 
   
@@ -337,6 +340,7 @@ class Engine {
         defaultSettings.putIfAbsent("volumeQuiet", 0.0);
         defaultSettings.putIfAbsent("fasterImageImport", false);
         defaultSettings.putIfAbsent("waitForGStreamerStartup", true);
+        defaultSettings.putIfAbsent("enableExperimentalGifs", false);
     
         defaultKeybindings = new HashMap<String, Character>();
         defaultKeybindings.putIfAbsent("CONFIG_VERSION", char(1));
@@ -1261,7 +1265,7 @@ class Engine {
       if (image == null) {
         img(errorImg, x-errorImg.width/2, y-errorImg.height/2, w, h);
       } else {
-        img(image, x-image.width/2, y-image.height/2, w, h);
+        img(image, x-w/2, y-h/2, w, h);
       }
     }
   
@@ -1715,7 +1719,289 @@ class Engine {
   
   
   
-  
+  public class FilemanagerModule {
+    public FilemanagerModule() {
+      
+    }
+    
+        // NOTE: VERY INACCURATE
+    private int countApproxGifFrames(FileInputStream inputStream) throws IOException {
+            int count = 0;
+    
+            // Read GIF header
+            byte[] header = new byte[6];
+            inputStream.read(header);
+            
+            int i_1 = 0;
+    
+            while (true) {
+                // Read the block type
+                int blockType = inputStream.read();
+    
+                if (blockType == 0x3B) {
+                    // Reached the end of the GIF file
+                    break;
+                } else if (blockType == 0x21) {
+                    // Extension block
+                    int extensionType = inputStream.read();
+                    if (extensionType == 0xF9) {
+                        count++;
+                    } else {
+                        // Skip other extension blocks
+                        while (true) {
+                            int blockSize = inputStream.read();
+                            if (blockSize == 0) {
+                                break; // Block terminator found
+                            }
+                            inputStream.skip(blockSize); // Skip this block
+                        }
+                    }
+                } else {
+                    // Image Data block
+                    int i_2 = 0;
+                    while (true) {
+                        int blockSize = inputStream.read();
+                        if (blockSize == 0) {
+                            break; // Block terminator found
+                        }
+                        inputStream.skip(blockSize); // Skip image data sub-blocks
+                        
+                        i_2++;
+                        if (i_2 > 5000) {
+                          break;
+                        }
+                    }
+                    //count++;
+                }
+                
+                
+                i_1++;
+                if (i_1 > 5900) {
+                  break;
+                }
+            }
+    
+            return count*2;
+        }
+        
+    
+    private int[] extractGifDimensions(FileInputStream inputStream) throws IOException {
+            int[] dimensions = new int[2];
+    
+            // Read GIF header and Logical Screen Descriptor
+            byte[] headerAndLSD = new byte[13];
+            inputStream.read(headerAndLSD);
+    
+            // Extract width and height from the Logical Screen Descriptor
+            dimensions[0] = (headerAndLSD[6] & 0xFF) | ((headerAndLSD[7] & 0xFF) << 8);
+            dimensions[1] = (headerAndLSD[8] & 0xFF) | ((headerAndLSD[9] & 0xFF) << 8);
+    
+            return dimensions;
+        }
+    
+    // WARNING: may provide VERY inaccurate results. This is largely an approximation.
+    // It should mainly be used to check if it's possible to fit it in memory, because it will
+    // most likely over-estimate.
+    // Please note that it may also take a while to get the size depending on the file size.
+    // Therefore, you should run this in a seperate thread.
+    public int getGifUncompressedSize(String filePath) {
+      FileInputStream inputStream;
+      try {
+          inputStream = new FileInputStream(filePath);
+          int numFrames = countApproxGifFrames(inputStream);
+          
+          inputStream.close();
+          inputStream = new FileInputStream(filePath);
+          int[] widthheight = extractGifDimensions(inputStream);
+          int wi = widthheight[0];
+          int hi = widthheight[1];
+          return wi*hi*4*numFrames;
+      }
+      catch (IOException e) {
+          return Integer.MAX_VALUE;
+      }
+      catch (RuntimeException e) {
+        return Integer.MAX_VALUE;
+      }
+    }
+    
+    public int[] getPNGImageDimensions(String filePath) throws IOException {
+        File file = new File(filePath);
+        byte[] data = new byte[24]; // PNG header size is 24 bytes
+        FileInputStream stream;
+        try {
+            stream = new FileInputStream(file);
+            stream.read(data);
+            stream.close();
+        }
+        catch (IOException e) {
+          // idk
+          int[] someValue = {0, 0};
+          return someValue;
+        }
+
+        // Check if the file is a PNG image
+        if (isPNG(data)) {
+            int width = getIntFromBytes(data, 16);
+            int height = getIntFromBytes(data, 20);
+            int[] dimensions = { width, height };
+            return dimensions;
+        } else {
+            throw new IOException("Not a valid PNG image");
+        }
+    }
+
+    private boolean isPNG(byte[] data) {
+        // Check PNG signature (first 8 bytes)
+        return data.length >= 8 &&
+                data[0] == (byte) 0x89 &&
+                data[1] == (byte) 0x50 &&
+                data[2] == (byte) 0x4E &&
+                data[3] == (byte) 0x47 &&
+                data[4] == (byte) 0x0D &&
+                data[5] == (byte) 0x0A &&
+                data[6] == (byte) 0x1A &&
+                data[7] == (byte) 0x0A;
+    }
+
+    private int getIntFromBytes(byte[] data, int offset) {
+        return ((data[offset] & 0xFF) << 24) |
+               ((data[offset + 1] & 0xFF) << 16) |
+               ((data[offset + 2] & 0xFF) << 8) |
+               (data[offset + 3] & 0xFF);
+    }
+
+    
+    public int getPNGUncompressedSize(String path) {
+      try {
+        int[] widthheight = getPNGImageDimensions(path);
+        int wi = widthheight[0];
+        int hi = widthheight[1];
+        return wi*hi*4;
+      }
+      catch (IOException e) {
+        return Integer.MAX_VALUE;
+      }
+    }
+    
+    private int readUnsignedShort(InputStream inputStream) throws IOException {
+        int byte1 = inputStream.read();
+        int byte2 = inputStream.read();
+
+        if ((byte1 | byte2) < 0) {
+            throw new IOException("End of stream reached");
+        }
+
+        return (byte1 << 8) + byte2;
+    }
+
+
+
+private int[] getJPEGImageDimensions(String filePath) throws IOException {
+        File file = new File(filePath);
+        FileInputStream stream;
+            stream = new FileInputStream(file);
+            byte[] data = new byte[2];
+            stream.read(data);
+            if (isJPEG(data)) {
+                // Skip to the SOF0 marker (0xFFC0)
+                while (true) {
+                    int marker = readUnsignedShort(stream);
+                    int length = readUnsignedShort(stream);
+                    if (marker >= 0xFFC0 && marker <= 0xFFCF && marker != 0xFFC4 && marker != 0xFFC8) {
+                        // Found SOF marker, read dimensions
+                        stream.skip(1); // Skip precision byte
+                        int hi = readUnsignedShort(stream);
+                        int wi = readUnsignedShort(stream);
+                        int[] dimensions = {wi, hi};
+                        stream.close();
+                        return dimensions;
+                    } else {
+                        // Skip marker segment
+                        stream.skip(length - 2);
+                    }
+                }
+            } else {
+              stream.close();
+                throw new IOException("Not a valid JPEG image");
+            }
+    }
+
+    private boolean isJPEG(byte[] data) {
+        return data.length >= 2 &&
+                data[0] == (byte) 0xFF &&
+                data[1] == (byte) 0xD8;
+    }
+
+    public int getJPEGUncompressedSize(String path) {
+      try {
+        int[] widthheight = getJPEGImageDimensions(path);
+        int wi = widthheight[0];
+        int hi = widthheight[1];
+        return wi*hi*4;
+      }
+      catch (IOException e) {
+        return Integer.MAX_VALUE;
+      }
+    }
+    
+    private int[] getBmpDimensions(String filePath) throws IOException {
+        int[] dimensions = new int[2];
+        FileInputStream fileInputStream;
+        try {
+            fileInputStream = new FileInputStream(filePath);
+            // BMP header contains width and height information at specific offsets
+            fileInputStream.skip(18); // Skip to width bytes
+            dimensions[0] = readLittleEndianInt(fileInputStream); // Read width (little-endian)
+            dimensions[1] = readLittleEndianInt(fileInputStream); // Read height (little-endian)
+            return dimensions;
+        }
+        catch (IOException e) {
+          // idk
+          int[] someValue = {0, 0};
+          return someValue;
+        }
+    }
+
+    private int readLittleEndianInt(FileInputStream inputStream) throws IOException {
+        byte[] buffer = new byte[4];
+        inputStream.read(buffer);
+        // Convert little-endian bytes to an integer
+        return (buffer[3] & 0xFF) << 24 | (buffer[2] & 0xFF) << 16 | (buffer[1] & 0xFF) << 8 | (buffer[0] & 0xFF);
+    }
+    
+    public int getBMPUncompressedSize(String path) {
+      try {
+          int[] dimensions = getBmpDimensions(path);
+          int wi = dimensions[0];
+          int hi = dimensions[1];
+          return wi*hi*4;
+      } catch (IOException e) {
+          return Integer.MAX_VALUE;
+      }
+    }
+    
+    // WARNING: might take time to calculate. You should run this in a seperate thread.
+    public int getImageUncompressedSize(String path) {
+      String ext = getExt(path);
+      if (ext.equals("png")) {
+        return getPNGUncompressedSize(path);
+      }
+      else if (ext.equals("jpg") || ext.equals("jpeg")) {
+        return getJPEGUncompressedSize(path);
+      }
+      else if (ext.equals("gif")) {
+        return getGifUncompressedSize(path);
+      }
+      else if (ext.equals("bmp")) {
+        return getBMPUncompressedSize(path);
+      }
+      else {
+        console.bugWarn("getImageUncompressedSize: file format ("+ext+" is not an image format.");
+        return Integer.MAX_VALUE;
+      }
+    }
+  }
   
   // *************************************************************
   // *********************Begin engine code***********************
@@ -1725,11 +2011,14 @@ class Engine {
     app = p;
     app.background(0);
     
+    CPU.noSmooth();
+    
     loadedContent = new HashSet<String>();
     
     console = new Console();
     console.info("Hello console");
     
+    file = new FilemanagerModule();
     sharedResources = new SharedResourcesModule();
     settings = new SettingsModule();
     display = new DisplayModule();
@@ -2397,13 +2686,13 @@ class Engine {
     if (!benchmark) {
       long nanoCapture = System.nanoTime();
       if (lastTimestampName == null) {
-        String out = name+" timestamp captured.";
-        if (console != null) console.info(out);
-        else println(out);
+        //String out = name+" timestamp captured.";
+        //if (console != null) console.info(out);
+        //else println(out);
       } else {
-        String out = lastTimestampName+" - "+name+": "+str((nanoCapture-lastTimestamp)/1000)+"microseconds";
-        if (console != null) console.info(out);
-        else println(out);
+        //String out = lastTimestampName+" - "+name+": "+str((nanoCapture-lastTimestamp)/1000)+"microseconds";
+        //if (console != null) console.info(out);
+        //else println(out);
       }
       lastTimestampName = name;
       lastTimestamp = nanoCapture;
@@ -3168,9 +3457,13 @@ class Engine {
     // Only when the button is actually clicked.
     return hover && mouseEventClick;
   }
+  
+  public void loadingIcon(float x, float y, float widthheight) {
+    display.imgCentre("load-"+appendZeros(counter(display.loadingFramesLength, 3), 4), x, y, widthheight, widthheight);
+  }
 
   public void loadingIcon(float x, float y) {
-    display.imgCentre("load-"+appendZeros(counter(display.loadingFramesLength, 3), 4), x, y);
+    loadingIcon(x, y, 128);
   }
 
   public float smoothLikeButter(float i) {
@@ -3268,7 +3561,14 @@ class Engine {
       if (!f.exists()) {
         createNewInfoFile = true;
       } else {
-        cacheInfoJSON = loadJSONObject(APPPATH+CACHE_INFO);
+        try {
+          cacheInfoJSON = loadJSONObject(APPPATH+CACHE_INFO);
+        }
+        catch (RuntimeException e) {
+          console.warn("Cache file is curroupted. Cache will be erased and regenerated.");
+          createNewInfoFile = true;
+          return;
+        }
         // Make sure this cached file is compatible.
         // We add a question mark in the name so that a file can't possibly be named the same in the json file
         String comp_ver = cacheInfoJSON.getString("?cache_compatibility_version", "");
@@ -3299,6 +3599,25 @@ class Engine {
   public void setCachingShrink(int x, int y) {
     cacheShrinkX = x;
     cacheShrinkY = y;
+  }
+  
+  // Gets the size of the cache if available, otherwise returns the original size.
+  public int getCacheSize(String originalPath) {
+    openCacheInfo();
+    JSONObject cachedItem = cacheInfoJSON.getJSONObject(originalPath);
+    if (cachedItem != null) {
+      return cachedItem.getInt("size", 0);
+    }
+    else {
+      String ext = getExt(originalPath);
+      if (ext.equals("bmp") || ext.equals("png") || ext.equals("jpeg") || ext.equals("jpg") || ext.equals("gif")) {
+        return file.getImageUncompressedSize(originalPath);
+      }
+      else {
+        console.bugWarn("getCacheSize: unsupported file format "+ext+", returning file size.");
+        return (int)((new File(originalPath)).length());
+      }
+    }
   }
 
   // Returns image if an image is found, returns null if cache for that image doesn't exist.
@@ -3384,22 +3703,41 @@ class Engine {
 
     // Should close automatically by the cache manager so no need to save or anything.
   }
+  
+  
 
   public void scaleDown(PImage image, int scale) {
     console.info("scaleDown: "+str(image.width)+","+str(image.height)+",scale"+str(scale));
     if ((image.width > scale || image.height > scale)) {
       // If the image is vertical, resize to 0x512
-      if (image.height > image.width) image.resize(0, scale);
+      if (image.height > image.width) {
+        image.resize(0, scale);
+      }
       // If the image is horizontal, resize to 512x0
-      else if (image.width > image.height) image.resize(scale, 0);
+      else if (image.width > image.height) {
+        image.resize(scale, 0);
+      }
       // Eh just scale it horizontally by default.
       else image.resize(scale, 0);
     }
   }
+  
+  public PImage experimentalScaleDown(PImage image) {
+    CPU.beginDraw();
+    CPU.clear();
+    CPU.image(image, 0, 0, CPU.width, CPU.height);
+    CPU.endDraw();
+    PImage p = new PImage(CPU.getImage());
+    return p;
+  }
 
 
-  public String saveCacheImage(String originalPath, final PImage image) {
+  public String saveCacheImage(String originalPath, PImage image) {
     console.info("saveCacheImage: "+originalPath);
+    if (image instanceof Gif) {
+      console.warn("Caching gifs not supported yet!");
+      return originalPath;
+    }
     openCacheInfo();
 
     JSONObject properties = new JSONObject();
@@ -3416,7 +3754,8 @@ class Engine {
 
     // TODO: cacheShrinkX and cacheShrinkY are not actually needed, we just need a true/false boolean.
     if (resizeByX != 0 || resizeByY != 0) 
-      scaleDown(image, CACHE_SCALE_DOWN);
+      //image = experimentalScaleDown(image);
+      scaleDown(image, max(resizeByX, resizeByY));
 
     console.info("saveCacheImage: saving...");
     image.save(savePath);
@@ -3424,9 +3763,18 @@ class Engine {
 
     properties.setString("actual", cachePath);
     properties.setInt("checksum", calculateChecksum(image));
+    
     File f = new File(originalPath);
-    if (f.exists()) properties.setString("lastModified", getLastModified(originalPath));
-    else properties.setString("lastModified", "");
+    if (f.exists()) {
+      properties.setString("lastModified", getLastModified(originalPath));
+      properties.setInt("size", image.width*image.height*4);
+    }
+    else {
+      properties.setString("lastModified", "");
+      
+      // TODO: Gif support.
+      properties.setInt("size", image.width*image.height*4);
+    }
 
     cacheInfoJSON.setJSONObject(originalPath, properties);
     console.info("saveCacheImage: Done creating cache");
@@ -3450,6 +3798,7 @@ class Engine {
     properties.setString("actual", cachePath);
     properties.setInt("checksum", calculateChecksum(img));
     properties.setString("lastModified", "");
+    properties.setInt("size", 0);
     cacheInfoJSON.setJSONObject(originalPath, properties);
 
 
@@ -4353,6 +4702,7 @@ public abstract class Screen {
   protected Engine.DisplayModule display;
   protected Engine.PowerModeModule power;
   protected Engine.AudioModule sound;
+  protected Engine.FilemanagerModule file;
   
   protected float screenx = 0;
   protected float screeny = 0;
@@ -4378,6 +4728,7 @@ public abstract class Screen {
     this.display = engine.display;
     this.power = engine.power;
     this.sound = engine.sound;
+    this.file = engine.file;
     
     this.WIDTH = engine.display.WIDTH;
     this.HEIGHT = engine.display.HEIGHT;

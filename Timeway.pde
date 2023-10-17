@@ -32,7 +32,7 @@ String sketch_ERR_LOG_PATH;
 // Set to true if you want to show the error log like in an exported build
 // rather than throw the error to processing (can be useful if you need more
 // error info)
-final boolean sketch_FORCE_CRASH_SCREEN = true;
+final boolean sketch_FORCE_CRASH_SCREEN = false;
 
 // TODO: Sorry ill put that in the engine code later.
 
@@ -52,23 +52,12 @@ void settings() {
   }
 }
 
-void sketch_openErrorLog(Exception e) {
-  StringWriter sw = new StringWriter();
-  PrintWriter pw = new PrintWriter(sw);
-  e.printStackTrace(pw);
-  String sStackTrace = sw.toString();
-  
-  String errMsg = 
-  "Sorry! Timeway crashed :(\n"+
-  "Please provide Neo_2222 with this error log (only if it doesn't contain any personal information you don't want shared), thanks <3\n"+
-  e.getClass().toString()+"\nMessage: \""+
-  e.getMessage()+"\"\nStack trace:\n"+
-  sStackTrace;
+void sketch_openErrorLog(String mssg) {
   
   // Write the file
   try {
     FileWriter myWriter = new FileWriter(sketch_ERR_LOG_PATH);
-    myWriter.write(errMsg);
+    myWriter.write(mssg);
     myWriter.close();
   } catch (IOException e2) {}
   
@@ -83,6 +72,22 @@ void sketch_openErrorLog(Exception e) {
     catch (IOException ex) {
     }
   }
+}
+
+void sketch_openErrorLog(Exception e) {
+  StringWriter sw = new StringWriter();
+  PrintWriter pw = new PrintWriter(sw);
+  e.printStackTrace(pw);
+  String sStackTrace = sw.toString();
+  
+  String errMsg = 
+  "Sorry! Timeway crashed :(\n"+
+  "Please provide Neo_2222 with this error log (only if it doesn't contain any personal information you don't want shared), thanks <3\n"+
+  e.getClass().toString()+"\nMessage: \""+
+  e.getMessage()+"\"\nStack trace:\n"+
+  sStackTrace;
+  
+  sketch_openErrorLog(errMsg);
 }
 
 
@@ -112,6 +117,13 @@ void draw() {
         
         try {
           timewayEngine.engine();
+        }
+        catch (java.lang.OutOfMemoryError outofmem) {
+          sketch_openErrorLog(
+          "Sorry! Timeway has run out of memory! D:\n"+
+          "You probably tried to load up too many files from a folder..."
+          );
+          exit();
         }
         catch (Exception e) {
           // Open a text document containing the error message
@@ -151,6 +163,7 @@ void keyReleased() {
     //timewayEngine.lastKeyPressed = 0;
     timewayEngine.releaseKeyboardAction();
   }
+  
 }
 
 void mouseWheel(MouseEvent event) {

@@ -1,4 +1,4 @@
-import java.util.concurrent.atomic.AtomicBoolean; //<>// //<>// //<>// //<>// //<>//
+import java.util.concurrent.atomic.AtomicBoolean; //<>// //<>// //<>// //<>// //<>// //<>//
 import javax.sound.midi.*;
 import java.io.BufferedInputStream;
 import processing.sound.*;
@@ -24,7 +24,9 @@ public class PixelRealm extends Screen {
   final static String QUICK_WARP_DATASET = "quick_warp_dataset";  // The name of this really doesn't matter as long as it's consistant when quick warping
   final static String QUICK_WARP_ID = "quick_warp_id";
   final static float PSHAPE_SIZE_FACTOR = 100.;
-
+  final static int MAX_CACHE_SIZE = 512;
+  final static float BACKWARD_COMPAT_SCALE = 256./(float)MAX_CACHE_SIZE;
+  final static int MAX_MEM_USAGE = 1024*1024*1024;   // 1GB
 
   public float height = 0.;
 
@@ -72,6 +74,8 @@ public class PixelRealm extends Screen {
   public int jumpTimeout = 0;
   public boolean primaryAction = false;
   public boolean secondaryAction = false;
+  
+  boolean showExperimentalGifs = false;
 
   public HashSet<FileObject> inventoryContents;
 
@@ -154,8 +158,17 @@ public class PixelRealm extends Screen {
   final boolean BIG_HITBOX = true;
   final boolean SMALL_HITBOX = false;
   
+  public AtomicInteger memUsage = new AtomicInteger(0);
+  public boolean memExceeded = false;
+  public boolean showMemUsage = false;
 
   HashSet<String> autogenStuff;
+  
+  int loading = 0;
+  int MAX_LOADER_THREADS;
+  AtomicInteger loadThreadsUsed = new AtomicInteger(0);
+  ArrayList<AtomicBoolean> loadQueue = new ArrayList<AtomicBoolean>();
+  
 
   // Our custom stack class that allows for emptying the stack in a single step.
   Stack<Object3D> terrainObjects;
@@ -165,8 +178,6 @@ public class PixelRealm extends Screen {
 
   private Object3D tailNode = null;
   private Object3D headNode = null;
-  private int numObjects = 0;
-
   // TODO: move cus I can't be bothered
   public void setRenderDistance(int renderDistance) {
     RENDER_DISTANCE = renderDistance;
@@ -190,6 +201,7 @@ public class PixelRealm extends Screen {
   public ItemSlot inventoryHead = null;
   public ItemSlot inventoryTail = null;
   public ItemSlot inventorySelectedItem = null;
+  
 
   class ItemSlot {
     public ItemSlot next = null;
@@ -274,6 +286,10 @@ public class PixelRealm extends Screen {
   abstract class FileObject extends Object3D {
     public String dir;
     public String filename;
+    
+    // Blocks a thread from loading an image until it's next in the queue.
+    public AtomicBoolean beginLoadFlag = new AtomicBoolean(false);
+    
     public FileObject(float x, float y, float z, String dir) {
       super(x, y, z);
       setFileNameAndIcon(dir);
@@ -311,7 +327,7 @@ public class PixelRealm extends Screen {
       // Every 3d object has x y z position.
       this.x = engine.getJSONFloat("x", lastPlacedPosX+random(-500, 500));
       this.z = engine.getJSONFloat("z", lastPlacedPosZ+random(-500, 500));
-      this.size = engine.getJSONFloat("scale", 1.);
+      this.size = engine.getJSONFloat("scale", 1.)*BACKWARD_COMPAT_SCALE;
       lastPlacedPosX = this.x;
       lastPlacedPosZ = this.z;
 
@@ -328,7 +344,7 @@ public class PixelRealm extends Screen {
       object3d.setFloat("x", this.x);
       object3d.setFloat("y", this.y);
       object3d.setFloat("z", this.z);
-      object3d.setFloat("scale", this.size);
+      object3d.setFloat("scale", this.size/BACKWARD_COMPAT_SCALE);
       return object3d;
     }
     
@@ -358,7 +374,7 @@ public class PixelRealm extends Screen {
       super(x, y, z, dir);
       this.wi = 300;
       this.hi = 300;
-      this.size = 1.;
+      this.size = 1.*BACKWARD_COMPAT_SCALE;
     }
 
     public OBJFileObject(String dir) {
@@ -403,11 +419,11 @@ public class PixelRealm extends Screen {
     }
     
     public void scaleUp(float amount) {
-      setSize(size+amount);
+      setSize(size+amount*BACKWARD_COMPAT_SCALE);
     }
     
     public void scaleDown(float amount) {
-      setSize(size-amount);
+      setSize(size-amount*BACKWARD_COMPAT_SCALE);
     }
   }
 
@@ -446,6 +462,8 @@ public class PixelRealm extends Screen {
 
     public boolean loadFlag = false;
     public boolean cacheFlag = false;
+    
+
 
     public ImageFileObject(float x, float y, float z, String dir) {
       super(x, y, z, dir);
@@ -465,7 +483,8 @@ public class PixelRealm extends Screen {
               // the image hasn't been cached, so let's create some to reduce load times
               // and ram usage in the future.
               if (cacheFlag) {
-                engine.setCachingShrink(128, 0);
+                engine.setCachingShrink(MAX_CACHE_SIZE, 0);
+                //this.img = engine.experimentalScaleDown(img);
                 engine.saveCacheImage(this.dir, img);
                 cacheFlag = true;
               }
@@ -501,19 +520,108 @@ public class PixelRealm extends Screen {
     public void load() {
       super.load();
 
-
-
-      this.img = engine.tryLoadImageCache(this.dir, new Runnable() {
-        public void run() {
-          cacheFlag = true;
-          engine.setOriginalImage(requestImage(dir));
-        }
-      }
-      );
-      console.info("loaded");
-
-
       this.rot = engine.getJSONFloat("rot", random(-PI, PI));
+      
+      // Add to the loadQueue.
+      this.beginLoadFlag.set(false);
+      loadQueue.add(this.beginLoadFlag);
+      
+      // Depends on our image format:
+      // GIF
+      if (engine.getExt(this.filename).equals("gif") && showExperimentalGifs) {
+        
+        // Load the gif.
+        Thread gifLoaderThread = new Thread(new Runnable() {
+          public void run() {
+            // Wait until we're allowed our turn.
+            while (!beginLoadFlag.get()) {
+              try {
+                Thread.sleep(10);
+              }
+              catch (InterruptedException e) {
+                // we don't care.
+              }
+            }
+            
+            // First, we need to see if we have enough space to store stuff.
+            int size = file.getImageUncompressedSize(dir);
+            console.info(filename+" size: "+(size/1024)+" kb");
+            // Tbh doesn't need to be specifically thread safe, it's all an
+            // approximation.
+            if (memUsage.get()+size > MAX_MEM_USAGE) {
+              if (!memExceeded) console.warn("Maximum allowed memory exceeded, some items/files may be missing from this realm.");
+              memExceeded = true;
+              console.info(filename+" exceeds the maximum allowed memory.");
+            }
+            else {
+              incrementMemUsage(size);
+              Gif newGif = new Gif(app, dir);
+              newGif.loop();
+              img = newGif;
+            }
+            
+            // Once we're done we need to free our slot so that other threads have a turn to use the core.
+            loadThreadsUsed.decrementAndGet();
+          }
+        }
+        );
+        gifLoaderThread.start();
+        
+        // Set the cache flag low so that we don't try to trigger 
+        // a cache generation of a gif (it hasn't been implemented yet
+        // so that would be a disaster)
+        cacheFlag = false;
+        return;
+      }
+      
+      // Literally anything else.
+      else {
+        
+        // Load the gif.
+        Thread imageLoaderThread = new Thread(new Runnable() {
+          public void run() {
+            // Wait until we're allowed our turn.
+            while (!beginLoadFlag.get()) {
+              try {
+                Thread.sleep(10);
+              }
+              catch (InterruptedException e) {
+                // we don't care.
+              }
+            }
+            
+            // First, we need to see if we have enough space to store stuff.
+            int size = engine.getCacheSize(dir);
+            console.info(filename+" size: "+(size/1024)+" kb");
+            // Tbh doesn't need to be specifically thread safe, it's all an
+            // approximation.
+            if (memUsage.get()+size > MAX_MEM_USAGE) {
+              if (!memExceeded) console.warn("Maximum allowed memory exceeded, some items/files may be missing from this realm.");
+              memExceeded = true;
+              console.info(filename+" exceeds the maximum allowed memory.");
+            }
+            else {
+              incrementMemUsage(size);
+              
+              // TODO: this is NOT thread-safe here!
+              img = engine.tryLoadImageCache(dir, new Runnable() {
+                public void run() {
+                  cacheFlag = true;
+                  engine.setOriginalImage(loadImage(dir));
+                }
+              }
+              );
+            }
+            
+            // Once we're done we need to free our slot so that other threads have a turn to use the core.
+            loadThreadsUsed.decrementAndGet();
+          }
+        }
+        );
+        imageLoaderThread.start();
+      }
+
+
     }
 
     public JSONObject save() {
@@ -577,14 +685,14 @@ public class PixelRealm extends Screen {
         try {
           JSONObject sh = app.loadJSONObject(this.dir);
           
-          String compat_ver = sh.getString("compatibilty_version");
+          String compat_ver = sh.getString("compatibilty_version", "[err]");
           if (!compat_ver.equals(SHORTCUT_COMPATIBILITY_VERSION)) {
             console.warn("Incompatiable shortcut "+engine.getFilename(this.filename));
             return;
           }
           
-          shortcutDir = sh.getString("shortcut_dir");
-          if (shortcutDir == null) {
+          shortcutDir = sh.getString("shortcut_dir", "[corrupted]");
+          if (shortcutDir.equals("[corrupted]")) {
             console.warn("Corrupted shortcut "+engine.getFilename(this.filename));
             return;
           }
@@ -595,9 +703,9 @@ public class PixelRealm extends Screen {
             return;
           }
           
-          shortcutName = sh.getString("shortcut_name");
+          shortcutName = sh.getString("shortcut_name", "[corrupted]");
           // Yup, shortcut_name is unnecessary. But hey might as well self-fix if broken.
-          if (shortcutName == null) {
+          if (shortcutName.equals("[corrupted]")) {
             shortcutName = engine.getFilename(shortcutDir);
           }
         }
@@ -923,7 +1031,6 @@ public class PixelRealm extends Screen {
       //tail's next point to null  
       tailNode.next = null;
     }  
-    numObjects++;
   }
 
   public void removeFromList(Object3D o) {
@@ -1128,6 +1235,8 @@ public class PixelRealm extends Screen {
     this.height = HEIGHT-myLowerBarWeight-myUpperBarWeight;
     
     legacyPortalEasteregg = (boolean)sharedResources.get("legacy_evolvinggateway_easteregg", false);
+    showMemUsage = (boolean)(sharedResources.get("show_mem_bar", false));
+    showExperimentalGifs = settings.getBoolean("enableExperimentalGifs");
 
     // TODO:
     // OH MY GOD I CANT BELIEVE I DIDNT NOTICE IT NOW PUT THIS INTO SHARED RESOURCES
@@ -1138,11 +1247,19 @@ public class PixelRealm extends Screen {
     ((PGraphicsOpenGL)scene).textureSampling(2);        
     scene.hint(DISABLE_OPENGL_ERRORS);          
     portal = createGraphics(128, 128+96, P2D);
+    ((PGraphicsOpenGL)portal).textureSampling(2);   
     portal.hint(DISABLE_OPENGL_ERRORS);
 
 
     //img_sky_1.resize(scene.width, scene.height);
     setupLegacyPortal();
+    
+    // TODO: I'd love to do a performance benchmark based on the number of core's we're using.
+    int numCores = Runtime.getRuntime().availableProcessors();
+    // We want to reserve at least one core to run the main thread otherwise it's gonna be REALLY laggy as the
+    // OS scheduler dedicates all of its processing resources to loading images.
+    MAX_LOADER_THREADS = (numCores/2)-1;
+    console.info("# cores reserved for loading: "+MAX_LOADER_THREADS);
     
 
     // Because our stack holds the generated terrain objects which is generated by the floor tiles,
@@ -1661,6 +1778,10 @@ public class PixelRealm extends Screen {
         if (f != null) f.destroy();
       }
     }
+    
+    // Reset memory usage
+    memUsage.set(0);
+    // TODO: we should also prolly kill all active loading threads too somehow...
 
     // Load the turf and aka all the files in the folder
     loadTurfJson(dir, emergeFrom);
@@ -1752,12 +1873,19 @@ public class PixelRealm extends Screen {
   protected void previousReturnAnimation() {
     refreshRealm();
   }
+  
+  public void incrementMemUsage(int val) {
+    memUsage.getAndAdd(val);
+  }
 
   public Object getRealmFile(String filename, Object defaultFile) {
-    File f = new File(engine.currentDir+filename);
+    String fullPath = engine.currentDir+filename;
+    File f = new File(fullPath);
     if (f.exists()) {
-      if (engine.getExt(filename).equals("png"))
+      if (engine.getExt(filename).equals("png")) {
+        incrementMemUsage(file.getImageUncompressedSize(fullPath));
         return loadImage(engine.currentDir+filename);
+      }
       else if (engine.getExt(filename).equals("wav"))
         return new SoundFile(engine.app, engine.currentDir+filename);
       else if (engine.getExt(filename).equals("mid"))
@@ -2380,6 +2508,10 @@ public class PixelRealm extends Screen {
     scene.colorMode(RGB, 255);
 
     scene.popMatrix();
+    
+    engine.timestamp("multithreaded manager");
+    
+    runMultithreadedLoader();
 
     engine.timestamp("objectsinteractions");
 
@@ -2387,7 +2519,7 @@ public class PixelRealm extends Screen {
 
     engine.timestamp("render3DObjects");
 
-    render3DObjects();  //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>//
+    render3DObjects();  //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>//
     scene.hint(DISABLE_DEPTH_TEST);
 
     engine.timestamp("portal light");
@@ -2444,6 +2576,8 @@ public class PixelRealm extends Screen {
 
     // We need to run the gui here otherwise it's going to look   t e r r i b l e   in the scene.
     runGUI();
+    if (showMemUsage)
+      displayMemUsageBar();
 
     engine.timestamp("end");
 
@@ -2454,7 +2588,7 @@ public class PixelRealm extends Screen {
   private void render3DObjects() {
     engine.timestamp("Update distances");
     // Update the distances from the player for all nodes
-    Object3D currNode = headNode; //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>//
+    Object3D currNode = headNode; //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>//
     while (currNode != null) {
       currNode.calculateVal();
       currNode = currNode.next;
@@ -2530,12 +2664,19 @@ public class PixelRealm extends Screen {
       }
       return true;
     }
+    else if (command.equals("/memusage")) {
+      showMemUsage = !showMemUsage;
+      sharedResources.set("show_mem_bar", new Boolean(showMemUsage));
+      if (showMemUsage) console.log("Memory usage bar shown.");
+      else console.log("Memory usage bar hidden.");
+      return true;
+    }
     else return false;
   }
 
   public void content() {
     if (engine.power.getSleepyMode()) engine.power.setAwake();
-    runPixelRealm();  //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>//
+    runPixelRealm();  //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>//
   }
   
   public void upperBar() {
@@ -2545,6 +2686,25 @@ public class PixelRealm extends Screen {
     textAlign(LEFT, TOP);
     fill(0);
     text(engine.currentDir, 10, 10);
+    if (loading > 0) {
+      engine.loadingIcon(WIDTH-myUpperBarWeight/2-10, myUpperBarWeight/2, myUpperBarWeight);
+      int n = 1;
+      switch (power.getPowerMode()) {
+        case HIGH:
+          n = 1;
+          break;
+        case NORMAL:
+          n = 2;
+          break;
+        case SLEEPY:
+          n = 4;
+          break;
+        case MINIMAL:
+          n = 1;
+          break;
+      }
+      loading -= n;
+    }
   }
 
   public void startupAnimation() {
@@ -2870,6 +3030,58 @@ public class PixelRealm extends Screen {
     inventorySelectedItem = null;
     inventoryHead = null;
   }
+  
+  public void displayMemUsageBar() {
+    int used = memUsage.get();
+    float percentage = (float)used/(float)MAX_MEM_USAGE;
+    noStroke();
+    fill(0, 0, 0, 127);
+    rect(100, myUpperBarWeight+20, (WIDTH-200.), 50);
+    
+    if (memExceeded)
+      fill(255, 50, 50); // Mem full.
+    else if (percentage > 0.8) 
+      fill(255, 140, 20); // Low mem
+    else 
+      fill(50, 50, 255);  // Normal
+    rect(100, myUpperBarWeight+20, (WIDTH-200.)*percentage, 50);
+    fill(255);
+    textFont(engine.DEFAULT_FONT, 30);
+    textAlign(LEFT, CENTER);
+    text("Mem: "+(used/1024)+" kb / "+(MAX_MEM_USAGE/1024)+" kb", 105, myUpperBarWeight+45);
+  }
+  
+  public void runMultithreadedLoader() {
+    // If there's items available, attempt to assign one of the loader threads with a job.
+      int originalValue = loadThreadsUsed.get();
+      int max_threads = MAX_LOADER_THREADS;
+      
+      // In powersaver mode,
+      // reduce power usage by only allowing one thread at a time to load content, hence
+      // reducing total cpu usage.
+      if (power.getPowerSaver()) max_threads = 1;
+      
+      while ((originalValue = loadThreadsUsed.get()) < max_threads && loadQueue.size() > 0) {
+          /// Technically not the best solution,
+          //  between int originalValue = loadThreadsAvailable.get();
+          //  and the comparison there could be an update.
+          //  However it is technically thread safe, because we check again
+          //  to ensure that it is still at the expected value.
+          //  So worst comes to worst, we will just need to wait until another frame until
+          //  we can attempt to allow a thread to load again.
+          boolean accessGranted = loadThreadsUsed.compareAndSet(originalValue, originalValue + 1);
+          if (accessGranted) {
+            // At this point we've got confirmation that we've got our hands on an available resource.
+            // So we can set off the next thread to begin loading.
+            AtomicBoolean loadFlag = loadQueue.remove(0);
+            
+            // Tell it to begin its loading thing-!
+            loadFlag.set(true);
+          }
+          
+          loading = 10;
+      }
+  }
 
   public void objectsInteractions() {
     // Cool coin thing!
@@ -2988,18 +3200,24 @@ public class PixelRealm extends Screen {
                 // Go into the new world
                 // If it's a shortcut, go to where the shortcut points to.
                 
-                if (f instanceof ShortcutPortal) {
-                  // SECRET EASTER EGG TOP SECRET
-                  if (((ShortcutPortal)f).shortcutName.equals("Neo_2222?")) {
-                    requestScreen(new WorldLegacy(engine));
-                    f.destroy();
+                try {
+                  if (f instanceof ShortcutPortal) {
+                    // SECRET EASTER EGG TOP SECRET
+                    if (((ShortcutPortal)f).shortcutName.equals("Neo_2222?")) {
+                      requestScreen(new WorldLegacy(engine));
+                      f.destroy();
+                    }
+                    // Normal non-easter egg action
+                    else
+                      enterNewRealm(((ShortcutPortal)f).shortcutDir);
                   }
-                  // Normal non-easter egg action
-                  else
-                    enterNewRealm(((ShortcutPortal)f).shortcutDir);
+                  // Otherwise go to where the directory points to.
+                  else enterNewRealm(f.dir);
                 }
-                // Otherwise go to where the directory points to.
-                else enterNewRealm(f.dir);
+                catch (RuntimeException e) {
+                  console.warn("The shortcut portal you've just entered is corrupted!");
+                  f.destroy();
+                }
               } else if (cancelOut) {
                 // Pause the portalcooldown by essentially cancelling out the values.
                 portalCoolDown += n;
