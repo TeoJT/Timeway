@@ -1,7 +1,6 @@
 import java.awt.Desktop;
 
 public class Explorer extends Screen {
-  private String DEFAULT_FONT = "";
   
   
   //private String currentDir = DEFAULT_DIR;
@@ -15,7 +14,6 @@ public class Explorer extends Screen {
   
   public Explorer(Engine engine) {
         super(engine);
-        DEFAULT_FONT = engine.DEFAULT_FONT_NAME;
         
         engine.openDirInNewThread(engine.DEFAULT_DIR);
         gui = new SpriteSystemPlaceholder(engine, engine.APPPATH+engine.PATH_SPRITES_ATTRIB+"gui/explorer/");
@@ -30,7 +28,6 @@ public class Explorer extends Screen {
   // Sorry for code duplication!
   public Explorer(Engine engine, String dir) {
         super(engine);
-        DEFAULT_FONT = engine.DEFAULT_FONT_NAME;
         
         engine.openDirInNewThread(dir);
         gui = new SpriteSystemPlaceholder(engine, engine.APPPATH+engine.PATH_SPRITES_ATTRIB+"gui/explorer/");

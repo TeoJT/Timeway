@@ -1,4 +1,4 @@
-import java.util.concurrent.atomic.AtomicBoolean; //<>// //<>// //<>// //<>// //<>// //<>//
+import java.util.concurrent.atomic.AtomicBoolean; //<>// //<>//
 import javax.sound.midi.*;
 import java.io.BufferedInputStream;
 import processing.sound.*;
@@ -71,7 +71,7 @@ public class PixelRealm extends Screen {
   public float direction = PI;
   public float bob = 0.0;
   public float onQuadY = 0.;
-  public int jumpTimeout = 0;
+  public float jumpTimeout = 0;
   public boolean primaryAction = false;
   public boolean secondaryAction = false;
   
@@ -129,8 +129,8 @@ public class PixelRealm extends Screen {
   final float TURN_SPEED = 0.05;
   final float SLOW_TURN_SPEED = 0.01;
   final float TERMINAL_VEL = 1000.;
-  final float GRAVITY = 0.2;
-  final float JUMP_STRENGTH = 5.;
+  final float GRAVITY = 0.4;
+  final float JUMP_STRENGTH = 8.;
   final float PLAYER_HEIGHT = 80;
   final float PLAYER_WIDTH  = 20;
 
@@ -153,7 +153,7 @@ public class PixelRealm extends Screen {
 
   public float portalLight = 255.;
   public final float MIN_PORTAL_LIGHT_THRESHOLD = pow(140., 2);
-  public int portalCoolDown = 45;
+  public float portalCoolDown = 45;
 
   final boolean BIG_HITBOX = true;
   final boolean SMALL_HITBOX = false;
@@ -1914,28 +1914,13 @@ public class PixelRealm extends Screen {
     portal.beginDraw();
     portal.clear();
 
-    // Because framerates, we need to speed up portal animations if the framerate is slow.
-    float n = 1.;
-    switch (engine.power.getPowerMode()) {
-    case HIGH:
-      n = 1.;
-      break;
-    case NORMAL:
-      n = 2.;
-      break;
-    case SLEEPY:
-      n = 4.;
-      break;
-    case MINIMAL:
-      n = 1.;
-      break;
-    }
+    
     
     portal.shader(
       display.getShaderWithParams("portal", "u_resolution", (float)portal.width, (float)portal.height, "u_time", portalUtime)
     );
     
-    portalUtime += n/60;
+    portalUtime += display.getDelta()/display.BASE_FRAMERATE;
     
     portal.rect(0,0, portal.width, portal.height);
     
@@ -2096,24 +2081,7 @@ public class PixelRealm extends Screen {
     engine.timestamp("begindraw");
 
 
-    int n = 1;
-    switch (engine.power.getPowerMode()) {
-    case HIGH:
-      n = 1;
-      break;
-    case NORMAL:
-      n = 2;
-      break;
-    case SLEEPY:
-      n = 4;
-      break;
-    case MINIMAL:
-      n = 1;
-      break;
-    }
-
-    if (n > 0) 
-      portalCoolDown -= n;
+    portalCoolDown -= display.getDelta();
 
     // This is gonna be hard to troubleshoot...
     scene.beginDraw();
@@ -2177,11 +2145,15 @@ public class PixelRealm extends Screen {
         sound.playSound("menu_appear");
     }
     
+    // Adjust for lower framerates than the target.
+    speed *= display.getDelta();
+    
     // Allow the command prompt to be shown only if the menu isn't displayed.
     engine.allowShowCommandPrompt = !menuShown;
 
     if (!menuShown) {
-      for (int i = 0; i < n; i++) {
+      // TODO: optimisations :D
+      for (int i = 0; i < 1; i++) {
         float movex = 0.;
         float movez = 0.;
         float rot = 0.;
@@ -2211,11 +2183,11 @@ public class PixelRealm extends Screen {
 
 
         if (engine.shiftKeyPressed) {
-          if (engine.keyAction("lookRight")) rot = -SLOW_TURN_SPEED;
-          if (engine.keyAction("lookLeft")) rot =  SLOW_TURN_SPEED;
+          if (engine.keyAction("lookRight")) rot = -SLOW_TURN_SPEED*display.getDelta();
+          if (engine.keyAction("lookLeft")) rot =  SLOW_TURN_SPEED*display.getDelta();
         } else {
-          if (engine.keyAction("lookRight")) rot = -TURN_SPEED;
-          if (engine.keyAction("lookLeft")) rot =  TURN_SPEED;
+          if (engine.keyAction("lookRight")) rot = -TURN_SPEED*display.getDelta();
+          if (engine.keyAction("lookLeft")) rot =  TURN_SPEED*display.getDelta();
         }
 
 
@@ -2238,13 +2210,18 @@ public class PixelRealm extends Screen {
           zpos += movez;
           if (isWalking && onGround()) {
             float bob_speed = speed*0.05;
+            
+            float maxBobSpeed = display.getDelta()*1.5;
 
             // If we bob too much, the bob will jiggle wayyyy to much
             // and the sound effect will be played too much and end up reallllly glitchy
-            if (bob_speed < 1)
+            if (bob_speed < maxBobSpeed) {
               bob += bob_speed;
-            else 
-            bob += 1.;
+            }
+            else {
+              bob += maxBobSpeed;
+            }
+              
             if (bob-HALF_PI > TWO_PI-HALF_PI) {
               bob = 0.;
               sound.playSound("step", random(0.9, 1.2));
@@ -2255,16 +2232,16 @@ public class PixelRealm extends Screen {
         // If holding an item, allow scaling up and down.
         if (inventorySelectedItem != null) {
           if (engine.keyAction("scaleUp")) {
-            inventorySelectedItem.carrying.scaleUp(0.20);
+            inventorySelectedItem.carrying.scaleUp(0.10*display.getDelta());
           }
           if (engine.keyAction("scaleDown")) {
-            inventorySelectedItem.carrying.scaleDown(0.20);
+            inventorySelectedItem.carrying.scaleDown(0.10*display.getDelta());
           }
           if (engine.keyAction("scaleUpSlow")) {
-            inventorySelectedItem.carrying.scaleUp(0.07);
+            inventorySelectedItem.carrying.scaleUp(0.03*display.getDelta());
           }
           if (engine.keyAction("scaleDownSlow")) {
-            inventorySelectedItem.carrying.scaleDown(0.07);
+            inventorySelectedItem.carrying.scaleDown(0.03*display.getDelta());
           }
         }
 
@@ -2275,14 +2252,14 @@ public class PixelRealm extends Screen {
         flatSinDirection = sin(direction-PI+HALF_PI);
         flatCosDirection = cos(direction-PI+HALF_PI);
 
-        if (engine.keyAction("jump") && onGround() && jumpTimeout < 1) {
+        if (engine.keyAction("jump") && onGround() && jumpTimeout < 1.) {
           yvel = JUMP_STRENGTH;
           ypos -= 10;
           sound.playSound("jump");
-          jumpTimeout = 10;
+          jumpTimeout = 30.;
         }
 
-        if (jumpTimeout > 0) jumpTimeout--;
+        if (jumpTimeout > 0) jumpTimeout -= display.getDelta();
 
 
         //engine.timestamp("getYposOnQuad");
@@ -2296,10 +2273,11 @@ public class PixelRealm extends Screen {
         PVector pv4 = calcTile(cchunkx-1., cchunkz);          // Left, bottom
         onQuadY = getYposOnQuad(pv1, pv2, pv3, pv4, xpos, zpos); 
 
-        ypos -= yvel;
+        ypos -= yvel*display.getDelta();
 
         if (!onGround()) {
-          if (yvel < TERMINAL_VEL) yvel -= GRAVITY;
+          yvel -= GRAVITY*display.getDelta();
+          if (yvel > TERMINAL_VEL) yvel = TERMINAL_VEL;
         } else {
           yvel = 0.;
           ypos = onQuadY;
@@ -2404,7 +2382,7 @@ public class PixelRealm extends Screen {
 
     //Coin animation.
 
-    int spinSpeed = 4/n;
+    int spinSpeed = (int)(10./display.getDelta());
     coinSpinAnimation++;
     if (coinSpinAnimation >= spinSpeed*6) {
       coinSpinAnimation = 0;
@@ -2519,7 +2497,7 @@ public class PixelRealm extends Screen {
 
     engine.timestamp("render3DObjects");
 
-    render3DObjects();  //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>//
+    render3DObjects();  //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>//
     scene.hint(DISABLE_DEPTH_TEST);
 
     engine.timestamp("portal light");
@@ -2540,21 +2518,12 @@ public class PixelRealm extends Screen {
 
     // Fade out the portal light
     float fade = 0.9;
-    // Of course, it's an animation so we need to perform it n times
-    switch (engine.power.getPowerMode()) {
-    case HIGH:
-      portalLight *= fade;
-      break;
-    case NORMAL:
-      portalLight *= fade*fade;
-      break;
-    case SLEEPY:
-      portalLight *= fade*fade*fade*fade;
-      break;
-    case MINIMAL:
-      portalLight *= fade;
-      break;
-    }
+    
+    // When we exit a portal, there's usually a bit of lag as we read files/perform loading,
+    // which causes the delta to be high and try to boost us forwards like 30 frames.
+    // However, with the old FPS system, SLEEPY mode was the minimum at 15fps, which meant we could
+    // only skip at most 4 frames at a time. We wanna keep that cool bug :sunglasses:
+    portalLight *= pow(fade, min(display.getDelta(), 4));
 
     engine.timestamp("end draw");
 
@@ -2588,7 +2557,7 @@ public class PixelRealm extends Screen {
   private void render3DObjects() {
     engine.timestamp("Update distances");
     // Update the distances from the player for all nodes
-    Object3D currNode = headNode; //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>//
+    Object3D currNode = headNode; //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>//
     while (currNode != null) {
       currNode.calculateVal();
       currNode = currNode.next;
@@ -2676,7 +2645,7 @@ public class PixelRealm extends Screen {
 
   public void content() {
     if (engine.power.getSleepyMode()) engine.power.setAwake();
-    runPixelRealm();  //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>//
+    runPixelRealm();  //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>//
   }
   
   public void upperBar() {
@@ -2688,22 +2657,10 @@ public class PixelRealm extends Screen {
     text(engine.currentDir, 10, 10);
     if (loading > 0) {
       engine.loadingIcon(WIDTH-myUpperBarWeight/2-10, myUpperBarWeight/2, myUpperBarWeight);
-      int n = 1;
-      switch (power.getPowerMode()) {
-        case HIGH:
-          n = 1;
-          break;
-        case NORMAL:
-          n = 2;
-          break;
-        case SLEEPY:
-          n = 4;
-          break;
-        case MINIMAL:
-          n = 1;
-          break;
-      }
-      loading -= n;
+      
+      // Doesn't matter too much that it's being converted to an int,
+      // it doesn't need to be accurate.
+      loading -= (int)display.getDelta();
     }
   }
 
@@ -3086,27 +3043,13 @@ public class PixelRealm extends Screen {
   public void objectsInteractions() {
     // Cool coin thing!
     // This is very very temp code.
-    int n = 1;
-    switch (engine.power.getPowerMode()) {
-    case HIGH:
-      n = 1;
-      break;
-    case NORMAL:
-      n = 2;
-      break;
-    case SLEEPY:
-      n = 4;
-      break;
-    case MINIMAL:
-      n = 1;
-      break;
-    }
+    
 
     if (droppingInventory) {
       currentTool = TOOL_NORMAL;
 
       if (dropInventoryItem != null) {
-        dropInventoryYVel += float(n);
+        dropInventoryYVel += display.getDelta();
         dropInventoryItem.y += dropInventoryYVel;
       }
 
@@ -3159,7 +3102,7 @@ public class PixelRealm extends Screen {
     if (coins != null) {
       for (int i = 0; i < 100; i++) {
         if (coins[i] != null) {
-          coins[i].img = img_coin[((int(frameCount*n)/4))%l];
+          coins[i].img = img_coin[((int(frameCount*display.getDelta())/4))%l];
           if (coins[i].touchingPlayer()) {
             sound.playSound("coin");
             coins[i].destroy();
@@ -3192,7 +3135,7 @@ public class PixelRealm extends Screen {
           if (f instanceof DirectoryPortal) {
             // Take the player to a new directory in the world if we enter the portal.
             if (f.touchingPlayer()) {
-              if (portalCoolDown <= 0) {
+              if (portalCoolDown <= 0.) {
                 // For now just create an entirely new screen object lmao.
                 endRealm();
                 sound.playSound("shift");
@@ -3220,7 +3163,7 @@ public class PixelRealm extends Screen {
                 }
               } else if (cancelOut) {
                 // Pause the portalcooldown by essentially cancelling out the values.
-                portalCoolDown += n;
+                portalCoolDown += display.getDelta();
                 cancelOut = true;
               }
             }

@@ -33,9 +33,6 @@ import java.util.List;
 import com.sun.jna.Native;
 import com.sun.jna.Structure;
 
-// TODO: figure out a solution for multiplatform battery tracking.
-// import com.sun.jna.win32.StdCallLibrary;
-
 // Timeway's engine code.
 // TODO: add documentation lmao.
 
@@ -74,8 +71,8 @@ class Engine {
   public       String DEFAULT_UPDATE_PATH = "";  // Set up by setup()
 
   // Static constants
-  public static final int    KEY_HOLD_TIME       = 30; // 30 frames
-  public static final int    POWER_CHECK_INTERVAL = 5000;  // Currently unused  TODO: remember to change this comment
+  public static final float  KEY_HOLD_TIME       = 30.; // 30 frames
+  public static final int    POWER_CHECK_INTERVAL = 5000;
   public static final int    PRESSED_KEY_ARRAY_LENGTH = 10;
   public static final String CACHE_COMPATIBILITY_VERSION = "0.3";
   public static final int    MAX_CPU_CANVAS = 8;
@@ -107,6 +104,7 @@ class Engine {
   public PowerModeModule power;
   public AudioModule sound;
   public FilemanagerModule file;
+  public ClipboardModule clipboard;
   
   PGraphics CPU = createGraphics(512, 512);
 
@@ -141,7 +139,7 @@ class Engine {
   public boolean enterPressed = false;
   public char lastKeyPressed = 0;
   public int lastKeycodePressed = 0;
-  public int keyHoldCounter = 0;
+  public float keyHoldCounter = 0;
   public float clickStartX = 0;
   public float clickStartY = 0;
   public boolean pressedArray[] = new boolean[PRESSED_KEY_ARRAY_LENGTH];
@@ -478,6 +476,10 @@ class Engine {
     float framerateBuffer[];
     private boolean forcePowerModeEnabled = false;
     private PowerMode forcedPowerMode = PowerMode.HIGH;
+    
+    
+    final float BASE_FRAMERATE = 60;
+    float targetFramerate = 60;
   
     // The score that seperates the stable fps from the unstable fps.
     // If you've got half a brain, it would make the most sense to keep it at 0.
@@ -721,10 +723,6 @@ class Engine {
         //  setPowerMode(PowerMode.SLEEPY);
         //  return;
         //}
-  
-        // TODO: run in seperate thread to prevent stutters. For the time being I'm only gonna
-        // run it once.
-        updateBatteryStatus();
       }  
   
       // If forced power mode is enabled, don't bother with the powermode selection algorithm below.
@@ -732,214 +730,6 @@ class Engine {
         if (powerMode != forcedPowerMode) setPowerMode(forcedPowerMode);
         return;
       }
-      
-  
-      if (powerSaver || sleepyMode) return;
-  
-      // How the fps algorithm works:
-      /*
-      There are 4 modes:
-       MONITOR:
-       - Use average framerate to determine framepoints.
-       - If the framerate is below the minimum required framerate, exponentially drain the score
-       until the framerate is stable or the drop zone has been reached.
-       - If in the unstable zone, linearly recover the score.
-       - If in the stable zone, increase the score by the recovery likelyhood (((30-framepoints)/30)**2) 
-       but only if we're lower than HIGH power mode. Otherwise max out at the stable threshold.
-       - If we reach the drop threshold, drop the power mode down a level and take note of the recovery likelyhood (((30-framepoints)/30)**2)
-       and reset the score to the stable threshold.
-       - If we reach the recovery threshold, enter fps recovery mode and go up a power level.
-       RECOVERY:
-       - Don't keep track of score.
-       - Use the real-time fps to take a small average of the current frame.
-       - Once the average buffer is filled, use the average fps to determine whether we stay in this power mode or drop back.
-       - Framerate at least 58, 28 etc, stay in this mode and go back into monitor mode, and reset the score to the stable threshold.
-       - Otherwise, update recovery likelyhood and drop back.
-       SLEEPY:
-       - If sleepy mode is enabled, the score is paused and we don't do any operations;
-       Wait until sleepy mode is disabled.
-       GRACE:
-       - A grace period where the score is not changed for a certain amount of time to allow the average framerate to fill up.
-       - Once the grace period ends, return to MONITOR mode.
-       */
-  
-      float stableFPS = 30.;
-      int n = 1;
-      switch (powerMode) {
-      case HIGH:
-        stableFPS = 57.;
-        n = 1;
-        break;
-      case NORMAL:
-        stableFPS = 27;
-        n = 2;
-        break;
-      case SLEEPY:
-        stableFPS = 13.;
-        n = 4;
-        break;
-        // We shouldn't need to come to this but hey, this is a 
-        // switch statement.
-      case MINIMAL:
-        stableFPS = 1.;
-        break;
-      }
-  
-      if (fpsTrackingMode == MONITOR) {
-        // Everything in monitor will take twice or 4 times long if the framerate is lower.
-        for (int i = 0; i < n; i++) {
-          if (frameRate < stableFPS) {
-            //console.log("Drain");
-            scoreDrain += (stableFPS-frameRate)/stableFPS;
-            fpsScore -= scoreDrain*scoreDrain;
-            //console.log(str(scoreDrain*scoreDrain));
-            //console.log(str(fpsScore));
-          } else {
-            scoreDrain = 0.;
-            // If in stable zone...
-            if (fpsScore > FPS_SCORE_MIDDLE) {
-              //console.log("stable zone");
-  
-              if (powerMode != PowerMode.HIGH)
-                fpsScore += recoveryScore;
-  
-              //console.log(str(recoveryScore));
-            }
-            // If in unstable zone...
-            else {
-              fpsScore += UNSTABLE_CONSTANT;
-            }
-          }
-  
-          if (fpsScore < FPS_SCORE_DROP) {
-            //console.log("DROP");
-            // The lower our framerate, the less likely (or rather longer it takes) to get back to it.
-            recoveryScore = pow((frameRate/stableFPS), RECOVERY_NEGLIGENCE);
-            // Reset the score.
-            fpsScore = FPS_SCORE_MIDDLE;
-            scoreDrain = 0.;
-  
-            // Set the power mode down a level.
-            switch (powerMode) {
-            case HIGH:
-              setPowerMode(PowerMode.NORMAL);
-              break;
-            case NORMAL:
-              setPowerMode(PowerMode.SLEEPY);
-              // Because sleepy is a pretty low framerate, chances are we just hit a slow
-              // spot and will speed up soon. Let's give ourselves a bit more recoveryScore
-              // so that we're not stuck slow forever.
-              //recoveryScore += 1;
-              break;
-            case SLEEPY:
-              // Raise this to true to enable any other bits of the code to perform performance-saving measures.
-              break;
-            case MINIMAL:
-              // This is not a power level we downgrade to.
-              // We shouldn't downgrade here, but if for whatever reason we're glitched out
-              // and stuck in this mode, get ourselves out of it.
-              setPowerMode(PowerMode.SLEEPY);
-              fpsScore = FPS_SCORE_MIDDLE;
-              break;
-            }
-          }
-  
-          if (fpsScore > FPS_SCORE_RECOVERY) {
-            //console.log("RECOVERY");
-            switch (powerMode) {
-            case HIGH:
-              // We shouldn't reach this here, but if we do, cap the
-              // score.
-              fpsScore = FPS_SCORE_RECOVERY;
-              break;
-            case NORMAL:
-              setPowerMode(PowerMode.HIGH);
-              break;
-            case SLEEPY:
-              setPowerMode(PowerMode.NORMAL);
-              break;
-            case MINIMAL:
-              // This is not a power level we upgrade to.
-              // We shouldn't downgrade here, but if for whatever reason we're glitched out
-              // and stuck in this mode, get ourselves out of it.
-              setPowerMode(PowerMode.SLEEPY);
-              break;
-            }
-            fpsScore = FPS_SCORE_MIDDLE;
-            fpsTrackingMode = RECOVERY;
-            recoveryFrameCount = 0;
-            // Record the next 5 frames.
-            framerateBuffer = new float[5];
-            recoveryPhase = 1;
-          }
-        }
-      } else if (fpsTrackingMode == RECOVERY) {
-        // Record the fps, as long as we're not waiting to go back into MONITOR mode.
-        if (recoveryPhase != 3)
-          framerateBuffer[recoveryFrameCount++] = display.getLiveFPS();
-  
-        // Once we're done recording...
-        int l = framerateBuffer.length;
-        if (recoveryFrameCount >= l) {
-  
-          // Calculate the average framerate.
-          float total = 0.;
-          for (int j = 0; j < l; j++) {
-            total += framerateBuffer[j];
-          }
-          float avg = total/float(l);
-          //console.log("Recovery average: "+str(avg));
-  
-          // If the framerate is at least 90%..
-          if (recoveryPhase == 1 && avg/stableFPS >= 0.9) {
-            //console.log("Recovery phase 1");
-            // Move on to phase 2 and get a little more data.
-            recoveryPhase = 2;
-            recoveryFrameCount = 0;
-            framerateBuffer = new float[30];
-          }
-  
-          // If the framerate is at least the minimum stable fps.
-          else if (recoveryPhase == 2 && avg >= stableFPS) {
-            //console.log("Recovery phase 2");
-            // Now wait a bit before going back to monitor.
-            graceTimer = 0;
-            recoveryFrameCount = 0;
-            fpsTrackingMode = GRACE;
-          }
-          // Otherwise drop back to the previous power mode.
-          else {
-            //console.log("Drop back");
-            switch (powerMode) {
-            case HIGH:
-              setPowerMode(PowerMode.NORMAL);
-              break;
-            case NORMAL:
-              setPowerMode(PowerMode.SLEEPY);
-              break;
-            case SLEEPY:
-              // Minimum power level, do nothing here.
-              // Hopefully framerates don't get that low.
-              break;
-            case MINIMAL:
-              // This is not a power level we downgrade to.
-              // We shouldn't downgrade here, but if for whatever reason we're glitched out
-              // and stuck in this mode, get ourselves out of it.
-              setPowerMode(PowerMode.SLEEPY);
-              fpsScore = FPS_SCORE_MIDDLE;
-              break;
-            }
-            recoveryScore = pow((avg/stableFPS), RECOVERY_NEGLIGENCE);
-            fpsTrackingMode = MONITOR;
-          }
-        }
-      } else if (fpsTrackingMode == SLEEPY) {
-      } else if (fpsTrackingMode == GRACE) {
-        graceTimer++;
-        if (graceTimer > (240/n))
-          fpsTrackingMode = MONITOR;
-      }
-      //console.log(str(fpsScore));
     }
     
     public boolean getSleepyMode() {
@@ -993,7 +783,12 @@ class Engine {
     private int thisFrameMillis = 0;
     private PGraphics[] CPUCanvas;
     private int currentCPUCanvas = 0;
-    public int smallerCanvasTimeout = 300;
+    public float smallerCanvasTimeout = 300;
+    
+    public final float BASE_FRAMERATE = 60.;
+    private float delta = 0.;
+    
+    private boolean showFPS = false;
     
     public DisplayModule() {
         // Set the display scale; since I've been programming this with my Surface Book 2 at high density resolution,
@@ -1011,6 +806,14 @@ class Engine {
           CPUCanvas = new PGraphics[MAX_CPU_CANVAS];
           CPUCanvas[0] = createGraphics(app.width, app.height);
         }
+    }
+    
+    public void setShowFPS(boolean b) {
+      showFPS = b;
+    }
+    
+    public boolean showFPS() {
+      return showFPS;
     }
     
     // Displaying it for the first time automatically caches it (and causes a massive ass delay)
@@ -1290,24 +1093,8 @@ class Engine {
     }
     
     public float getLiveFPS() {
-      float fps = 60;
-      switch (power.powerMode) {
-      case HIGH:
-        fps = 60.;
-        break;
-      case NORMAL:
-        fps = 30.;
-        break;
-      case SLEEPY:
-        fps = 15.;
-        break;
-      case MINIMAL:
-        fps = 1.;
-        break;
-      }
-      float timeframe = 1000/fps;
-  
-      return (timeframe/float(thisFrameMillis-lastFrameMillis))*fps;
+      float timeframe = 1000/BASE_FRAMERATE;
+      return (timeframe/float(thisFrameMillis-lastFrameMillis))*BASE_FRAMERATE;
     }
     
     public void displayScreens() {
@@ -1365,24 +1152,9 @@ class Engine {
     }
     
     public void controlCPUCanvas() {
-      int n = 1;
-      switch (power.getPowerMode()) {
-        case HIGH:
-          n = 1;
-          break;
-        case NORMAL:
-          n = 2;
-          break;
-        case SLEEPY:
-          n = 4;
-          break;
-        case MINIMAL:
-          n = 1;
-          break;
-      }
-      
       if (USE_CPU_CANVAS) {
-        if ((frameRate < 13 || getLiveFPS() < 9) && smallerCanvasTimeout < 1 && power.getPowerMode() != PowerMode.MINIMAL) {
+        // TODO: FPS system changes, you prolly wanna update this
+        if ((frameRate < 13 || getLiveFPS() < 9) && smallerCanvasTimeout < 1. && power.getPowerMode() != PowerMode.MINIMAL) {
           currentCPUCanvas++;
           if (currentCPUCanvas < MAX_CPU_CANVAS && CPUCanvas[currentCPUCanvas] == null) {
             int w = CPUCanvas[currentCPUCanvas-1].width;
@@ -1391,13 +1163,18 @@ class Engine {
           }
           smallerCanvasTimeout = 120;
         }
-        else smallerCanvasTimeout -= n;
+        else smallerCanvasTimeout -= display.getDelta();
       }
     }
     
-    public void updateFrameMillis() {
+    public void updateDelta() {
       lastFrameMillis = thisFrameMillis;
       thisFrameMillis = app.millis();
+      delta = BASE_FRAMERATE/display.getLiveFPS();
+    }
+    
+    public float getDelta() {
+      return delta;
     }
     
   
@@ -1485,6 +1262,7 @@ class Engine {
     public void playSound(String name, float pitch) {
       SoundFile s = getSound(name);
       if (s != null) {
+        if (s.isPlaying()) s.stop();
         s.play(pitch);
       }
     }
@@ -1624,22 +1402,6 @@ class Engine {
   
   
     public void processSound() {
-      float n = 1.;
-      switch (power.getPowerMode()) {
-      case HIGH:
-        n = 1.;
-        break;
-      case NORMAL:
-        n = 2.;
-        break;
-      case SLEEPY:
-        n = 4.;
-        break;
-      case MINIMAL:
-        n = 60.;
-        break;
-      }
-  
       if (musicReady.get() == true) {
         if (reloadMusic) {
           stopMusic();
@@ -1651,7 +1413,7 @@ class Engine {
         if (musicFadeOut < 1.) {
           if (musicFadeOut > 0.005) {
             // Fade the old music out
-            float vol = musicFadeOut *= pow(MUSIC_FADE_SPEED, n);
+            float vol = musicFadeOut *= pow(MUSIC_FADE_SPEED, display.getDelta());
             streamMusic.playbin.setVolume(vol*masterVolume);
             streamMusic.playbin.getState();   
   
@@ -2024,6 +1786,7 @@ private int[] getJPEGImageDimensions(String filePath) throws IOException {
     display = new DisplayModule();
     power = new PowerModeModule();
     sound = new AudioModule();
+    clipboard = new ClipboardModule();
     
     
     // First, load the logo and loading symbol.
@@ -2250,22 +2013,6 @@ private int[] getJPEGImageDimensions(String filePath) throws IOException {
   private String downloadPath;
 
   private void runUpdate() {
-    int n = 1;
-    switch (power.powerMode) {
-    case HIGH:
-      n = 1;
-      break;
-    case NORMAL:
-      n = 2;
-      break;
-    case SLEEPY:
-      n = 4;
-      break;
-    case MINIMAL:
-      n = 1;
-      break;
-    }
-    
 
     // Download
     if (updatePhase == 1) {
@@ -2294,7 +2041,7 @@ private int[] getJPEGImageDimensions(String filePath) throws IOException {
 
       // Every 0.5 secs, update the download percentage
       checkPercentageInterval++;
-      if (checkPercentageInterval > 30/n) {
+      if (checkPercentageInterval > (int)(30./display.getDelta())) {
         checkPercentageInterval = 0;
 
         // Because we can't really check how many bytes we've downloaded without making
@@ -2628,6 +2375,16 @@ private int[] getJPEGImageDimensions(String filePath) throws IOException {
       playWhileUnfocused = false;
       console.log("Background music (while focused) disabled.");
     }
+    else if (commandEquals(command, "/showfps")) {
+      if (display.showFPS()) {
+        display.setShowFPS(false);
+        console.log("FPS hidden.");
+      }
+      else {
+        display.setShowFPS(true);
+        console.log("FPS shown.");
+      }
+    }
     else if (command.length() <= 1) {
       // If empty, do nothing and close the prompt.
     } else if (currScreen.customCommands(command)) {
@@ -2953,8 +2710,15 @@ private int[] getJPEGImageDimensions(String filePath) throws IOException {
     public Console() {
       this.consoleLine = new ConsoleLine[totalLines];
       this.generateConsole();
-
-      consoleFont = createFont(APPPATH+CONSOLE_FONT, 24);
+      
+      boolean createFontFailed = false;
+      try {
+        consoleFont = createFont(APPPATH+CONSOLE_FONT, 24);
+      }
+      catch (NullPointerException e) {
+        createFontFailed = true;
+      }
+      if (createFontFailed) consoleFont = null;
       if (consoleFont == null) {
         consoleFont = createFont("Monospace", 24);
       }
@@ -3365,25 +3129,10 @@ private int[] getJPEGImageDimensions(String filePath) throws IOException {
 
   
 
-
+  private float counter = 0.;
 
   public int counter(int max, int interval) {
-    float n = 1.;
-    switch (power.getPowerMode()) {
-    case HIGH:
-      n = 1.;
-      break;
-    case NORMAL:
-      n = 2.;
-      break;
-    case SLEEPY:
-      n = 4.;
-      break;
-    case MINIMAL:
-      n = 0.;
-      break;
-    }
-    return (int)((app.frameCount*n)/interval) % (max);
+    return (int)((counter)/interval) % (max);
   }
 
   public String appendZeros(int num, int length) {
@@ -3468,20 +3217,16 @@ private int[] getJPEGImageDimensions(String filePath) throws IOException {
 
   public float smoothLikeButter(float i) {
 
-    switch (power.getPowerMode()) {
-    case HIGH:
-      i *= 0.9;
-      break;
-    case NORMAL:
-      i *= 0.9*0.9;
-      break;
-    case SLEEPY:
-      i *= 0.9*0.9*0.9*0.9;
-      break;
-    case MINIMAL:
-      i *= 0.9;
-      break;
-    }
+    // I wanna emulate some of the cruddy performance from the old fps system
+    // so we limit the display delta especially when we get sudden fps dips.
+    // Max it at 4 because that was the minimum framerate we could do in SLEEPY mode,
+    // 15fps!
+    float d = min(display.getDelta(), 4.);
+    i *= pow(0.9, d);
+    
+    
+    // LMAO REALLY FUNNY GLITCH, COMMENT THE LINE ABOVE AND UNCOMMENT THIS ONE BELOW!!
+    //i *= 0.9*display.getDelta();
 
     if (i < 0.05) {
       return i-0.001;
@@ -3891,43 +3636,27 @@ private int[] getJPEGImageDimensions(String filePath) throws IOException {
       keyActionPressed = false;
 
     if (keyHoldCounter >= 1) {
-      switch (power.getPowerMode()) {
-      case HIGH:
-        keyHoldCounter++;
-        break;
-      case NORMAL:
-        keyHoldCounter += 2;
-        break;
-      case SLEEPY:
-        keyHoldCounter += 4;
-        break;
-      case MINIMAL:
-        keyHoldCounter++;
-        break;
-      }
+      keyHoldCounter += display.getDelta();
     }
 
     if (keyHoldCounter > KEY_HOLD_TIME) {
-
-      switch (power.getPowerMode()) {
-      case HIGH:
-        // Reduce speed of repeated key presses when holding key.
+      
+      // TODO: not good.
+      if (display.getDelta() >= 30.) {
         if (app.frameCount % 2 == 0) {
           keyboardAction(lastKeyPressed, lastKeycodePressed);
         }
-        break;
-      case NORMAL:
+      }
+      else if (display.getDelta() >= 15.) {
         keyboardAction(lastKeyPressed, lastKeycodePressed);
-        break;
-      case SLEEPY:
+      }
+      else {
         // Ohgod
         keyboardAction(lastKeyPressed, lastKeycodePressed);
         keyboardAction(lastKeyPressed, lastKeycodePressed);
-        break;
-      case MINIMAL:
-        keyboardAction(lastKeyPressed, lastKeycodePressed);
-        break;
       }
+      
+      
     }
 
     //*************MOUSE WHEEL*************
@@ -4482,96 +4211,122 @@ private int[] getJPEGImageDimensions(String filePath) throws IOException {
     openDirInNewThread(currentDir);
   }
   
-  private Object cachedClipboardObject;
   
-  public boolean clipboardIsImage() {
-    if (cachedClipboardObject == null) cachedClipboardObject = getFromClipboard(DataFlavor.imageFlavor);
+  public class ClipboardModule {
+    private Object cachedClipboardObject;
     
-    // If still false, is nothing so isn't an image.
-    if (cachedClipboardObject == null) return false;
-    return (cachedClipboardObject instanceof java.awt.Image);
-  }
-
-  public String getTextFromClipboard()
-  {
-    if (cachedClipboardObject == null) cachedClipboardObject = getFromClipboard(DataFlavor.stringFlavor);
-    String text = (String) cachedClipboardObject;
-    cachedClipboardObject = null;
-    return text;
-  }
+    public boolean isImage() {
+      if (cachedClipboardObject == null) cachedClipboardObject = getFromClipboard(DataFlavor.imageFlavor);
+      
+      // If still false, is nothing so isn't an image.
+      if (cachedClipboardObject == null) return false;
+      return (cachedClipboardObject instanceof java.awt.Image);
+    }
   
-  public boolean clipboardIsString() {
-    if (cachedClipboardObject == null) cachedClipboardObject = getFromClipboard(DataFlavor.stringFlavor);
-    
-    // If still false, is nothing so isn't an image.
-    if (cachedClipboardObject == null) return false;
-    return (cachedClipboardObject instanceof String);
-  }
-
-  public PImage getImageFromClipboard()
-  {
-    PImage img = null;
-    
-    if (cachedClipboardObject == null) cachedClipboardObject = getFromClipboard(DataFlavor.imageFlavor);
-    
-    java.awt.Image image = (java.awt.Image) getFromClipboard(DataFlavor.imageFlavor);
-    
-    cachedClipboardObject = null;
-    
-    if (image != null)
+    public String getText()
     {
-      img = new PImage(image);
+      if (cachedClipboardObject == null) cachedClipboardObject = getFromClipboard(DataFlavor.stringFlavor);
+      String text = (String) cachedClipboardObject;
+      cachedClipboardObject = null;
+      return text;
     }
-    return img;
-  }
-
-  private Object getFromClipboard(DataFlavor flavor)
-  {
-    Clipboard clipboard = Toolkit.getDefaultToolkit().getSystemClipboard();
-    Transferable contents;
-    try {
-      contents = clipboard.getContents(null);
+    
+    public boolean isString() {
+      if (cachedClipboardObject == null) cachedClipboardObject = getFromClipboard(DataFlavor.stringFlavor);
+      
+      // If still false, is nothing so isn't an image.
+      if (cachedClipboardObject == null) return false;
+      return (cachedClipboardObject instanceof String);
     }
-    catch (IllegalStateException e) {
-      contents = null;
-    }
-
-    Object obj = null;
-    if (contents != null && contents.isDataFlavorSupported(flavor))
-    {
-      try
-      {
-        obj = contents.getTransferData(flavor);
-      }
-      catch (UnsupportedFlavorException exu) // Unlikely but we must catch it
-      {
-        console.warn("(Copy/paste) Unsupported flavor");
-        //~  exu.printStackTrace();
-      }
-      catch (java.io.IOException exi)
-      {
-        console.warn("(Copy/paste) Unavailable data: " + exi);
-        //~  exi.printStackTrace();
-      }
-    }
-    return obj;
-  } 
   
-  // Returns true if successful, false if not
-  public boolean copyStringToClipboard(String str) {
-    String myString = str;
-    try {
-      StringSelection stringSelection = new StringSelection(myString);
+    public PImage getImage()
+    {
+      PImage img = null;
+      
+      if (cachedClipboardObject == null) cachedClipboardObject = getFromClipboard(DataFlavor.imageFlavor);
+      
+      java.awt.Image image = (java.awt.Image) getFromClipboard(DataFlavor.imageFlavor);
+      
+      cachedClipboardObject = null;
+      
+      if (image != null)
+      {
+        img = new PImage(image);
+      }
+      return img;
+    }
+  
+    private Object getFromClipboard(DataFlavor flavor)
+    {
       Clipboard clipboard = Toolkit.getDefaultToolkit().getSystemClipboard();
-      clipboard.setContents(stringSelection, null);
+      Transferable contents;
+      try {
+        contents = clipboard.getContents(null);
+      }
+      catch (IllegalStateException e) {
+        contents = null;
+      }
+  
+      Object obj = null;
+      if (contents != null && contents.isDataFlavorSupported(flavor))
+      {
+        try
+        {
+          obj = contents.getTransferData(flavor);
+        }
+        catch (UnsupportedFlavorException exu) // Unlikely but we must catch it
+        {
+          console.warn("(Copy/paste) Unsupported flavor");
+          //~  exu.printStackTrace();
+        }
+        catch (java.io.IOException exi)
+        {
+          console.warn("(Copy/paste) Unavailable data: " + exi);
+          //~  exi.printStackTrace();
+        }
+      }
+      return obj;
+    } 
+    
+    // Returns true if successful, false if not
+    public boolean copyString(String str) {
+      String myString = str;
+      try {
+        StringSelection stringSelection = new StringSelection(myString);
+        Clipboard clipboard = Toolkit.getDefaultToolkit().getSystemClipboard();
+        clipboard.setContents(stringSelection, null);
+      }
+      catch (RuntimeException e) {
+        console.warn(e.getMessage());
+        console.warn("Couldn't copy text to clipboard: ");
+        return false;
+      }
+      return true;
     }
-    catch (RuntimeException e) {
-      console.warn(e.getMessage());
-      console.warn("Couldn't copy text to clipboard: ");
-      return false;
-    }
-    return true;
+  
   }
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
 
   public void processCaching() {
     if (cacheInfoTimeout > 0) {
@@ -4603,21 +4358,6 @@ private int[] getJPEGImageDimensions(String filePath) throws IOException {
     // Get updates
     processUpdate();
 
-    int n = 1;
-    switch (power.getPowerMode()) {
-    case HIGH:
-      n = 1;
-      break;
-    case NORMAL:
-      n = 2;
-      break;
-    case SLEEPY:
-      n = 4;
-      break;
-    case MINIMAL:
-      n = 1;
-      break;
-    }
 
     // This should be run at all times because apparently (for some stupid reason)
     // it uses way more performance NOT to call background();
@@ -4659,17 +4399,30 @@ private int[] getJPEGImageDimensions(String filePath) throws IOException {
       app.popMatrix();
     }
 
+    counter += display.getDelta();
     // Update times so we can calculate live fps.
-    display.updateFrameMillis();
+    display.updateDelta();
+    
+    if (display.showFPS()) {
+      pushMatrix();
+      app.scale(display.getScale());
+      textFont(DEFAULT_FONT, 32);
+      textAlign(LEFT, TOP);
+      float y = 5;
+      if (currScreen != null) y = currScreen.myUpperBarWeight+5;
+      fill(0);
+      text(round(frameRate), 5, y);
+      fill(255);
+      text(round(frameRate), 7, y+2);
+      popMatrix();
+    }
 
     devInfo();
 
     // Display console
     // TODO: this renders the console 4 times which is BAD.
     // We need to make the animation execute 4 times, not the drawing routines.
-    for (int i = 0; i < n; i++) {
-      console.display(true);
-    }
+    console.display(true);
 
     mouseEventClick = false;
     this.keyPressed = false;
@@ -4703,6 +4456,7 @@ public abstract class Screen {
   protected Engine.PowerModeModule power;
   protected Engine.AudioModule sound;
   protected Engine.FilemanagerModule file;
+  protected Engine.ClipboardModule clipboard;
   
   protected float screenx = 0;
   protected float screeny = 0;
@@ -4729,6 +4483,7 @@ public abstract class Screen {
     this.power = engine.power;
     this.sound = engine.sound;
     this.file = engine.file;
+    this.clipboard = engine.clipboard;
     
     this.WIDTH = engine.display.WIDTH;
     this.HEIGHT = engine.display.HEIGHT;

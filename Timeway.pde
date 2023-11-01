@@ -97,6 +97,7 @@ void setup() {
     surface.setResizable(true);
     surface.setTitle("Timeway");
     hint(DISABLE_OPENGL_ERRORS);
+    //hint(ENABLE_KEY_REPEAT)
     background(0);
     
     // Are we running in Processing or as an exported application?
@@ -121,7 +122,10 @@ void draw() {
         catch (java.lang.OutOfMemoryError outofmem) {
           sketch_openErrorLog(
           "Sorry! Timeway has run out of memory! D:\n"+
-          "You probably tried to load up too many files from a folder..."
+          "Either: \n"+
+          "You loaded a massive number of files from a folder\n"+
+          "or\n"+
+          "The OutOfMemoryError protection system failed. This could be a bug."
           );
           exit();
         }

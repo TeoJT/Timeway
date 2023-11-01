@@ -1232,7 +1232,7 @@ public class Editor extends Screen {
           if (editingPlaceable != null) {
             if (editingPlaceable instanceof TextPlaceable) {
               TextPlaceable t = (TextPlaceable)editingPlaceable;
-              boolean success = engine.copyStringToClipboard(t.text);
+              boolean success = clipboard.copyString(t.text);
               if (success)
                 console.log("Copied!");
             }
@@ -1245,13 +1245,13 @@ public class Editor extends Screen {
             // Timeout so that we don't immediately shrink our cpu canvas since a delay is expected.
             display.smallerCanvasTimeout = 10;
             
-            if (engine.clipboardIsImage()) {
-              PImage pastedImage = engine.getImageFromClipboard();
+            if (clipboard.isImage()) {
+              PImage pastedImage = clipboard.getImage();
               if (pastedImage == null) console.log("Can't paste image from clipboard!");
               else insertImage(pastedImage);
             }
-            else if (engine.clipboardIsString()) {
-              String pastedString = engine.getTextFromClipboard();
+            else if (clipboard.isString()) {
+              String pastedString = clipboard.getText();
               
               if (editingPlaceable != null) {
                 // If we're currently editing text, append it
