@@ -106,7 +106,7 @@ public class Updater extends Screen {
       
     if (button("Update", WIDTH/2, HEIGHT-myLowerBarWeight-60)) {
       String downloadURL = "";
-      String downloadLocation = engine.getMyDir()+"timeway-update-download.zip";
+      String downloadLocation = file.getMyDir()+"timeway-update-download.zip";
       switch (platform) {
         case WINDOWS:
           downloadURL = updateInfo.getString("windows-download", "");

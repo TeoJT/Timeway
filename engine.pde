@@ -1482,8 +1482,357 @@ class Engine {
   
   
   public class FilemanagerModule {
-    public FilemanagerModule() {
+    Engine engine;
+    
+    public FilemanagerModule(Engine e) {
+      engine = e;
       
+      DEFAULT_DIR  = settings.getString("homeDirectory");
+      {
+        File f = new File(DEFAULT_DIR);
+        if (!f.exists()) {
+          console.warn("homeDirectory "+DEFAULT_DIR+" doesn't exist! You should check your config file.");
+          DEFAULT_DIR = System.getProperty("user.home").replace('\\', '/');
+        }
+        currentDir  = DEFAULT_DIR;
+      }
+    }
+    
+    public boolean loading = false;
+    public int MAX_DISPLAY_FILES = 2048; 
+    public int numTimewayEntries = 0;
+    public DisplayableFile[] currentFiles;
+  
+    // TODO: change this so that you can modify the default dir.
+    // TODO: Make it follow the UNIX file system with compatibility with windows.
+    public String currentDir;
+    public class DisplayableFile {
+      public String path;
+      public String filename;
+      public String fileext;
+      public String icon = null;
+      // TODO: add other properties.
+      
+      
+      public boolean exists() {
+        return (new File(path)).exists();
+      }
+      
+      public boolean isDirectory() {
+        if (!exists()) {
+          console.bugWarn("isDirectory: "+path+" doesn't exist!");
+          return false;
+        }
+        return (new File(path)).isDirectory();
+      }
+    }
+  
+    // Returns the extention WITHOUT the "." dot
+    public String getExt(String fileName) {
+      int dotIndex = fileName.lastIndexOf(".");
+      // If it's a dir, return a dot "."
+      if (dotIndex == -1) {
+        // Return a dot to resemble that this is a directory.
+        // We choose a dot because no extention can possibly be a ".".
+        return ".";
+      }
+      return fileName.substring(dotIndex+1, fileName.length());
+    }
+  
+    public String getDir(String path) {
+      try {
+        String str = path.substring(0, path.lastIndexOf('/', path.length()-2));
+        return str;
+      }
+      catch (StringIndexOutOfBoundsException e) {
+        return path;
+      }
+    }
+    
+    public String getMyDir() {
+      String dir = getDir(APPPATH);
+      if (dir.charAt(dir.length()-1) != '/')  dir += "/";
+      return dir;
+    }
+  
+    public String getFilename(String path) {
+      int index = path.lastIndexOf('/', path.length()-2);
+      if (index != -1) {
+        if (path.charAt(path.length()-1) == '/') {
+          path = path.substring(0, path.length()-1);
+        }
+        return path.substring(index+1);
+      } else
+        return path;
+    }
+    
+    // Returns filename without the extension.
+    public String getIsolatedFilename(String path) {
+      int index = path.lastIndexOf('/', path.length()-2);
+      String filenameWithExt = "";
+      if (index != -1) {
+        if (path.charAt(path.length()-1) == '/') {
+          path = path.substring(0, path.length()-1);
+        }
+        filenameWithExt = path.substring(index+1);
+      } else
+        filenameWithExt = path;
+      
+      // Now strip off the ext.
+      index = filenameWithExt.indexOf('.');
+      String result = filenameWithExt.substring(0, index);
+      console.log(result);
+      return result;
+    }
+  
+    public boolean atRootDir(String dirName) {
+      // This will heavily depend on what os we're on.
+      if (platform == WINDOWS) {
+  
+        // for windows, let's do a dirty way of checking for 3 characters
+        // such as C:/
+        return (dirName.length() <= 3);
+      }
+  
+      // Shouldn't be reached
+      return false;
+    }
+  
+  
+  
+    public String typeToIco(FileType type) {
+      switch (type) {
+      case FILE_TYPE_UNKNOWN:
+        return "unknown_128";
+      case FILE_TYPE_IMAGE:
+        return "image_128";
+      case FILE_TYPE_VIDEO:
+        return "media_128";
+      case FILE_TYPE_MUSIC:
+        return "media_128";
+      case FILE_TYPE_MODEL:
+        return "unknown_128";
+      case FILE_TYPE_DOC:
+        return "doc_128";
+      default:
+        return "unknown_128";
+      }
+    }
+  
+    public String extIcon(String ext) {
+      return typeToIco(extToType(ext));
+    }
+  
+    public FileType extToType(String ext) {
+      if (ext.equals("png")
+        || ext.equals("jpg")
+        || ext.equals("jpeg")
+        || ext.equals("bmp")
+        || ext.equals("gif")
+        || ext.equals("ico")
+        || ext.equals("webm")
+        || ext.equals("tiff")
+        || ext.equals("tif")) return FileType.FILE_TYPE_IMAGE;
+  
+      if (ext.equals("doc")
+        || ext.equals("docx")
+        || ext.equals("txt")
+        || ext.equals(ENTRY_EXTENSION)
+        || ext.equals("pdf")) return FileType.FILE_TYPE_DOC;
+  
+      if (ext.equals("mp3")
+        || ext.equals("wav")
+        || ext.equals("flac")
+        || ext.equals("ogg"))  return FileType.FILE_TYPE_MUSIC;
+  
+      if (ext.equals("mp4")
+        || ext.equals("m4v")
+        || ext.equals("mov")) return FileType.FILE_TYPE_VIDEO;
+        
+      if (ext.equals("obj")) return FileType.FILE_TYPE_MODEL;
+      
+      // For backwards compat, we may have different portal shortcut extensions.
+      for (String s : SHORTCUT_EXTENSION) {
+        if (ext.equals(s)) return FileType.FILE_TYPE_SHORTCUT;
+      }
+  
+      return FileType.FILE_TYPE_UNKNOWN;
+    }
+  
+    // A function of conditions for a file to be hidden,
+    // for now files are only hidden if they have '.' at the front.
+    private boolean fileHidden(String filename) {
+      if (filename.length() > 0) {
+        if      (filename.charAt(0) == '.') return true;
+        else if (filename.equals("desktop.ini")) return true;
+      }
+      return false;
+    }
+  
+    // Opens the dir and populates the currentFiles list.
+    public void openDir(String dirName) {
+      loading = true;
+      dirName = dirName.replace('\\', '/');
+      numTimewayEntries = 0;
+      File dir = new File(dirName);
+      if (!dir.isDirectory()) {
+        console.warn(dirName+" is not a directory!");
+        return;
+      }
+  
+      // Start at one because the first element is the back element
+      int index = 1;
+  
+      // Make the dir have one extra slot for back.2
+      // TODO: add runtime loading of files and remove the MAX_DISPLAY_FILES limit.
+      try {
+        int l = dir.listFiles().length + 1;
+        if (l > MAX_DISPLAY_FILES) l = MAX_DISPLAY_FILES+1;
+        if (atRootDir(dirName)) {
+          // if we're at the root dir, then nevermind about that one extra slot;
+          // there's no need to go back when we're already at the root dir.
+          l = dir.listFiles().length;
+          if (l > MAX_DISPLAY_FILES) l = MAX_DISPLAY_FILES;
+          index = 0;
+        }
+  
+        currentFiles = new DisplayableFile[l];
+  
+        // Add the back option to the list
+        if (!atRootDir(dirName)) {
+          // Assuming we're not at the root dir (therefore possible to go back),
+          // add the back option to our dir
+          currentFiles[0] = new DisplayableFile();
+          currentFiles[0].path = getDir(dirName);
+          console.log(currentFiles[0].path);
+          currentFiles[0].filename = "[Prev dir]";
+          currentFiles[0].fileext = "..";            // It should be impossible for any files to have this file extention.
+        }
+  
+        final int MAX_NAME_SIZE = 40;
+  
+        for (File f : dir.listFiles()) {
+          if (index < l) {
+            // Cheap fix, sorryyyyyy
+            try {
+              if (!fileHidden(f.getName())) {
+                currentFiles[index] = new DisplayableFile();
+                currentFiles[index].path = f.getAbsolutePath();
+                currentFiles[index].filename = f.getName();
+                if (currentFiles[index].filename.length() > MAX_NAME_SIZE) currentFiles[index].filename = currentFiles[index].filename.substring(0, MAX_NAME_SIZE)+"...";
+                currentFiles[index].fileext = getExt(f.getName());
+  
+                // Get icon
+                if (f.isDirectory()) currentFiles[index].icon = "folder_128";
+                else currentFiles[index].icon = extIcon(currentFiles[index].fileext);
+  
+                // Just a piece of code plonked in for the entries part
+                if (currentFiles[index].fileext.equals(ENTRY_EXTENSION)) numTimewayEntries++;
+                index++;
+              }
+            }
+            catch (NullPointerException e1) {
+            }
+            catch (ArrayIndexOutOfBoundsException e2) {
+            }
+          }
+        }
+        currentDir = dirName;
+        if (currentDir.charAt(currentDir.length()-1) != '/')  currentDir += "/";
+        loading = false;
+      }
+      catch (NullPointerException e) {
+        console.warn("Null dir, perhaps refused permissions?");
+      }
+    }
+  
+    //public boolean isLoading() {
+    //  return loading;
+    //}
+  
+    public void openDirInNewThread(final String dirName) {
+      loading = true;
+      Thread t = new Thread(new Runnable() {
+        public void run() {
+          openDir(dirName);
+        }
+      }
+      );
+      t.start();
+    }
+  
+    // NOTE: Only opens files, NOT directories (yet).
+    public void open(String filePath) {
+      String ext = getExt(filePath);
+      // Stuff to open with our own app (timeway)
+      if (ext.equals(ENTRY_EXTENSION)) {
+        currScreen.requestScreen(new Editor(engine, filePath));
+      }
+  
+      // Anything else which is opened by a windows app or something.
+      // TODO: use xdg-open in linux.
+      // TODO: figure out how to open apps with MacOS.
+      else {
+        if (Desktop.isDesktopSupported()) {
+          // Open desktop app with this snippet of code that I stole.
+          try {
+            Desktop desktop = Desktop.getDesktop();
+            File myFile = new File(filePath);
+            try {
+              desktop.open(myFile);
+            }
+            catch (IllegalArgumentException fileNotFound) {
+              console.log("This file or dir no longer exists!");
+              refreshDir();
+            }
+          } 
+          catch (IOException ex) {
+            console.warn("Couldn't open file IOException");
+          }
+        } else {
+          console.warn("Couldn't open file, isDesktopSupported=false.");
+        }
+      }
+    }
+  
+    public void open(DisplayableFile file) {
+      String path = file.path;
+      if (file.isDirectory()) {
+        openDirInNewThread(path);
+      } else {
+        // Stuff to open with our own app (timeway)
+        if (file.fileext.equals(ENTRY_EXTENSION)) {
+          currScreen.requestScreen(new Editor(engine, path));
+        }
+  
+        // Anything else which is opened by a windows app or something.
+        // TODO: use xdg-open in linux.
+        // TODO: figure out how to open apps with MacOS.
+        else {
+          if (Desktop.isDesktopSupported()) {
+            // Open desktop app with this snippet of code that I stole.
+            try {
+              Desktop desktop = Desktop.getDesktop();
+              File myFile = new File(path);
+              try {
+                desktop.open(myFile);
+              }
+              catch (IllegalArgumentException fileNotFound) {
+                console.log("This file or dir no longer exists!");
+                refreshDir();
+              }
+            } 
+            catch (IOException ex) {
+            }
+          } else {
+            console.warn("Couldn't open file, isDesktopSupported=false.");
+          }
+        }
+      }
+    }
+  
+    public void refreshDir() {
+      openDirInNewThread(currentDir);
     }
     
         // NOTE: VERY INACCURATE
@@ -1659,7 +2008,7 @@ class Engine {
 
 
 
-private int[] getJPEGImageDimensions(String filePath) throws IOException {
+    private int[] getJPEGImageDimensions(String filePath) throws IOException {
         File file = new File(filePath);
         FileInputStream stream;
             stream = new FileInputStream(file);
@@ -1763,6 +2112,8 @@ private int[] getJPEGImageDimensions(String filePath) throws IOException {
         return Integer.MAX_VALUE;
       }
     }
+    
+    
   }
   
   // *************************************************************
@@ -1780,9 +2131,9 @@ private int[] getJPEGImageDimensions(String filePath) throws IOException {
     console = new Console();
     console.info("Hello console");
     
-    file = new FilemanagerModule();
-    sharedResources = new SharedResourcesModule();
     settings = new SettingsModule();
+    file = new FilemanagerModule(this);
+    sharedResources = new SharedResourcesModule();
     display = new DisplayModule();
     power = new PowerModeModule();
     sound = new AudioModule();
@@ -1805,15 +2156,6 @@ private int[] getJPEGImageDimensions(String filePath) throws IOException {
     scrollSensitivity = settings.getFloat("scrollSensitivity");
     power.setDynamicFramerate(settings.getBoolean("dynamicFramerate"));
     DEFAULT_FONT_NAME = settings.getString("defaultSystemFont");
-    DEFAULT_DIR  = settings.getString("homeDirectory");
-    {
-      File f = new File(DEFAULT_DIR);
-      if (!f.exists()) {
-        console.warn("homeDirectory "+DEFAULT_DIR+" doesn't exist! You should check your config file.");
-        DEFAULT_DIR = System.getProperty("user.home").replace('\\', '/');
-      }
-      currentDir  = DEFAULT_DIR;
-    }
     
     
     DEFAULT_FONT = display.getFont(DEFAULT_FONT_NAME);
@@ -1997,7 +2339,7 @@ private int[] getJPEGImageDimensions(String filePath) throws IOException {
         cmds[0] = cmd;
         app.saveStrings(APPPATH+WINDOWS_CMD, cmds);
         delay(100);
-        open(APPPATH+WINDOWS_CMD);
+        file.open(APPPATH+WINDOWS_CMD);
       break;
       default:
       console.bugWarn("runOSCommand: support for os not implemented!");
@@ -2090,7 +2432,7 @@ private int[] getJPEGImageDimensions(String filePath) throws IOException {
           Thread t1 = new Thread(new Runnable() {
             public void run() {
                 try {
-                  unzip(downloadPath, getMyDir());
+                  unzip(downloadPath, file.getMyDir());
                 }
                 catch (Exception e) {
                   console.warn("An error occured while downloading update...");
@@ -2163,12 +2505,12 @@ private int[] getJPEGImageDimensions(String filePath) throws IOException {
               break;
           }
           // TODO: move files from old version
-          String newVersion = getMyDir()+exeloc;
+          String newVersion = file.getMyDir()+exeloc;
           File f = new File(newVersion);
           if (f.exists()) {
             updatePhase = 0;
             //Process p = Runtime.getRuntime().exec(newVersion);
-            String cmd = "start \"Timeway\" /d \""+getDir(newVersion).replaceAll("/", "\\\\")+"\" \""+getFilename(newVersion)+"\"";
+            String cmd = "start \"Timeway\" /d \""+file.getDir(newVersion).replaceAll("/", "\\\\")+"\" \""+file.getFilename(newVersion)+"\"";
             console.log(cmd);
             runOSCommand(cmd);
             delay(500);
@@ -2234,7 +2576,7 @@ private int[] getJPEGImageDimensions(String filePath) throws IOException {
     // TODO: make restart work while in Processing (dev mode)
     switch (platform) {
       case WINDOWS:
-      cmd = "start \"Timeway\" /d \""+getMyDir().replaceAll("/", "\\\\")+"\" \""+getExeFilename()+"\"";
+      cmd = "start \"Timeway\" /d \""+file.getMyDir().replaceAll("/", "\\\\")+"\" \""+getExeFilename()+"\"";
       break;
       case LINUX:
       console.bugWarn("restart(): Not implemented for Linux");
@@ -3354,7 +3696,7 @@ private int[] getJPEGImageDimensions(String filePath) throws IOException {
       return cachedItem.getInt("size", 0);
     }
     else {
-      String ext = getExt(originalPath);
+      String ext = file.getExt(originalPath);
       if (ext.equals("bmp") || ext.equals("png") || ext.equals("jpeg") || ext.equals("jpg") || ext.equals("gif")) {
         return file.getImageUncompressedSize(originalPath);
       }
@@ -3892,324 +4234,6 @@ private int[] getJPEGImageDimensions(String filePath) throws IOException {
   //}
 
 
-  // **********************************File stuff for explorers*************************************
-  public boolean loading = false;
-  public int MAX_DISPLAY_FILES = 2048; 
-  public int numTimewayEntries = 0;
-  public DisplayableFile[] currentFiles;
-
-  // TODO: change this so that you can modify the default dir.
-  // TODO: Make it follow the UNIX file system with compatibility with windows.
-  public String currentDir;
-  public class DisplayableFile {
-    public File file;
-    public String filename;
-    public String fileext;
-    public String icon = null;
-    // TODO: add other properties.
-  }
-
-  // Returns the extention WITHOUT the "." dot
-  public String getExt(String fileName) {
-    int dotIndex = fileName.lastIndexOf(".");
-    // If it's a dir, return a dot "."
-    if (dotIndex == -1) {
-      // Return a dot to resemble that this is a directory.
-      // We choose a dot because no extention can possibly be a ".".
-      return ".";
-    }
-    return fileName.substring(dotIndex+1, fileName.length());
-  }
-
-  public String getDir(String path) {
-    String str = path.substring(0, path.lastIndexOf('/', path.length()-2));
-    return str;
-  }
-  
-  public String getMyDir() {
-    String dir = getDir(APPPATH);
-    if (dir.charAt(dir.length()-1) != '/')  dir += "/";
-    return dir;
-  }
-
-  public String getFilename(String path) {
-    int index = path.lastIndexOf('/', path.length()-2);
-    if (index != -1) {
-      if (path.charAt(path.length()-1) == '/') {
-        path = path.substring(0, path.length()-1);
-      }
-      return path.substring(index+1);
-    } else
-      return path;
-  }
-  
-  // Returns filename without the extension.
-  public String getIsolatedFilename(String path) {
-    int index = path.lastIndexOf('/', path.length()-2);
-    String filenameWithExt = "";
-    if (index != -1) {
-      if (path.charAt(path.length()-1) == '/') {
-        path = path.substring(0, path.length()-1);
-      }
-      filenameWithExt = path.substring(index+1);
-    } else
-      filenameWithExt = path;
-    
-    // Now strip off the ext.
-    index = filenameWithExt.indexOf('.');
-    String result = filenameWithExt.substring(0, index);
-    console.log(result);
-    return result;
-  }
-
-  public boolean atRootDir(String dirName) {
-    // This will heavily depend on what os we're on.
-    if (platform == WINDOWS) {
-
-      // for windows, let's do a dirty way of checking for 3 characters
-      // such as C:/
-      return (dirName.length() == 3);
-    }
-
-    // Shouldn't be reached
-    return false;
-  }
-
-
-
-  public String typeToIco(FileType type) {
-    switch (type) {
-    case FILE_TYPE_UNKNOWN:
-      return "unknown_128";
-    case FILE_TYPE_IMAGE:
-      return "image_128";
-    case FILE_TYPE_VIDEO:
-      return "media_128";
-    case FILE_TYPE_MUSIC:
-      return "media_128";
-    case FILE_TYPE_MODEL:
-      return "unknown_128";
-    case FILE_TYPE_DOC:
-      return "doc_128";
-    default:
-      return "unknown_128";
-    }
-  }
-
-  public String extIcon(String ext) {
-    return typeToIco(extToType(ext));
-  }
-
-  public FileType extToType(String ext) {
-    if (ext.equals("png")
-      || ext.equals("jpg")
-      || ext.equals("jpeg")
-      || ext.equals("bmp")
-      || ext.equals("gif")
-      || ext.equals("ico")
-      || ext.equals("webm")
-      || ext.equals("tiff")
-      || ext.equals("tif")) return FileType.FILE_TYPE_IMAGE;
-
-    if (ext.equals("doc")
-      || ext.equals("docx")
-      || ext.equals("txt")
-      || ext.equals(ENTRY_EXTENSION)
-      || ext.equals("pdf")) return FileType.FILE_TYPE_DOC;
-
-    if (ext.equals("mp3")
-      || ext.equals("wav")
-      || ext.equals("flac")
-      || ext.equals("ogg"))  return FileType.FILE_TYPE_MUSIC;
-
-    if (ext.equals("mp4")
-      || ext.equals("m4v")
-      || ext.equals("mov")) return FileType.FILE_TYPE_VIDEO;
-      
-    if (ext.equals("obj")) return FileType.FILE_TYPE_MODEL;
-    
-    // For backwards compat, we may have different portal shortcut extensions.
-    for (String s : SHORTCUT_EXTENSION) {
-      if (ext.equals(s)) return FileType.FILE_TYPE_SHORTCUT;
-    }
-
-    return FileType.FILE_TYPE_UNKNOWN;
-  }
-
-  // A function of conditions for a file to be hidden,
-  // for now files are only hidden if they have '.' at the front.
-  private boolean fileHidden(String filename) {
-    if (filename.length() > 0) {
-      if      (filename.charAt(0) == '.') return true;
-      else if (filename.equals("desktop.ini")) return true;
-    }
-    return false;
-  }
-
-  // Opens the dir and populates the currentFiles list.
-  public void openDir(String dirName) {
-    loading = true;
-    dirName = dirName.replace('\\', '/');
-    numTimewayEntries = 0;
-    File dir = new File(dirName);
-    if (!dir.isDirectory()) {
-      console.warn(dirName+" is not a directory!");
-      return;
-    }
-
-    // Start at one because the first element is the back element
-    int index = 1;
-
-    // Make the dir have one extra slot for back.2
-    // TODO: add runtime loading of files and remove the MAX_DISPLAY_FILES limit.
-    try {
-      int l = dir.listFiles().length + 1;
-      if (l > MAX_DISPLAY_FILES) l = MAX_DISPLAY_FILES+1;
-      if (atRootDir(dirName)) {
-        // if we're at the root dir, then nevermind about that one extra slot;
-        // there's no need to go back when we're already at the root dir.
-        l = dir.listFiles().length;
-        if (l > MAX_DISPLAY_FILES) l = MAX_DISPLAY_FILES;
-        index = 0;
-      }
-
-      currentFiles = new DisplayableFile[l];
-
-      // Add the back option to the list
-      if (!atRootDir(dirName)) {
-        // Assuming we're not at the root dir (therefore possible to go back),
-        // add the back option to our dir
-        currentFiles[0] = new DisplayableFile();
-        currentFiles[0].file = new File(new File(dirName).getParent());
-        currentFiles[0].filename = "[Prev dir]";
-        currentFiles[0].fileext = "..";            // It should be impossible for any files to have this file extention.
-      }
-
-      final int MAX_NAME_SIZE = 40;
-
-      for (File f : dir.listFiles()) {
-        if (index < l) {
-          // Cheap fix, sorryyyyyy
-          try {
-            if (!fileHidden(f.getName())) {
-              currentFiles[index] = new DisplayableFile();
-              currentFiles[index].file = f;
-              currentFiles[index].filename = f.getName();
-              if (currentFiles[index].filename.length() > MAX_NAME_SIZE) currentFiles[index].filename = currentFiles[index].filename.substring(0, MAX_NAME_SIZE)+"...";
-              currentFiles[index].fileext = getExt(f.getName());
-
-              // Get icon
-              if (f.isDirectory()) currentFiles[index].icon = "folder_128";
-              else currentFiles[index].icon = extIcon(currentFiles[index].fileext);
-
-              // Just a piece of code plonked in for the entries part
-              if (currentFiles[index].fileext.equals(ENTRY_EXTENSION)) numTimewayEntries++;
-              index++;
-            }
-          }
-          catch (NullPointerException e1) {
-          }
-          catch (ArrayIndexOutOfBoundsException e2) {
-          }
-        }
-      }
-      currentDir = dirName;
-      if (currentDir.charAt(currentDir.length()-1) != '/')  currentDir += "/";
-      loading = false;
-    }
-    catch (NullPointerException e) {
-      console.warn("Null dir, perhaps refused permissions?");
-    }
-  }
-
-  //public boolean isLoading() {
-  //  return loading;
-  //}
-
-  public void openDirInNewThread(final String dirName) {
-    loading = true;
-    Thread t = new Thread(new Runnable() {
-      public void run() {
-        openDir(dirName);
-      }
-    }
-    );
-    t.start();
-  }
-
-  // NOTE: Only opens files, NOT directories (yet).
-  public void open(String filePath) {
-    String ext = getExt(filePath);
-    // Stuff to open with our own app (timeway)
-    if (ext.equals(ENTRY_EXTENSION)) {
-      currScreen.requestScreen(new Editor(this, filePath));
-    }
-
-    // Anything else which is opened by a windows app or something.
-    // TODO: use xdg-open in linux.
-    // TODO: figure out how to open apps with MacOS.
-    else {
-      if (Desktop.isDesktopSupported()) {
-        // Open desktop app with this snippet of code that I stole.
-        try {
-          Desktop desktop = Desktop.getDesktop();
-          File myFile = new File(filePath);
-          try {
-            desktop.open(myFile);
-          }
-          catch (IllegalArgumentException fileNotFound) {
-            console.log("This file or dir no longer exists!");
-            refreshDir();
-          }
-        } 
-        catch (IOException ex) {
-          console.warn("Couldn't open file IOException");
-        }
-      } else {
-        console.warn("Couldn't open file, isDesktopSupported=false.");
-      }
-    }
-  }
-
-  public void open(DisplayableFile file) {
-    String path = file.file.getAbsolutePath();
-    if (file.file.isDirectory()) {
-      openDirInNewThread(path);
-    } else {
-      // Stuff to open with our own app (timeway)
-      if (file.fileext.equals(ENTRY_EXTENSION)) {
-        currScreen.requestScreen(new Editor(this, path));
-      }
-
-      // Anything else which is opened by a windows app or something.
-      // TODO: use xdg-open in linux.
-      // TODO: figure out how to open apps with MacOS.
-      else {
-        if (Desktop.isDesktopSupported()) {
-          // Open desktop app with this snippet of code that I stole.
-          try {
-            Desktop desktop = Desktop.getDesktop();
-            File myFile = new File(path);
-            try {
-              desktop.open(myFile);
-            }
-            catch (IllegalArgumentException fileNotFound) {
-              console.log("This file or dir no longer exists!");
-              refreshDir();
-            }
-          } 
-          catch (IOException ex) {
-          }
-        } else {
-          console.warn("Couldn't open file, isDesktopSupported=false.");
-        }
-      }
-    }
-  }
-
-  public void refreshDir() {
-    openDirInNewThread(currentDir);
-  }
   
   
   public class ClipboardModule {

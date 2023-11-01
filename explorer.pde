@@ -15,7 +15,7 @@ public class Explorer extends Screen {
   public Explorer(Engine engine) {
         super(engine);
         
-        engine.openDirInNewThread(engine.DEFAULT_DIR);
+        file.openDirInNewThread(engine.DEFAULT_DIR);
         gui = new SpriteSystemPlaceholder(engine, engine.APPPATH+engine.PATH_SPRITES_ATTRIB+"gui/explorer/");
         gui.repositionSpritesToScale();
         gui.interactable = false;
@@ -29,7 +29,7 @@ public class Explorer extends Screen {
   public Explorer(Engine engine, String dir) {
         super(engine);
         
-        engine.openDirInNewThread(dir);
+        file.openDirInNewThread(dir);
         gui = new SpriteSystemPlaceholder(engine, engine.APPPATH+engine.PATH_SPRITES_ATTRIB+"gui/explorer/");
         gui.repositionSpritesToScale();
         gui.interactable = false;
@@ -50,7 +50,7 @@ public class Explorer extends Screen {
     
     app.textFont(engine.DEFAULT_FONT, 50);
     app.textSize(TEXT_SIZE);
-    for (int i = 0; i < engine.currentFiles.length; i++) {
+    for (int i = 0; i < file.currentFiles.length; i++) {
       float textHeight = app.textAscent() + app.textDescent();
       float x = 50;
       float wi = TEXT_SIZE + 20;
@@ -58,27 +58,27 @@ public class Explorer extends Screen {
       
       // Sorry not sorry
       try {
-        if (engine.currentFiles[i] != null) {
-          if (engine.mouseX() > x && engine.mouseX() < x + app.textWidth(engine.currentFiles[i].filename) + wi && engine.mouseY() > y && engine.mouseY() < textHeight + y) {
+        if (file.currentFiles[i] != null) {
+          if (engine.mouseX() > x && engine.mouseX() < x + app.textWidth(file.currentFiles[i].filename) + wi && engine.mouseY() > y && engine.mouseY() < textHeight + y) {
             // if mouse is overing over text, change the color of the text
             app.fill(100, 0, 255);
             app.tint(100, 0, 255);
             // if mouse is hovering over text and left click is pressed, go to this directory/open the file
             if (engine.pressDown) {
-              if (engine.currentFiles[i].file.isDirectory())
+              if (file.currentFiles[i].isDirectory())
                 scrollOffset = 0.;
                 
-              engine.open(engine.currentFiles[i]);
+              file.open(file.currentFiles[i]);
             }
           } else {
             app.noTint();
             app.fill(255);
           }
           
-          if (engine.currentFiles[i].icon != null)
-            display.img(engine.currentFiles[i].icon, 50, y, TEXT_SIZE, TEXT_SIZE);
+          if (file.currentFiles[i].icon != null)
+            display.img(file.currentFiles[i].icon, 50, y, TEXT_SIZE, TEXT_SIZE);
           app.textAlign(LEFT, TOP);
-          app.text(engine.currentFiles[i].filename, x + wi, y);
+          app.text(file.currentFiles[i].filename, x + wi, y);
           app.noTint();
         }
       }
@@ -90,7 +90,7 @@ public class Explorer extends Screen {
       }
     }
     
-    scrollBottom = max(0, (engine.currentFiles.length*TEXT_SIZE-HEIGHT+BOTTOM_SCROLL_EXTEND));
+    scrollBottom = max(0, (file.currentFiles.length*TEXT_SIZE-HEIGHT+BOTTOM_SCROLL_EXTEND));
   }
   
   private void processScroll(float top, float bottom) {
@@ -189,7 +189,7 @@ public class Explorer extends Screen {
     //************NEW ENTRY************
     if (button("new_entry", "new_entry_128", "New entry")) {
       // TODO: placeholder
-      String newName = engine.currentDir+engine.appendZeros(numTimewayEntries, 5)+"."+engine.ENTRY_EXTENSION;
+      String newName = file.currentDir+engine.appendZeros(numTimewayEntries, 5)+"."+engine.ENTRY_EXTENSION;
       requestScreen(new Editor(engine, newName));
     }
     
@@ -202,7 +202,7 @@ public class Explorer extends Screen {
             console.log("Please enter a valid folder name!");
             return;
           }
-          String foldername = engine.currentDir+engine.keyboardMessage;
+          String foldername = file.currentDir+engine.keyboardMessage;
           new File(foldername).mkdirs();
           refreshDir();
         }
@@ -218,7 +218,7 @@ public class Explorer extends Screen {
     
     //***********PIXeL REALM BUTTON***********
     if (button("world", "world_128", "Pixel Realm")) {
-      requestScreen(new PixelRealm(engine, engine.currentDir));
+      requestScreen(new PixelRealm(engine, file.currentDir));
     }
     
     gui.updateSpriteSystem();
@@ -248,7 +248,7 @@ public class Explorer extends Screen {
     
   
   public void refreshDir() {
-    engine.openDirInNewThread(engine.currentDir);
+    file.openDirInNewThread(file.currentDir);
   }
   
   
@@ -261,7 +261,7 @@ public class Explorer extends Screen {
       app.textAlign(LEFT, TOP);
       app.text("Explorer", 50, 80);
       
-      if (engine.loading) {
+      if (file.loading) {
         engine.loadingIcon(WIDTH/2, HEIGHT/2);
       }
       else {

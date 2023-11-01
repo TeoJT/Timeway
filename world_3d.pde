@@ -1,4 +1,4 @@
-import java.util.concurrent.atomic.AtomicBoolean; //<>// //<>//
+import java.util.concurrent.atomic.AtomicBoolean; //<>//
 import javax.sound.midi.*;
 import java.io.BufferedInputStream;
 import processing.sound.*;
@@ -303,8 +303,8 @@ public class PixelRealm extends Screen {
     public void setFileNameAndIcon(String dir) {
       dir = dir.replace('\\', '/');
       this.dir = dir;
-      this.filename = engine.getFilename(dir);
-      display.systemImages.get(engine.extIcon(this.filename));
+      this.filename = file.getFilename(dir);
+      display.systemImages.get(file.extIcon(this.filename));
     }
 
     public void display() {
@@ -528,7 +528,7 @@ public class PixelRealm extends Screen {
       
       // Depends on our image format:
       // GIF
-      if (engine.getExt(this.filename).equals("gif") && showExperimentalGifs) {
+      if (file.getExt(this.filename).equals("gif") && showExperimentalGifs) {
         
         // Load the gif.
         Thread gifLoaderThread = new Thread(new Runnable() {
@@ -635,7 +635,7 @@ public class PixelRealm extends Screen {
     // Create a shortcut with a unique name.
     
     // SHORTCUT_EXTENSION[0] is the latest shortcut version.
-    String folderName = engine.getFilename(dir);
+    String folderName = file.getFilename(dir);
     String shortcutName = folderName+"."+engine.SHORTCUT_EXTENSION[0];
     String shortcutPath = dir+shortcutName;
     shortcutPath.replaceAll("\\\\", "/");
@@ -644,7 +644,7 @@ public class PixelRealm extends Screen {
     File f = new File(shortcutPath);
     int i = 1;
     while (f.exists()) {
-      shortcutName = engine.getFilename(dir)+"-"+str(i++)+"."+engine.SHORTCUT_EXTENSION[0];
+      shortcutName = file.getFilename(dir)+"-"+str(i++)+"."+engine.SHORTCUT_EXTENSION[0];
       shortcutPath = dir+shortcutName;
       f = new File(shortcutPath);
     }
@@ -687,30 +687,30 @@ public class PixelRealm extends Screen {
           
           String compat_ver = sh.getString("compatibilty_version", "[err]");
           if (!compat_ver.equals(SHORTCUT_COMPATIBILITY_VERSION)) {
-            console.warn("Incompatiable shortcut "+engine.getFilename(this.filename));
+            console.warn("Incompatiable shortcut "+file.getFilename(this.filename));
             return;
           }
           
           shortcutDir = sh.getString("shortcut_dir", "[corrupted]");
           if (shortcutDir.equals("[corrupted]")) {
-            console.warn("Corrupted shortcut "+engine.getFilename(this.filename));
+            console.warn("Corrupted shortcut "+file.getFilename(this.filename));
             return;
           }
           // Check shortcut exists.
           f = new File(shortcutDir);
           if (!f.exists()) {
-            console.warn("Shortcut to "+engine.getFilename(this.filename)+" doesn't exist!");
+            console.warn("Shortcut to "+file.getFilename(this.filename)+" doesn't exist!");
             return;
           }
           
           shortcutName = sh.getString("shortcut_name", "[corrupted]");
           // Yup, shortcut_name is unnecessary. But hey might as well self-fix if broken.
           if (shortcutName.equals("[corrupted]")) {
-            shortcutName = engine.getFilename(shortcutDir);
+            shortcutName = file.getFilename(shortcutDir);
           }
         }
         catch (RuntimeException e) {
-          console.warn(engine.getFilename(this.filename)+" shortcut json error!");
+          console.warn(file.getFilename(this.filename)+" shortcut json error!");
           this.destroy();
           return;
         }
@@ -1289,7 +1289,7 @@ public class PixelRealm extends Screen {
       // TODO: obviously we need to fix for macos and linux. (I think)
       // Really really stupid bug fix.
       if (emergeFrom.equals("C:")) emergeFrom = "C:/";
-      emergeFrom     = engine.getFilename(emergeFrom);
+      emergeFrom     = file.getFilename(emergeFrom);
     }
 
     // Find out if the directory has a turf file.
@@ -1530,7 +1530,7 @@ public class PixelRealm extends Screen {
     turfJson.setBoolean("coins", (coins != null));
 
     try {
-      engine.backupAndSaveJSON(turfJson, engine.currentDir+REALM_TURF);
+      engine.backupAndSaveJSON(turfJson, file.currentDir+REALM_TURF);
     }
     catch (RuntimeException e) {
       console.log("Maybe permissions are denied for this folder?");
@@ -1603,27 +1603,27 @@ public class PixelRealm extends Screen {
   // A version of opendir which uses the engine's opendir but then
   // creates 3d objects that resemble each item in the directory.
   public void openDir(String dir) {
-    engine.openDir(dir);
-    int l = engine.currentFiles.length;
-    files = new FileObject[engine.currentFiles.length];
+    file.openDir(dir);
+    int l = file.currentFiles.length;
+    files = new FileObject[file.currentFiles.length];
     for (int i = 0; i < l; i++) {
-      if (engine.currentFiles[i] != null) {
+      if (file.currentFiles[i] != null) {
         // Here we determine which type of object to load into our scene.
         // If it's a folder, create a portal object.
-        if (engine.currentFiles[i].file.isDirectory()) {
-          DirectoryPortal portal = new DirectoryPortal(0., 0., 0., engine.currentFiles[i].file.getAbsolutePath());
+        if (file.currentFiles[i].isDirectory()) {
+          DirectoryPortal portal = new DirectoryPortal(0., 0., 0., file.currentFiles[i].path);
           files[i] = portal;
         }
         // If it's a file, create the corresponding object based on the file's type.
         else {
           FileObject fileobject = null;
 
-          FileType type = engine.extToType(engine.currentFiles[i].fileext);
-          String path = engine.currentFiles[i].file.getAbsolutePath();
+          FileType type = file.extToType(file.currentFiles[i].fileext);
+          String path = file.currentFiles[i].path;
           switch (type) {
           case FILE_TYPE_UNKNOWN:
             fileobject = new UnknownTypeFileObject(path);
-            fileobject.img = engine.display.systemImages.get(engine.currentFiles[i].icon);
+            fileobject.img = engine.display.systemImages.get(file.currentFiles[i].icon);
             fileobject.setSize(0.5);
             fileobject.hitboxSize = BIG_HITBOX;
             break;
@@ -1631,14 +1631,14 @@ public class PixelRealm extends Screen {
             fileobject = new ImageFileObject(path);
             break;
           case FILE_TYPE_SHORTCUT:
-            fileobject = new ShortcutPortal(0., 0., 0., engine.currentFiles[i].file.getAbsolutePath());
+            fileobject = new ShortcutPortal(0., 0., 0., file.currentFiles[i].path);
             break;
           case FILE_TYPE_MODEL:
-            fileobject = new OBJFileObject(0., 0., 0., engine.currentFiles[i].file.getAbsolutePath());
+            fileobject = new OBJFileObject(0., 0., 0., file.currentFiles[i].path);
             break;
           default:
             fileobject = new UnknownTypeFileObject(path);
-            fileobject.img = display.systemImages.get(engine.currentFiles[i].icon);
+            fileobject.img = display.systemImages.get(file.currentFiles[i].icon);
             fileobject.setSize(0.5);
             fileobject.hitboxSize = BIG_HITBOX;
             break;
@@ -1655,10 +1655,10 @@ public class PixelRealm extends Screen {
   public void refreshRealmInSeperateThread() {
     refreshThreadEnded.set(false);
     refreshThread = new Thread(new Runnable() {
-      private FileTime img_sky_1_modified = getLastModified(engine.currentDir+REALM_SKY);
-      private FileTime img_grass_modified = getLastModified(engine.currentDir+REALM_GRASS);
+      private FileTime img_sky_1_modified = getLastModified(file.currentDir+REALM_SKY);
+      private FileTime img_grass_modified = getLastModified(file.currentDir+REALM_GRASS);
 
-      private FileTime[] img_tree_modified  = getLastModifiedTree(engine.currentDir+REALM_TREE);
+      private FileTime[] img_tree_modified  = getLastModifiedTree(file.currentDir+REALM_TREE);
 
       // Leave bgm out for now since this one is complicated.
       //private FileTime bgm_modified       = null;
@@ -1679,9 +1679,9 @@ public class PixelRealm extends Screen {
           {
             console.log("Change detected, reloading...");
             refreshRealm.set(true);
-            img_sky_1_modified = getLastModified(engine.currentDir+REALM_SKY);
-            img_tree_modified  = getLastModifiedTree(engine.currentDir+REALM_TREE);
-            img_grass_modified = getLastModified(engine.currentDir+REALM_GRASS);
+            img_sky_1_modified = getLastModified(file.currentDir+REALM_SKY);
+            img_tree_modified  = getLastModifiedTree(file.currentDir+REALM_TREE);
+            img_grass_modified = getLastModified(file.currentDir+REALM_GRASS);
           }
         }
         refreshThreadEnded.set(true);
@@ -1702,7 +1702,7 @@ public class PixelRealm extends Screen {
 
 
   public boolean fileChanged(String name, FileTime lastLastChange) {
-    FileTime t = getLastModified(engine.currentDir+name);
+    FileTime t = getLastModified(file.currentDir+name);
 
     // File doesn't exist, check if it's been added/removed.
     if (t == null) {
@@ -1831,10 +1831,10 @@ public class PixelRealm extends Screen {
     // Search until one of the pixelrealm-bgm with the appropriate file format is found.
     while (i < soundFileFormats.length && !found) {
       String ext = soundFileFormats[i++];
-      File f = new File(engine.currentDir+REALM_BGM+ext);
+      File f = new File(file.currentDir+REALM_BGM+ext);
       if (f.exists()) {
         found = true;
-        sound.streamMusicWithFade(engine.currentDir+REALM_BGM+ext);
+        sound.streamMusicWithFade(file.currentDir+REALM_BGM+ext);
       }
     }
 
@@ -1867,7 +1867,7 @@ public class PixelRealm extends Screen {
 
   public void refreshRealm() {
     // Refresh the realm without spawning back at the emerging portal.
-    refreshRealm(engine.currentDir, "", true);
+    refreshRealm(file.currentDir, "", true);
   }
 
   protected void previousReturnAnimation() {
@@ -1879,17 +1879,17 @@ public class PixelRealm extends Screen {
   }
 
   public Object getRealmFile(String filename, Object defaultFile) {
-    String fullPath = engine.currentDir+filename;
+    String fullPath = file.currentDir+filename;
     File f = new File(fullPath);
     if (f.exists()) {
-      if (engine.getExt(filename).equals("png")) {
+      if (file.getExt(filename).equals("png")) {
         incrementMemUsage(file.getImageUncompressedSize(fullPath));
-        return loadImage(engine.currentDir+filename);
+        return loadImage(file.currentDir+filename);
       }
-      else if (engine.getExt(filename).equals("wav"))
-        return new SoundFile(engine.app, engine.currentDir+filename);
-      else if (engine.getExt(filename).equals("mid"))
-        return loadMidiFile(engine.currentDir+filename);
+      else if (file.getExt(filename).equals("wav"))
+        return new SoundFile(engine.app, file.currentDir+filename);
+      else if (file.getExt(filename).equals("mid"))
+        return loadMidiFile(file.currentDir+filename);
       else
         return defaultFile;
     } else {
@@ -2297,7 +2297,7 @@ public class PixelRealm extends Screen {
     if (engine.keyDown(BACKSPACE)) {
       endRealm();
       sound.fadeAndStopMusic();
-      requestScreen(new Explorer(engine, engine.currentDir));
+      requestScreen(new Explorer(engine, file.currentDir));
     }
 
     // Quick warp shortcut keys
@@ -2312,7 +2312,7 @@ public class PixelRealm extends Screen {
         // If we pressed the same button as the warp we're already in, then go back to the default dir instead.
         int myQuickWarpID = ((Integer)sharedResources.get(QUICK_WARP_ID)).intValue();
 
-        quickWarp[myQuickWarpID] = new QuickWarpSaveInfo(xpos, ypos, zpos, direction, engine.currentDir);
+        quickWarp[myQuickWarpID] = new QuickWarpSaveInfo(xpos, ypos, zpos, direction, file.currentDir);
 
         // Now go to new warp
         endRealm();
@@ -2497,7 +2497,7 @@ public class PixelRealm extends Screen {
 
     engine.timestamp("render3DObjects");
 
-    render3DObjects();  //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>//
+    render3DObjects();  //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>//
     scene.hint(DISABLE_DEPTH_TEST);
 
     engine.timestamp("portal light");
@@ -2557,7 +2557,7 @@ public class PixelRealm extends Screen {
   private void render3DObjects() {
     engine.timestamp("Update distances");
     // Update the distances from the player for all nodes
-    Object3D currNode = headNode; //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>//
+    Object3D currNode = headNode; //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>//
     while (currNode != null) {
       currNode.calculateVal();
       currNode = currNode.next;
@@ -2645,7 +2645,7 @@ public class PixelRealm extends Screen {
 
   public void content() {
     if (engine.power.getSleepyMode()) engine.power.setAwake();
-    runPixelRealm();  //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>//
+    runPixelRealm();  //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>//
   }
   
   public void upperBar() {
@@ -2654,7 +2654,7 @@ public class PixelRealm extends Screen {
     textSize(36);
     textAlign(LEFT, TOP);
     fill(0);
-    text(engine.currentDir, 10, 10);
+    text(file.currentDir, 10, 10);
     if (loading > 0) {
       engine.loadingIcon(WIDTH-myUpperBarWeight/2-10, myUpperBarWeight/2, myUpperBarWeight);
       
@@ -2692,7 +2692,7 @@ public class PixelRealm extends Screen {
     ItemSlot slot = inventoryHead;
 
     HashSet<String> carry = new HashSet<String>();
-    String dirFolderName = engine.getFilename(engine.currentDir);
+    String dirFolderName = file.getFilename(file.currentDir);
 
     // Go thru the linked list and move each file to the new dir.
     while (slot != null) {
@@ -2716,8 +2716,8 @@ public class PixelRealm extends Screen {
 
     // If inventory isn't empty, move the files to the new directory.
     if (inventoryHead != null && inventorySelectedItem != null) {
-      engine.currScreen = new PixelRealm(engine, newdir, engine.getFilename(engine.currentDir), inventoryToHashSet(newdir));
-    } else engine.currScreen = new PixelRealm(engine, newdir, engine.getFilename(engine.currentDir));
+      engine.currScreen = new PixelRealm(engine, newdir, file.getFilename(file.currentDir), inventoryToHashSet(newdir));
+    } else engine.currScreen = new PixelRealm(engine, newdir, file.getFilename(file.currentDir));
   }
 
   public int menuID = 1;
@@ -2830,7 +2830,7 @@ public class PixelRealm extends Screen {
                 return;
               }
 
-              String newName = engine.currentDir+engine.keyboardMessage+"."+engine.ENTRY_EXTENSION;
+              String newName = file.currentDir+engine.keyboardMessage+"."+engine.ENTRY_EXTENSION;
               // Create a new empty file so that we can hold it and place it down, editor will handle the rest.
               try {
                 FileWriter emptyFile = new FileWriter(newName);
@@ -2871,7 +2871,7 @@ public class PixelRealm extends Screen {
                 console.log("Please enter a valid folder name!");
                 return;
               }
-              String foldername = engine.currentDir+engine.keyboardMessage;
+              String foldername = file.currentDir+engine.keyboardMessage;
               new File(foldername).mkdirs();
 
               refreshRealm();
@@ -2888,7 +2888,7 @@ public class PixelRealm extends Screen {
         
         if (engine.button("newshortcut", "create_shortcut_128", "New shortcut")) {
           sound.playSound("menu_select");
-          String shortcutPath = createShortcut(engine.currentDir);
+          String shortcutPath = createShortcut(file.currentDir);
           refreshRealm();
           pickupItem(shortcutPath);
           menuShown = false;
@@ -3179,7 +3179,7 @@ public class PixelRealm extends Screen {
       // Open the file/directory if clicked
       if (currentTool == TOOL_NORMAL) {
         if (p.selectedLeft()) {
-          engine.open(p.dir);
+          file.open(p.dir);
         }
       }
 
@@ -3219,7 +3219,7 @@ public class PixelRealm extends Screen {
           // "Refresh" the folder
           endRealm();
           // Go to the journal
-          engine.open(itemPath);
+          file.open(itemPath);
           currentTool = TOOL_NORMAL;
         }
 
