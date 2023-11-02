@@ -202,7 +202,7 @@ public class Editor extends Screen {
             // Only bother closing if we're not in any current animation
             if (!disappear && yappear <= 0.01) {
                 disappear = true;
-                engine.power.setSleepy();
+                power.setSleepy();
                 yappear = 1.;
             }
         }
@@ -1073,7 +1073,7 @@ public class Editor extends Screen {
               
             
             
-            if (upperbarExpand <= 0.001) engine.power.setSleepy();
+            if (upperbarExpand <= 0.001) power.setSleepy();
         }
         
         app.shader(
@@ -1310,7 +1310,7 @@ public class Editor extends Screen {
         // If we're dragging a sprite, we want framerates to be smooth, so temporarily
         // set framerates higher while we're dragging around.
         if (placeables.selectedSprite != null) {
-          if (placeables.selectedSprite.repositionDrag.isDragging()) {
+          if (placeables.selectedSprite.repositionDrag.isDragging() || placeables.selectedSprite.resizeDrag.isDragging()) {
             engine.power.setAwake();
             
             // While we're here, a sprite is being dragged which means changes to the file.
@@ -1375,27 +1375,12 @@ public class Editor extends Screen {
           cameraDisplay.endDraw();
           app.image(cameraDisplay, 0, 0, WIDTH, HEIGHT);
           if (takePhoto) {
-            float n = 1.;
-            switch (engine.power.getPowerMode()) {
-                case HIGH:
-                n = 1.;
-                break;
-                case NORMAL:
-                n = 2.;
-                break;
-                case SLEEPY:
-                n = 4.;
-                break;
-                case MINIMAL:
-                n = 1.;
-                break;
-            }
             app.blendMode(ADD);
             app.noStroke();
             app.fill(cameraFlashEffect);
             app.rect(0,0, WIDTH, HEIGHT);
             app.blendMode(NORMAL);
-            cameraFlashEffect -= 20.*n;
+            cameraFlashEffect -= 20.*display.getDelta();
             if (cameraFlashEffect < 10.) {
               takePhoto = false;
               this.endCamera();

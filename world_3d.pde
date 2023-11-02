@@ -117,7 +117,8 @@ public class PixelRealm extends Screen {
   public boolean nearObject = false;
   public boolean menuShown = false;
 
-  int coinSpinAnimation = 0;
+  float coinSpinAnimation = 0.;
+  int coinFrame = 0;
 
 
   final float BOB_SPEED = 0.4;
@@ -472,6 +473,35 @@ public class PixelRealm extends Screen {
     public ImageFileObject(String dir) {
       super(dir);
     }
+    
+    
+    public void calculateVal() {
+      
+      // TODO: obvious optimisation required!
+      // Cache variables from display()!
+      float hwi = wi/2;
+      float sin_d = flatSinDirection*(hwi);
+      float cos_d = flatCosDirection*(hwi);
+      float xx1 = x + sin_d;
+      float zz1 = z + cos_d;
+      float xx2 = x - sin_d;
+      float zz2 = z - cos_d;
+      
+      float x1 = xpos-xx1;
+      float y1 = ypos-this.y;
+      float z1 = zpos-zz1;
+      
+      float x2 = xpos-xx2;
+      float y2 = y1;
+      float z2 = zpos-zz2;
+      
+      // BUG FIX:
+      // Calculate the edge with the furthest distance to the player (camera).
+      float val1 = x1*x1 + y1*y1 + z1*z1;
+      float val2 = x2*x2 + y2*y2 + z2*z2;
+      
+      this.val = val1 > val2 ? val1 : val2;
+    }
 
     public void display() {
       if (visible) {
@@ -824,31 +854,9 @@ public class PixelRealm extends Screen {
     }
 
     public void calculateVal() {
-      
-      // TODO: obvious optimisation required!
-      // Cache variables from display()!
-      float hwi = wi/2;
-      float sin_d = flatSinDirection*(hwi);
-      float cos_d = flatCosDirection*(hwi);
-      float xx1 = x + sin_d;
-      float zz1 = z + cos_d;
-      float xx2 = x - sin_d;
-      float zz2 = z - cos_d;
-      
-      float x1 = xpos-xx1;
-      float y1 = ypos-this.y;
-      float z1 = zpos-zz1;
-      
-      float x2 = xpos-xx2;
-      float y2 = y1;
-      float z2 = zpos-zz2;
-      
-      // BUG FIX:
-      // Calculate the edge with the furthest distance to the player (camera).
-      float val1 = x1*x1 + y1*y1 + z1*z1;
-      float val2 = x2*x2 + y2*y2 + z2*z2;
-      
-      this.val = val1 > val2 ? val1 : val2;
+      float xx = xpos-x;
+      float zz = zpos-z;
+      this.val = xx*xx + zz*zz + wi*0.5;
     }
 
     public boolean touchingPlayer() {
@@ -2382,10 +2390,10 @@ public class PixelRealm extends Screen {
 
     //Coin animation.
 
-    int spinSpeed = (int)(10./display.getDelta());
-    coinSpinAnimation++;
-    if (coinSpinAnimation >= spinSpeed*6) {
+    coinSpinAnimation += display.getDelta();
+    if (coinSpinAnimation >= 6) {
       coinSpinAnimation = 0;
+      coinFrame = (coinFrame+1)%6;
     }
 
     scene.pushMatrix();
@@ -3102,7 +3110,7 @@ public class PixelRealm extends Screen {
     if (coins != null) {
       for (int i = 0; i < 100; i++) {
         if (coins[i] != null) {
-          coins[i].img = img_coin[((int(frameCount*display.getDelta())/4))%l];
+          coins[i].img = img_coin[coinFrame];
           if (coins[i].touchingPlayer()) {
             sound.playSound("coin");
             coins[i].destroy();

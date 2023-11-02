@@ -39,6 +39,8 @@ public final class SpriteSystemPlaceholder {
         public final int DOUBLE = 2;
         public final int VERTEX = 3;
         public final int ROTATE = 4;   
+        
+        public float selectBorderTime = 0.;
 
         // Use this constructor for no saving sprite data.
         public SpriteSystemPlaceholder(Engine engine) {
@@ -50,7 +52,7 @@ public final class SpriteSystemPlaceholder {
         public SpriteSystemPlaceholder(Engine engine, String path) {
             this.engine = engine;
             spriteNames = new HashMap<String, Integer>();
-            selectedSprites = new Stack<Sprite>(128);
+            selectedSprites = new Stack<Sprite>(8192);
             sprites = new ArrayList<Sprite>();
             spritesStack = new Stack<Sprite>(128);
             unusedSprite = new Sprite("UNUSED");
@@ -789,7 +791,7 @@ public final class SpriteSystemPlaceholder {
 
             private void square(float x, float y, float d) {
                 noStroke();
-                fill(sin(frameCount*0.1)*50+200, 100);
+                fill(sin(selectBorderTime += 0.1*engine.display.getDelta())*50+200, 100);
                 app.rect(x, y, d, d);
             }
         }

@@ -97,7 +97,6 @@ void setup() {
     surface.setResizable(true);
     surface.setTitle("Timeway");
     hint(DISABLE_OPENGL_ERRORS);
-    //hint(ENABLE_KEY_REPEAT)
     background(0);
     
     // Are we running in Processing or as an exported application?
