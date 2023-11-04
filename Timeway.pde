@@ -13,18 +13,6 @@ import java.io.PrintWriter;
 * in a Onenote-like editor.
 **/
 
-
-/*************************************************************************************
-  IMPORTANT THING TO DO WHEN EXPORTING!!!
-  
-  - Export the application.
-  - Go into the lib folder
-  - Create a new folder called "windows64"
-  - Move all .dll files and the "gstreamer1.0" folder into that new folder but NOT
-    the .jar files
-  - Hey presto it works!
-*************************************************************************************/
-
 Engine timewayEngine;
 boolean sketch_showCrashScreen = false;
 String sketch_ERR_LOG_PATH;

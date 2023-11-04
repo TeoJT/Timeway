@@ -122,6 +122,7 @@ class DCapture implements java.beans.PropertyChangeListener {
 }
 
 public class Editor extends Screen {
+    public boolean showGUI = false;
     public float upperbarExpand = 0;
     public SpriteSystemPlaceholder gui;
     public SpriteSystemPlaceholder placeables;
@@ -135,7 +136,6 @@ public class Editor extends Screen {
     public String entryPath;
     public String entryDir;
     public MiniMenu currMinimenu = null;
-    public float guiFade;
     public color selectedColor = color(255, 255, 255);
     public float selectedFontSize = 20;
     public float xview = 0;
@@ -210,34 +210,21 @@ public class Editor extends Screen {
         public void display() {
             app.noTint();
             // Sorry I'm lazy
-            switch (engine.power.getPowerMode()) {
-              case HIGH:
-              yappear *= (1.-APPEAR_SPEED);
-              break;
-              case NORMAL:
-              yappear *= (1.-APPEAR_SPEED);
-              yappear *= (1.-APPEAR_SPEED);
-              break;
-              case SLEEPY:
-              yappear *= (1.-APPEAR_SPEED);
-              yappear *= (1.-APPEAR_SPEED);
-              yappear *= (1.-APPEAR_SPEED);
-              yappear *= (1.-APPEAR_SPEED);
-              break;
-              case MINIMAL:
-              yappear *= (1.-APPEAR_SPEED);
-              break;
-            }
+            
+            yappear *= PApplet.pow(1.-APPEAR_SPEED, display.getDelta());
             
             app.noStroke();
             app.fill(BACKGROUND_COLOR);
 
             // Cool menu appaer animation. Or disappear animation.
             if (!disappear) {
-                app.rect(x, y, this.width, this.height-(this.height*yappear));
+                float h = this.height-(this.height*yappear);
+                app.rect(x, y, this.width, h);
+                display.clip(x, y, this.width, h);
             }
             else {
                 app.rect(x, y, this.width, this.height*yappear);
+                display.clip(x, y, this.width, this.height*yappear);
                 if (yappear <= 0.01) {
                     engine.power.setSleepy();
                     currMinimenu = null;
@@ -298,10 +285,6 @@ public class Editor extends Screen {
             super.display();
             //app.tint(255, 255.*yappear);
 
-            float opacity = 255.*(1.-yappear);
-            if (disappear) {
-                opacity = 255.*yappear;
-            }
 
             // display all the colors in the colorArray, in a grid, with a new row every MAX_COLS
 
@@ -346,7 +329,7 @@ public class Editor extends Screen {
                 }
 
                 // Display the color box
-                app.fill(boxColor, opacity);
+                app.fill(boxColor);
                 app.rect((spacing/2)+boxX, boxY, boxWidth-spacing, boxHeight-(spacing/2));
 
                 if (wasHovered) {
@@ -361,6 +344,12 @@ public class Editor extends Screen {
             //Remember to call noTint
             app.noTint();
         }
+    }
+    
+    public class ImgOptionsMenu extends MiniMenu {
+      public ImgOptionsMenu() {
+        super(engine.mouseX(), engine.mouseY(), 300, 150);
+      }
     }
 
     public class Placeable {
@@ -554,9 +543,14 @@ public class Editor extends Screen {
         super(engine);
         gui = new SpriteSystemPlaceholder(engine, engine.APPPATH+engine.PATH_SPRITES_ATTRIB+"gui/editor/");
         gui.repositionSpritesToScale();
+        
+        // Bug fix: run once so that text element in GUI being at pos 0,0 isn't shown.
+        runGUI();
+        
         placeables = new SpriteSystemPlaceholder(engine);
         imagesInEntry = new ArrayList<String>();
         placeableset = new HashSet<Placeable>();
+        
         this.entryPath = entryPath;
         camera = new DCapture(engine);
         
@@ -862,12 +856,9 @@ public class Editor extends Screen {
     public void runGUI() {
         engine.useSpriteSystem(gui);
         engine.spriteSystemClickable = (currMinimenu == null);
-        engine.guiFade = guiFade;
 
         
         if (!cameraMode) {
-          // Cool fade in animation
-          app.tint(255, guiFade);
   
           // The lines nothin to see here
           gui.guiElement("line_1");
@@ -943,8 +934,11 @@ public class Editor extends Screen {
           app.textSize(20);
   
           // Added this line cus other elements caused the text size to gray.
-          app.fill(255, guiFade);
-          app.text(selectedFontSize, s.xpos+s.wi/2, s.ypos+s.hi/2);
+          app.fill(255);
+          // Bug fix: don't show the sprite on the first frame of the animation start
+          // (showGUI is set later)
+          if (showGUI)
+            app.text(selectedFontSize, s.xpos+s.wi/2, s.ypos+s.hi/2);
   
           // The button code
           if (engine.button("font_size", "nothing", "Font size")) {
@@ -991,6 +985,7 @@ public class Editor extends Screen {
         // Display the minimenu in front of all the buttons.
         if (currMinimenu != null) {
             currMinimenu.display();
+            app.noClip();
         }
 
     }
@@ -1050,39 +1045,31 @@ public class Editor extends Screen {
         // The upper bar expand down animation when the screen loads.
         if (upperbarExpand > 0.001) {
             engine.power.setAwake();
-            switch (engine.power.getPowerMode()) {
-              case HIGH:
-              upperbarExpand *= 0.8;
-              break;
-              case NORMAL:
-              upperbarExpand *= 0.8*0.8;
-              break;
-              case SLEEPY:
-              upperbarExpand *= 0.8*0.8*0.8*0.8;
-              break;
-              case MINIMAL:
-              upperbarExpand *= 0.8;
-              break;
-            }
-            guiFade = 255.*(1.-upperbarExpand);
+            upperbarExpand *= PApplet.pow(0.8, display.getDelta());
+            
             float newBarWeight = UPPER_BAR_DROP_WEIGHT;
             
             if (upperBarDrop == CAMERA_OFF_ANIMATION || upperBarDrop == INITIALISE_DROP_ANIMATION)
               myUpperBarWeight = UPPER_BAR_WEIGHT + newBarWeight - (newBarWeight * upperbarExpand);
             else myUpperBarWeight = UPPER_BAR_WEIGHT + (newBarWeight * upperbarExpand);
-              
+            
             
             
             if (upperbarExpand <= 0.001) power.setSleepy();
         }
         
         app.shader(
-          display.getShaderWithParams("fabric", "color",float((myUpperBarColor>>16)&0xFF)/255.,float((myUpperBarColor>>8)&0xFF)/255.,float((myUpperBarColor)&0xFF)/255.,1., "intensity",0.1)
+          display.getShaderWithParams("fabric", "color",float((myUpperBarColor>>16)&0xFF)/255.,(float)((myUpperBarColor>>8)&0xFF)/255.,float((myUpperBarColor)&0xFF)/255.,1., "intensity",0.1)
         );
+        
+        if (currMinimenu == null && !cameraMode) 
+          display.clip(0, 0, WIDTH, myUpperBarWeight);
         super.upperBar();
         display.defaultShader();
-
-        runGUI();
+        
+        if (showGUI)
+          runGUI();
+        app.noClip();
     }
     
     public void lowerBar() {
@@ -1408,13 +1395,9 @@ public class Editor extends Screen {
         app.scale(display.getScale());
         this.backg();
         
-        engine.timestamp("begin content");
         this.content();
-        engine.timestamp("end content");
         this.lowerBar();
-        engine.timestamp("end lowerbar");
         this.upperBar();
-        engine.timestamp("end upperbar");
         app.popMatrix();
       }
     }
@@ -1439,6 +1422,7 @@ public class Editor extends Screen {
         // Beautiful animation :twinkle_emoji:
         upperBarDrop = INITIALISE_DROP_ANIMATION;
         upperbarExpand = 1.0;
+        showGUI = true;
     }
     
     public void endScreenAnimation() {

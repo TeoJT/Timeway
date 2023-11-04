@@ -907,25 +907,19 @@ public final class SpriteSystemPlaceholder {
         private void renderSprite(Sprite s) {
             if (s.equals(selectedSprite) || (showAllWireframes && keyPressAllowed)) {
                 engine.wireframe = true;
-                String txt = s.getName() + "   x:" + str((int)s.getX()) + " y:" + str((int)s.getY());
-
-                // We don't wanna show text when we drag sprites.
-                //app.textSize(12);
-                //app.fill(255);
-                //app.text(txt, s.getX()*1., s.getY() - 5.);
             }
             //draw.autoImg(s.getImg(), s.getX(), s.getY()+s.getHeight()*s.getBop(), s.getWidth(), s.getHeight()-int((float)s.getHeight()*s.getBop()));
             
             switch (s.mode) {
-            case SINGLE:
-            engine.display.img(s.imgName, s.getX(), s.getY()+s.getHeight()*s.getBop(), s.getWidth(), s.getHeight()-int((float)s.getHeight()*s.getBop()));
-            break;
-            case VERTEX:  // We don't need vertices in our program so let's just sweep this under the rug.
-            //draw.autoImgVertex(s);
-            break;
-            case ROTATE:
-            //draw.autoImgRotate(s);
-            break;
+              case SINGLE:
+              engine.display.img(s.imgName, s.getX(), s.getY()+s.getHeight()*s.getBop(), s.getWidth(), s.getHeight()-int((float)s.getHeight()*s.getBop()));
+              break;
+              case VERTEX:  // We don't need vertices in our program so let's just sweep this under the rug.
+              //draw.autoImgVertex(s);
+              break;
+              case ROTATE:
+              //draw.autoImgRotate(s);
+              break;
             }
             engine.wireframe = false;
             s.poke(app.frameCount);

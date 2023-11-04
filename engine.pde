@@ -106,6 +106,7 @@ class Engine {
   public FilemanagerModule file;
   public ClipboardModule clipboard;
   
+  
   PGraphics CPU = createGraphics(512, 512);
 
 
@@ -831,7 +832,7 @@ class Engine {
     
             if (fpsScore < FPS_SCORE_DROP) {
               // The lower our framerate, the less likely (or rather longer it takes) to get back to it.
-              recoveryScore = pow((frameRate/stableFPS), RECOVERY_NEGLIGENCE);
+              recoveryScore = PApplet.pow((frameRate/stableFPS), RECOVERY_NEGLIGENCE);
               // Reset the score.
               fpsScore = FPS_SCORE_MIDDLE;
               scoreDrain = 0.;
@@ -950,7 +951,7 @@ class Engine {
                 fpsScore = FPS_SCORE_MIDDLE;
                 break;
               }
-              recoveryScore = pow((avg/stableFPS), RECOVERY_NEGLIGENCE);
+              recoveryScore = PApplet.pow((avg/stableFPS), RECOVERY_NEGLIGENCE);
               fpsTrackingMode = MONITOR;
             }
           }
@@ -1402,6 +1403,11 @@ class Engine {
       }
     }
     
+    public void clip(float x, float y, float wi, float hi) {
+      float s = getScale();
+      app.clip(x*s, y*s, wi*s, hi*s);
+    }
+    
     public void updateDelta() {
       lastFrameMillis = thisFrameMillis;
       thisFrameMillis = app.millis();
@@ -1648,7 +1654,7 @@ class Engine {
         if (musicFadeOut < 1.) {
           if (musicFadeOut > 0.005) {
             // Fade the old music out
-            float vol = musicFadeOut *= pow(MUSIC_FADE_SPEED, display.getDelta());
+            float vol = musicFadeOut *= PApplet.pow(MUSIC_FADE_SPEED, display.getDelta());
             streamMusic.playbin.setVolume(vol*masterVolume);
             streamMusic.playbin.getState();   
   
@@ -4444,7 +4450,8 @@ class Engine {
       this.keyboardMessage = this.keyboardMessage.substring(0, this.keyboardMessage.length()-1);
     }
   }
-
+  
+  // TODO: this is called a lot, this could be optimised.
   public float mouseX() {
     return mouseX/display.getScale();
   }

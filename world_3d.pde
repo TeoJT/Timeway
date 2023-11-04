@@ -1,4 +1,4 @@
-import java.util.concurrent.atomic.AtomicBoolean; //<>//
+import java.util.concurrent.atomic.AtomicBoolean; //<>// //<>//
 import javax.sound.midi.*;
 import java.io.BufferedInputStream;
 import processing.sound.*;
@@ -149,11 +149,11 @@ public class PixelRealm extends Screen {
   public int RENDER_DISTANCE = 6;
   public float GROUND_REPEAT = 2;
   public float GROUND_SIZE = 400;
-  public float FADE_DIST_OBJECTS = pow((RENDER_DISTANCE-4)*GROUND_SIZE, 2);
-  public float FADE_DIST_GROUND = pow(GROUND_SIZE*max(RENDER_DISTANCE-3, 0), 2);
+  public float FADE_DIST_OBJECTS = PApplet.pow((RENDER_DISTANCE-4)*GROUND_SIZE, 2);
+  public float FADE_DIST_GROUND = PApplet.pow(GROUND_SIZE*max(RENDER_DISTANCE-3, 0), 2);
 
   public float portalLight = 255.;
-  public final float MIN_PORTAL_LIGHT_THRESHOLD = pow(140., 2);
+  public final float MIN_PORTAL_LIGHT_THRESHOLD = PApplet.pow(140., 2);
   public float portalCoolDown = 45;
 
   final boolean BIG_HITBOX = true;
@@ -182,14 +182,14 @@ public class PixelRealm extends Screen {
   // TODO: move cus I can't be bothered
   public void setRenderDistance(int renderDistance) {
     RENDER_DISTANCE = renderDistance;
-    FADE_DIST_OBJECTS = pow((RENDER_DISTANCE-4)*GROUND_SIZE, 2);
-    FADE_DIST_GROUND = pow(GROUND_SIZE*max(RENDER_DISTANCE-3, 0), 2);
+    FADE_DIST_OBJECTS = PApplet.pow((RENDER_DISTANCE-4)*GROUND_SIZE, 2);
+    FADE_DIST_GROUND = PApplet.pow(GROUND_SIZE*max(RENDER_DISTANCE-3, 0), 2);
   }
 
   public void setGroundSize(float groundSize) {
     GROUND_SIZE = groundSize;
-    FADE_DIST_OBJECTS = pow((RENDER_DISTANCE-4)*GROUND_SIZE, 2);
-    FADE_DIST_GROUND = pow(GROUND_SIZE*max(RENDER_DISTANCE-3, 0), 2);
+    FADE_DIST_OBJECTS = PApplet.pow((RENDER_DISTANCE-4)*GROUND_SIZE, 2);
+    FADE_DIST_GROUND = PApplet.pow(GROUND_SIZE*max(RENDER_DISTANCE-3, 0), 2);
   }
 
   public final Runnable generateQuickWarp = new Runnable() {
@@ -811,7 +811,7 @@ public class PixelRealm extends Screen {
 
         // Screen glow effect.
         // Calculate distance to portal
-        float dist = pow(x-xpos, 2)+pow(z-zpos, 2);
+        float dist = PApplet.pow(x-xpos, 2)+PApplet.pow(z-zpos, 2);
         if (dist < MIN_PORTAL_LIGHT_THRESHOLD) {
           // If close to the portal, set the portal light to create a portal enter/transistion effect.
           portalLight = max(portalLight, (1.-(dist/MIN_PORTAL_LIGHT_THRESHOLD))*255.);
@@ -978,7 +978,7 @@ public class PixelRealm extends Screen {
 
       //Add some fog for objects as they get further away.
       //Note that if the transparacy is 100%, the object will not be rendered at all.
-      float dist = pow((xpos-x), 2)+pow((zpos-z), 2);
+      float dist = PApplet.pow((xpos-x), 2)+PApplet.pow((zpos-z), 2);
 
       boolean dontRender = false;
       if (dist > FADE_DIST_OBJECTS) {
@@ -1948,7 +1948,7 @@ public class PixelRealm extends Screen {
     // Calculate the how much we scale the fade so that it doesn't fade so fast that it looks like it
     // pops/disappears into distance. We use this funky pow statement since we're dealing with un-square-rooted
     // distances. I do it in the name of refusing to use sqrt!!
-    float scale = (5./pow(GROUND_SIZE, 1.8));
+    float scale = (5./PApplet.pow(GROUND_SIZE, 1.8));
     // Finally, apply the scale to the fade distance and do an "inverse" (e.g. 220 out of 255 -> 35 out of 255) so
     // that we're fading away tiles furthest from us, not closest to us.
     return 255-(d*scale);
@@ -2411,7 +2411,7 @@ public class PixelRealm extends Screen {
       //                                                        random bug fix over here.
       for (int tilex = (chunkx-RENDER_DISTANCE-1); tilex < (chunkx+RENDER_DISTANCE); tilex++) {
         float x = GROUND_SIZE*(tilex-0.5), z = GROUND_SIZE*(tilez-0.5);
-        float dist = pow((xpos-x), 2)+pow((zpos-z), 2);
+        float dist = PApplet.pow((xpos-x), 2)+PApplet.pow((zpos-z), 2);
 
         boolean dontRender = false;
         if (dist > FADE_DIST_GROUND) {
@@ -2505,7 +2505,7 @@ public class PixelRealm extends Screen {
 
     engine.timestamp("render3DObjects");
 
-    render3DObjects();  //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>//
+    render3DObjects();  //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>//
     scene.hint(DISABLE_DEPTH_TEST);
 
     engine.timestamp("portal light");
@@ -2531,7 +2531,7 @@ public class PixelRealm extends Screen {
     // which causes the delta to be high and try to boost us forwards like 30 frames.
     // However, with the old FPS system, SLEEPY mode was the minimum at 15fps, which meant we could
     // only skip at most 4 frames at a time. We wanna keep that cool bug :sunglasses:
-    portalLight *= pow(fade, min(display.getDelta(), 4));
+    portalLight *= PApplet.pow(fade, min(display.getDelta(), 4));
 
     engine.timestamp("end draw");
 
@@ -2565,7 +2565,7 @@ public class PixelRealm extends Screen {
   private void render3DObjects() {
     engine.timestamp("Update distances");
     // Update the distances from the player for all nodes
-    Object3D currNode = headNode; //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>//
+    Object3D currNode = headNode; //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>//
     while (currNode != null) {
       currNode.calculateVal();
       currNode = currNode.next;
@@ -2653,7 +2653,7 @@ public class PixelRealm extends Screen {
 
   public void content() {
     if (engine.power.getSleepyMode()) engine.power.setAwake();
-    runPixelRealm();  //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>//
+    runPixelRealm();  //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>//
   }
   
   public void upperBar() {
@@ -3378,7 +3378,7 @@ public class WorldLegacy extends Screen {
   public float getHillHeight(float x) { 
     float slow=x*0.0001; 
     return floor(rand(x*VARI, 40, 
-      MAX_RANDOM_HEIGHT))+(pow(sin(slow*MOUNTAIN_FREQUENCY), 3)*HIGHEST_MOUNTAIN*0.5+HIGHEST_MOUNTAIN)-(sin(slow*LOW_DIPS_REQUENCY)*
+      MAX_RANDOM_HEIGHT))+(PApplet.pow(sin(slow*MOUNTAIN_FREQUENCY), 3)*HIGHEST_MOUNTAIN*0.5+HIGHEST_MOUNTAIN)-(sin(slow*LOW_DIPS_REQUENCY)*
       LOWEST_DIPS*0.5+LOWEST_DIPS);
   } 
   public float interpolate(float arr[], float x) { 
