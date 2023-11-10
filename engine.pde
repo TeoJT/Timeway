@@ -41,7 +41,7 @@ class Engine {
   // Info and versioning
   public final String NAME        = "Timeway";
   public final String AUTHOR      = "Teo Taylor";
-  public final String VERSION     = "0.0.6-aksjdfha";
+  public final String VERSION     = "0.0.6-d00";
   public final String VERSION_DESCRIPTION = 
     "- Added shortcuts\n";
   // ***************************
@@ -161,9 +161,6 @@ class Engine {
   public int timestampCount = 0;
   public boolean allowShowCommandPrompt = true;
   public boolean playWhileUnfocused = true;
-  
-  
-  
   
   
   
@@ -1743,6 +1740,53 @@ class Engine {
     public int MAX_DISPLAY_FILES = 2048; 
     public int numTimewayEntries = 0;
     public DisplayableFile[] currentFiles;
+    public String fileSelected = null;
+    public boolean fileSelectSuccess = false;
+    public boolean selectingFile = false;
+    public Object objectToSave;
+    
+    
+    void selectOutput(String promptMessage) {
+      if (true) {
+        fileSelectSuccess = false;
+        app.selectOutput(promptMessage, "outputFileSelected");
+        selectingFile = true;
+      }
+      // TODO: Pixelrealm file chooser.
+    }
+    
+    void selectOutput(String promptMessage, PImage imageToSave) {
+      this.selectOutput(promptMessage);
+      objectToSave = imageToSave;
+    }
+    
+    void outputFileSelected(File selection) {
+      selectingFile = false;
+      if (selection == null) {
+        fileSelected = null;
+        fileSelectSuccess = false;
+      }
+      else {
+        fileSelected = selection.getAbsolutePath();
+        fileSelectSuccess = true;
+      }
+      
+      if (objectToSave != null && fileSelectSuccess) {
+        if (objectToSave instanceof PImage) {
+          Thread t = new Thread(new Runnable() {
+              public void run() {
+                  PImage imageToSave = (PImage)objectToSave;
+                  imageToSave.save(fileSelected);
+                  objectToSave = null;
+              }
+          });
+          t.start();
+        }
+        else {
+          console.bugWarn("outputFileSelected: I don't know how to save "+objectToSave.getClass().toString()+"!");
+        }
+      }
+    }
   
     // TODO: change this so that you can modify the default dir.
     // TODO: Make it follow the UNIX file system with compatibility with windows.
@@ -4187,6 +4231,8 @@ class Engine {
 
 
   private float holdKeyFrames = 0.;
+  public boolean leftPressDown = false;
+  public boolean rightPressDown = false;
 
   public void inputManagement() {
 
@@ -4194,10 +4240,15 @@ class Engine {
     leftClick  = false;   // True one frame after left  mouse is pressed and then released
     rightClick = false;   // True one frame after right mouse is pressed and then released
     pressDown  = false;   // True for one frame instantly when mouse is pressed.
+    leftPressDown  = false;   // True for one frame instantly when mouse is pressed.
+    rightPressDown  = false;   // True for one frame instantly when mouse is pressed.
 
     if (app.mousePressed && !click) {
       click = true;
       pressDown = true;
+      leftPressDown = (app.mouseButton == LEFT);
+      rightPressDown = (app.mouseButton == RIGHT);
+      
       noMove = true;
       clickStartX = mouseX();
       clickStartY = mouseY();

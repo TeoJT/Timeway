@@ -1,4 +1,4 @@
-import java.util.concurrent.atomic.AtomicBoolean; //<>// //<>//
+import java.util.concurrent.atomic.AtomicBoolean; //<>// //<>// //<>// //<>// //<>//
 import javax.sound.midi.*;
 import java.io.BufferedInputStream;
 import processing.sound.*;
@@ -13,10 +13,6 @@ import java.nio.file.*;
 // - Use shaders for the portal code rather than the gross old code from yestercentury when I didn't know how to code gud.
 // - Only process and sort objects that are in view instead of every single one.
 
-// WIP
-public class PixelRealmContext {
-  float xpos = 0, ypos = 0, zpos = 0;
-}
 
 public class PixelRealm extends Screen {
   final static String COMPATIBILITY_VERSION = "1.0";
@@ -27,6 +23,16 @@ public class PixelRealm extends Screen {
   final static int MAX_CACHE_SIZE = 512;
   final static float BACKWARD_COMPAT_SCALE = 256./(float)MAX_CACHE_SIZE;
   final static int MAX_MEM_USAGE = 1024*1024*1024;   // 1GB
+  
+  public final static int MODE_EXPLORER = 1;
+  public final static int MODE_SAVE = 2;
+  public final static int MODE_FILE_SELECT = 3;
+  public final static int MODE_FOLDER_SELECT = 4;
+  
+  // TODO: later.
+  public int mode = MODE_EXPLORER;
+  
+  
 
   public float height = 0.;
 
@@ -37,8 +43,6 @@ public class PixelRealm extends Screen {
   public PImage img_neonTest;
   public PImage img_coin[] = new PImage[6];
   public PImage img_tree[];
-  public PImage img_nightskyStars[] = new PImage[4];
-  public SoundFile snd_bgm;
 
   // Reallllly sorry.
   public PGraphics background;
@@ -174,7 +178,6 @@ public class PixelRealm extends Screen {
   // Our custom stack class that allows for emptying the stack in a single step.
   Stack<Object3D> terrainObjects;
 
-  public int worldThemeSky = 0;
   private boolean legacyPortalEasteregg = false;
 
   private Object3D tailNode = null;
@@ -783,12 +786,6 @@ public class PixelRealm extends Screen {
 
     public void display() {
       if (visible) {
-        // Tint it based on its dir colour.
-        // TODO: Eventually the world theming system will be different, remember to replace.
-        //scene.colorMode(HSB, 255);
-        //scene.tint(myTheme,127,255);
-        //scene.colorMode(RGB, 255);
-
         // Display like normal like before
         super.display();
 
@@ -1212,6 +1209,9 @@ public class PixelRealm extends Screen {
     sharedResources.set(QUICK_WARP_ID, 1);
   }
 
+  // TODO: most of this code hasn't been properly cleaned up since Evolving Gateway.... needs
+  // desperate cleaning up.
+  // (I mean, look at this! "neonTest" is still here! Why's that still here?!)
   public void setup(String dir, String emergeFrom) {
 
     img_glow  = display.systemImages.get("glow");
@@ -1238,8 +1238,6 @@ public class PixelRealm extends Screen {
 
     noiseSeed(getHash(dir));
 
-    worldThemeSky = 0;
-
     this.height = HEIGHT-myLowerBarWeight-myUpperBarWeight;
     
     legacyPortalEasteregg = (boolean)sharedResources.get("legacy_evolvinggateway_easteregg", false);
@@ -1248,6 +1246,7 @@ public class PixelRealm extends Screen {
 
     // TODO:
     // OH MY GOD I CANT BELIEVE I DIDNT NOTICE IT NOW PUT THIS INTO SHARED RESOURCES
+    // TODO: Make canvas width 640 pixels ALWAYS with backwards compat for 1500x221 skies.
     
     //Now craete those offscreen graphics so we can use them for all eternity!!!!
     scene = createGraphics((int(WIDTH/scale)), int(this.height/scale), P3D);
@@ -2505,9 +2504,14 @@ public class PixelRealm extends Screen {
 
     engine.timestamp("render3DObjects");
 
-    render3DObjects();  //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>//
+    render3DObjects(); //<>// //<>// //<>// //<>//
+    
+    // TODO: figure out how to keep the depth test on without compromising performance.
+    engine.timestamp("disabletepthtest start");
     scene.hint(DISABLE_DEPTH_TEST);
-
+    engine.timestamp("disabledepthtest done");
+    
+    // TODO: maybe move the portal light outside of the scene render code?
     engine.timestamp("portal light");
 
     // Pop the camera positioning.
@@ -2540,8 +2544,6 @@ public class PixelRealm extends Screen {
     engine.timestamp("display final scene");
     
     image(scene, 0, myUpperBarWeight, WIDTH, this.height);
-    //if (blurrr) filter(NORMAL);
-    if (blurrr) filter(BLUR, 0.1);
     
 
     //fill(255);
@@ -2565,7 +2567,7 @@ public class PixelRealm extends Screen {
   private void render3DObjects() {
     engine.timestamp("Update distances");
     // Update the distances from the player for all nodes
-    Object3D currNode = headNode; //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>//
+    Object3D currNode = headNode; //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>//
     while (currNode != null) {
       currNode.calculateVal();
       currNode = currNode.next;
@@ -2592,7 +2594,6 @@ public class PixelRealm extends Screen {
     engine.timestamp("done render3DObjects");
   }
   
-  boolean blurrr = false;
 
   public boolean customCommands(String command) {
     if (command.equals("/refresh")) {
@@ -2605,11 +2606,6 @@ public class PixelRealm extends Screen {
         dropInventory();
         console.log("Dropping all items");
       } else console.log("No items to drop.");
-      return true;
-    }
-    else if (command.equals("/blurrr")) {
-      blurrr = !blurrr;
-      console.log("BLURRR");
       return true;
     }
     else if (command.equals("/editgui")) {
@@ -2653,16 +2649,28 @@ public class PixelRealm extends Screen {
 
   public void content() {
     if (engine.power.getSleepyMode()) engine.power.setAwake();
-    runPixelRealm();  //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>//
+    runPixelRealm(); //<>// //<>// //<>// //<>//
   }
   
   public void upperBar() {
     super.upperBar();
-    textFont(engine.DEFAULT_FONT);
-    textSize(36);
-    textAlign(LEFT, TOP);
-    fill(0);
-    text(file.currentDir, 10, 10);
+    app.textFont(engine.DEFAULT_FONT);
+    app.textSize(36);
+    app.textAlign(LEFT, TOP);
+    app.fill(0);
+    
+    if (engine.mouseX() > 0. && engine.mouseX() < app.textWidth(file.currentDir) && engine.mouseY() > 0. && engine.mouseY() < myUpperBarWeight) {
+      app.fill(50);
+      if (engine.leftClick) {
+        console.log("Path copied!");
+        clipboard.copyString(file.currentDir);
+      }
+    }
+    else 
+      app.fill(0);
+    app.text(file.currentDir, 10, 10);
+    
+    
     if (loading > 0) {
       engine.loadingIcon(WIDTH-myUpperBarWeight/2-10, myUpperBarWeight/2, myUpperBarWeight);
       
@@ -3244,6 +3252,7 @@ public class PixelRealm extends Screen {
   }
   
   
+  // Easter egg code
   final int portPartNum = 90;
   float portPartX[] = new float[portPartNum];
   float portPartY[] = new float[portPartNum];
@@ -3251,7 +3260,6 @@ public class PixelRealm extends Screen {
   float portPartVY[] = new float[portPartNum];
   float portPartTick[] = new float[portPartNum];
   void setupLegacyPortal() {for (int i = 0; i < portPartNum; i++) {portPartX[i] = -999;}}
-  // Easter egg code
   public void evolvingGatewayRenderPortal() {     portal.beginDraw(); portal.background(color(0, 0, 255), 0); portal.blendMode(ADD);     float w = 48, h = 48;     int n = 1;     switch (engine.power.getPowerMode()) {     case HIGH:       n = 1;       break;     case NORMAL:       n = 2;       break;     case SLEEPY:       n = 4;       break;     case MINIMAL:       n = 1;       break;     }      for (int j = 0; j < n; j++) {       if (int(random(0, 2)) == 0) {         int i = 0;
 boolean finding = true;         while (finding) {           if (int(portPartX[i]) == -999) {             finding = false;             portPartVX[i] = random(-0.5, 0.5);             portPartVY[i] = random(-0.2, 0.2);              portPartX[i] = portal.width/2;             portPartY[i] = random(h, portal.height-60);              portPartTick[i] = 255;
   }            i++;           if (i >= portPartNum) {             finding = false;           }         }       }               for (int i = 0; i < portPartNum; i++) {         if (int(portPartX[i]) != -999) {           portPartVX[i] *= 0.99;           portPartVY[i] *= 0.99;            portPartX[i] += portPartVX[i];           portPartY[i] += portPartVY[i];              portPartTick[i] -= 2;            if (portPartTick[i] <= 0) {             portPartX[i] = -999;           }    }       }     }      for (int i = 0; i < portPartNum; i++) {       if (int(portPartX[i]) != -999) {         portal.tint(color(128, 128, 255), portPartTick[i]);            portal.image(img_glow, portPartX[i]-(w/2), portPartY[i]+(h/2), w, h);       }     }      portal.blendMode(NORMAL);     portal.endDraw();   }

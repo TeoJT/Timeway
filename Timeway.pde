@@ -168,3 +168,9 @@ void mouseWheel(MouseEvent event) {
 void mouseClicked() {
   if (timewayEngine != null) timewayEngine.mouseEventClick = true;
 }
+
+void outputFileSelected(File selection) {
+  if (timewayEngine != null) {
+    timewayEngine.file.outputFileSelected(selection);
+  }
+}

@@ -177,7 +177,7 @@ public class Editor extends Screen {
         public boolean disappear = false;
 
         final public float APPEAR_SPEED = 0.1;
-        final public color BACKGROUND_COLOR = color(0, 0, 0, 100);
+        final public color BACKGROUND_COLOR = color(0, 0, 0, 150);
 
         public MiniMenu() {
             // idk what else to put there
@@ -187,7 +187,6 @@ public class Editor extends Screen {
 
         public MiniMenu(float x, float y) {
             this();
-            engine.power.setAwake();
             this.x = x;
             this.y = y;
         }
@@ -236,7 +235,7 @@ public class Editor extends Screen {
             // If we click away from the minimenu, close the minimenu
             if ((engine.mouseX() > x && engine.mouseX() < x+this.width && engine.mouseY() > y && engine.mouseY() < y+this.height) == false) {
 
-                if (engine.leftClick) {
+                if (engine.pressDown) {
                     close();
                 }
             }
@@ -346,9 +345,131 @@ public class Editor extends Screen {
         }
     }
     
-    public class ImgOptionsMenu extends MiniMenu {
+    public class OptionsMenu extends MiniMenu {
+      private HashSet<String> options = new HashSet<String>();
+      private String selectedOption = null;
+      private static final float SIZE = 30.;
+      private static final float SPACING = 10.;
+      private static final float OFFSET_SPACING_X = 50.;
+      private static final color HOVER_COLOR = 0xFFC200FF;
+      
+      // Keep track if the menu has been selected, and if it has, set this to
+      // false so that our selected action is only performed once (might loop
+      // during the closing animation of the MiniMenu)
+      private boolean selectable = true;
+      
+      public OptionsMenu(String... opts) {
+        super(engine.mouseX(), engine.mouseY());
+        
+        float maxWidth = 0.;
+        float hi = 0.;        
+        app.textFont(engine.DEFAULT_FONT, SIZE);
+        for (String op : opts) {
+          options.add(op);
+          float wi = app.textWidth(op);
+          if (wi > maxWidth) maxWidth = wi;
+          hi += SIZE+SPACING;
+        }
+        
+        this.width = maxWidth+SPACING*2.+OFFSET_SPACING_X;
+        this.height = hi+SPACING;
+      }
+      
+      
+      public void display() {
+        super.display();
+        if (selectedOption != null) 
+          selectable = false;
+        
+        app.textFont(engine.DEFAULT_FONT, SIZE);
+        app.textAlign(LEFT, TOP);
+        
+        float yy = this.y+SPACING;
+        for (String op : options) {
+          float xx = this.x+OFFSET_SPACING_X+SPACING;
+          if (engine.mouseX() > this.x && engine.mouseX() < this.x+this.width && engine.mouseY() > yy && engine.mouseY() < yy+SIZE+SPACING) {
+            app.fill(HOVER_COLOR);
+            if (engine.click) {
+              selectedOption = op;
+              this.close();
+            }
+          }
+          else app.fill(255);
+          app.text(op, xx, yy);
+          yy += SIZE+SPACING;
+        }
+      }
+      
+      public boolean optionSelected() {
+        if (!selectable) return false;
+        return (selectedOption != null);
+      }
+      
+      public boolean optionSelected(String exp) {
+        if (selectedOption == null || !selectable) return false;
+        return selectedOption.equals(exp);
+      }
+    }
+    
+    public class ImgOptionsMenu extends OptionsMenu {
       public ImgOptionsMenu() {
-        super(engine.mouseX(), engine.mouseY(), 300, 150);
+        super("Copy", "Save", "Delete");
+      }
+      
+      public void display() {
+        super.display();
+        
+        if (optionSelected()) {
+          if (optionSelected("Copy")) {
+            console.log("Copying images to clipboard not supported yet, sorry!");
+          }
+          
+          if (optionSelected("Save")) {
+            if (editingPlaceable != null && editingPlaceable instanceof ImagePlaceable) {
+              ImagePlaceable im = (ImagePlaceable)editingPlaceable;
+              file.selectOutput("Save image...", im.getImage());
+            }
+          }
+          
+          if (optionSelected("Delete")) {
+            if (editingPlaceable != null) {
+              placeableset.remove(editingPlaceable);
+              changesMade = true;
+            }
+          }
+        }
+      }
+    }
+    
+    public class TextOptionsMenu extends OptionsMenu {
+      public TextOptionsMenu() {
+        super("Copy", "Delete");
+      }
+      
+      public void display() {
+        super.display();
+        
+        // Oh god this is so unreadable.
+        if (optionSelected()) {
+          if (optionSelected("Copy")) {
+            if (editingPlaceable != null) {
+              if (editingPlaceable instanceof TextPlaceable) {
+                TextPlaceable t = (TextPlaceable)editingPlaceable;
+                boolean success = clipboard.copyString(t.text);
+                if (success)
+                  console.log("Copied!");
+              }
+            }
+          }
+          
+          // TODO: put this in a function.
+          if (optionSelected("Delete")) {
+            if (editingPlaceable != null) {
+              placeableset.remove(editingPlaceable);
+              changesMade = true;
+            }
+          }
+        }
       }
     }
 
@@ -372,7 +493,7 @@ public class Editor extends Screen {
         
         
         protected boolean placeableSelected() {
-          return (sprite.mouseWithinHitbox() && placeables.selectedSprite == sprite && engine.leftClick && engine.noMove);
+          return (sprite.mouseWithinHitbox() && placeables.selectedSprite == sprite && engine.pressDown && engine.noMove);
         }
 
 
@@ -478,6 +599,11 @@ public class Editor extends Screen {
                 engine.allowShowCommandPrompt = false;
                 editingPlaceable = this;
                 engine.keyboardMessage = text;
+                
+                // Mini menu for text
+                if (engine.rightPressDown) {
+                  currMinimenu = new TextOptionsMenu();
+                }
             }
             super.update();
         }
@@ -523,15 +649,23 @@ public class Editor extends Screen {
           imagesInEntry.add(imgName);
         }
         
-        public void display() {
-          
+        public PImage getImage() {
+          return display.systemImages.get(this.imageName);
         }
+        
+        public void display() {
+                                      }
         
         public void update() {
             if (placeableSelected()) {
                 editingPlaceable = this;
+                if (engine.rightPressDown) {
+                  currMinimenu = new ImgOptionsMenu();
+                }
             }
             placeables.sprite(sprite.getName(), imageName);
+            
+            // TODO: Remove any old instances of ERS
             sprite.setRedraw(true);
         }
     }
@@ -1196,7 +1330,7 @@ public class Editor extends Screen {
                   }
                   // Rename the entry if we're clicking off the title text.
                   if (editingPlaceable == entryNameText) {
-                    if (entryNameText.text.matches("^[a-zA-Z0-9_ ,\\-]+$") && entryNameText.text.length() > 0) {
+                    if (entryNameText.text.matches("^[a-zA-Z0-9_ ,\\-]+$()") && entryNameText.text.length() > 0) {
                       renameEntry(entryNameText.text);
                       console.log("Entry renamed!");
                     }
