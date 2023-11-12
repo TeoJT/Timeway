@@ -1,4 +1,4 @@
-import java.util.concurrent.atomic.AtomicBoolean; //<>// //<>// //<>// //<>// //<>//
+import java.util.concurrent.atomic.AtomicBoolean; //<>//
 import javax.sound.midi.*;
 import java.io.BufferedInputStream;
 import processing.sound.*;
@@ -1307,14 +1307,14 @@ public class PixelRealm extends Screen {
     if (f.exists()) {
       if (!engine.openJSONObject(dir+REALM_TURF)) {
         console.warn("There's an error in the folder's turf file. Will now act as if the turf is new.");
-        engine.backupMove(dir+REALM_TURF);
+        file.backupMove(dir+REALM_TURF);
         newTurf = true;
       }
 
       // Check to see if the version we're reading is compatible.
       if (!engine.getJSONString("compatibility_version", "").equals(COMPATIBILITY_VERSION)) {
         console.log("Incompatible turf file, backing up old and creating new turf.");
-        engine.backupMove(dir+REALM_TURF);
+        file.backupMove(dir+REALM_TURF);
         newTurf = true;
       }
     } else newTurf = true;
@@ -1537,7 +1537,7 @@ public class PixelRealm extends Screen {
     turfJson.setBoolean("coins", (coins != null));
 
     try {
-      engine.backupAndSaveJSON(turfJson, file.currentDir+REALM_TURF);
+      file.backupAndSaveJSON(turfJson, file.currentDir+REALM_TURF);
     }
     catch (RuntimeException e) {
       console.log("Maybe permissions are denied for this folder?");
@@ -2036,7 +2036,12 @@ public class PixelRealm extends Screen {
   // We need this to prevent any bugs while dropping items in the inventory.
   public boolean droppingInventory = false;
   public int dropInventoryTimeIndex = 0;
-
+  
+  public boolean hasProblem() {
+    return (currentProblem != null);
+  }
+  
+  
 
 
   boolean onGround = false;
@@ -2140,8 +2145,7 @@ public class PixelRealm extends Screen {
     // BIG TODO: Make it so that you can't walk through trees and other obstacles.
     // Toggle between item reposition mode and free move mode
 
-    // Tab pressed.
-    if (engine.keybindPressed("menu") && !engine.commandPromptShown) {
+    if (engine.keybindPressed("menu") && !engine.commandPromptShown && !hasProblem()) {
       menuShown = !menuShown;
       menuID = MENU_MAIN;
       // If we're editing a folder/entry name, pressing tab should make the menu disappear
@@ -2329,13 +2333,24 @@ public class PixelRealm extends Screen {
         if (quickWarp[i] == null || (myQuickWarpID == i)) {
           //console.log("New quick warp!");
           // If warp on the number key has not been used before, then create a new quickwarp
-          PixelRealm warpTo = new PixelRealm(engine, engine.DEFAULT_DIR, inventoryToHashSet(engine.DEFAULT_DIR));
-          // A really really hacky way of doing things.
-          // We need to know the starting position calculated by loading everything after creating the world
-          quickWarp[i] = new QuickWarpSaveInfo(warpTo.xpos, warpTo.ypos, warpTo.zpos, warpTo.direction, engine.DEFAULT_DIR);
-          engine.currScreen = warpTo;
+          
+          // NOTE: This is really hacky but Imma eventually tidy up all this code later on.
+          // The way current things are implemented in the Pixel Realm needs serious fixing.
+          HashSet<String> carrying = moveFilesInInventory(engine.DEFAULT_DIR);
+          
+          if (!hasProblem()) {
+            PixelRealm warpTo = new PixelRealm(engine, engine.DEFAULT_DIR, carrying);
+            // A really really hacky way of doing things.
+            // We need to know the starting position calculated by loading everything after creating the world
+            quickWarp[i] = new QuickWarpSaveInfo(warpTo.xpos, warpTo.ypos, warpTo.zpos, warpTo.direction, engine.DEFAULT_DIR);
+            engine.currScreen = warpTo;
+          }
+          
         } else {
-          engine.currScreen = new PixelRealm(engine, quickWarp[i].currentDir, inventoryToHashSet(quickWarp[i].currentDir), quickWarp[i]);
+          HashSet<String> carrying = moveFilesInInventory(quickWarp[i].currentDir);
+          if (!hasProblem()) {
+            engine.currScreen = new PixelRealm(engine, quickWarp[i].currentDir, carrying, quickWarp[i]);
+          }
         }
       }
     }
@@ -2649,7 +2664,7 @@ public class PixelRealm extends Screen {
 
   public void content() {
     if (engine.power.getSleepyMode()) engine.power.setAwake();
-    runPixelRealm(); //<>// //<>// //<>// //<>//
+    runPixelRealm(); //<>//
   }
   
   public void upperBar() {
@@ -2703,21 +2718,50 @@ public class PixelRealm extends Screen {
     // if uA and uB are between 0-1, lines are colliding
     return (uA >= 0 && uA <= 1 && uB >= 0 && uB <= 1);
   }
+  
+  Engine.FilemanagerModule.ProblematicOperation currentProblem = null;
 
-  private HashSet<String> inventoryToHashSet(String newdir) {
-    ItemSlot slot = inventoryHead;
 
+  // This function moves our files that's currently in our inventory and then returns
+  // a hashset so we can use them in the next realm.
+  private HashSet<String> moveFilesInInventory(String newdir) {
     HashSet<String> carry = new HashSet<String>();
-    String dirFolderName = file.getFilename(file.currentDir);
-
-    // Go thru the linked list and move each file to the new dir.
-    while (slot != null) {
-      if (!slot.carrying.filename.equals(dirFolderName)) {
-        engine.mv(slot.carrying.dir, newdir+slot.carrying.filename);
-        carry.add(newdir+slot.carrying.filename);
-      } else console.log("You can't move the back portal to another folder!");
-      slot = slot.next;
+    if (!hasProblem()) {
+      ItemSlot slot = inventoryHead;
+  
+      String dirFolderName = file.getFilename(file.currentDir);
+      
+      boolean problem = false;
+  
+      // Go thru the linked list and move each file to the new dir.
+      while (slot != null) {
+        if (!slot.carrying.filename.equals(dirFolderName)) {
+          // We might have problematic files here e.g. file already exists.
+          // Be ready to handle the problems.
+          if (!file.mv(slot.carrying.dir, newdir+slot.carrying.filename)) {
+            // remove the problematic file so that we don't have anymore issues.
+            // We can add it back later.
+            slot.remove();
+            
+            // Later on (somewhere in the messy) code we can evaluate those exceptions in the filemodule's
+            // queue to handle the problem.
+            problem = true;
+          }
+        } else {
+          console.log("You can't move the back portal to another folder!");
+          // Remove the back folder from the inventory.
+          slot.remove();
+        }
+        slot = slot.next;
+      }
+      
+      // If a problem occured, show the menu to allow us to rename folders.
+      if (problem) {
+        sound.playSound("nope");
+        getNextDuplicateFileProblem();
+      }
     }
+    
     return carry;
   }
 
@@ -2732,14 +2776,25 @@ public class PixelRealm extends Screen {
 
     // If inventory isn't empty, move the files to the new directory.
     if (inventoryHead != null && inventorySelectedItem != null) {
-      engine.currScreen = new PixelRealm(engine, newdir, file.getFilename(file.currentDir), inventoryToHashSet(newdir));
-    } else engine.currScreen = new PixelRealm(engine, newdir, file.getFilename(file.currentDir));
+      HashSet<String> carrying = moveFilesInInventory(newdir);
+      if (!hasProblem()) {
+        endRealm();
+        sound.playSound("shift");
+        engine.currScreen = new PixelRealm(engine, newdir, file.getFilename(file.currentDir), carrying);
+      }
+    } else if (!hasProblem()) {
+      endRealm();
+      sound.playSound("shift");
+      engine.currScreen = new PixelRealm(engine, newdir, file.getFilename(file.currentDir));
+    }
   }
 
   public int menuID = 1;
   public final static int MENU_MAIN = 1;
   public final static int MENU_CREATOR = 2;
   public final static int MENU_CREATE_FOLDER_PROMPT = 3;
+  public final static int MENU_MOVE_ALREADY_EXISTS = 4;
+  
 
   private int buttonCount = 0;
   private int selectedButton = 0;
@@ -2922,10 +2977,102 @@ public class PixelRealm extends Screen {
         app.rect(WIDTH/2-promptWi/2, HEIGHT/2-promptHi/2, promptWi, promptHi);
         engine.displayInputPrompt();
         break;
+      case MENU_MOVE_ALREADY_EXISTS:
+        // If there is a problem to deal with then render the GUI menu.
+        if (currentProblem != null) {
+          app.fill(0, 127);
+          app.noStroke();
+          float x = WIDTH/2-promptWi/2;
+          float y = HEIGHT/2-promptHi/2;
+          app.rect(x, y, promptWi, promptHi);
+          // Sorryyyyyyy
+          app.fill(255);
+          app.textAlign(LEFT, TOP);
+          app.textFont(engine.DEFAULT_FONT, 30);
+          app.text(file.getFilename(currentProblem.getSource())+" already exists!\nWhat do you want to do?", x+20, y+20, promptWi-40, promptHi-40);
+          
+          
+          if (engine.button("move_autorename", "create_shortcut_128", "Automatically rename")) {
+            console.log("Not functional yet!");
+            //String newPath = file.currentDir+engine.keyboardMessage;
+            //console.log(newPath);
+            
+            
+            //file.mv(currentProblem.getSource(), newPath);
+          }
+          
+          if (engine.button("move_replace", "create_shortcut_128", "Replace")) {
+            // Just make the menu disappear
+            // It will then automatically replace the file.
+            menuShown = false;
+            pickupItem(currentProblem.getSource());
+          }
+          
+          if (engine.button("move_rename", "create_shortcut_128", "Manually rename")) {
+            sound.playSound("menu_select");
+            Runnable r = new Runnable() {
+              public void run() {
+                // Check file name is good etc
+                if (engine.keyboardMessage.length() <= 1) {
+                  console.log("Please enter a valid file name!");
+                  return;
+                }
+                // TODO: append extension if not already appended.
+                
+                
+                String newPath = file.currentDir+engine.keyboardMessage;
+                console.log(newPath);
+                
+                // Attempt to move the file.
+                // Don't do anything in the catch statement because the
+                // exception automatically adds the problem to the queue at the front
+                // if the user is dumb enough to rename the file to the same name.
+                file.mv(currentProblem.getSource(), newPath);
+                refreshRealm();
+                pickupItem(newPath);
+                            
+                getNextDuplicateFileProblem();
+              }
+            };
+            engine.beginInputPrompt("Rename file:", r);
+            menuID = MENU_CREATE_FOLDER_PROMPT;
+          }
+        }
+        break;
       }
 
       guiMainToolbar.updateSpriteSystem();
     }
+  }
+  
+  private void getNextDuplicateFileProblem() {
+    currentProblem = null;
+    while (file.hasProblematicOperations()) {
+      Engine.FilemanagerModule.ProblematicOperation p = file.getNextProblem();
+      
+      
+      // Using if statement instead of switch because we need to use break.
+      if (p.getProblemType() == Engine.FilemanagerModule.ProblematicOperation.ALREADY_EXISTS) {
+        // Open up the menu with a prompt about a duplicate file.
+        menuID = MENU_MOVE_ALREADY_EXISTS;
+        menuShown = true;
+        // If we're editing a folder/entry name, pressing tab should make the menu disappear
+        // and then we can continue moving. If we forget to turn the inputPrompt off, the engine
+        // will think we're still typing and won't allow us to move.
+        engine.inputPromptShown = false;
+        currentProblem = p;
+        // Break here because we want to go to handling the next file.
+        break;
+      }
+      else if (p.getProblemType() == Engine.FilemanagerModule.ProblematicOperation.SOURCE_DOESNT_EXIST) {
+        console.bugWarn("moveFilesInInventory: tried to move file but source doesn't exist!");
+      }
+      else if (p.getProblemType() == Engine.FilemanagerModule.ProblematicOperation.IOEXCEPTION) {
+        // TODO: Add option to try again or cancel.
+      }
+    }
+            
+            
   }
 
   private void pickupItem(FileObject p) {
@@ -3152,9 +3299,6 @@ public class PixelRealm extends Screen {
             // Take the player to a new directory in the world if we enter the portal.
             if (f.touchingPlayer()) {
               if (portalCoolDown <= 0.) {
-                // For now just create an entirely new screen object lmao.
-                endRealm();
-                sound.playSound("shift");
 
                 // Go into the new world
                 // If it's a shortcut, go to where the shortcut points to.

@@ -41,7 +41,7 @@ class Engine {
   // Info and versioning
   public final String NAME        = "Timeway";
   public final String AUTHOR      = "Teo Taylor";
-  public final String VERSION     = "0.0.6-d00";
+  public final String VERSION     = "0.0.6-shit";
   public final String VERSION_DESCRIPTION = 
     "- Added shortcuts\n";
   // ***************************
@@ -1493,6 +1493,7 @@ class Engine {
     public void playSound(String name) {
       SoundFile s = getSound(name);
       if (s != null) {
+        if (s.isPlaying()) s.stop();
         s.play();
       }
     }
@@ -1744,6 +1745,7 @@ class Engine {
     public boolean fileSelectSuccess = false;
     public boolean selectingFile = false;
     public Object objectToSave;
+    public 
     
     
     void selectOutput(String promptMessage) {
@@ -1787,6 +1789,107 @@ class Engine {
         }
       }
     }
+    
+    private ArrayList<ProblematicOperation> problematicOperations = new ArrayList<ProblematicOperation>();
+    
+    // This class is NOT meant to test if such and such exists, it should ONLY be used
+    // as a data structure to store error information
+    public class ProblematicOperation {
+      public static final int ALREADY_EXISTS = 1;
+      public static final int SOURCE_DOESNT_EXIST = 2;
+      public static final int IOEXCEPTION = 3;
+      private int problemType = 0;
+      private String oldPlace = "";
+      private String newPlace = "";
+      
+      public ProblematicOperation(int type, String oldPlace, String newPlace) {
+        this.oldPlace = oldPlace;
+        this.newPlace = newPlace;
+        this.problemType = type;
+        switch (type) {
+          case ALREADY_EXISTS:
+          console.warn(oldPlace+": "+newPlace+" already exists!");
+          break;
+          case SOURCE_DOESNT_EXIST:
+          console.warn(oldPlace+" doesn't exist");
+          break;
+          case IOEXCEPTION:
+          console.warn(oldPlace+": A system error occured!");
+          break;
+        }
+      }
+      
+      public int getProblemType() {
+        return problemType;
+      }
+      
+      public String getSource() {
+        return this.oldPlace;
+      }
+      
+      public String getNewLocation() {
+        return this.newPlace;
+      }
+      
+      
+    }
+    
+    public boolean mv(String oldPlace, String newPlace) {
+      try {
+        File of = new File(oldPlace);
+        File nf = new File(newPlace);
+        if (nf.exists()) {
+           problematicOperations.add(0, new ProblematicOperation(ProblematicOperation.ALREADY_EXISTS, oldPlace, newPlace));
+           return false;
+        }
+        if (of.exists()) {
+          of.renameTo(nf);
+          // If the file is cached, move the cached file too to avoid stalling and creating duplicate cache
+          moveCache(oldPlace, newPlace);
+        } else if (!of.exists()) {
+          problematicOperations.add(0, new ProblematicOperation(ProblematicOperation.SOURCE_DOESNT_EXIST, oldPlace, newPlace));
+          return false;
+        }
+      }
+      catch (SecurityException e) {
+        console.warn(e.getMessage());
+        problematicOperations.add(0, new ProblematicOperation(ProblematicOperation.IOEXCEPTION, oldPlace, newPlace));
+        return false;
+      }
+      return true;
+    }
+  
+    public void backupMove(String path) {
+      if (!mv(path, APPPATH+CACHE_PATH+"_"+getLastModified(path).replaceAll(":", "-"))) {
+        // If a file doesn't back up, it's not the end of the world.
+        console.warn("Couldn't back up "+path+".");
+      }
+    }
+  
+    public void backupAndSaveJSON(JSONObject json, String path) {
+      File f = new File(path);
+      if (f.exists())
+        backupMove(path);
+          
+      app.saveJSONObject(json, path);
+    }
+    
+    public boolean hasProblematicOperations() {
+      return (problematicOperations.size() > 0);
+    }
+    
+    public ProblematicOperation getNextProblem() {
+      if (hasProblematicOperations()) {
+        // Pop from the queue
+        return problematicOperations.remove(0);
+      }
+      else {
+        console.bugWarn("getNextProblem: No problems! Make sure to use hasProblematicOperations()!");
+        return null;
+      }
+    }
+    
+    
   
     // TODO: change this so that you can modify the default dir.
     // TODO: Make it follow the UNIX file system with compatibility with windows.
@@ -4185,40 +4288,6 @@ class Engine {
     }
 
     return cachePath;
-  }
-
-  public void mv(String oldPlace, String newPlace) {
-    try {
-      File of = new File(oldPlace);
-      File nf = new File(newPlace);
-      if (nf.exists()) {
-        console.warn("Tried to move "+oldPlace+", "+newPlace+" already exists!");
-      }
-      if (of.exists()) {
-        of.renameTo(nf);
-        // If the file is cached, move the cached file too to avoid stalling and creating duplicate cache
-        moveCache(oldPlace, newPlace);
-      } else if (!of.exists()) console.warn(oldPlace+" doesn't exist");
-    }
-    catch (RuntimeException e) {
-      console.warn("couldn't move file");
-    }
-  }
-
-  public void backupMove(String path) {
-    mv(path, APPPATH+CACHE_PATH+"_"+getLastModified(path).replaceAll(":", "-"));
-  }
-
-  public void backupAndSaveJSON(JSONObject json, String path) {
-    File f = new File(path);
-    try {
-      if (f.exists())
-        backupMove(path);
-    }
-    catch (NullPointerException e) {
-    }
-
-    saveJSONObject(json, path);
   }
 
 
