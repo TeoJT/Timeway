@@ -20,11 +20,11 @@ void draw() {
   background(0);
   //translate(width/2, height/2, 600);
   
-  //noFill();
-  //stroke(255);
-  //strokeWeight(1);
-  fill(127);
-  noStroke();
+  noFill();
+  stroke(255);
+  strokeWeight(1);
+  //fill(127);
+  //noStroke();
   
   float scale = -20.;
   float x = 0.;

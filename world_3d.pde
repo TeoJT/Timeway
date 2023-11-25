@@ -1,4 +1,4 @@
-import java.util.concurrent.atomic.AtomicBoolean; //<>//
+import java.util.concurrent.atomic.AtomicBoolean;  //<>// //<>// //<>// //<>// //<>// //<>//
 import javax.sound.midi.*;
 import java.io.BufferedInputStream;
 import processing.sound.*;
@@ -2519,7 +2519,7 @@ public class PixelRealm extends Screen {
 
     engine.timestamp("render3DObjects");
 
-    render3DObjects(); //<>// //<>// //<>// //<>//
+    render3DObjects(); //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>//
     
     // TODO: figure out how to keep the depth test on without compromising performance.
     engine.timestamp("disabletepthtest start");
@@ -2582,7 +2582,7 @@ public class PixelRealm extends Screen {
   private void render3DObjects() {
     engine.timestamp("Update distances");
     // Update the distances from the player for all nodes
-    Object3D currNode = headNode; //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>//
+    Object3D currNode = headNode; //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>//
     while (currNode != null) {
       currNode.calculateVal();
       currNode = currNode.next;
@@ -2664,7 +2664,7 @@ public class PixelRealm extends Screen {
 
   public void content() {
     if (engine.power.getSleepyMode()) engine.power.setAwake();
-    runPixelRealm(); //<>//
+    runPixelRealm(); //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>//
   }
   
   public void upperBar() {
