@@ -15,7 +15,7 @@ public class Startup extends Screen {
           sound.streamMusic(engine.DEFAULT_DIR+PixelRealm.REALM_BGM);
         else
           sound.streamMusic(engine.APPPATH+PixelRealm.REALM_BGM_DEFAULT);
-        sound.playSound("intro");
+        //sound.playSound("intro");
     }
 
     public void upperBar() {
@@ -56,7 +56,7 @@ public class Startup extends Screen {
         // BIG MASSIVE TODO: This doesn't actually wait for Timeway to load. It's just mostly a lil hello thing lmao.
         // Obviously we need to make the loading actually work in a seperate thread while this screen loads everything.
         // Render logo
-        if (engine.isLoading() || timeFromStart < 60) {
+        if (engine.isLoading() || timeFromStart < 30) {
             floatIn *= 0.9;
             app.tint(255, 255-(255*floatIn));
             display.imgCentre("logo", WIDTH/2, HEIGHT/2 - floatIn*100);

@@ -26,10 +26,12 @@ final boolean sketch_FORCE_CRASH_SCREEN = false;
 
 void settings() {
   try {
-    //System.setProperty("jogl.disable.openglcore", "true");
+    if (platform == LINUX)
+      System.setProperty("jogl.disable.openglcore", "true");
     size(displayWidth, displayHeight, P2D);
     //size(1500, 1000, P2D);
     smooth(1);
+    //hint(DISABLE_OPENGL_ERRORS);         
     
     // Ugly, I know. But we're at the most low level point in the program, so ain't
     // much we can do.
