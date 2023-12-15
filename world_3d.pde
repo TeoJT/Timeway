@@ -43,16 +43,14 @@ public class PixelRealm extends Screen {
   public PImage img_neonTest;
   public PImage img_coin[] = new PImage[6];
   public PImage img_tree[];
-
-  // Reallllly sorry.
-  public PGraphics background;
-  public PImage img_sky_1;
+  public PImage img_sky[] = new PImage[1];
+  public float skyAnimationTick = 0.;
 
   public boolean lights = false;
   public boolean finderEnabled = false;
 
   public final static String REALM_GRASS = ".pixelrealm-grass.png";
-  public final static String REALM_SKY   = ".pixelrealm-sky.png";
+  public final static String REALM_SKY   = ".pixelrealm-sky";
   public final static String REALM_TREE  = ".pixelrealm-terrain_object-";
   public final static String REALM_BGM   = ".pixelrealm-bgm";
   public final static String REALM_SEQ   = ".pixelrealm-bgm.mid";
@@ -1225,12 +1223,13 @@ public class PixelRealm extends Screen {
     img_coin[5]  = display.systemImages.get("coin_5");
     img_tree = new PImage[1];
     img_tree[0]  = display.systemImages.get("tree");
-    img_sky_1    = display.systemImages.get("sky_1");
+    REALM_SKY_DEFAULT    = display.systemImages.get("sky_1");
+    img_sky  = new PImage[1];
+    img_sky[0] = REALM_SKY_DEFAULT;
     portalSound  = sound.getSound("portal");
     if (portalSound != null) portalSound.loop();
     REALM_GRASS_DEFAULT = img_grass;
     REALM_MUSIC_DEFAULT = null;
-    REALM_SKY_DEFAULT = img_sky_1;
     REALM_TREE_DEFAULT = img_tree[0];
 
     guiMainToolbar = new SpriteSystemPlaceholder(engine, engine.APPPATH+engine.PATH_SPRITES_ATTRIB+"gui/pixelrealm/");
@@ -1662,7 +1661,9 @@ public class PixelRealm extends Screen {
   public void refreshRealmInSeperateThread() {
     refreshThreadEnded.set(false);
     refreshThread = new Thread(new Runnable() {
-      private FileTime img_sky_1_modified = getLastModified(file.currentDir+REALM_SKY);
+      private FileTime img_sky_1_modified = getLastModified(file.currentDir+REALM_SKY+".png");
+      private FileTime img_sky_1_modified_gif = getLastModified(file.currentDir+REALM_SKY+".gif");
+      
       private FileTime img_grass_modified = getLastModified(file.currentDir+REALM_GRASS);
 
       private FileTime[] img_tree_modified  = getLastModifiedTree(file.currentDir+REALM_TREE);
@@ -1680,13 +1681,15 @@ public class PixelRealm extends Screen {
             //break; // Exit the loop on interruption
           }
           if (
-            fileChanged(REALM_SKY, img_sky_1_modified)  ||
+            fileChanged(REALM_SKY+".png", img_sky_1_modified)  ||
+            fileChanged(REALM_SKY+".gif", img_sky_1_modified_gif) ||
             terrainObjectFileChanged(REALM_TREE, img_tree_modified) ||
             fileChanged(REALM_GRASS, img_grass_modified))
           {
             console.log("Change detected, reloading...");
             refreshRealm.set(true);
-            img_sky_1_modified = getLastModified(file.currentDir+REALM_SKY);
+            img_sky_1_modified_gif = getLastModified(file.currentDir+REALM_SKY+".gif");
+            img_sky_1_modified = getLastModified(file.currentDir+REALM_SKY+".png");
             img_tree_modified  = getLastModifiedTree(file.currentDir+REALM_TREE);
             img_grass_modified = getLastModified(file.currentDir+REALM_GRASS);
           }
@@ -1698,7 +1701,6 @@ public class PixelRealm extends Screen {
     refreshThread.start();
   }
 
-
   public boolean terrainObjectFileChanged(String path, FileTime[] lastLastChange) {
     boolean changed = false;
     for (int i = 0; i < lastLastChange.length; i++) {
@@ -1706,6 +1708,15 @@ public class PixelRealm extends Screen {
     }
     return changed;
   }
+  
+  //public boolean skyFileChanged(String path, FileTime[] lastLastChange) {
+  //  if (fileChanged(path+".png", lastLastChange[0])) return true;
+  //  boolean changed = false;
+  //  for (int i = 0; i < lastLastChange.length; i++) {
+  //    changed |= fileChanged(path+str(i+1)+".png", lastLastChange[i]);
+  //  }
+  //  return changed;
+  //}
 
 
   public boolean fileChanged(String name, FileTime lastLastChange) {
@@ -1797,14 +1808,38 @@ public class PixelRealm extends Screen {
     portalLight = 255;
 
     img_grass = (PImage)getRealmFile(REALM_GRASS, REALM_GRASS_DEFAULT);
-    img_sky_1 = (PImage)getRealmFile(REALM_SKY, REALM_SKY_DEFAULT);
-
+    
     /// here we search for the terrain objects textures from the dir.
-    ArrayList<PImage> terrainobjs = new ArrayList<PImage>();
+    ArrayList<PImage> imgs = new ArrayList<PImage>();
+
+    if (new File(REALM_SKY+".gif").exists())
+      img_sky = ((Gif)getRealmFile(REALM_SKY+".gif", REALM_SKY_DEFAULT)).getPImages();
+    else {
+      
+      int i = 1;
+      PImage sky = (PImage)getRealmFile(REALM_SKY+".png", REALM_SKY_DEFAULT);
+      if (sky == REALM_SKY_DEFAULT) sky = (PImage)getRealmFile(REALM_SKY+"-1.png", REALM_SKY_DEFAULT);
+      imgs.add(sky);
+      
+      while (sky != REALM_SKY_DEFAULT && i <= 9) {
+        sky = (PImage)getRealmFile(REALM_SKY+"-"+str(i+1)+".png", REALM_SKY_DEFAULT);
+        if (sky != REALM_SKY_DEFAULT) {
+          imgs.add(sky);
+        }
+        i++;
+      }
+      
+      img_sky = new PImage[imgs.size()];
+      for (int j = 0; j < imgs.size(); j++) {
+        img_sky[j] = imgs.get(j);
+      }
+    }
+    
+    imgs = new ArrayList<PImage>();
 
     // Try to find the first terrain object texture, it will return default if not found
     PImage terrainobj = (PImage)getRealmFile(REALM_TREE+"1.png", REALM_TREE_DEFAULT);
-    terrainobjs.add(terrainobj);
+    imgs.add(terrainobj);
 
     int i = 1;
     // Run this loop only if the terrain_objects files exist and only for how many pixelrealm-terrain_objects
@@ -1812,15 +1847,15 @@ public class PixelRealm extends Screen {
     while (terrainobj != null && i <= 9) {
       terrainobj = (PImage)getRealmFile(REALM_TREE+str(i+1)+".png", null);
       if (terrainobj != null) {
-        terrainobjs.add(terrainobj);
+        imgs.add(terrainobj);
       }
       i++;
     }
 
     // New array and plonk that all in there.
-    img_tree = new PImage[terrainobjs.size()];
-    for (int j = 0; j < terrainobjs.size(); j++) {
-      img_tree[j] = terrainobjs.get(j);
+    img_tree = new PImage[imgs.size()];
+    for (int j = 0; j < imgs.size(); j++) {
+      img_tree[j] = imgs.get(j);
     }
 
     //img_sky_1.resize(scene.width, scene.height);
@@ -1889,7 +1924,7 @@ public class PixelRealm extends Screen {
     String fullPath = file.currentDir+filename;
     File f = new File(fullPath);
     if (f.exists()) {
-      if (file.getExt(filename).equals("png")) {
+      if (file.getExt(filename).equals("png") || file.getExt(filename).equals("gif")) {
         incrementMemUsage(file.getImageUncompressedSize(fullPath));
         return loadImage(file.currentDir+filename);
       }
@@ -1973,7 +2008,9 @@ public class PixelRealm extends Screen {
     // Part 1
     float v3tov4 = v3.x-v4.x;
     float v2tov3 = v3.z-v2.z;
-    float m1 = (xpos-v1.x)/(zpos-v1.z);
+    float m1 = 0.;
+    if ((zpos-v1.z) != 0.) m1 = (xpos-v1.x)/(zpos-v1.z);
+    
     PVector point1;
     boolean otherEdge = false;
     if (m1 > 1) {
@@ -2002,7 +2039,7 @@ public class PixelRealm extends Screen {
 
     // Part 3
     // Pythagoras
-    float len;
+    float len = 0.;
     if (otherEdge) {
       float v1tov2 = v2.x-v1.x;
       float v2toPoint1 = point1.z-v2.z;
@@ -2016,7 +2053,7 @@ public class PixelRealm extends Screen {
     // Part 4
     // Yay
     // Pythagoras again
-    float playerLen;
+    float playerLen = 0.0;
     if (otherEdge) {
       float v1toPlayer = xpos-v1.x;
       float v2toPlayer = zpos-v2.z;
@@ -2036,12 +2073,7 @@ public class PixelRealm extends Screen {
   // We need this to prevent any bugs while dropping items in the inventory.
   public boolean droppingInventory = false;
   public int dropInventoryTimeIndex = 0;
-  
-  public boolean hasProblem() {
-    return (currentProblem != null);
-  }
-  
-  
+
 
 
   boolean onGround = false;
@@ -2145,7 +2177,8 @@ public class PixelRealm extends Screen {
     // BIG TODO: Make it so that you can't walk through trees and other obstacles.
     // Toggle between item reposition mode and free move mode
 
-    if (engine.keybindPressed("menu") && !engine.commandPromptShown && !hasProblem()) {
+    // Tab pressed.
+    if (engine.keybindPressed("menu") && !engine.commandPromptShown) {
       menuShown = !menuShown;
       menuID = MENU_MAIN;
       // If we're editing a folder/entry name, pressing tab should make the menu disappear
@@ -2333,24 +2366,13 @@ public class PixelRealm extends Screen {
         if (quickWarp[i] == null || (myQuickWarpID == i)) {
           //console.log("New quick warp!");
           // If warp on the number key has not been used before, then create a new quickwarp
-          
-          // NOTE: This is really hacky but Imma eventually tidy up all this code later on.
-          // The way current things are implemented in the Pixel Realm needs serious fixing.
-          HashSet<String> carrying = moveFilesInInventory(engine.DEFAULT_DIR);
-          
-          if (!hasProblem()) {
-            PixelRealm warpTo = new PixelRealm(engine, engine.DEFAULT_DIR, carrying);
-            // A really really hacky way of doing things.
-            // We need to know the starting position calculated by loading everything after creating the world
-            quickWarp[i] = new QuickWarpSaveInfo(warpTo.xpos, warpTo.ypos, warpTo.zpos, warpTo.direction, engine.DEFAULT_DIR);
-            engine.currScreen = warpTo;
-          }
-          
+          PixelRealm warpTo = new PixelRealm(engine, engine.DEFAULT_DIR, inventoryToHashSet(engine.DEFAULT_DIR));
+          // A really really hacky way of doing things.
+          // We need to know the starting position calculated by loading everything after creating the world
+          quickWarp[i] = new QuickWarpSaveInfo(warpTo.xpos, warpTo.ypos, warpTo.zpos, warpTo.direction, engine.DEFAULT_DIR);
+          engine.currScreen = warpTo;
         } else {
-          HashSet<String> carrying = moveFilesInInventory(quickWarp[i].currentDir);
-          if (!hasProblem()) {
-            engine.currScreen = new PixelRealm(engine, quickWarp[i].currentDir, carrying, quickWarp[i]);
-          }
+          engine.currScreen = new PixelRealm(engine, quickWarp[i].currentDir, inventoryToHashSet(quickWarp[i].currentDir), quickWarp[i]);
         }
       }
     }
@@ -2372,12 +2394,14 @@ public class PixelRealm extends Screen {
     scene.beginShape();
     scene.textureMode(NORMAL);
     scene.textureWrap(REPEAT);
-    scene.texture(img_sky_1);
+    scene.texture(img_sky[int(skyAnimationTick/10.)%img_sky.length]);
     scene.vertex(0, 0, skyViewportLeft, 0.);
     scene.vertex(scene.width, 0, skyViewportRight, 0.);
     scene.vertex(scene.width, scene.height, skyViewportRight, 1.);
     scene.vertex(0, scene.height, skyViewportLeft, 1.);
     scene.endShape();
+    
+    skyAnimationTick += display.getDelta();
 
     //scene.image(img_sky_1,0,0,scene.width,scene.height);
 
@@ -2519,7 +2543,7 @@ public class PixelRealm extends Screen {
 
     engine.timestamp("render3DObjects");
 
-    render3DObjects(); //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>//
+    render3DObjects(); //<>// //<>// //<>// //<>//
     
     // TODO: figure out how to keep the depth test on without compromising performance.
     engine.timestamp("disabletepthtest start");
@@ -2582,7 +2606,7 @@ public class PixelRealm extends Screen {
   private void render3DObjects() {
     engine.timestamp("Update distances");
     // Update the distances from the player for all nodes
-    Object3D currNode = headNode; //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>//
+    Object3D currNode = headNode; //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>// //<>//
     while (currNode != null) {
       currNode.calculateVal();
       currNode = currNode.next;
@@ -2659,7 +2683,47 @@ public class PixelRealm extends Screen {
       else console.log("Memory usage bar hidden.");
       return true;
     }
+    else if (engine.commandEquals(command, "/tp")) {
+      String[] args = getArgs(command);
+      int i = 0;
+      float xyz[] = {1000.,0.,1000.,PI};
+      for (String arg : args) {
+        if (i >= xyz.length) break;
+        xyz[i++] = int(arg);
+      }
+      xpos = xyz[0];
+      ypos = xyz[1];
+      zpos = xyz[2];
+      direction = xyz[3];
+      
+      console.log("Teleported to ("+str(xpos)+", "+str(ypos)+", "+str(zpos)+").");
+
+      return true;
+    }
     else return false;
+  }
+  
+  public String[] getArgs(String input) {
+    if (input.indexOf(' ') <= -1) {
+      return new String[0];
+    }
+    else {
+      String[] arr = input.split(" ");
+      String[] args = new String[arr.length-1];
+      for (int i = 0; i < args.length; i++) {
+        args[i] = arr[i+1];
+      }
+      return args;
+    }
+    //cmdLength+=1;
+    
+    //ArrayList<String> arr = new ArrayList<String>();
+    
+    //int index = str.indexOf(termChar);
+    //int x = int(input.substring(cmdLength, getEnd()));
+    
+    //if (command.length() > 4) {
+    //}
   }
 
   public void content() {
@@ -2718,50 +2782,21 @@ public class PixelRealm extends Screen {
     // if uA and uB are between 0-1, lines are colliding
     return (uA >= 0 && uA <= 1 && uB >= 0 && uB <= 1);
   }
-  
-  Engine.FilemanagerModule.ProblematicOperation currentProblem = null;
 
+  private HashSet<String> inventoryToHashSet(String newdir) {
+    ItemSlot slot = inventoryHead;
 
-  // This function moves our files that's currently in our inventory and then returns
-  // a hashset so we can use them in the next realm.
-  private HashSet<String> moveFilesInInventory(String newdir) {
     HashSet<String> carry = new HashSet<String>();
-    if (!hasProblem()) {
-      ItemSlot slot = inventoryHead;
-  
-      String dirFolderName = file.getFilename(file.currentDir);
-      
-      boolean problem = false;
-  
-      // Go thru the linked list and move each file to the new dir.
-      while (slot != null) {
-        if (!slot.carrying.filename.equals(dirFolderName)) {
-          // We might have problematic files here e.g. file already exists.
-          // Be ready to handle the problems.
-          if (!file.mv(slot.carrying.dir, newdir+slot.carrying.filename)) {
-            // remove the problematic file so that we don't have anymore issues.
-            // We can add it back later.
-            slot.remove();
-            
-            // Later on (somewhere in the messy) code we can evaluate those exceptions in the filemodule's
-            // queue to handle the problem.
-            problem = true;
-          }
-        } else {
-          console.log("You can't move the back portal to another folder!");
-          // Remove the back folder from the inventory.
-          slot.remove();
-        }
-        slot = slot.next;
-      }
-      
-      // If a problem occured, show the menu to allow us to rename folders.
-      if (problem) {
-        sound.playSound("nope");
-        getNextDuplicateFileProblem();
-      }
+    String dirFolderName = file.getFilename(file.currentDir);
+
+    // Go thru the linked list and move each file to the new dir.
+    while (slot != null) {
+      if (!slot.carrying.filename.equals(dirFolderName)) {
+        file.mv(slot.carrying.dir, newdir+slot.carrying.filename);
+        carry.add(newdir+slot.carrying.filename);
+      } else console.log("You can't move the back portal to another folder!");
+      slot = slot.next;
     }
-    
     return carry;
   }
 
@@ -2776,25 +2811,14 @@ public class PixelRealm extends Screen {
 
     // If inventory isn't empty, move the files to the new directory.
     if (inventoryHead != null && inventorySelectedItem != null) {
-      HashSet<String> carrying = moveFilesInInventory(newdir);
-      if (!hasProblem()) {
-        endRealm();
-        sound.playSound("shift");
-        engine.currScreen = new PixelRealm(engine, newdir, file.getFilename(file.currentDir), carrying);
-      }
-    } else if (!hasProblem()) {
-      endRealm();
-      sound.playSound("shift");
-      engine.currScreen = new PixelRealm(engine, newdir, file.getFilename(file.currentDir));
-    }
+      engine.currScreen = new PixelRealm(engine, newdir, file.getFilename(file.currentDir), inventoryToHashSet(newdir));
+    } else engine.currScreen = new PixelRealm(engine, newdir, file.getFilename(file.currentDir));
   }
 
   public int menuID = 1;
   public final static int MENU_MAIN = 1;
   public final static int MENU_CREATOR = 2;
   public final static int MENU_CREATE_FOLDER_PROMPT = 3;
-  public final static int MENU_MOVE_ALREADY_EXISTS = 4;
-  
 
   private int buttonCount = 0;
   private int selectedButton = 0;
@@ -2977,102 +3001,10 @@ public class PixelRealm extends Screen {
         app.rect(WIDTH/2-promptWi/2, HEIGHT/2-promptHi/2, promptWi, promptHi);
         engine.displayInputPrompt();
         break;
-      case MENU_MOVE_ALREADY_EXISTS:
-        // If there is a problem to deal with then render the GUI menu.
-        if (currentProblem != null) {
-          app.fill(0, 127);
-          app.noStroke();
-          float x = WIDTH/2-promptWi/2;
-          float y = HEIGHT/2-promptHi/2;
-          app.rect(x, y, promptWi, promptHi);
-          // Sorryyyyyyy
-          app.fill(255);
-          app.textAlign(LEFT, TOP);
-          app.textFont(engine.DEFAULT_FONT, 30);
-          app.text(file.getFilename(currentProblem.getSource())+" already exists!\nWhat do you want to do?", x+20, y+20, promptWi-40, promptHi-40);
-          
-          
-          if (engine.button("move_autorename", "create_shortcut_128", "Automatically rename")) {
-            console.log("Not functional yet!");
-            //String newPath = file.currentDir+engine.keyboardMessage;
-            //console.log(newPath);
-            
-            
-            //file.mv(currentProblem.getSource(), newPath);
-          }
-          
-          if (engine.button("move_replace", "create_shortcut_128", "Replace")) {
-            // Just make the menu disappear
-            // It will then automatically replace the file.
-            menuShown = false;
-            pickupItem(currentProblem.getSource());
-          }
-          
-          if (engine.button("move_rename", "create_shortcut_128", "Manually rename")) {
-            sound.playSound("menu_select");
-            Runnable r = new Runnable() {
-              public void run() {
-                // Check file name is good etc
-                if (engine.keyboardMessage.length() <= 1) {
-                  console.log("Please enter a valid file name!");
-                  return;
-                }
-                // TODO: append extension if not already appended.
-                
-                
-                String newPath = file.currentDir+engine.keyboardMessage;
-                console.log(newPath);
-                
-                // Attempt to move the file.
-                // Don't do anything in the catch statement because the
-                // exception automatically adds the problem to the queue at the front
-                // if the user is dumb enough to rename the file to the same name.
-                file.mv(currentProblem.getSource(), newPath);
-                refreshRealm();
-                pickupItem(newPath);
-                            
-                getNextDuplicateFileProblem();
-              }
-            };
-            engine.beginInputPrompt("Rename file:", r);
-            menuID = MENU_CREATE_FOLDER_PROMPT;
-          }
-        }
-        break;
       }
 
       guiMainToolbar.updateSpriteSystem();
     }
-  }
-  
-  private void getNextDuplicateFileProblem() {
-    currentProblem = null;
-    while (file.hasProblematicOperations()) {
-      Engine.FilemanagerModule.ProblematicOperation p = file.getNextProblem();
-      
-      
-      // Using if statement instead of switch because we need to use break.
-      if (p.getProblemType() == Engine.FilemanagerModule.ProblematicOperation.ALREADY_EXISTS) {
-        // Open up the menu with a prompt about a duplicate file.
-        menuID = MENU_MOVE_ALREADY_EXISTS;
-        menuShown = true;
-        // If we're editing a folder/entry name, pressing tab should make the menu disappear
-        // and then we can continue moving. If we forget to turn the inputPrompt off, the engine
-        // will think we're still typing and won't allow us to move.
-        engine.inputPromptShown = false;
-        currentProblem = p;
-        // Break here because we want to go to handling the next file.
-        break;
-      }
-      else if (p.getProblemType() == Engine.FilemanagerModule.ProblematicOperation.SOURCE_DOESNT_EXIST) {
-        console.bugWarn("moveFilesInInventory: tried to move file but source doesn't exist!");
-      }
-      else if (p.getProblemType() == Engine.FilemanagerModule.ProblematicOperation.IOEXCEPTION) {
-        // TODO: Add option to try again or cancel.
-      }
-    }
-            
-            
   }
 
   private void pickupItem(FileObject p) {
@@ -3299,6 +3231,9 @@ public class PixelRealm extends Screen {
             // Take the player to a new directory in the world if we enter the portal.
             if (f.touchingPlayer()) {
               if (portalCoolDown <= 0.) {
+                // For now just create an entirely new screen object lmao.
+                endRealm();
+                sound.playSound("shift");
 
                 // Go into the new world
                 // If it's a shortcut, go to where the shortcut points to.
