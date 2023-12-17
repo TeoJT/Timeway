@@ -359,6 +359,63 @@ public class PixelRealm extends Screen {
       // Use a curve to make it scale a little when small and scale a lot when larger
       setSize(size-max((amount*amount), 0.001));
     }
+    
+    public void addRequestToQueue(final String path) {
+      this.beginLoadFlag.set(false);
+      loadQueue.add(this.beginLoadFlag);
+      final boolean isImg = this instanceof ImageFileObject;
+      final FileObject me = this;
+      
+      Thread t1 = new Thread(new Runnable() {
+        public void run() {
+          // Wait until we're allowed our turn.
+          while (!beginLoadFlag.get()) {
+            try {
+              Thread.sleep(10);
+            }
+            catch (InterruptedException e) {
+              // we don't care.
+            }
+          }
+          
+          // First, we need to see if we have enough space to store stuff.
+          int size = file.getImageUncompressedSize(path);
+          //console.info(filename+" size: "+(size/1024)+" kb");
+          // Tbh doesn't need to be specifically thread safe, it's all an
+          // approximation.
+          if (memUsage.get()+size > MAX_MEM_USAGE) {
+            if (!memExceeded) console.warn("Maximum allowed memory exceeded, some items/files may be missing from this realm.");
+            memExceeded = true;
+            //console.info(filename+" exceeds the maximum allowed memory.");
+          }
+          else {
+            incrementMemUsage(size);
+            if (file.getExt(path).equals("gif")) {
+              Gif newGif = new Gif(app, path);
+              newGif.loop();
+              img = newGif;
+            }
+            // TODO: idk error check here
+            else {
+              // TODO: this is NOT thread-safe here!
+              img = engine.tryLoadImageCache(path, new Runnable() {
+                public void run() {
+                  if (isImg)
+                    ((ImageFileObject)me).cacheFlag = true;
+                  engine.setOriginalImage(loadImage(path));
+                }
+              }
+              );
+            }
+          }
+          
+          // Once we're done we need to free our slot so that other threads have a turn to use the core.
+          loadThreadsUsed.decrementAndGet();
+        }
+      }
+      );
+      t1.start();
+    }
   }
   
   class OBJFileObject extends FileObject {
@@ -553,104 +610,12 @@ public class PixelRealm extends Screen {
 
       this.rot = engine.getJSONFloat("rot", random(-PI, PI));
       
-      // Add to the loadQueue.
-      this.beginLoadFlag.set(false);
-      loadQueue.add(this.beginLoadFlag);
       
       // Depends on our image format:
-      // GIF
-      if (file.getExt(this.filename).equals("gif") && showExperimentalGifs) {
+      if (file.getExt(this.filename).equals("gif") && showExperimentalGifs) cacheFlag = false;
         
-        // Load the gif.
-        Thread gifLoaderThread = new Thread(new Runnable() {
-          public void run() {
-            // Wait until we're allowed our turn.
-            while (!beginLoadFlag.get()) {
-              try {
-                Thread.sleep(10);
-              }
-              catch (InterruptedException e) {
-                // we don't care.
-              }
-            }
-            
-            // First, we need to see if we have enough space to store stuff.
-            int size = file.getImageUncompressedSize(dir);
-            console.info(filename+" size: "+(size/1024)+" kb");
-            // Tbh doesn't need to be specifically thread safe, it's all an
-            // approximation.
-            if (memUsage.get()+size > MAX_MEM_USAGE) {
-              if (!memExceeded) console.warn("Maximum allowed memory exceeded, some items/files may be missing from this realm.");
-              memExceeded = true;
-              console.info(filename+" exceeds the maximum allowed memory.");
-            }
-            else {
-              incrementMemUsage(size);
-              Gif newGif = new Gif(app, dir);
-              newGif.loop();
-              img = newGif;
-            }
-            
-            // Once we're done we need to free our slot so that other threads have a turn to use the core.
-            loadThreadsUsed.decrementAndGet();
-          }
-        }
-        );
-        gifLoaderThread.start();
+      addRequestToQueue(dir);
         
-        // Set the cache flag low so that we don't try to trigger 
-        // a cache generation of a gif (it hasn't been implemented yet
-        // so that would be a disaster)
-        cacheFlag = false;
-        return;
-      }
-      
-      // Literally anything else.
-      else {
-        
-        // Load the gif.
-        Thread imageLoaderThread = new Thread(new Runnable() {
-          public void run() {
-            // Wait until we're allowed our turn.
-            while (!beginLoadFlag.get()) {
-              try {
-                Thread.sleep(10);
-              }
-              catch (InterruptedException e) {
-                // we don't care.
-              }
-            }
-            
-            // First, we need to see if we have enough space to store stuff.
-            int size = engine.getCacheSize(dir);
-            console.info(filename+" size: "+(size/1024)+" kb");
-            // Tbh doesn't need to be specifically thread safe, it's all an
-            // approximation.
-            if (memUsage.get()+size > MAX_MEM_USAGE) {
-              if (!memExceeded) console.warn("Maximum allowed memory exceeded, some items/files may be missing from this realm.");
-              memExceeded = true;
-              console.info(filename+" exceeds the maximum allowed memory.");
-            }
-            else {
-              incrementMemUsage(size);
-              
-              // TODO: this is NOT thread-safe here!
-              img = engine.tryLoadImageCache(dir, new Runnable() {
-                public void run() {
-                  cacheFlag = true;
-                  engine.setOriginalImage(loadImage(dir));
-                }
-              }
-              );
-            }
-            
-            // Once we're done we need to free our slot so that other threads have a turn to use the core.
-            loadThreadsUsed.decrementAndGet();
-          }
-        }
-        );
-        imageLoaderThread.start();
-      }
 
 
     }
@@ -733,8 +698,11 @@ public class PixelRealm extends Screen {
             console.warn("Shortcut to "+file.getFilename(this.filename)+" doesn't exist!");
             return;
           }
+          // If at this point we should have the shortcut dir.
+          requestRealmSky(shortcutDir);
           
           shortcutName = sh.getString("shortcut_name", "[corrupted]");
+          
           // Yup, shortcut_name is unnecessary. But hey might as well self-fix if broken.
           if (shortcutName.equals("[corrupted]")) {
             shortcutName = file.getFilename(shortcutDir);
@@ -757,7 +725,7 @@ public class PixelRealm extends Screen {
       // Cheap hacky way of getting the shortcutName to display instead of the shortcut's filename :v)
       if (shortcutName != null) this.filename = shortcutName;
       if (visible) {
-        this.tint = color(255, 200, 255);
+        this.tint = color(150, 255, 255);
         super.display();
       }
       this.filename = filenameOriginal;
@@ -768,7 +736,12 @@ public class PixelRealm extends Screen {
 
     public DirectoryPortal(float x, float y, float z, String dir) {
       super(x, y, z, dir);
-      this.img = portal;
+      this.img = display.systemImages.get("white"); 
+      
+      requestRealmSky(dir);
+      
+      this.wi = 128;
+      this.hi = 128+96;
     }
 
     public DirectoryPortal(String dir) {
@@ -777,15 +750,34 @@ public class PixelRealm extends Screen {
 
     {
       this.hitboxSize = SMALL_HITBOX;
-      this.img = portal;
-      setSize(legacyPortalEasteregg ? 1.0 : 0.8);
+      if (legacyPortalEasteregg ) setSize(0.8);
     }
-
+    
+    public void requestRealmSky(String d) {
+      String sky = d+"/.pixelrealm-sky.png";
+      String sky1 = d+"/.pixelrealm-sky-1.png";
+      File f = new File(sky);
+      File f1 = new File(sky1);
+      
+      if (f.exists()) {
+        addRequestToQueue(sky);
+      }
+      else if (f1.exists()) {
+        addRequestToQueue(sky1);
+      }
+      else {
+        this.img = img_sky[0];
+      }
+    }
 
     public void display() {
       if (visible) {
-        // Display like normal like before
+        scene.shader(
+          display.getShaderWithParams("portal_plus", "u_resolution", (float)scene.width, (float)scene.height, "u_time", portalUtime, "u_dir", -direction/(PI*2))
+        );
         super.display();
+        scene.resetShader();
+        
 
         scene.noTint();
 
@@ -1588,6 +1580,8 @@ public class PixelRealm extends Screen {
 
     if (tailNode == null) console.bugWarn("Null tailnode!");
   }
+  
+  
 
   // This took bloody ages to figure out so it better work 100% of the timeee
   // Update: turns out I didn't need to use this function but I'm gonna leave it here
@@ -2106,7 +2100,8 @@ public class PixelRealm extends Screen {
     engine.timestamp("Render portal");
     
     if (legacyPortalEasteregg) evolvingGatewayRenderPortal();
-    else renderPortal();
+    
+    portalUtime += display.getDelta()/display.BASE_FRAMERATE;
     
 
     engine.timestamp("atomicboolean get");

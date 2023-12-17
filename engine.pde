@@ -49,7 +49,7 @@ class Engine {
   // Info and versioning
   public final String NAME        = "Timeway";
   public final String AUTHOR      = "Teo Taylor";
-  public final String VERSION     = "0.0.6-sound";
+  public final String VERSION     = "0.0.6-portal";
   public final String VERSION_DESCRIPTION = 
     "- Added shortcuts\n";
   // ***************************
