@@ -151,9 +151,10 @@ public class PixelRealm extends Screen {
     
     // --- Load default assets ---
     // TODO (eventually): load screen's assets, not everything from the loading screen (even tho that would be a minor optimisation)
-    REALM_SKY_DEFAULT = new RealmTexture(REALM_SKY);
-    REALM_TREE_DEFAULT = new RealmTexture(REALM_TREE_LEGACY);
-    REALM_GRASS_DEFAULT = new RealmTexture(REALM_GRASS);
+    // (get rid of the . at the start cus hidden files are no good)
+    REALM_SKY_DEFAULT = new RealmTexture(REALM_SKY.substring(1));
+    REALM_TREE_DEFAULT = new RealmTexture(REALM_TREE_LEGACY.substring(1));
+    REALM_GRASS_DEFAULT = new RealmTexture(REALM_GRASS.substring(1));
   
     String[] COINS = { "coin_0", "coin_1", "coin_2", "coin_3", "coin_4", "coin_5"};;
     IMG_COIN = new RealmTexture(COINS);
