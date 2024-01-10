@@ -49,7 +49,7 @@ class Engine {
   // Info and versioning
   public final String NAME        = "Timeway";
   public final String AUTHOR      = "Teo Taylor";
-  public final String VERSION     = "0.0.6-portal";
+  public final String VERSION     = "0.0.7";
   public final String VERSION_DESCRIPTION = 
     "- Added shortcuts\n";
   // ***************************
@@ -77,6 +77,7 @@ class Engine {
   public final String CACHE_INFO          = "data/cache/cache_info.json";
   public final String CACHE_PATH          = "data/cache/";
   public final String WINDOWS_CMD         = "data/engine/shell/mywindowscommand.bat";
+  public final String POCKET_PATH         = "data/pocket/";
   public       String DEFAULT_UPDATE_PATH = "";  // Set up by setup()
 
   // Static constants
@@ -372,6 +373,7 @@ class Engine {
         defaultKeybindings.putIfAbsent("inventorySelectRight", '.');
         defaultKeybindings.putIfAbsent("scaleDownSlow", '_');
         defaultKeybindings.putIfAbsent("showCommandPrompt", '/');
+        defaultKeybindings.putIfAbsent("prevDirectory", char(8));
         for (int i = 0; i < 10; i++) defaultKeybindings.putIfAbsent("quickWarp"+str(i), str(i).charAt(0));
       }
       
@@ -1023,6 +1025,7 @@ class Engine {
     private int loadingFramesLength = 0;
     private int lastFrameMillis = 0;
     private int thisFrameMillis = 0;
+    private float time = 0.;
     private PGraphics[] CPUCanvas;
     private int currentCPUCanvas = 0;
     public float smallerCanvasTimeout = 300;
@@ -1424,10 +1427,23 @@ class Engine {
       // lol
       // But sudden lag frames won't be a problem
       delta = min(BASE_FRAMERATE/display.getLiveFPS(), 7.5);
+      
+      // Also update the time while we're at it.
+      time += delta;
     }
     
     public float getDelta() {
       return delta;
+    }
+    
+    // Frames since the beginning of the program (always 1 second = 60 time, even if running at 30fps)
+    // accounting for missed frames.
+    public float getTime() {
+      return time;
+    }
+    
+    public float getTimeSeconds() {
+      return time/display.BASE_FRAMERATE;
     }
     
   
@@ -1465,7 +1481,6 @@ class Engine {
     public HashMap<String, SoundFile> sounds;
     private AtomicBoolean musicReady = new AtomicBoolean(true);
     private boolean startupGStreamer = true;
-    private boolean gstreamerLoading = true;
     private boolean reloadMusic = false;
     private String reloadMusicPath = "";
     public       float  VOLUME_NORMAL = 1.;
@@ -2052,7 +2067,7 @@ class Engine {
     public SoundFile getSound(String name) {
       SoundFile sound = sounds.get(name);
       if (sound == null) {
-        console.bugWarn("playSound: Sound "+name+" doesn't exist!");
+        console.bugWarn("getsound: Sound "+name+" doesn't exist!");
         return null;
       } else return sound;
     }
@@ -2397,56 +2412,11 @@ class Engine {
       }
     }
     
-    private ArrayList<ProblematicOperation> problematicOperations = new ArrayList<ProblematicOperation>();
-    
-    // This class is NOT meant to test if such and such exists, it should ONLY be used
-    // as a data structure to store error information
-    public class ProblematicOperation {
-      public static final int ALREADY_EXISTS = 1;
-      public static final int SOURCE_DOESNT_EXIST = 2;
-      public static final int IOEXCEPTION = 3;
-      private int problemType = 0;
-      private String oldPlace = "";
-      private String newPlace = "";
-      
-      public ProblematicOperation(int type, String oldPlace, String newPlace) {
-        this.oldPlace = oldPlace;
-        this.newPlace = newPlace;
-        this.problemType = type;
-        switch (type) {
-          case ALREADY_EXISTS:
-          console.warn(oldPlace+": "+newPlace+" already exists!");
-          break;
-          case SOURCE_DOESNT_EXIST:
-          console.warn(oldPlace+" doesn't exist");
-          break;
-          case IOEXCEPTION:
-          console.warn(oldPlace+": A system error occured!");
-          break;
-        }
-      }
-      
-      public int getProblemType() {
-        return problemType;
-      }
-      
-      public String getSource() {
-        return this.oldPlace;
-      }
-      
-      public String getNewLocation() {
-        return this.newPlace;
-      }
-      
-      
-    }
-    
     public boolean mv(String oldPlace, String newPlace) {
       try {
         File of = new File(oldPlace);
         File nf = new File(newPlace);
         if (nf.exists()) {
-           problematicOperations.add(0, new ProblematicOperation(ProblematicOperation.ALREADY_EXISTS, oldPlace, newPlace));
            return false;
         }
         if (of.exists()) {
@@ -2454,13 +2424,11 @@ class Engine {
           // If the file is cached, move the cached file too to avoid stalling and creating duplicate cache
           moveCache(oldPlace, newPlace);
         } else if (!of.exists()) {
-          problematicOperations.add(0, new ProblematicOperation(ProblematicOperation.SOURCE_DOESNT_EXIST, oldPlace, newPlace));
           return false;
         }
       }
       catch (SecurityException e) {
         console.warn(e.getMessage());
-        problematicOperations.add(0, new ProblematicOperation(ProblematicOperation.IOEXCEPTION, oldPlace, newPlace));
         return false;
       }
       return true;
@@ -2479,21 +2447,6 @@ class Engine {
         backupMove(path);
           
       app.saveJSONObject(json, path);
-    }
-    
-    public boolean hasProblematicOperations() {
-      return (problematicOperations.size() > 0);
-    }
-    
-    public ProblematicOperation getNextProblem() {
-      if (hasProblematicOperations()) {
-        // Pop from the queue
-        return problematicOperations.remove(0);
-      }
-      else {
-        console.bugWarn("getNextProblem: No problems! Make sure to use hasProblematicOperations()!");
-        return null;
-      }
     }
     
     
@@ -2544,10 +2497,68 @@ class Engine {
       }
     }
     
-    public String getMyDir() {
-      String dir = getDir(APPPATH);
+    public boolean isDirectory(String path) {
+      return (new File(path)).isDirectory();
+    }
+    
+    // TODO: optimise to be safe and for use with MacOS and Linux.
+    public String getPrevDir(String dir) {
+      int i = dir.lastIndexOf("/", dir.length()-2);
+      if (i == -1) {
+        console.bugWarn("getPrevDir: At root dir, make sure to use atRootDir in your code!");
+        return dir;
+      }
+      return dir.substring(0, i);
+    }
+    
+    public String directorify(String dir) {
       if (dir.charAt(dir.length()-1) != '/')  dir += "/";
       return dir;
+    }
+    
+    public String getMyDir() {
+      String dir = getDir(APPPATH);
+      return directorify(dir);
+    }
+    
+    public String anyFileWithExt(String pathWithoutExt, String[] exts) {
+      for (String ext : exts) {
+        // Because we like to keep our code secure, let's do a bit of error checking (what opengl suffers from lol)
+        if (ext.charAt(0) != '.') ext = "."+ext;
+        
+        File f = new File(pathWithoutExt+ext);
+        if (f.exists()) {
+          return pathWithoutExt+ext;
+        }
+      }
+      return null;
+    }
+    
+    // Yes.
+    public boolean exists(String path) {
+      File f = new File(path);
+      return f.exists();
+    }
+    
+    public boolean isImage(String path) {
+      String ext = getExt(path);
+      if (ext.equals("png")
+        || ext.equals("jpg")
+        || ext.equals("jpeg")
+        || ext.equals("bmp")
+        || ext.equals("gif")
+        || ext.equals("ico")
+        || ext.equals("webm")
+        || ext.equals("tiff")
+        || ext.equals("tif"))
+        return true;
+      else
+        return false;
+    }
+    
+    public String anyImageFile(String pathWithoutExt) {
+      String[] SUPPORTED_IMG_TYPES = { ".png", ".bmp", ".jpg", ".jpeg", ".gif" };
+      return anyFileWithExt(pathWithoutExt, SUPPORTED_IMG_TYPES);
     }
   
     public String getFilename(String path) {
@@ -3134,6 +3145,7 @@ class Engine {
     sound = new AudioModule();
     clipboard = new ClipboardModule();
     
+    power.putFPSSystemIntoGraceMode();
     
     // First, load the essential stuff.
     

@@ -139,7 +139,6 @@ public final class SpriteSystemPlaceholder {
             
             public float xpos, ypos, zpos;
             public int wi = 0, hi = 0;
-            public boolean redraw;
             
             public QuadVertices vertex;
  
@@ -439,12 +438,20 @@ public final class SpriteSystemPlaceholder {
                 case SINGLE: {
                     float d = BOX_SIZE, x = (float)wi-d+xpos, y = (float)hi-d+ypos;
                     if (engine.mouseX() > x && engine.mouseY() > y && engine.mouseX() < x+d && engine.mouseY() < y+d) {
-                    return true;
+                      return true;
                     }
                 }
                 break;
-                case DOUBLE:
-                
+                case DOUBLE: {
+                  // width square
+                    float d = BOX_SIZE, x1 = (float)wi-(d/2)+xpos, y1 = (float)(hi/2)-(d/2)+ypos;
+                  // height square
+                    float               x2 = (float)(wi/2)-(d/2)+xpos, y2 = (float)(hi)-(d/2)+ypos;
+                    if ((engine.mouseX() > x1 && engine.mouseY() > y1 && engine.mouseX() < x1+d && engine.mouseY() < y1+d)
+                    || (engine.mouseX() > x2 && engine.mouseY() > y2 && engine.mouseX() < x2+d && engine.mouseY() < y2+d)) {
+                      return true;
+                    }
+                }
                 break;
                 case VERTEX: {
                     for (int i = 0; i < 4; i++) {
@@ -541,13 +548,15 @@ public final class SpriteSystemPlaceholder {
             
             public boolean mouseWithinSprite() {
                 switch (mode) {
-                case SINGLE:
+                case SINGLE: {
                     float x = xpos, y = ypos;
                     return (engine.mouseX() > x && engine.mouseY() > y && engine.mouseX() < x+wi && engine.mouseY() < y+hi);
                     //return (mouseX > x && mouseY > y && mouseX < x+wi && mouseY < y+hi && !repositionDrag.isDragging());
-                    
-                case DOUBLE:
-                
+                }
+                case DOUBLE: {
+                    float x = xpos, y = ypos;
+                    return (engine.mouseX() > x && engine.mouseY() > y && engine.mouseX() < x+wi && engine.mouseY() < y+hi);
+                }
                 case VERTEX:
                     return polyPoint(vertex.v, engine.mouseX(), engine.mouseY());
                 case ROTATE: {
@@ -665,7 +674,7 @@ public final class SpriteSystemPlaceholder {
                 case SINGLE: {
                     float d = BOX_SIZE, x = (float)wi-d+xpos, y = (float)hi-d+ypos;
                     resizeDrag.update();
-                    this.square((float)wi-d+xpos, (float)hi-d+ypos, d);
+                    this.square(x,y, d);
                     if (engine.mouseX() > x && engine.mouseY() > y && engine.mouseX() < x+d && engine.mouseY() < y+d) {
                     resizeDrag.beginDrag();
                     this.hoveringOverResizeSquare = true;
@@ -678,17 +687,6 @@ public final class SpriteSystemPlaceholder {
                     
                     defwi = wi-offwi;
                     defhi = hi-offhi;
-                    
-                    /*
-                    if (mouseX*aspect > mouseY) {
-                    wi = int((mouseX-xpos)*r.getScaleX());
-                    hi = int((mouseX-xpos)*r.getScaleX()*aspect);
-                    }
-                    else {
-                    wi = int((mouseY-ypos)*r.getScaleY());
-                    hi = int((mouseY-ypos)*r.getScaleY()*aspect);
-                    }
-                    */
                     }
                     if (resizeDrag.draggingEnded()) {
                     updateJSON();
@@ -697,31 +695,68 @@ public final class SpriteSystemPlaceholder {
                 break;
                     
                     
+                case DOUBLE: {
+                  // width square
+                    float d = BOX_SIZE, x1 = (float)wi-(d/2)+xpos, y1 = (float)(hi/2)-(d/2)+ypos;
+                  // height square
+                    float               x2 = (float)(wi/2)-(d/2)+xpos, y2 = (float)(hi)-(d/2)+ypos;
+                    resizeDrag.update();
+                    this.square(x1, y1, d);
+                    this.square(x2, y2, d);
+                    if (engine.mouseX() > x1 && engine.mouseY() > y1 && engine.mouseX() < x1+d && engine.mouseY() < y1+d) {
+                      resizeDrag.beginDrag();
+                      // whatever we're using currentVertex
+                      currentVertex = 1;
+                      this.hoveringOverResizeSquare = true;
+                    } else if (engine.mouseX() > x2 && engine.mouseY() > y2 && engine.mouseX() < x2+d && engine.mouseY() < y2+d) {
+                      resizeDrag.beginDrag();
+                      // whatever we're using currentVertex
+                      currentVertex = 2;
+                      this.hoveringOverResizeSquare = true;
+                    }
+                    else {
+                      this.hoveringOverResizeSquare = false;
+                    }
                     
-                case DOUBLE:
-                
+                    
+                    if (resizeDrag.isDragging()) {
+                      if (currentVertex == 1) {
+                        wi = int((engine.mouseX()+d/2-xpos));
+                      }
+                      else if (currentVertex == 2) {
+                        hi = int((engine.mouseY()+d/2-ypos));
+                      }
+                      
+                      defwi = wi-offwi;
+                      defhi = hi-offhi;
+                    }
+                    
+                    if (resizeDrag.draggingEnded()) {
+                      updateJSON();
+                    }
+                }
                 break;
                 
                 case VERTEX: {
                     resizeDrag.update();
                     for (int i = 0; i < 4; i++) {
-                    float d = BOX_SIZE;
-                    float x = vertex.v[i].x;
-                    float y = vertex.v[i].y;
-                    this.square(x-d/2, y-d/2, d);
-                    
-                    if (engine.mouseX() > x-d/2 && engine.mouseY() > y-d/2 && engine.mouseX() < x+d/2 && engine.mouseY() < y+d/2) {
-                        resizeDrag.beginDrag();
-                        currentVertex = i;
-                        this.hoveringOverResizeSquare = true;
-                    } else {
-                        this.hoveringOverResizeSquare = false;
-                    }
-                    if (resizeDrag.isDragging() && currentVertex == i) {
-                        vertex.v[i].x = engine.mouseX();
-                        vertex.v[i].y = engine.mouseY();
-                        defvertex.v[i].set(vertex.v[i].x-offvertex.v[i].x, vertex.v[i].y-offvertex.v[i].y);
-                    }
+                      float d = BOX_SIZE;
+                      float x = vertex.v[i].x;
+                      float y = vertex.v[i].y;
+                      this.square(x-d/2, y-d/2, d);
+                      
+                      if (engine.mouseX() > x-d/2 && engine.mouseY() > y-d/2 && engine.mouseX() < x+d/2 && engine.mouseY() < y+d/2) {
+                          resizeDrag.beginDrag();
+                          currentVertex = i;
+                          this.hoveringOverResizeSquare = true;
+                      } else {
+                          this.hoveringOverResizeSquare = false;
+                      }
+                      if (resizeDrag.isDragging() && currentVertex == i) {
+                          vertex.v[i].x = engine.mouseX();
+                          vertex.v[i].y = engine.mouseY();
+                          defvertex.v[i].set(vertex.v[i].x-offvertex.v[i].x, vertex.v[i].y-offvertex.v[i].y);
+                      }
                     }
                     if (resizeDrag.draggingEnded()) {
                     updateJSON();
@@ -791,7 +826,7 @@ public final class SpriteSystemPlaceholder {
 
             private void square(float x, float y, float d) {
                 noStroke();
-                fill(sin(selectBorderTime += 0.1*engine.display.getDelta())*50+200, 100);
+                app.fill(sin(selectBorderTime += 0.1*engine.display.getDelta())*50+200, 100);
                 app.rect(x, y, d, d);
             }
         }
@@ -912,6 +947,9 @@ public final class SpriteSystemPlaceholder {
             
             switch (s.mode) {
               case SINGLE:
+              engine.display.img(s.imgName, s.getX(), s.getY()+s.getHeight()*s.getBop(), s.getWidth(), s.getHeight()-int((float)s.getHeight()*s.getBop()));
+              break;
+              case DOUBLE:
               engine.display.img(s.imgName, s.getX(), s.getY()+s.getHeight()*s.getBop(), s.getWidth(), s.getHeight()-int((float)s.getHeight()*s.getBop()));
               break;
               case VERTEX:  // We don't need vertices in our program so let's just sweep this under the rug.

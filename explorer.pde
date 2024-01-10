@@ -218,7 +218,7 @@ public class Explorer extends Screen {
     
     //***********PIXeL REALM BUTTON***********
     if (button("world", "world_128", "Pixel Realm")) {
-      requestScreen(new PixelRealm(engine, file.currentDir));
+      requestScreen(new PixelRealmWithUI(engine, file.currentDir));
     }
     
     gui.updateSpriteSystem();
