@@ -5,7 +5,14 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 class CameraException extends RuntimeException {};
 
-class DCapture implements java.beans.PropertyChangeListener {
+abstract class Capture {
+  public abstract void setup();
+  public abstract void turnOffCamera();
+  public abstract void switchNextCamera();
+  public abstract PImage updateImage();
+}
+
+class DCapture extends Capture implements java.beans.PropertyChangeListener {
   private DSCapture capture;
   public int width, height;
   public AtomicBoolean ready = new AtomicBoolean(false);
@@ -32,21 +39,39 @@ class DCapture implements java.beans.PropertyChangeListener {
   public void setup() {
     ready.set(false);
     error.set(false);
-    DSFilterInfo[][] dsi = DSCapture.queryDevices();
-    cameraDevices = new ArrayList<DSFilterInfo>();
     
-    for (int y = 0; y < dsi.length; y++) {
-      for (int x = 0; x < dsi[y].length; x++) {
-        println("("+x+", "+y+") "+dsi[y][x].getName(), dsi[y][x].getType());
-        if (dsi[y][x].getType() == DEVICE_CAMERA)
-          cameraDevices.add(dsi[y][x]);
+    try {
+      DSFilterInfo[][] dsi = DSCapture.queryDevices();
+      cameraDevices = new ArrayList<DSFilterInfo>();
+      
+      for (int y = 0; y < dsi.length; y++) {
+        for (int x = 0; x < dsi[y].length; x++) {
+          println("("+x+", "+y+") "+dsi[y][x].getName(), dsi[y][x].getType());
+          if (dsi[y][x].getType() == DEVICE_CAMERA)
+            cameraDevices.add(dsi[y][x]);
+        }
+      }
+      
+      if (cameraDevices.size() <= 0) {
+        error.set(true);
+        errorCode.set(Editor.ERR_NO_CAMERA_DEVICES);
+        return;
       }
     }
-    
-    if (cameraDevices.size() <= 0) {
-      error.set(true);
-      errorCode.set(Editor.ERR_NO_CAMERA_DEVICES);
-      return;
+    catch (UnsatisfiedLinkError e) {
+        error.set(true);
+        errorCode.set(Editor.ERR_UNSUPPORTED_SYSTEM);
+        return;
+    }
+    catch (NoClassDefFoundError e) {
+        error.set(true);
+        errorCode.set(Editor.ERR_UNSUPPORTED_SYSTEM);
+        return;
+    }
+    catch (Exception e) {
+        error.set(true);
+        errorCode.set(Editor.ERR_UNKNOWN);
+        return;
     }
     
     
@@ -167,6 +192,7 @@ public class Editor extends Screen {
     public final static int ERR_UNKNOWN = 0;
     public final static int ERR_NO_CAMERA_DEVICES = 1;
     public final static int ERR_FAILED_TO_SWITCH = 2;
+    public final static int ERR_UNSUPPORTED_SYSTEM = 3;
 
 
     public class MiniMenu {
@@ -1097,17 +1123,20 @@ public class Editor extends Screen {
             this.endCamera();
           }
           
-          if (engine.button("snap", "snap_button_128", "")) {
-            insertImage(camera.updateImage());
+          if (!camera.error.get() && camera.ready.get()) {
+            if (engine.button("snap", "snap_button_128", "")) {
+              insertImage(camera.updateImage());
+              
+              // Rest of the stuff is just for cosmetic effects :sparkle_emoji:
+              takePhoto = true;
+              cameraFlashEffect = 255.;
+            }
+            gui.getSprite("snap").setY(HEIGHT-myLowerBarWeight+138/4);
             
-            // Rest of the stuff is just for cosmetic effects :sparkle_emoji:
-            takePhoto = true;
-            cameraFlashEffect = 255.;
-          }
-          
-          if (engine.button("camera_flip", "flip_camera_128", "Switch camera")) {
-            preparingCameraMessage = "Switching camera...";
-            camera.switchNextCamera();
+            if (engine.button("camera_flip", "flip_camera_128", "Switch camera")) {
+              preparingCameraMessage = "Switching camera...";
+              camera.switchNextCamera();
+            }
           }
           
         }
@@ -1460,7 +1489,7 @@ public class Editor extends Screen {
         textAlign(CENTER, CENTER);
         textSize(30);
         if (camera.error.get() == true) {
-          engine.loadingIcon(WIDTH/2, HEIGHT/2);
+          display.imgCentre("error", WIDTH/2, HEIGHT/2);
           String errorMessage = "";
           fill(255, 0, 0);
           switch (camera.errorCode.get()) {
@@ -1472,6 +1501,9 @@ public class Editor extends Screen {
             break;
             case ERR_FAILED_TO_SWITCH:
               errorMessage = "A weird error occured with switching cameras.";
+            break;
+            case ERR_UNSUPPORTED_SYSTEM:
+              errorMessage = "Camera is unsupported on your system, sorry :(";
             break;
             default:
               errorMessage = "An unknown error has occured.";

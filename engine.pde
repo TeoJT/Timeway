@@ -1025,16 +1025,98 @@ class Engine {
     private int loadingFramesLength = 0;
     private int lastFrameMillis = 0;
     private int thisFrameMillis = 0;
+    private int totalTimeMillis = 0;
     private float time = 0.;
     private PGraphics[] CPUCanvas;
     private int currentCPUCanvas = 0;
     public float smallerCanvasTimeout = 300;
     private float selectBorderTime = 0.;
+    public boolean showCPUBenchmarks = false;
     
     public final float BASE_FRAMERATE = 60.;
     private float delta = 0.;
     
     private boolean showFPS = false;
+    
+    public long rendererTime = 0;
+    public long logicTime  = 0;
+    public long idleTime  = 0;
+    private long lastTime = 0;
+    
+    public int RENDER_TIME = 1;
+    public int LOGIC_TIME  = 2;
+    public int IDLE_TIME   = 3;
+    
+    public int timeMode = LOGIC_TIME;
+    
+    public void recordRendererTime() {
+      long time = System.nanoTime();
+      if (timeMode == LOGIC_TIME) {
+        logicTime += time-lastTime;
+      }
+      lastTime = time;
+      timeMode = RENDER_TIME;
+    }
+    
+    public void recordLogicTime() {
+      long time = System.nanoTime();
+      if (timeMode == RENDER_TIME) {
+        rendererTime += time-lastTime;
+      }
+      lastTime = time;
+      timeMode = LOGIC_TIME;
+    }
+    
+    public int getRendererTime() {
+      return (int)rendererTime;
+    }
+    
+    public int getLogicTime() {
+      return (int)logicTime;
+    }
+    
+    public void resetTimes() {
+      lastTime = System.nanoTime();
+      rendererTime = 0;
+      logicTime = 0;
+    }
+    
+    
+    public void showBenchmarks() {
+      app.pushMatrix();
+      app.scale(displayScale);
+      
+      app.noStroke();
+      
+      int totalTime = (totalTimeMillis*1000000);
+      
+      float wi = WIDTH*0.8;
+      
+      try {
+        app.fill(127);
+        app.rect(WIDTH*0.1, 10, wi, 50);
+        
+        float logic = wi*(((float)logicTime/(float)totalTime));
+        app.fill(color(0,255,0));
+        app.rect(WIDTH*0.1, 10, logic, 50);
+        app.fill(255);
+        app.textAlign(LEFT, CENTER);
+        app.text("logic", WIDTH*0.1+10, 30);
+        
+        float opengl = wi*((float)rendererTime/(float)totalTime);
+        app.fill(color(0,0,255));
+        app.rect(WIDTH*0.1+logic, 10, opengl, 50);
+        app.fill(255);
+        app.textAlign(LEFT, CENTER);
+        app.text("opengl", WIDTH*0.1+logic+10, 30);
+        
+      
+      }
+      catch (ArithmeticException e) {}
+      
+      app.popMatrix();
+    }
+    
     
     public DisplayModule() {
         // Set the display scale; since I've been programming this with my Surface Book 2 at high density resolution,
@@ -1052,6 +1134,8 @@ class Engine {
           CPUCanvas = new PGraphics[MAX_CPU_CANVAS];
           CPUCanvas[0] = createGraphics(app.width, app.height);
         }
+        
+        resetTimes();
     }
     
     public void setShowFPS(boolean b) {
@@ -1172,6 +1256,7 @@ class Engine {
     
     public void img(PImage image, float x, float y, float w, float h) {
       if (wireframe) {
+        recordRendererTime();
         app.stroke(sin(selectBorderTime)*127+127, 100);
         selectBorderTime += 0.1*getDelta();
         app.strokeWeight(3);
@@ -1183,11 +1268,13 @@ class Engine {
       }
       if (image == null) {
         app.image(errorImg, x, y, w, h);
+        recordLogicTime();
         console.warnOnce("Image listed as 'loaded' but image doesn't seem to exist.");
         return;
       }
       if (image.width == -1 || image.height == -1) {
         app.image(errorImg, x, y, w, h);
+        recordLogicTime();
         console.warnOnce("Corrupted image.");
         return;
       }
@@ -1205,6 +1292,7 @@ class Engine {
           PGraphics canv = CPUCanvas[currentCPUCanvas];
           float canvDispSclX = canv.width/WIDTH;
           float canvDispSclY = canv.height/HEIGHT;
+          recordRendererTime();
           canv.beginDraw();
           //CPUCanvas.clear();
           //CPUCanvas.clip(x*canvDispSclX,y*canvDispSclY,w*canvDispSclX,h*canvDispSclY);
@@ -1214,6 +1302,7 @@ class Engine {
           app.clip(x*displayScale+currScreen.screenx, y*displayScale+currScreen.screeny, w*displayScale, h*displayScale);
           app.image(canv, 0, 0, WIDTH, HEIGHT);
           app.noClip();
+          recordLogicTime();
         }
         else app.image(image, x, y, w, h);
         
@@ -1294,7 +1383,9 @@ class Engine {
       if (systemImages.get(name) != null) {
         img(systemImages.get(name), x, y, w, h);
       } else {
+        recordRendererTime();
         app.image(errorImg, x, y, w, h);
+        recordLogicTime();
         console.warnOnce("Image "+name+" does not exist");
       }
     }
@@ -1304,7 +1395,9 @@ class Engine {
       if (image != null) {
         img(systemImages.get(name), x, y, image.width, image.height);
       } else {
+        recordRendererTime();
         app.image(errorImg, x, y, errorImg.width, errorImg.height);
+        recordLogicTime();
         console.warnOnce("Image "+name+" does not exist");
       }
     }
@@ -1396,6 +1489,7 @@ class Engine {
         currScreen.display();
       }
       timestamp("end display");
+      display.recordLogicTime();
     }
     
     public void controlCPUCanvas() {
@@ -1420,6 +1514,7 @@ class Engine {
     }
     
     public void updateDelta() {
+      totalTimeMillis = thisFrameMillis-lastFrameMillis;
       lastFrameMillis = thisFrameMillis;
       thisFrameMillis = app.millis();
       // Limit delta to 7.5.
@@ -3747,6 +3842,19 @@ class Engine {
         console.log("FPS shown.");
       }
     }
+    else if (commandEquals(command, "/showcpubenchmarks")) {
+      if (display.showCPUBenchmarks) {
+        display.showCPUBenchmarks = false;
+        console.log("CPU benchmarks hidden.");
+      }
+      else {
+        display.showCPUBenchmarks = true;
+        console.log("CPU benchmarks shown.");
+      }
+    }
+    
+    
+    // No commands
     else if (command.length() <= 1) {
       // If empty, do nothing and close the prompt.
     } else if (currScreen.customCommands(command)) {
@@ -4021,6 +4129,8 @@ class Engine {
       }
 
       public void display() {
+        if (display != null) display.recordRendererTime();
+        
         app.textFont(consoleFont);
         if (force) {
           if (interval > 0) {
@@ -4064,6 +4174,7 @@ class Engine {
             app.text(message, 5, ypos+20);
           }
         }
+        if (display != null) display.recordLogicTime();
       }
     }
 
@@ -5434,9 +5545,13 @@ class Engine {
   // The core engine function which essentially runs EVERYTHING in Timeway.
   // All the screens, all the input management, and everything else.
   public void engine() {
-
+    if (display != null) display.resetTimes();
+    if (display != null) display.recordLogicTime();
     // Run benchmark if it's active.
     runBenchmark();
+    
+    display.WIDTH = width/display.displayScale;
+    display.HEIGHT = height/display.displayScale;
 
     power.updatePowerMode();
 
@@ -5447,9 +5562,11 @@ class Engine {
     processUpdate();
 
 
+    if (display != null) display.recordRendererTime();
     // This should be run at all times because apparently (for some stupid reason)
     // it uses way more performance NOT to call background();
     app.background(0);
+    if (display != null) display.recordLogicTime();
 
     inputManagement();
 
@@ -5490,6 +5607,7 @@ class Engine {
     counter += display.getDelta();
     // Update times so we can calculate live fps.
     display.updateDelta();
+    if (display.showCPUBenchmarks) display.showBenchmarks();
     
     if (display.showFPS()) {
       pushMatrix();
@@ -5517,7 +5635,12 @@ class Engine {
 
     mouseEventClick = false;
     this.keyPressed = false;
+    
+    display.resetTimes();
+    
+    if (display != null) display.timeMode = display.IDLE_TIME;
   }
+  
 }
 
 //*******************************************
@@ -5581,21 +5704,27 @@ public abstract class Screen {
   }
 
   protected void upperBar() {
+    display.recordRendererTime();
     fill(myUpperBarColor);
     noStroke();
     rect(0, 0, WIDTH, myUpperBarWeight);
+    display.recordLogicTime();
   }
 
   protected void lowerBar() {
+    display.recordRendererTime();
     fill(myLowerBarColor);
     noStroke();
     rect(0, HEIGHT-myLowerBarWeight, WIDTH, myLowerBarWeight);
+    display.recordLogicTime();
   }
 
   protected void backg() {
+    display.recordRendererTime();
     fill(myBackgroundColor);
     noStroke();
     rect(0, myUpperBarWeight, WIDTH, HEIGHT-myUpperBarWeight-myLowerBarWeight);
+    display.recordLogicTime();
   }
 
   public void startupAnimation() {

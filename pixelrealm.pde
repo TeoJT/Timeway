@@ -83,6 +83,7 @@ public class PixelRealm extends Screen {
   private float cache_playerCosDirection;
   private boolean primaryAction = false;
   private boolean secondaryAction = false;
+  private boolean realmCaching = false;
   
   
   // --- Legacy backward-compatibility stuff & easter eggs ---
@@ -625,7 +626,7 @@ public class PixelRealm extends Screen {
       this.stateDirectory = file.directorify(dir);
       
       loadRealm();
-      emergeFromExitPortal(file.directorify(emergeFrom));
+      emergeFromPortal(file.directorify(emergeFrom));
       
       // For testing purposes (just set version = "1.0")
       if (version.equals("1.0")) {
@@ -750,10 +751,11 @@ public class PixelRealm extends Screen {
       }
       
       public void run() {
-        // TODO: based on different modes etc.
-        if (selectedLeft() && currentTool == TOOL_NORMAL) {
-          file.open(dir);
-        }
+        
+      }
+      
+      public void interationAction() {
+        file.open(dir);
       }
       
       public void load(JSONObject json) {
@@ -897,6 +899,7 @@ public class PixelRealm extends Screen {
       
       public void display() {
         super.display();
+        display.recordRendererTime();
         if (model != null && visible) {
           scene.pushMatrix();
           scene.translate(this.x, this.y, this.z);
@@ -907,6 +910,7 @@ public class PixelRealm extends Screen {
           scene.shape(model);
           scene.popMatrix();
         }
+        display.recordLogicTime();
       }
       
       public void scaleUp(float amount) {
@@ -932,6 +936,7 @@ public class PixelRealm extends Screen {
         // Display the name of the file
         float d = direction-PI;
   
+        display.recordRendererTime();
         if (lights) scene.noLights();
         scene.pushMatrix();
         scene.translate(x, y-hi-20, z);
@@ -942,6 +947,7 @@ public class PixelRealm extends Screen {
         scene.text(filename, 0, 0, 0);
         scene.popMatrix();
         if (lights) scene.lights();
+        display.recordLogicTime();
   
         super.display(true);
       }
@@ -1116,18 +1122,18 @@ public class PixelRealm extends Screen {
             
             String compat_ver = sh.getString("compatibilty_version", "[err]");
             if (!compat_ver.equals(SHORTCUT_COMPATIBILITY_VERSION)) {
-              console.warn("Incompatiable shortcut "+file.getFilename(this.filename));
+              //console.warn("Incompatiable shortcut "+file.getFilename(this.filename));
               return;
             }
             
             shortcutDir = sh.getString("shortcut_dir", "[corrupted]");
             if (shortcutDir.equals("[corrupted]")) {
-              console.warn("Corrupted shortcut "+file.getFilename(this.filename));
+              //console.warn("Corrupted shortcut "+file.getFilename(this.filename));
               return;
             }
             // Check shortcut exists.
             if (!file.exists(shortcutDir)) {
-              console.warn("Shortcut to "+file.getFilename(this.filename)+" doesn't exist!");
+              //console.warn("Shortcut to "+file.getFilename(this.filename)+" doesn't exist!");
               return;
             }
             // If at this point we should have the shortcut dir.
@@ -1141,7 +1147,7 @@ public class PixelRealm extends Screen {
             }
           }
           catch (RuntimeException e) {
-            console.warn(file.getFilename(this.filename)+" shortcut json error!");
+            //console.warn(file.getFilename(this.filename)+" shortcut json error!");
             this.destroy();
             return;
           }
@@ -1164,14 +1170,16 @@ public class PixelRealm extends Screen {
         // Entering the portal.
         if (touchingPlayer() && portalCoolDown < 1.) {
           sound.playSound("shift");
-          prevRealm = currRealm;
+          //prevRealm = currRealm;
           gotoRealm(this.shortcutDir);
         }
-        
-        if (selectedLeft() && currentTool == TOOL_NORMAL) {
-          file.open(this.shortcutDir);
-        }
       }
+      
+      
+      public void interationAction() {
+        file.open(this.shortcutDir);
+      }
+  
   
       public void display() {
         String filenameOriginal = this.filename;
@@ -1243,6 +1251,7 @@ public class PixelRealm extends Screen {
   
       public void display() {
         if (visible) {
+          display.recordRendererTime();
           scene.shader(
             display.getShaderWithParams("portal_plus", "u_resolution", (float)scene.width, (float)scene.height, "u_time", display.getTimeSeconds(), "u_dir", -direction/(PI*2))
           );
@@ -1266,6 +1275,7 @@ public class PixelRealm extends Screen {
           scene.text(filename, 0, 0, 0);
           scene.popMatrix();
           if (lights) scene.lights();
+          display.recordLogicTime();
   
           // Reset tint
           this.tint = color(255);
@@ -1387,13 +1397,9 @@ public class PixelRealm extends Screen {
           return false;
         }
       }
-  
-      public boolean selectedLeft() {
-        return hovering() && primaryAction;
-      }
-  
-      public boolean selectedRight() {
-        return hovering() && secondaryAction;
+      
+      public void interationAction() {
+        
       }
   
       public void destroy() {
@@ -1475,7 +1481,8 @@ public class PixelRealm extends Screen {
         } else {
           scene.noStroke();
         }
-  
+        
+        display.recordRendererTime();
         if (!dontRender || useFinder) {
           scene.pushMatrix();
   
@@ -1497,6 +1504,7 @@ public class PixelRealm extends Screen {
   
           scene.popMatrix();
         }
+        display.recordLogicTime();
       }
     }
     // End PRObject classes.
@@ -1553,17 +1561,14 @@ public class PixelRealm extends Screen {
     
     
     protected ItemSlot<PocketItem> addToPockets(PRObject item) {
-      String name = "Unknown";
+      String name = getHoldingName(item);
       // Anything that isn't *the* physical file is abstract.
       boolean abstractObject = false;
-      if (item instanceof FileObject) {
-        FileObject o = (FileObject)item;
-        name = o.filename;
+      
+      // We absolutely do NOT want to move the exit portal!!
+      if (item == exitPortal)
+        abstractObject = true;
         
-        // We absolutely do NOT want to move the exit portal!!
-        if (item == exitPortal)
-          abstractObject = true;
-      }
       PocketItem p = new PocketItem(name, item, abstractObject);
       pocketItemNames.add(name);
       ItemSlot<PocketItem> ii = pockets.add(p);
@@ -1682,6 +1687,7 @@ public class PixelRealm extends Screen {
       FileObject o = createPRObject(path);
       files.add(o);
       pickupItem(o);
+      currentTool = TOOL_GRABBER;
       return o;
     }
     
@@ -1749,7 +1755,11 @@ public class PixelRealm extends Screen {
       for (int i = 0; i < l; i++) {
         if (file.currentFiles[i] != null) {
           // Here we determine which type of object to load into our scene.
-          files.add(createPRObject(file.currentFiles[i].path));
+          FileObject o = createPRObject(file.currentFiles[i].path);
+          files.add(o);
+          if (file.currentFiles[i].filename.equals("[Prev dir]") && o instanceof DirectoryPortal) {
+            exitPortal = (DirectoryPortal)o;
+          }
         }
       }
       
@@ -1996,7 +2006,7 @@ public class PixelRealm extends Screen {
     
     
     
-    public void emergeFromExitPortal(String emergeFrom) {
+    public void emergeFromPortal(String emergeFrom) {
       // Secure code stuff
       if (emergeFrom.length() > 0)
         if (emergeFrom.charAt(emergeFrom.length()-1) == '/')  emergeFrom = emergeFrom.substring(0, emergeFrom.length()-1);
@@ -2006,18 +2016,19 @@ public class PixelRealm extends Screen {
       if (emergeFrom.equals("C:")) emergeFrom = "C:/";
       emergeFrom     = file.getFilename(emergeFrom);
       
+      DirectoryPortal emergePortal = null;
+      
       // Find the exit portal.
       for (FileObject o : files) {
-        // While we're at it we can figure out which portal we're emerging from.
         if (emergeFrom.equals(o.filename)) {
-          exitPortal = (DirectoryPortal)o;
+          emergePortal = (DirectoryPortal)o;
         }
       }
       
       // If for some reason we're at the root
       // (or some strange place)
       // then just reset to normal position.
-      if (exitPortal == null) {
+      if (emergePortal == null) {
         playerX = 1000.;
         playerY = 0.;
         playerZ = 1000.;
@@ -2042,20 +2053,20 @@ public class PixelRealm extends Screen {
           if (o instanceof DirectoryPortal) {
 
             // This is +z and -z
-            if (o.x > exitPortal.x-AREA_WIDTH && o.x < exitPortal.x+AREA_WIDTH) {
+            if (o.x > emergePortal.x-AREA_WIDTH && o.x < emergePortal.x+AREA_WIDTH) {
               // +z
-              if (o.z > exitPortal.z+AREA_OFFSET && o.z < exitPortal.z+AREA_LENGTH)
+              if (o.z > emergePortal.z+AREA_OFFSET && o.z < emergePortal.z+AREA_LENGTH)
                 portalCount[1] += 1;
               // -z
-              if (o.z < exitPortal.z-AREA_OFFSET && o.z > exitPortal.z-AREA_LENGTH)
+              if (o.z < emergePortal.z-AREA_OFFSET && o.z > emergePortal.z-AREA_LENGTH)
                 portalCount[3] += 1;
             }
-            if (o.z > exitPortal.z-AREA_WIDTH && o.z < exitPortal.z+AREA_WIDTH) {
+            if (o.z > emergePortal.z-AREA_WIDTH && o.z < emergePortal.z+AREA_WIDTH) {
               // +x
-              if (o.x > exitPortal.x+AREA_OFFSET && o.x < exitPortal.x+AREA_LENGTH)
+              if (o.x > emergePortal.x+AREA_OFFSET && o.x < emergePortal.x+AREA_LENGTH)
                 portalCount[0] += 1;
               // -x
-              if (o.x < exitPortal.x-AREA_OFFSET && o.x > exitPortal.x-AREA_LENGTH)
+              if (o.x < emergePortal.x-AREA_OFFSET && o.x > emergePortal.x-AREA_LENGTH)
                 portalCount[2] += 1;
             }
           }
@@ -2097,26 +2108,26 @@ public class PixelRealm extends Screen {
         switch (chosenDir) {
           // +x
         case 0:
-          playerX = exitPortal.x+FROM_DIST;
-          playerZ = exitPortal.z;
+          playerX = emergePortal.x+FROM_DIST;
+          playerZ = emergePortal.z;
           direction = HALF_PI + additionalDir;
           break;
           // +z
         case 1:
-          playerX = exitPortal.x;
-          playerZ = exitPortal.z+FROM_DIST;
+          playerX = emergePortal.x;
+          playerZ = emergePortal.z+FROM_DIST;
           direction = 0. + additionalDir;
           break;
           // -x
         case 2:
-          playerX = exitPortal.x-FROM_DIST;
-          playerZ = exitPortal.z;
+          playerX = emergePortal.x-FROM_DIST;
+          playerZ = emergePortal.z;
           direction = -HALF_PI + additionalDir;
           break;
           // -z
         case 3:
-          playerX = exitPortal.x;
-          playerZ = exitPortal.z-FROM_DIST;
+          playerX = emergePortal.x;
+          playerZ = emergePortal.z-FROM_DIST;
           direction = PI + additionalDir;
           break;
         }
@@ -2158,8 +2169,11 @@ public class PixelRealm extends Screen {
       /// here we search for the terrain objects textures from the dir.
       ArrayList<PImage> imgs = new ArrayList<PImage>();
   
-      if (file.exists(REALM_SKY+".gif"))
+      if (file.exists(REALM_SKY+".gif")) {
         img_sky = new RealmTexture(((Gif)getRealmFile(REALM_SKY_DEFAULT.get(), dir+REALM_SKY+".gif")).getPImages());
+        //if (img_sky.get().width != 1500)
+        //  console.warn("Width of "+REALM_SKY+" is "+str(img_sky.get().width)+"px, should be 1500px for best visual results!");
+      }
       else {
         
         // Get either a sky called sky-1 or just sky
@@ -2171,6 +2185,8 @@ public class PixelRealm extends Screen {
         while (sky != REALM_SKY_DEFAULT.get() && i <= 9) {
           sky = (PImage)getRealmFile(REALM_SKY_DEFAULT.get(), dir+REALM_SKY+"-"+str(i+1)+".png");
           if (sky != REALM_SKY_DEFAULT.get()) {
+            //if (sky.width != 1500)
+            //  console.warn("Width of "+REALM_SKY+" is "+str(sky.width)+"px, should be 1500px for best visual results!");
             imgs.add(sky);
           }
           i++;
@@ -2178,6 +2194,7 @@ public class PixelRealm extends Screen {
         
         img_sky = new RealmTexture(imgs);
       }
+      
       
       imgs = new ArrayList<PImage>();
   
@@ -2463,9 +2480,12 @@ public class PixelRealm extends Screen {
   
       // This only uses a single cycle, dw.
       legacy_terrainObjects.empty();
-  
+      
+      
+      display.recordRendererTime();
       // TODO: fix the bug once and for all!
       scene.hint(ENABLE_DEPTH_TEST);
+      display.recordLogicTime();
   
       for (float tilez = chunkz-tt.renderDistance-1; tilez < chunkz+tt.renderDistance; tilez += 1.) {
         //                                                        random bug fix over here.
@@ -2482,11 +2502,13 @@ public class PixelRealm extends Screen {
   
           if (!dontRender) {
             float noisePosition = noise(tilex, tilez);
-  
+            
+            display.recordRendererTime();
             scene.beginShape();
             scene.textureMode(NORMAL);
             scene.textureWrap(REPEAT);
             scene.texture(img_grass.get());
+            display.recordLogicTime();
   
   
             if (tilex == chunkx && tilez == chunkz) {
@@ -2498,7 +2520,9 @@ public class PixelRealm extends Screen {
             PVector v2 = calcTile(tilex, tilez-1.);          // Right, top
             PVector v3 = calcTile(tilex, tilez);          // Right, bottom
             PVector v4 = calcTile(tilex-1., tilez);          // Left, bottom
-  
+            
+            
+            display.recordRendererTime();
             scene.vertex(v1.x, v1.y, v1.z, 0, 0);                                    
             scene.vertex(v2.x, v2.y, v2.z, tt.groundRepeat, 0);  
             scene.vertex(v3.x, v3.y, v3.z,tt.groundRepeat, tt.groundRepeat);  
@@ -2507,6 +2531,7 @@ public class PixelRealm extends Screen {
   
             scene.endShape();
             //scene.noTint();
+            display.recordLogicTime();
   
             final float treeLikelyhood = 0.6;
             final float randomOffset = 70;
@@ -2536,10 +2561,12 @@ public class PixelRealm extends Screen {
           }
         }
       }
+      display.recordRendererTime();
       scene.noTint();
       scene.colorMode(RGB, 255);
   
       scene.popMatrix();
+      display.recordLogicTime();
     }
     
     public void renderTerrainV2() {
@@ -2547,26 +2574,38 @@ public class PixelRealm extends Screen {
     }
     
     public void renderSky() {
+      display.recordRendererTime();
       // Clear canvas (we need to do that because opengl is big stoopid)
       // TODO: benchmark; scene.clear or scene.background()?
       scene.background(0);
       scene.noTint();
       scene.noStroke();
       
+      float sky_fov = 0.25;
+      
       // Render the sky.
       float skyDelta = -(direction/TWO_PI);
       float skyViewportLeft = skyDelta;
-      float skyViewportRight = skyDelta+0.25;
+      float skyViewportRight = skyDelta+sky_fov;
   
       scene.beginShape();
       scene.textureMode(NORMAL);
       scene.textureWrap(REPEAT);
       scene.texture(img_sky.get());
+      
+      
       scene.vertex(0, 0, skyViewportLeft, 0.);
       scene.vertex(scene.width, 0, skyViewportRight, 0.);
-      scene.vertex(scene.width, scene.height, skyViewportRight, 1.);
-      scene.vertex(0, scene.height, skyViewportLeft, 1.);
+      scene.vertex(scene.width, img_sky.get().height, skyViewportRight, 1.);
+      scene.vertex(0, img_sky.get().height, skyViewportLeft, 1.);
+      
+      scene.vertex(0, img_sky.get().height, skyViewportLeft, 1.);
+      scene.vertex(scene.width, img_sky.get().height, skyViewportRight, 1.);
+      scene.vertex(scene.width, height, skyViewportRight, 0.9999);
+      scene.vertex(0,   height, skyViewportLeft, 0.9999);
+      
       scene.endShape();
+      display.recordLogicTime();
     }
     
     private void placeDownObject() {
@@ -2611,12 +2650,15 @@ public class PixelRealm extends Screen {
           // If we get past this point we gutch!!
         }
         
-        // Need to do a few things when we move files like that.
-        // Update folder's destination location)
-        if (holdingObject instanceof PixelRealmState.DirectoryPortal) {
-          PixelRealmState.DirectoryPortal portal = (PixelRealmState.DirectoryPortal)holdingObject;
-          portal.dir = file.directorify(currRealm.stateDirectory)+portal.filename;
+        // Need to do a few things when we move files like that.a
+        // But NOT if it's an abstract item! (i.e. exit portal)
+        if (!globalHoldingObject.abstractObject) {
+          if (holdingObject instanceof PixelRealmState.FileObject) {
+            PixelRealmState.FileObject obj = (PixelRealmState.FileObject)holdingObject;
+            obj.dir = file.directorify(currRealm.stateDirectory)+obj.filename;
+          }
         }
+
         
         // Open the file if requested (i.e. create new entry)
         if (launchWhenPlaced) {
@@ -2628,9 +2670,6 @@ public class PixelRealm extends Screen {
           }
         }
         
-        // Simply setting it to null will "release"
-        // the object, setting it in place.
-        holdingObject = null;
         
         ItemSlot tmp = null;
         // Switch to next item in the queue
@@ -2639,6 +2678,12 @@ public class PixelRealm extends Screen {
         
         // Remove from inventory
         pockets.remove(globalHoldingObjectSlot);
+        // Remove from names
+        pocketItemNames.remove(getHoldingName());
+        
+        // Simply setting it to null will "release"
+        // the object, setting it in place.
+        holdingObject = null;
         
         // Set the new "holdingitem" to the item we switched to in the queue/hotbar.
         globalHoldingObjectSlot = tmp;
@@ -2662,13 +2707,18 @@ public class PixelRealm extends Screen {
       // Pick up code
       if (closestObject != null) {
         FileObject p = (FileObject)closestObject;
-        
-        // When clicked pick up the object.
-        if (currentTool == TOOL_GRABBER) {
-          if (primaryAction) {
+        if (primaryAction) {
+          switch (currentTool) {
+            case TOOL_GRABBER:
             pickupItem(p);
-            
             sound.playSound("pickup");
+            break;
+            case TOOL_NORMAL:
+            p.interationAction();
+            break;
+            default:
+            file.open(p.dir);
+            break;
           }
         }
       }
@@ -2713,6 +2763,19 @@ public class PixelRealm extends Screen {
       }
     }
     
+    private String getHoldingName(PRObject item) {
+      String name = "Unknown";
+      if (item instanceof FileObject) {
+        FileObject o = (FileObject)item;
+        name = o.filename;
+      }
+      return name;
+    }
+    
+    private String getHoldingName() {
+      return getHoldingName(holdingObject);
+    }
+    
     float closestDist = 0;
     public void renderPRObjects() {
       for (PRObject o : ordering) {
@@ -2723,6 +2786,7 @@ public class PixelRealm extends Screen {
     // That "effect" is just the portal glow.
     public void renderEffects() {
       float FADE = 0.9;
+      display.recordRendererTime();
       if (portalLight > 0.1) {
         scene.blendMode(ADD);
         scene.fill(portalLight);
@@ -2744,6 +2808,7 @@ public class PixelRealm extends Screen {
         
         coinCounterBounce *= pow(0.85, display.getDelta());
       }
+      display.recordLogicTime();
       
     
       // When we exit a portal, there's usually a bit of lag as we read files/perform loading,
@@ -2886,6 +2951,7 @@ public class PixelRealm extends Screen {
       return;
     }
     portalLight = 255.;
+    portalCoolDown = 30.;
     
     // Update inventory for moving realms (move files)
     boolean success = true;
@@ -2900,32 +2966,38 @@ public class PixelRealm extends Screen {
       return;
     }
     
+    // Save before we leave (I can't believe I forgot that)
+    currRealm.saveRealmJson();
+    
     // Do caching here.
-    if (prevRealm != null) {
-      if (prevRealm.stateDirectory.equals(file.directorify(to))) {
-        PixelRealmState tmp = currRealm;
-        currRealm = prevRealm;
-        // currRealm is now prevrealm
-        prevRealm = tmp;
-        if (fro.length() > 0)
-          currRealm.emergeFromExitPortal(fro);
-        else {
-          currRealm.playerX = 1000.;
-          currRealm.playerY = 0.;
-          currRealm.playerZ = 1000.;
-          currRealm.direction = PApplet.PI;
+    if (realmCaching) {
+      if (prevRealm != null) {
+        if (prevRealm.stateDirectory.equals(file.directorify(to))) {
+          PixelRealmState tmp = currRealm;
+          currRealm = prevRealm;
+          // currRealm is now prevrealm
+          prevRealm = tmp;
+          if (fro.length() > 0)
+            currRealm.emergeFromPortal(fro);
+          else {
+            currRealm.playerX = 1000.;
+            currRealm.playerY = 0.;
+            currRealm.playerZ = 1000.;
+            currRealm.direction = PApplet.PI;
+          }
+          switchToRealm(currRealm);
+          return;
         }
-        switchToRealm(currRealm);
-        return;
       }
+      
+      prevRealm = currRealm;
     }
     
-    prevRealm = currRealm;
     if (fro.length() == 0)
       currRealm = new PixelRealmState(to);
     else
       currRealm = new PixelRealmState(to, fro);
-      
+        
     // Refresh the files since we need to update the inventory.
     currRealm.refreshFiles();
     
@@ -2956,6 +3028,7 @@ public class PixelRealm extends Screen {
     currRealm.refreshFiles();
     currRealm.updateHoldingItem(globalHoldingObjectSlot);
     sound.streamMusicWithFade(r.musicPath);
+    portalCoolDown = 30.;
     currRealm = r;
   }
   
@@ -3014,6 +3087,7 @@ public class PixelRealm extends Screen {
   }
   
   public void displayMemUsageBar() {
+    display.recordRendererTime();
     int used = memUsage.get();
     float percentage = (float)used/(float)MAX_MEM_USAGE;
     noStroke();
@@ -3031,6 +3105,7 @@ public class PixelRealm extends Screen {
     textFont(engine.DEFAULT_FONT, 30);
     textAlign(LEFT, CENTER);
     text("Mem: "+(used/1024)+" kb / "+(MAX_MEM_USAGE/1024)+" kb", 105, myUpperBarWeight+45);
+    display.recordLogicTime();
   }
   
     
@@ -3057,12 +3132,16 @@ public class PixelRealm extends Screen {
     currRealm.runPRObjects();
     
     // Now begin all the drawing!
+    display.recordRendererTime();
     scene.beginDraw();
+    display.recordLogicTime();
     currRealm.renderSky();
     
+    display.recordRendererTime();
     // Make us see really really farrrrrrr
     scene.perspective(PI/3.0, (float)scene.width/scene.height, 1, 10000);
     scene.pushMatrix();
+    display.recordLogicTime();
 
     //scene.translate(-xpos+(scene.width / 2), ypos+(sin(bob)*3)+(scene.height / 2)+80, -zpos+(scene.width / 2));
     {
@@ -3070,10 +3149,12 @@ public class PixelRealm extends Screen {
       float y = currRealm.playerY+(sin(bob)*3)-PLAYER_HEIGHT;
       float z = currRealm.playerZ;
       float LOOK_DIST = 200.;
+      display.recordRendererTime();
       scene.camera(x, y, z, 
         x+sin(currRealm.direction)*LOOK_DIST, y, z+cos(currRealm.direction)*LOOK_DIST, 
         0., 1., 0.);
       if (currRealm.lights) scene.pointLight(255, 245, 245, x, y, z);
+      display.recordLogicTime();
     }
 
     currRealm.renderTerrain();
@@ -3084,11 +3165,16 @@ public class PixelRealm extends Screen {
     
     // PERFORMANCE ISSUE: OpenGL state machine is a bitchass!
     // This takes a long itme to do!!
+    display.recordRendererTime();
     scene.hint(DISABLE_DEPTH_TEST);
     currRealm.renderEffects();
     
+    display.recordRendererTime();
     scene.endDraw();
-    image(scene, 0, myUpperBarWeight, WIDTH, this.height);
+    float wi = scene.width*DISPLAY_SCALE;
+    float hi = this.height;
+    image(scene, (WIDTH/2)-wi/2, (HEIGHT/2)-hi/2, wi, hi);
+    display.recordLogicTime();
     
     // TODO: show gui.
     //runGUI();
@@ -3131,6 +3217,7 @@ public class PixelRealm extends Screen {
   
   public void upperBar() {
     super.upperBar();
+    display.recordRendererTime();
     app.textFont(engine.DEFAULT_FONT);
     app.textSize(36);
     app.textAlign(LEFT, TOP);
@@ -3157,6 +3244,7 @@ public class PixelRealm extends Screen {
       // it doesn't need to be accurate.
       loading -= (int)display.getDelta();
     }
+    display.recordLogicTime();
   }
   
   

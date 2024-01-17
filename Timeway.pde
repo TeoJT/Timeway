@@ -4,6 +4,7 @@ import java.io.FileWriter;   // Import the FileWriter class
 import java.io.IOException;
 import java.io.StringWriter;
 import java.io.PrintWriter;
+import com.jogamp.newt.opengl.GLWindow;
 
 
 /**
@@ -29,9 +30,9 @@ void settings() {
     if (platform == LINUX)
       System.setProperty("jogl.disable.openglcore", "true");
     size(displayWidth, displayHeight, P2D);
-    //size(1500, 1000, P2D);
+    //size(750, 1200, P2D);
     smooth(1);
-    //hint(DISABLE_OPENGL_ERRORS);         
+    
     
     // Ugly, I know. But we're at the most low level point in the program, so ain't
     // much we can do.
@@ -40,6 +41,36 @@ void settings() {
   catch (Exception e) {
     JOptionPane.showMessageDialog(null,"A fatal error has occurred: \n"+e.getMessage()+"\n"+e.getStackTrace(),"Timeway",1);
   }
+}
+
+@Override
+protected PSurface initSurface() {
+    PSurface s = super.initSurface();
+    
+    // Windows is annoying with maximised screens
+    // So let's do this hack to make the screen maximised.
+    boolean maximise = false;
+    
+    if (maximise) {
+      if (platform == WINDOWS) {
+        try {
+          // Set maximised.
+          Object o = surface.getNative();
+          if (o instanceof GLWindow) {
+            GLWindow window = (GLWindow)o;
+            window.setMaximized(true, true);
+          }
+        }
+        catch (Exception e) {
+          sketch_openErrorLog(
+              "Maximise error. This is a bug."
+              );
+        }
+      }
+    }
+    s.setTitle("Timeway");
+    s.setResizable(true);
+    return s;
 }
 
 void sketch_openErrorLog(String mssg) {
@@ -84,8 +115,7 @@ void sketch_openErrorLog(Exception e) {
 // This is all the code you need to set up and start running
 // the timeway engine.
 void setup() {
-    surface.setResizable(true);
-    surface.setTitle("Timeway");
+    
     hint(DISABLE_OPENGL_ERRORS);
     background(0);
     
@@ -128,7 +158,7 @@ void draw() {
       // Let it gracefully crash
       else timewayEngine.engine();
   }
-    //saveFrame("saveframe/####.tiff");
+  
 }
 
 

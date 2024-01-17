@@ -48,6 +48,8 @@ public class PixelRealmWithUI extends PixelRealm {
         cached = true;
       }
       
+      display.recordRendererTime();
+      
       // Horizontal
       float x = cache_backX;
       float y = cache_backY;
@@ -67,6 +69,8 @@ public class PixelRealmWithUI extends PixelRealm {
         image(IMG_BORDER_TILE, x+sideOffset, y);
         y += IMG_BORDER_TILE.height;
       }
+      
+      display.recordLogicTime();
     }
     
   }
@@ -251,6 +255,7 @@ public class PixelRealmWithUI extends PixelRealm {
       float invx = 10;
       float invy = this.height-80;
       
+      display.recordRendererTime();
       textFont(engine.DEFAULT_FONT, 40);
       textAlign(LEFT, TOP);
       fill(255);
@@ -271,6 +276,7 @@ public class PixelRealmWithUI extends PixelRealm {
           image(p.item.img, x, y, 64, 64);
         invx += 70;
       }
+      display.recordLogicTime();
     }
   }
   

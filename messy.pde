@@ -999,7 +999,9 @@ public final class SpriteSystemPlaceholder {
                 app.textAlign(CENTER, TOP);
                 float x = getSprite(identifier).getX() + getSprite(identifier).getWidth()/2;
                 float y = getSprite(identifier).getY() + getSprite(identifier).getHeight() + 5;
+                engine.display.recordRendererTime();
                 app.text(text, x, y);
+                engine.display.recordLogicTime();
             }
         }
 

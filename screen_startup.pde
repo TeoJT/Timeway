@@ -99,7 +99,7 @@ public class Startup extends Screen {
         app.textAlign(LEFT, CENTER);
         app.textFont(engine.DEFAULT_FONT);
         app.textSize(30);
-        app.text(engine.VERSION, 10, HEIGHT-60);
+        app.text(engine.VERSION, 10, HEIGHT-30);
         
     }
 }
