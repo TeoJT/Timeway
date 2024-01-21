@@ -1131,12 +1131,15 @@ public class Editor extends Screen {
               takePhoto = true;
               cameraFlashEffect = 255.;
             }
-            gui.getSprite("snap").setY(HEIGHT-myLowerBarWeight+138/4);
+            
+            // TODO: Add some automatic "position at bottom" function to the messy class.
+            gui.getSprite("snap").setY(HEIGHT-myLowerBarWeight+20);
             
             if (engine.button("camera_flip", "flip_camera_128", "Switch camera")) {
               preparingCameraMessage = "Switching camera...";
               camera.switchNextCamera();
             }
+            gui.getSprite("camera_flip").setY(HEIGHT-myLowerBarWeight+10);
           }
           
         }
@@ -1241,7 +1244,7 @@ public class Editor extends Screen {
         display.getShaderWithParams("fabric", "color",float((myUpperBarColor>>16)&0xFF)/255.,float((myUpperBarColor>>8)&0xFF)/255.,float((myUpperBarColor)&0xFF)/255.,1., "intensity",0.1)
       );
       
-      float LOWER_BAR_EXPAND = UPPER_BAR_DROP_WEIGHT;
+      float LOWER_BAR_EXPAND = 100.;
       if (upperBarDrop == CAMERA_ON_ANIMATION) myLowerBarWeight = LOWER_BAR_WEIGHT+(LOWER_BAR_EXPAND * (1.-upperbarExpand));
       if (upperBarDrop == CAMERA_OFF_ANIMATION) myLowerBarWeight = LOWER_BAR_WEIGHT+(LOWER_BAR_EXPAND * (upperbarExpand));
       

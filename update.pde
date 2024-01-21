@@ -6,12 +6,11 @@ public class Updater extends Screen {
   String patchNotes = "";
   boolean startedMusic = false;
   JSONObject updateInfo;
-  public final static String UPDATE_MUSIC = "data/engine/music/update_music.wav";
   
   public Updater(Engine engine, JSONObject updateInfo) {
     super(engine);
     this.updateInfo = updateInfo;
-    sound.streamMusicWithFade(engine.APPPATH+UPDATE_MUSIC);
+    //sound.streamMusicWithFade(engine.APPPATH+UPDATE_MUSIC);
     myUpperBarWeight = 70;
     try {
       updateName = updateInfo.getString("update-name");

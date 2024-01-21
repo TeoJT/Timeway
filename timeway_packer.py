@@ -82,10 +82,26 @@ for arg in sys.argv:
         # Output the update info json to a file
         output_to_file = True
     
+# Auto-find the version.
+# It should be in engine.pde in the line that says:
+# public final String VERSION = "x.x.x";
+# So we'll search for that line and get the version from it.
+version_original = None
+f = open("engine.pde", "r")
+for line in f:
+    if ("VERSION" in line):
+        # Get the version from the line
+        version_original = line[line.find("\"")+1:line.rfind("\"")]
+        break
+f.close()
 
+# Version could not be auto-found
+if (version_original == None):
+    # prompt for version
+    version_original = input("Enter version: ")
+else:
+    print(color.WHITE+"Auto-find version: "+version_original+color.NONE)
 
-# prompt for version
-version_original = input("Enter version: ")
 
 # Replace '-' with '_'
 version = version_original.replace("-", "_")
@@ -153,9 +169,16 @@ if (os.path.isdir("timeway_windows_"+version)):
     if (os.path.isfile(new_name_windows+"/data/config.json")):
         os.remove(new_name_windows+"/data/config.json")
         print("Removed config.json.")
+    if (os.path.isfile(new_name_windows+"/data/stats.json")):
+        os.remove(new_name_windows+"/data/stats.json")
+        print("Removed stats.json.")
     if (os.path.isfile(new_name_windows+"/data/error_log.txt")):
         os.remove(new_name_windows+"/data/error_log.txt")
         print("Removed error_log.txt.")
+    if (os.path.isdir(new_name_windows+"/data/pocket")):
+        shutil.rmtree(new_name_windows+"/data/pocket")
+        print("Removed pocket folder.")
+
     # Also recursively search and remove any files beginning with .pixelrealm from the folders
     files_to_remove = []
     for root, dirs, files in os.walk(new_name_windows):

@@ -848,8 +848,8 @@ public final class SpriteSystemPlaceholder {
             return sprites.get(spriteNames.get(name));
             }
             catch (NullPointerException e) {
-                if (!suppressSpriteWarning)
-                    console.bugWarn("Sprite "+name+" does not exist.");
+                //if (!suppressSpriteWarning)
+                //    console.bugWarn("Sprite "+name+" does not exist.");
                 return unusedSprite;
             }
         }

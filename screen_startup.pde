@@ -82,14 +82,16 @@ public class Startup extends Screen {
               engine.initialScreen = true;
               
               // This is the part where we exit the welcome screen and go to our main screen.
-              requestScreen(new PixelRealmWithUI(engine, dir));
+              PixelRealmWithUI pixelrealm = new PixelRealmWithUI(engine, dir);
+              requestScreen(pixelrealm);
             }
         }
-        app.fill(255, 255-(255*floatIn));
         app.noStroke();
         app.textAlign(CENTER, CENTER);
-        app.textFont(engine.DEFAULT_FONT);
-        app.textSize(34);
+        app.textFont(engine.DEFAULT_FONT, 34);
+        app.fill(0, 255-(255*floatIn));
+        app.text("by "+engine.AUTHOR, WIDTH/2-3, HEIGHT/2+150-3);
+        app.fill(255, 255-(255*floatIn));
         app.text("by "+engine.AUTHOR, WIDTH/2, HEIGHT/2+150);
         
         app.noTint();
@@ -97,8 +99,10 @@ public class Startup extends Screen {
         app.fill(255);
         app.noStroke();
         app.textAlign(LEFT, CENTER);
-        app.textFont(engine.DEFAULT_FONT);
-        app.textSize(30);
+        app.textFont(engine.DEFAULT_FONT, 30);
+        app.fill(0, 255-(255*floatIn));
+        app.text(engine.VERSION, 10-3, HEIGHT-30-3);
+        app.fill(255, 255-(255*floatIn));
         app.text(engine.VERSION, 10, HEIGHT-30);
         
     }

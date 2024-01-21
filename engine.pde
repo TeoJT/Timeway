@@ -32,6 +32,7 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.ShortBuffer;
 import java.nio.FloatBuffer;
+import java.nio.file.Paths;
 
 
 
@@ -71,6 +72,7 @@ class Engine {
   public final String SOUND_PATH          = "data/engine/sounds/";
   public final String CONFIG_PATH         = "data/config.json";
   public final String KEYBIND_PATH        = "data/keybindings.json";
+  public final String STATS_FILE          = "data/stats.json";
   public final String PATH_SPRITES_ATTRIB = "data/engine/spritedata/";
   public final String DAILY_ENTRY         = "data/daily_entry.timewayentry";
   public final String GLITCHED_REALM      = "data/engine/default/glitched_realm/";
@@ -78,6 +80,7 @@ class Engine {
   public final String CACHE_PATH          = "data/cache/";
   public final String WINDOWS_CMD         = "data/engine/shell/mywindowscommand.bat";
   public final String POCKET_PATH         = "data/pocket/";
+  public final String TEMPLATES_PATH      = "data/engine/realmtemplates/";
   public       String DEFAULT_UPDATE_PATH = "";  // Set up by setup()
 
   // Static constants
@@ -2286,8 +2289,14 @@ class Engine {
     }
   
     public void stopMusic() {
-      if (streamMusic != null)
+      if (streamMusic != null) {
         streamMusic.stop();
+        streamMusic = null;
+      }
+      if (streamMusicFadeTo != null) {
+        streamMusicFadeTo.stop();
+        streamMusicFadeTo = null;
+      }
     }
   
     public void streamMusicWithFade(String path) {
@@ -2310,9 +2319,12 @@ class Engine {
         streamMusic(path);
         return;
       }
+      
       streamMusicFadeTo = loadNewMusic(path);
-      streamMusicFadeTo.volume(0.);
-      streamMusicFadeTo.setReady();
+      if (streamMusicFadeTo != null) {
+        streamMusicFadeTo.volume(0.);
+        streamMusicFadeTo.setReady();
+      }
       musicFadeOut = 0.99;
     }
     
@@ -2355,17 +2367,21 @@ class Engine {
         if (musicFadeOut > 0.005) {
           // Fade the old music out
           float vol = musicFadeOut *= PApplet.pow(MUSIC_FADE_SPEED, display.getDelta());
-          streamMusic.playbinSetVolume(vol);
+          
+          if (streamMusic != null)
+            streamMusic.playbinSetVolume(vol);
 
 
           // Fade the new music in.
           if (streamMusicFadeTo != null) {
             streamMusicFadeTo.play();
             streamMusicFadeTo.volume((1.-vol)*masterVolume);
-          } else 
-          console.bugWarnOnce("streamMusicFadeTo shouldn't be null here.");
+          } 
+          //else 
+          //  console.bugWarnOnce("streamMusicFadeTo shouldn't be null here.");
         } else {
-          stopMusic();
+          if (streamMusic != null)
+            streamMusic.stop();
           if (streamMusicFadeTo != null) streamMusic = streamMusicFadeTo;
           musicFadeOut = 1.;
         }
@@ -2528,9 +2544,31 @@ class Engine {
       }
       return true;
     }
+    
+    public boolean copy(String src, String destination) {
+      if (!exists(src)) {
+        console.bugWarn("copy: "+src+" doesn't exist!");
+        return false;
+      }
+      
+      
+      try {
+        Path copied = Paths.get(destination);
+        Path originalPath = (new File(src)).toPath();
+        Files.copy(originalPath, copied, StandardCopyOption.REPLACE_EXISTING);
+      }
+      catch (IOException e) {
+        console.warn(e.getMessage());
+        return false;
+      }
+      return true;
+    }
   
     public void backupMove(String path) {
-      if (!mv(path, APPPATH+CACHE_PATH+"_"+getLastModified(path).replaceAll(":", "-"))) {
+      String name = getFilename(path);
+      String newPath = APPPATH+CACHE_PATH+"_"+name+"_"+getLastModified(path).replaceAll("[\\.:]", "-")+".txt";
+      if (!mv(path, newPath)) {
+        console.log(newPath);
         // If a file doesn't back up, it's not the end of the world.
         console.warn("Couldn't back up "+path+".");
       }
@@ -2654,6 +2692,11 @@ class Engine {
     public String anyImageFile(String pathWithoutExt) {
       String[] SUPPORTED_IMG_TYPES = { ".png", ".bmp", ".jpg", ".jpeg", ".gif" };
       return anyFileWithExt(pathWithoutExt, SUPPORTED_IMG_TYPES);
+    }
+    
+    public String anyMusicFile(String pathWithoutExt) {
+      String[] SUPPORTED_MUSIC_TYPES = { ".wav", ".mp3", ".flac", ".ogg" };
+      return anyFileWithExt(pathWithoutExt, SUPPORTED_MUSIC_TYPES);
     }
   
     public String getFilename(String path) {
@@ -2859,6 +2902,25 @@ class Engine {
       }
       );
       t.start();
+    }
+    
+    public int countFiles(String path) {
+        File folder = new File(path);
+        if (!folder.exists() || !folder.isDirectory())
+            return 1;
+            
+        int count = 0;
+        File[] files = folder.listFiles();
+        if (files != null) {
+            for (File file : files) {
+                if (file.isFile()) {
+                    count++;
+                } else if (file.isDirectory()) {
+                    count += countFiles(file.getAbsolutePath()); // Recursively count files in subfolders
+                }
+            }
+        }
+        return count;
     }
   
     // NOTE: Only opens files, NOT directories (yet).
@@ -3842,7 +3904,7 @@ class Engine {
         console.log("FPS shown.");
       }
     }
-    else if (commandEquals(command, "/showcpubenchmarks")) {
+    else if (commandEquals(command, "/cpubenchmark")) {
       if (display.showCPUBenchmarks) {
         display.showCPUBenchmarks = false;
         console.log("CPU benchmarks hidden.");
@@ -3851,6 +3913,10 @@ class Engine {
         display.showCPUBenchmarks = true;
         console.log("CPU benchmarks shown.");
       }
+    }
+    else if (commandEquals(command, "/stopmusic")) {
+      console.log("Music stopped");
+      sound.stopMusic();
     }
     
     
@@ -5339,6 +5405,7 @@ class Engine {
   }
 
   public boolean keybindPressed(String keybindName) {
+    if (inputPromptShown) return false;
     // Unnecessary note:
     // Hey by implementing modules I just fixed a potential bug by accident! :3
     return (this.keyPressed && int(key) == settings.getKeybinding(keybindName));
@@ -5585,7 +5652,7 @@ class Engine {
 
 
     // Allow command prompt to be shown.
-    if (keyActionOnce("showCommandPrompt") && allowShowCommandPrompt)
+    if (keybindPressed("showCommandPrompt") && allowShowCommandPrompt)
       showCommandPrompt();
 
 

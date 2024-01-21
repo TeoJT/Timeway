@@ -7,13 +7,6 @@ import java.nio.file.*;
 import java.util.ListIterator;
 import java.util.Iterator;
 
-// Optimisations to be made:
-// - PRObject value is technically calculated twice, once for rendering (for dist) and other for sorting (calculateVal)
-// - Hovering and rendering flat 3d objects done twice; have temporary values that are calculated ONCE in the object3D
-//   class rather than re-calculating everything for each Object3D.
-
-
-
 // ---- The Pixel Realm screen -----
 // Your folders are realms, your hard drive is a universe.
 //
@@ -33,6 +26,7 @@ public class PixelRealm extends Screen {
   final static float  BACKWARD_COMPAT_SCALE = 256./(float)MAX_CACHE_SIZE;
   final static int    MAX_MEM_USAGE = 1024*1024*1024;   // 1GB
   final static int    DISPLAY_SCALE = 4;
+  final static int    FOLDER_SIZE_LIMIT = 500;  // If a folder has over this number of files, moving is restricted to prevent any potentially dangerous data moves.
   
   // Movement/player constants.
   final static float BOB_SPEED = 0.4;
@@ -67,10 +61,9 @@ public class PixelRealm extends Screen {
   public final static String REALM_BGM_DEFAULT = "data/engine/music/pixelrealm_default_bgm.wav";
   
   // Defaults (Loaded on constructor)
-  private RealmTexture REALM_GRASS_DEFAULT;
-  private RealmTexture REALM_MUSIC_DEFAULT;
-  private RealmTexture REALM_SKY_DEFAULT;
-  private RealmTexture REALM_TREE_DEFAULT;
+  private PImage REALM_GRASS_DEFAULT;
+  private PImage REALM_SKY_DEFAULT;
+  private PImage REALM_TREE_DEFAULT;
   
   // Other assets (might remove later)
   private RealmTexture IMG_COIN;
@@ -92,6 +85,11 @@ public class PixelRealm extends Screen {
   private boolean legacy_portalEasteregg = false;
   private float coinCounterBounce = 0.;
   
+  private PImage REALM_GRASS_DEFAULT_LEGACY;
+  private PImage REALM_SKY_DEFAULT_LEGACY;
+  private PImage REALM_TREE_DEFAULT_LEGACY;
+  private String REALM_BGM_DEFAULT_LEGACY = "data/engine/music/pixelrealm_default_bgm_legacy.wav";
+  
   // --- Global state and working variables (doesn't require per-realm states) ---
   private PGraphics scene;
   private float runAcceleration = 0.;
@@ -109,6 +107,7 @@ public class PixelRealm extends Screen {
   private AtomicBoolean refreshRealm = new AtomicBoolean(false);
   private float portalLight = 255.;
   private float portalCoolDown = 45;
+  protected boolean usePortalAllowed = true;
   private float animationTick = 0.;
   
   // Inventory//pocket
@@ -119,6 +118,7 @@ public class PixelRealm extends Screen {
   protected ItemSlot<PocketItem> globalHoldingObjectSlot = null;
   
   // Debug-based variables.
+  @SuppressWarnings("unused")
   private int operationCount = 0;
   
   // Memory protection (TODO: Move to engine)
@@ -153,9 +153,13 @@ public class PixelRealm extends Screen {
     // --- Load default assets ---
     // TODO (eventually): load screen's assets, not everything from the loading screen (even tho that would be a minor optimisation)
     // (get rid of the . at the start cus hidden files are no good)
-    REALM_SKY_DEFAULT = new RealmTexture(REALM_SKY.substring(1));
-    REALM_TREE_DEFAULT = new RealmTexture(REALM_TREE_LEGACY.substring(1));
-    REALM_GRASS_DEFAULT = new RealmTexture(REALM_GRASS.substring(1));
+    REALM_SKY_DEFAULT = display.systemImages.get("pixelrealm-sky");
+    REALM_TREE_DEFAULT = display.systemImages.get("pixelrealm-terrain_object");
+    REALM_GRASS_DEFAULT = display.systemImages.get("pixelrealm-grass");
+    
+    REALM_SKY_DEFAULT_LEGACY = display.systemImages.get("pixelrealm-sky-legacy");
+    REALM_TREE_DEFAULT_LEGACY = display.systemImages.get("pixelrealm-terrain_object-legacy");
+    REALM_GRASS_DEFAULT_LEGACY = display.systemImages.get("pixelrealm-grass-legacy");
   
     String[] COINS = { "coin_0", "coin_1", "coin_2", "coin_3", "coin_4", "coin_5"};;
     IMG_COIN = new RealmTexture(COINS);
@@ -217,19 +221,40 @@ public class PixelRealm extends Screen {
     private PImage singleImg = null;
     private PImage[] aniImg = null;
     private final static float ANIMATION_INTERVAL = 10.;
+    public float width = 0;
+    public float height = 0;
     
     public RealmTexture(PImage img) {
+      set(img);
+    }
+    public void set(PImage img) {
       if (img == null) {
-        console.bugWarn("RealmTexture: passing a null image");
+        console.bugWarn("set: passing a null image");
         singleImg = display.systemImages.get("white");
+        width = singleImg.width;
+        height = singleImg.height;
         return;
       }
       singleImg = img;
+      aniImg = null;
+      width = singleImg.width;
+      height = singleImg.height;
     }
     public RealmTexture(PImage[] imgs) {
+      set(imgs);
+    }
+    public void set(PImage[] imgs) {
       if (imgs.length == 0) {
-        console.bugWarn("RealmTexture PImage[]: passing an empty list");
+        console.bugWarn("set PImage[]: passing an empty list");
         singleImg = display.systemImages.get("white");
+        width = singleImg.width;
+        height = singleImg.height;
+        return;
+      }
+      else if (imgs.length == 1) {
+        singleImg = imgs[0];
+        width = imgs[0].width;
+        height = imgs[0].height;
         return;
       }
       singleImg = null;
@@ -238,11 +263,22 @@ public class PixelRealm extends Screen {
       for (PImage p : imgs) {
         aniImg[i++] = p;
       }
+      width = aniImg[0].width;
+      height = aniImg[0].height;
     }
     public RealmTexture(ArrayList<PImage> imgs) {
+      set(imgs);
+    }
+    public void set(ArrayList<PImage> imgs) {
       if (imgs.size() == 0) {
-        console.bugWarn("RealmTexture ArrayList: passing an empty list");
+        console.bugWarn("set ArrayList: passing an empty list");
         singleImg = display.systemImages.get("white");
+        return;
+      }
+      else if (imgs.size() == 1) {
+        singleImg = imgs.get(0);
+        width = singleImg.width;
+        height = singleImg.height;
         return;
       }
       singleImg = null;
@@ -251,11 +287,22 @@ public class PixelRealm extends Screen {
       for (PImage p : imgs) {
         aniImg[i++] = p;
       }
+      width = aniImg[0].width;
+      height = aniImg[0].height;
     }
     public RealmTexture(String[] imgs) {
+      set(imgs);
+    }
+    public void set(String[] imgs) {
       if (imgs.length == 0) {
-        console.bugWarn("RealmTexture String[]: passing an empty list");
+        console.bugWarn("set String[]: passing an empty list");
         singleImg = display.systemImages.get("white");
+        return;
+      }
+      else if (imgs.length == 1) {
+        singleImg = display.systemImages.get(imgs[0]);
+        width = singleImg.width;
+        height = singleImg.height;
         return;
       }
       singleImg = null;
@@ -264,14 +311,26 @@ public class PixelRealm extends Screen {
       for (String s : imgs) {
         aniImg[i++] = display.systemImages.get(s);
       }
+      width = aniImg[0].width;
+      height = aniImg[0].height;
     }
+    
+    
     public RealmTexture(String imgName) {
       singleImg = display.systemImages.get(imgName);
     }
     
     public PImage get(int index) {
-      if (singleImg != null) return singleImg;
-      else return aniImg[index%aniImg.length];
+      if (singleImg != null) {
+        width = singleImg.width;
+        height = singleImg.height;
+        return singleImg;
+      }
+      else {
+        width = aniImg[0].width;
+        height = aniImg[0].height;
+        return aniImg[index%aniImg.length];
+      }
     }
     
     public PImage get() {
@@ -281,6 +340,19 @@ public class PixelRealm extends Screen {
     public PImage getRandom() {
       return this.get(int(app.random(0., aniImg.length)));
     }
+    
+    public PImage getRandom(float seed) {
+      PImage p;
+      if (aniImg != null) {
+        p = this.get(int( app.noise(seed) * float(aniImg.length) * 3.)%aniImg.length);
+      }
+      else {
+        p = this.get();
+      }
+      width = p.width;
+      height = p.height;
+      return p;
+    } 
   }
   
   
@@ -527,7 +599,6 @@ public class PixelRealm extends Screen {
       // Can't move abstract objects.
       if (abstractObject) {
         promptMoveAbstractObject(name);
-        console.warn("Abstract file");
         return false;
       }
       
@@ -535,16 +606,24 @@ public class PixelRealm extends Screen {
         // Can't move files that have the same filename as another file
         // in the pocket.
         if (isDuplicate) {
-          console.warn("is duplicate");
           promptPocketConflict(name);
           return false;
         }
         
+        // Can't move directoryPortals with over a certain limit of files.
+        if (item instanceof PixelRealmState.DirectoryPortal) {
+          PixelRealmState.DirectoryPortal p = (PixelRealmState.DirectoryPortal)item;
+          if (file.countFiles(p.dir) > FOLDER_SIZE_LIMIT) {
+            prompt("Folder size limit", name+" has over "+str(FOLDER_SIZE_LIMIT)+" files in it. As a safety precaution, Timeway won't move large folders.", 20);
+            return false;
+          }
+        }
+        
         boolean success = file.mv(fro+name, engine.APPPATH+engine.POCKET_PATH+name);
         if (!success) {
-          console.warn("failed to move");
-          console.warn("to: "+engine.APPPATH+engine.POCKET_PATH+name);
-          console.warn("fro: "+fro+name);
+          //console.warn("failed to move");
+          //console.warn("to: "+engine.APPPATH+engine.POCKET_PATH+name);
+          //console.warn("fro: "+fro+name);
           promptFailedToMove(name);
           return false;
         }
@@ -566,6 +645,14 @@ public class PixelRealm extends Screen {
   protected void promptMoveAbstractObject(String filename) {}
   @SuppressWarnings("unused")
   protected void promptFailedToMove(String filename) {}
+  protected void promptNewRealm() {}
+  protected void promptPickedUpItem() {}
+  protected void promptPlonkedDownItem() {}
+  
+  @SuppressWarnings("unused")
+  protected void prompt(String title, String text, int appearDelay) {}
+  @SuppressWarnings("unused")
+  protected void prompt(String title, String text) {}
     
     
     
@@ -595,15 +682,15 @@ public class PixelRealm extends Screen {
     
     // --- Realm textures & state ---
     // Initially defaults, gets loaded with realm-specific files (if exists) later.
-    public RealmTexture img_grass = REALM_GRASS_DEFAULT;
-    public RealmTexture img_tree  = REALM_TREE_DEFAULT;
-    public RealmTexture img_sky   = REALM_SKY_DEFAULT;
+    public RealmTexture img_grass = new RealmTexture(REALM_GRASS_DEFAULT);
+    public RealmTexture img_tree  = new RealmTexture(REALM_TREE_DEFAULT);
+    public RealmTexture img_sky   = new RealmTexture(REALM_SKY_DEFAULT);
     private TerrainAttributes terrain;
     private DirectoryPortal exitPortal = null;
     private String musicPath;
     
     // TODO: change to COMPATIBILITY_VERSION
-    private String version = "1.0";
+    private String version = "1.1";
     
     // --- Legacy stuff for backward compatibility ---
     private Stack<PixelRealmState.PRObject> legacy_terrainObjects;
@@ -611,25 +698,27 @@ public class PixelRealm extends Screen {
     public boolean lights = false;
     public int collectedCoins = 0;
     public boolean coins = false;
+    private boolean createdCoins = false;
     
     // All objects that are visible on the scene, their interactable actions are run.
-    private LinkedList<PRObject> ordering = new LinkedList<PRObject>();
+    protected LinkedList<PRObject> ordering = new LinkedList<PRObject>();
     
     // Not necessary lists here, just useful and faster.
-    private LinkedList<FileObject> files = new LinkedList<FileObject>();
+    protected LinkedList<FileObject> files = new LinkedList<FileObject>();
     
-    private LinkedList<PRObject> pocketObjects = new LinkedList<PRObject>();
+    protected LinkedList<PRObject> pocketObjects = new LinkedList<PRObject>();
     
     
     // --- Constructor ---
     public PixelRealmState(String dir, String emergeFrom) {
       this.stateDirectory = file.directorify(dir);
       
+      if (isNewRealm()) promptNewRealm();
       loadRealm();
       emergeFromPortal(file.directorify(emergeFrom));
       
-      // For testing purposes (just set version = "1.0")
-      if (version.equals("1.0")) {
+      // For backwards compatibility (just set version = "1.0")
+      if (version.equals("1.0") || version.equals("1.1")) {
         legacy_terrainObjects = new Stack<PRObject>(int(((terrain.renderDistance+5)*2)*((terrain.renderDistance+5)*2)));
         legacy_autogenStuff = new HashSet<String>();
         app.noiseSeed(getHash(dir));
@@ -638,12 +727,13 @@ public class PixelRealm extends Screen {
     
     public PixelRealmState(String dir) {
       this.stateDirectory = file.directorify(dir);
-      
+
+      if (isNewRealm()) promptNewRealm();
       // Load realm emerging from our exit portal.
       loadRealm();
       
-      // For testing purposes (just set version = "1.0")
-      if (version.equals("1.0")) {
+      // For backwards compatibility (just set version = "1.0")
+      if (version.equals("1.0") || version.equals("1.1")) {
         legacy_terrainObjects = new Stack<PRObject>(int(((terrain.renderDistance+5)*2)*((terrain.renderDistance+5)*2)));
         legacy_autogenStuff = new HashSet<String>();
         app.noiseSeed(getHash(dir));
@@ -703,14 +793,45 @@ public class PixelRealm extends Screen {
     
     // --- Define our PR objects. ---
     class TerrainPRObject extends PRObject {
+      private float randSeed = 0.;
+      
       public TerrainPRObject(float x, float y, float z, float size, String id) {
         super(x, y, z);
-        this.img = img_tree.getRandom();
-        this.setSize(size);
+        this.img = img_tree;
+        this.size = size;
+        readjustSize();
         legacy_autogenStuff.add(id);
+        randSeed = x+y+z;
         
         // Small hitbox
         this.hitboxWi = wi*0.25;
+      }
+      
+      public void readjustSize() {
+        // Set the size in case there's a realm refresh.
+        this.wi = img.getRandom(randSeed).width*size;
+        this.hi = img.getRandom(randSeed).height*size;
+      }
+      
+      public void display() {
+        if (img == null)
+          return;
+          
+        float y1 = y-hi;
+        // There's no y2 huehue.
+
+        // Half width
+        float hwi = wi/2;
+        float sin_d = cache_flatSinDirection*(hwi);
+        float cos_d = cache_flatCosDirection*(hwi);
+        float x1 = x + sin_d;
+        float z1 = z + cos_d;
+        float x2 = x - sin_d;
+        float z2 = z - cos_d;
+        
+        readjustSize();
+
+        displayQuad(img.getRandom(randSeed), x1, y1, z1, x2, y1+hi, z2, false);
       }
     }
   
@@ -761,14 +882,14 @@ public class PixelRealm extends Screen {
       public void load(JSONObject json) {
         // We expect the engine to have already loaded a JSON object.
         // Every 3d object has x y z position.
-        this.x = json.getFloat("x", lastPlacedPosX+random(-500, 500));
-        this.z = json.getFloat("z", lastPlacedPosX+random(-500, 500));
+        this.x = json.getFloat("x", this.x);
+        this.z = json.getFloat("z", this.z);
         this.size = json.getFloat("scale", 1.)*BACKWARD_COMPAT_SCALE;
-        lastPlacedPosX = this.x;
-        lastPlacedPosZ = this.z;
   
         float yy = onSurface(this.x, this.z);
         this.y = json.getFloat("y", yy);
+        
+        //console.log("x: "+x+" y: "+y+" z: "+z);
   
         // If the object is below the ground, reset its position.
         if (y > yy+5.) this.y = yy;
@@ -827,12 +948,12 @@ public class PixelRealm extends Screen {
               if (file.getExt(path).equals("gif")) {
                 Gif newGif = new Gif(app, path);
                 newGif.loop();
-                img = newGif;
+                img = new RealmTexture(newGif);
               }
               // TODO: idk error check here
               else {
                 // TODO: this is NOT thread-safe here!
-                img = engine.tryLoadImageCache(path, new Runnable() {
+                PImage im = engine.tryLoadImageCache(path, new Runnable() {
                   public void run() {
                     if (isImg)
                       ((ImageFileObject)me).cacheFlag = true;
@@ -840,6 +961,7 @@ public class PixelRealm extends Screen {
                   }
                 }
                 );
+                img = new RealmTexture(im);
               }
             }
             
@@ -1011,7 +1133,7 @@ public class PixelRealm extends Screen {
                 if (cacheFlag) {
                   engine.setCachingShrink(MAX_CACHE_SIZE, 0);
                   //this.img = engine.experimentalScaleDown(img);
-                  engine.saveCacheImage(this.dir, img);
+                  engine.saveCacheImage(this.dir, img.get());
                   cacheFlag = true;
                 }
   
@@ -1035,7 +1157,7 @@ public class PixelRealm extends Screen {
               float x2 = x - sin_d;
               float z2 = z - cos_d;
   
-              displayQuad(x1, y1, z1, x2, y1+hi, z2, true);
+              displayQuad(this.img.get(), x1, y1, z1, x2, y1+hi, z2, true);
             }
           }
         }
@@ -1169,6 +1291,12 @@ public class PixelRealm extends Screen {
         
         // Entering the portal.
         if (touchingPlayer() && portalCoolDown < 1.) {
+          if (!usePortalAllowed) {
+            console.log("You can't go here just yet!");
+            bumpBack();
+            return;
+          }
+          
           sound.playSound("shift");
           //prevRealm = currRealm;
           gotoRealm(this.shortcutDir);
@@ -1194,10 +1322,19 @@ public class PixelRealm extends Screen {
     }
   
     class DirectoryPortal extends FileObject {
-  
       public DirectoryPortal(float x, float y, float z, String dir) {
         super(x, y, z, dir);
-        this.img = display.systemImages.get("white"); 
+        setupSelf();
+      }
+  
+      public DirectoryPortal(String dir) {
+        super(dir);
+        setupSelf();
+      }
+      
+      private void setupSelf()
+      {
+        this.img = new RealmTexture(display.systemImages.get("white")); 
         
         requestRealmSky(dir);
         
@@ -1207,10 +1344,6 @@ public class PixelRealm extends Screen {
         // Set hitbox size to small
         this.hitboxWi = wi*0.5;
         if (legacy_portalEasteregg) setSize(0.8);
-      }
-  
-      public DirectoryPortal(String dir) {
-        super(dir);
       }
       
       public void requestRealmSky(String d) {
@@ -1228,7 +1361,8 @@ public class PixelRealm extends Screen {
         }
         else {
           // No img sky found, get default sky
-          this.img = REALM_SKY_DEFAULT.get();
+          //this.img = new RealmTexture(REALM_SKY_DEFAULT_LEGACY);
+          this.img = new RealmTexture(display.systemImages.get("white"));
         }
       }
       
@@ -1243,6 +1377,12 @@ public class PixelRealm extends Screen {
         
         // Entering the portal.
         if (touchingPlayer() && portalCoolDown < 1.) {
+          if (!usePortalAllowed) {
+            console.log("You can't go here just yet!");
+            bumpBack();
+            return;
+          }
+          
           sound.playSound("shift");
           // Perfectly optimised. Creating a new state instead of a new screen
           gotoRealm(this.dir, stateDirectory);
@@ -1290,13 +1430,12 @@ public class PixelRealm extends Screen {
       
       public PRCoin(float x, float y, float z) {
         super(x,y,z);
-        this.img = IMG_COIN.get();
+        this.img = IMG_COIN;
         setSize(0.25);
         this.hitboxWi = wi;
       }
       
       public void display() {
-        this.img = IMG_COIN.get();
         super.display();
       }
       
@@ -1317,7 +1456,7 @@ public class PixelRealm extends Screen {
       public float x;
       public float y;
       public float z;
-      public PImage img = null;
+      public RealmTexture img = null;
       protected float size = 1.;
       protected float wi = 0.;
       protected float hi = 0.;
@@ -1341,6 +1480,10 @@ public class PixelRealm extends Screen {
         float xx = playerX-x;
         float zz = playerZ-z;
         this.myOrderingNode.val = xx*xx + zz*zz + wi*0.5;
+      }
+      
+      public void surface() {
+        y = onSurface(x, z);
       }
   
       public boolean touchingPlayer() {
@@ -1412,8 +1555,8 @@ public class PixelRealm extends Screen {
           console.bugWarn("You shouldn't be setting the size if you don't have an image!");
           return;
         }
-        this.wi = float(img.width)*size;
-        this.hi = float(img.height)*size;
+        this.wi = img.width*size;
+        this.hi = img.height*size;
       }
       
       public void run() {
@@ -1441,14 +1584,14 @@ public class PixelRealm extends Screen {
           float x2 = x - sin_d;
           float z2 = z - cos_d;
   
-          displayQuad(x1, y1, z1, x2, y1+hi, z2, useFinder);
+          displayQuad(this.img.get(), x1, y1, z1, x2, y1+hi, z2, useFinder);
   
           // Reset tint
           this.tint = color(255);
         }
       }
   
-      protected void displayQuad(float x1, float y1, float z1, float x2, float y2, float z2, boolean useFinder) {
+      protected void displayQuad(PImage im, float x1, float y1, float z1, float x2, float y2, float z2, boolean useFinder) {
         //boolean selected = lineLine(x1,z1,x2,z2,beamX1,beamZ1,beamX2,beamZ2);
         //color selectedColor = color(255);
         //if (hovering()) {
@@ -1491,7 +1634,7 @@ public class PixelRealm extends Screen {
           if (!dontRender) {
             scene.textureMode(NORMAL);
             scene.textureWrap(REPEAT);
-            scene.texture(img);
+            scene.texture(im);
           }
           scene.vertex(x1, y1, z1, 0, 0);           // Bottom left
           scene.vertex(x2, y1, z2, 0.995, 0);    // Bottom right
@@ -1582,6 +1725,8 @@ public class PixelRealm extends Screen {
     }
     
     protected void pickupItem(PRObject p) {
+      promptPickedUpItem();  // This is for tutorial only
+      
       globalHoldingObjectSlot = addToPockets(p);
       updateHoldingItem(globalHoldingObjectSlot);
     }
@@ -1644,6 +1789,10 @@ public class PixelRealm extends Screen {
     
     // Load realm but we don't emerge out of anywhere.
     public void loadRealm() {
+      // Reset memory usage
+      memUsage.set(0);
+      // TODO: we should also prolly kill all active loading threads too somehow...
+      
       // Get all files (creates the FileObject instances)
       openDir();
       
@@ -1652,32 +1801,25 @@ public class PixelRealm extends Screen {
       if (terrain == null) terrain = new SinesinesineTerrain();
       
       // Get realm's terrain assets (sky, grass, trees, music)
-      loadRealmTextures();
+      loadRealmAssets();
     }
     
     public void refreshFiles() {
-      // Get rid of all the old files
-      for (FileObject o : files) {
-        o.destroy();
-        o = null;
-      }
-      // also destroy the pocketobjects
-      for (PRObject o : pocketObjects) {
-        o.destroy();
-        o = null;
-      }
+      // Reset memory usage
+      memUsage.set(0);
       files = new LinkedList<FileObject>();
       
       // Reload everything!
       openDir();
       loadRealmTerrain();
+      loadRealmAssets();
       if (terrain == null) terrain = new SinesinesineTerrain();
     }
     
     public void refreshEverything() {
       portalLight = 255;
       refreshFiles();
-      loadRealmTextures();
+      loadRealmAssets();
     }
     
     public FileObject createPRObjectAndPickup(String path) {
@@ -1698,7 +1840,7 @@ public class PixelRealm extends Screen {
       
       // If it's a folder, create a portal object.
       if (file.isDirectory(path)) {
-        DirectoryPortal portal = new DirectoryPortal(0., 0., 0., path);
+        DirectoryPortal portal = new DirectoryPortal(path);
         return portal;
       }
       // If it's a file, create the corresponding object based on the file's type.
@@ -1709,7 +1851,7 @@ public class PixelRealm extends Screen {
         switch (type) {
         case FILE_TYPE_UNKNOWN:
           fileobject = new UnknownTypeFileObject(path);
-          fileobject.img = engine.display.systemImages.get(file.typeToIco(type));
+          fileobject.img = new RealmTexture(engine.display.systemImages.get(file.typeToIco(type)));
           fileobject.setSize(0.5);
           // NOTE: Put back hitbox size in case it becomes important later
           break;
@@ -1717,14 +1859,14 @@ public class PixelRealm extends Screen {
           fileobject = new ImageFileObject(path);
           break;
         case FILE_TYPE_SHORTCUT:
-          fileobject = new ShortcutPortal(0., 0., 0., path);
+          fileobject = new ShortcutPortal(path);
           break;
         case FILE_TYPE_MODEL:
-          fileobject = new OBJFileObject(0., 0., 0., path);
+          fileobject = new OBJFileObject(path);
           break;
         default:
           fileobject = new UnknownTypeFileObject(path);
-          fileobject.img = display.systemImages.get(file.typeToIco(type));
+          fileobject.img = new RealmTexture(display.systemImages.get(file.typeToIco(type)));
           fileobject.setSize(0.5);
           // NOTE: Put back hitbox size in case it becomes important later
           break;
@@ -1795,8 +1937,22 @@ public class PixelRealm extends Screen {
       updateHoldingItem(globalHoldingObjectSlot);
     }
     
+    public boolean isNewRealm() {
+      return file.anyImageFile(stateDirectory+REALM_GRASS) == null
+      && file.anyImageFile(stateDirectory+REALM_SKY) == null
+      && file.anyImageFile(stateDirectory+REALM_SKY+"-1") == null
+      && file.anyImageFile(stateDirectory+REALM_TREE) == null
+      && file.anyImageFile(stateDirectory+REALM_TREE_LEGACY+"-1") == null
+      && file.anyImageFile(stateDirectory+REALM_TREE+"-1") == null
+      && file.anyMusicFile(stateDirectory+REALM_BGM) == null
+      && file.exists(stateDirectory+REALM_TURF) == false;
+    }
+    
     public void loadRealmTerrain() {
-      String dir = this.stateDirectory;
+      loadRealmTerrain(this.stateDirectory);
+    }
+    
+    public void loadRealmTerrain(String dir) {
       // Find out if the directory has a turf file.
       JSONObject jsonFile = null;
       
@@ -1808,13 +1964,13 @@ public class PixelRealm extends Screen {
         catch (RuntimeException e) {
           console.warn("There's an error in the folder's turf file (exception). Will now act as if the turf is new.");
           file.backupMove(dir+REALM_TURF);
-          saveRealmJson();
+          //saveRealmJson();
           return;
         }
         if (jsonFile == null) {
           console.warn("There's an error in the folder's turf file (null). Will now act as if the turf is new.");
           file.backupMove(dir+REALM_TURF);
-          saveRealmJson();
+          //saveRealmJson();
           return;
         }
         
@@ -1844,9 +2000,9 @@ public class PixelRealm extends Screen {
         
       // File doesn't exist; create new turf file.
       } else {
-        console.log("Creating new realm turf file.");
-        if (version.equals("1.0")) terrain = new SinesinesineTerrain();
-        saveRealmJson();
+        //console.log("Creating new realm turf file.");
+        if (version.equals("1.0") || version.equals("1.1")) terrain = new SinesinesineTerrain();
+        //saveRealmJson();
       }
     }
     
@@ -1883,7 +2039,9 @@ public class PixelRealm extends Screen {
       // Because it relies on this *very* inefficient legacy system,
       // we need to create the appropriate objects for V1 legacy.
       legacy_terrainObjects = new Stack<PRObject>(int(((terrain.renderDistance+5)*2)*((terrain.renderDistance+5)*2)));
-      legacy_autogenStuff = new HashSet<String>();
+      if (legacy_autogenStuff == null) {
+        legacy_autogenStuff = new HashSet<String>();
+      }
       app.noiseSeed(getHash(stateDirectory));
 
       int l = objects3d.size();
@@ -1915,16 +2073,16 @@ public class PixelRealm extends Screen {
       }
       
       
-      // TODO: ill do it later (maybe)
-      
-      if (createCoins) {
+      if (createCoins && !createdCoins) {
         float x = random(-1000, 1000);
         float z = random(-1000, 1000);
         for (int i = 0; i < 100; i++) {
+          @SuppressWarnings("unused")
           PRCoin coin = new PRCoin(x, onSurface(x,z), z);
           x += random(-500, 500);
           z += random(-500, 500);
         }
+        createdCoins = true;
       }
     }
     
@@ -1946,7 +2104,7 @@ public class PixelRealm extends Screen {
       JSONObject turfJson = new JSONObject();
       boolean success = true;
       // Based on the version...
-      if (version.equals("1.0")) {
+      if (version.equals("1.0") || version.equals("1.1")) {
         success = saveRealmV1(turfJson);
       }
       else if (version.equals(COMPATIBILITY_VERSION)) {
@@ -1987,7 +2145,7 @@ public class PixelRealm extends Screen {
       SinesinesineTerrain t = (SinesinesineTerrain)terrain;
   
       jsonFile.setJSONArray("objects3d", objects3d);
-      jsonFile.setString("compatibility_version", "1.0");
+      jsonFile.setString("compatibility_version", version);
       jsonFile.setInt("render_distance", (int)t.renderDistance);
       jsonFile.setFloat("ground_size", t.groundSize);
       jsonFile.setFloat("hill_height", t.hillHeight);
@@ -2147,30 +2305,42 @@ public class PixelRealm extends Screen {
       }
       return defaultFile;
     }
-  
+    
+    public void loadRealmAssets() {
+      loadRealmAssets(this.stateDirectory);
+    }
   
     
     // Used with a flash to refresh the sky
     // TODO: Needs tidying up (especially since we have a imageFileExists method now)
-    public void loadRealmTextures() {
-      String dir = this.stateDirectory;
-      // Refresh the dir without resetting the position.
-      
-      // Reset memory usage
-      memUsage.set(0);
-      // TODO: we should also prolly kill all active loading threads too somehow...
-  
+    public void loadRealmAssets(String dir) {
       // Portal light to make it look like a transition effect
-      portalLight = 255;
+      //portalLight = 255;
+      
+      PImage DEFAULT_GRASS = REALM_GRASS_DEFAULT;
+      PImage DEFAULT_TREE = REALM_TREE_DEFAULT;
+      PImage DEFAULT_SKY = REALM_SKY_DEFAULT;
+      String DEFAULT_BGM = REALM_BGM_DEFAULT;
+      
+      
+      // Classic backwards compatibility for old realms
+      // that had a field as the default realm.
+      if (version.equals("1.0")) {
+        DEFAULT_GRASS = REALM_GRASS_DEFAULT_LEGACY;
+        DEFAULT_TREE = REALM_TREE_DEFAULT_LEGACY;
+        DEFAULT_SKY = REALM_SKY_DEFAULT_LEGACY;
+        DEFAULT_BGM = REALM_BGM_DEFAULT_LEGACY;
+      }
+      
       
       // TODO: read any image format (png, gif, etc)
-      img_grass = new RealmTexture((PImage)getRealmFile(REALM_GRASS_DEFAULT.get(), dir+REALM_GRASS+".png"));
+      img_grass = new RealmTexture((PImage)getRealmFile(DEFAULT_GRASS, dir+REALM_GRASS+".png"));
       
       /// here we search for the terrain objects textures from the dir.
       ArrayList<PImage> imgs = new ArrayList<PImage>();
   
-      if (file.exists(REALM_SKY+".gif")) {
-        img_sky = new RealmTexture(((Gif)getRealmFile(REALM_SKY_DEFAULT.get(), dir+REALM_SKY+".gif")).getPImages());
+      if (file.exists(DEFAULT_SKY+".gif")) {
+        img_sky = new RealmTexture(((Gif)getRealmFile(DEFAULT_SKY, dir+REALM_SKY+".gif")).getPImages());
         //if (img_sky.get().width != 1500)
         //  console.warn("Width of "+REALM_SKY+" is "+str(img_sky.get().width)+"px, should be 1500px for best visual results!");
       }
@@ -2178,13 +2348,13 @@ public class PixelRealm extends Screen {
         
         // Get either a sky called sky-1 or just sky
         int i = 1;
-        PImage sky = (PImage)getRealmFile(REALM_SKY_DEFAULT.get(), dir+REALM_SKY+".png", dir+REALM_SKY+"-1.png");
+        PImage sky = (PImage)getRealmFile(DEFAULT_SKY, dir+REALM_SKY+".png", dir+REALM_SKY+"-1.png");
         imgs.add(sky);
         
         // If we find a sky, keep looking for sky-2, sky-3 etc
-        while (sky != REALM_SKY_DEFAULT.get() && i <= 9) {
-          sky = (PImage)getRealmFile(REALM_SKY_DEFAULT.get(), dir+REALM_SKY+"-"+str(i+1)+".png");
-          if (sky != REALM_SKY_DEFAULT.get()) {
+        while (sky != DEFAULT_SKY && i <= 9) {
+          sky = (PImage)getRealmFile(DEFAULT_SKY, dir+REALM_SKY+"-"+str(i+1)+".png");
+          if (sky != DEFAULT_SKY) {
             //if (sky.width != 1500)
             //  console.warn("Width of "+REALM_SKY+" is "+str(sky.width)+"px, should be 1500px for best visual results!");
             imgs.add(sky);
@@ -2199,41 +2369,46 @@ public class PixelRealm extends Screen {
       imgs = new ArrayList<PImage>();
   
       // Try to find the first terrain object texture, it will return default if not found
-      PImage terrainobj = (PImage)getRealmFile(REALM_TREE_DEFAULT.get(), dir+REALM_TREE_LEGACY+"-1.png", dir+REALM_TREE+"-1.png", dir+REALM_TREE+".png");
+      PImage terrainobj = (PImage)getRealmFile(DEFAULT_TREE, dir+REALM_TREE_LEGACY+"-1.png", dir+REALM_TREE+"-1.png", dir+REALM_TREE+".png");
       imgs.add(terrainobj);
   
       int i = 1;
       // Run this loop only if the terrain_objects files exist and only for how many pixelrealm-terrain_objects
       // there are in the folder.
-      while (terrainobj != null && i <= 9) {
-        terrainobj = (PImage)getRealmFile(null, dir+REALM_TREE_LEGACY+"-"+str(i+1)+".png", dir+REALM_TREE+"-"+str(i+1)+".png");
-        if (terrainobj != null) {
+      while (terrainobj != DEFAULT_TREE && i <= 9) {
+        terrainobj = (PImage)getRealmFile(DEFAULT_TREE, dir+REALM_TREE_LEGACY+"-"+str(i+1)+".png", dir+REALM_TREE+"-"+str(i+1)+".png");
+        if (terrainobj != DEFAULT_TREE) {
           imgs.add(terrainobj);
         }
         i++;
       }
   
       // New array and plonk that all in there.
-      img_tree = new RealmTexture(imgs);
+      if (img_tree != null) {
+        img_tree.set(imgs);
+      }
+      else {
+        img_tree = new RealmTexture(imgs);
+      }
   
       //if (!loadedMusic) {
       String[] soundFileFormats = {".wav", ".mp3", ".ogg", ".flac"};
       boolean found = false;
       i = 0;
-  
+      
+      // TODO: Tidy this code up with file.anyMusicFile
       // Search until one of the pixelrealm-bgm with the appropriate file format is found.
       while (i < soundFileFormats.length && !found) {
         String ext = soundFileFormats[i++];
-        File f = new File(stateDirectory+REALM_BGM+ext);
-        if (f.exists()) {
+        if (file.exists(dir+REALM_BGM+ext)) {
           found = true;
-          musicPath = stateDirectory+REALM_BGM+ext;
+          musicPath = dir+REALM_BGM+ext;
         }
       }
   
       // If none found use default bgm
       if (!found) {
-        musicPath = engine.APPPATH+REALM_BGM_DEFAULT;
+        musicPath = engine.APPPATH+DEFAULT_BGM;
       }
     }
     
@@ -2253,6 +2428,8 @@ public class PixelRealm extends Screen {
       primaryAction = engine.keyActionOnce("primaryAction");
       secondaryAction = engine.keyActionOnce("secondaryAction");
       
+      if (!movementPaused) {
+        
       isWalking = false;
       float speed = WALK_ACCELERATION;
   
@@ -2285,7 +2462,7 @@ public class PixelRealm extends Screen {
       //  }
       //}
       
-      if (engine.keyActionOnce("prevDirectory")) {
+      if (engine.keybindPressed("prevDirectory") && usePortalAllowed) {
         //sound.fadeAndStopMusic();
         //requestScreen(new Explorer(engine, stateDirectory));
         if (!file.atRootDir(stateDirectory)) {
@@ -2297,9 +2474,6 @@ public class PixelRealm extends Screen {
       
       // Adjust for lower framerates than the target.
       speed *= display.getDelta();
-      
-  
-      if (!movementPaused) {
           float movex = 0.;
           float movez = 0.;
           float rot = 0.;
@@ -2453,7 +2627,7 @@ public class PixelRealm extends Screen {
     
     
     public void renderTerrain() {
-      if (version.equals("1.0")) {
+      if (version.equals("1.0") || version.equals("1.1")) {
         renderTerrainV1();
       }
       else if (version.equals("2.0")) {
@@ -2540,9 +2714,8 @@ public class PixelRealm extends Screen {
               float pureStaticNoise = (noisePosition-treeLikelyhood);
               float offset = -randomOffset+(pureStaticNoise*randomOffset*2);
   
-              // Only create a new tree object if there isn't already one in this
-              // position.
-  
+              // I hate this piece of code so much
+              // But this is backwards-compatible legacy code.
               String id = str(tilex)+","+str(tilez);
               if (!legacy_autogenStuff.contains(id)) {
                 float terrainX = (tt.groundSize*(tilex-1))+offset;
@@ -2681,6 +2854,9 @@ public class PixelRealm extends Screen {
         // Remove from names
         pocketItemNames.remove(getHoldingName());
         
+        // For the tutorial.
+        promptPlonkedDownItem();
+        
         // Simply setting it to null will "release"
         // the object, setting it in place.
         holdingObject = null;
@@ -2753,14 +2929,12 @@ public class PixelRealm extends Screen {
       //  holdingObject.destroy();
       //  holdingObject = null;
       //}
-      if (!movementPaused) {
-        for (PRObject o : ordering) {
-          o.run();
-          o.calculateVal();
-          //console.log(o.getClass().getSimpleName());
-        }
-        ordering.insertionSort();
+      for (PRObject o : ordering) {
+        o.run();
+        o.calculateVal();
+        //console.log(o.getClass().getSimpleName());
       }
+      ordering.insertionSort();
     }
     
     private String getHoldingName(PRObject item) {
@@ -2998,8 +3172,6 @@ public class PixelRealm extends Screen {
     else
       currRealm = new PixelRealmState(to, fro);
         
-    // Refresh the files since we need to update the inventory.
-    currRealm.refreshFiles();
     
     // Creating a new realm won't start the music automatically cus we like manual bug-free control.
     sound.streamMusicWithFade(currRealm.musicPath);
@@ -3139,7 +3311,9 @@ public class PixelRealm extends Screen {
     
     display.recordRendererTime();
     // Make us see really really farrrrrrr
-    scene.perspective(PI/3.0, (float)scene.width/scene.height, 1, 10000);
+    float zNear = 10.;
+    if (movementPaused) zNear = 120.;
+    scene.perspective(PI/3.0, (float)scene.width/scene.height, zNear, 10000.);
     scene.pushMatrix();
     display.recordLogicTime();
 
@@ -3185,7 +3359,7 @@ public class PixelRealm extends Screen {
     // class to run it)
     for (int i = 0; i < 10; i++) {
       // Go through all the keys 0-9 and check if it's being pressed
-      if (engine.keyActionOnce("quickWarp"+str(i))) {
+      if (engine.keybindPressed("quickWarp"+str(i)) && usePortalAllowed) {
         // Save current realm
         quickWarpRealms[quickWarpIndex] = currRealm;
         

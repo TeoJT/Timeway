@@ -49,7 +49,7 @@ protected PSurface initSurface() {
     
     // Windows is annoying with maximised screens
     // So let's do this hack to make the screen maximised.
-    boolean maximise = false;
+    boolean maximise = true;
     
     if (maximise) {
       if (platform == WINDOWS) {
