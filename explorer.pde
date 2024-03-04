@@ -233,7 +233,7 @@ public class Explorer extends Screen {
   }
   
   public void upperBar() {
-    app.shader(display.getShaderWithParams("fabric", "color", 0.5,0.5,0.5,1., "intensity", 0.1));
+    display.shader("fabric", "color", 0.5,0.5,0.5,1., "intensity", 0.1);
     super.upperBar();
     app.resetShader();
     renderGui();
@@ -241,7 +241,7 @@ public class Explorer extends Screen {
   
     
   public void lowerBar() {
-    app.shader(display.getShaderWithParams("fabric", "color", 0.5,0.5,0.5,1., "intensity", 0.1));
+    display.shader("fabric", "color", 0.5,0.5,0.5,1., "intensity", 0.1);
     super.lowerBar();
     display.defaultShader();
   }

@@ -34,15 +34,23 @@ public class PixelRealm extends Screen {
   final static float RUN_SPEED = 10.0;
   final static float RUN_ACCELERATION = 0.1;
   final static float MAX_SPEED = 30.;
+  final static float UNDERWATER_SPEED_MULTIPLIER = 0.4;
   final static float SNEAK_SPEED = 1.5;
   final static float TURN_SPEED = 0.05;
   final static float SLOW_TURN_SPEED = 0.01;
-  final static float TERMINAL_VEL = 100.;
+  final static float TERMINAL_VEL = 30.;
   final static float GRAVITY = 0.4;
+  final static float UNDERWATER_GRAVITY = 0.1;
   final static float JUMP_STRENGTH = 8.;
+  final static float UNDERWATER_JUMP_STRENGTH = 4.;
   final static float PLAYER_HEIGHT = 80;
   final static float PLAYER_WIDTH  = 20;
   final static float MIN_PORTAL_LIGHT_THRESHOLD = 19600.;   // 140 ^ 2
+  final static int   CHUNK_SIZE = 8;
+  final static int   MAX_CHUNKS_XZ = 32768;
+  final static float UNDERWATER_TEMINAL_VEL = 3.0;
+  final static float SWIM_UP_SPEED = 0.8;
+  
   
   // Tool constants
   protected final static int TOOL_NORMAL = 1;
@@ -77,6 +85,7 @@ public class PixelRealm extends Screen {
   private boolean primaryAction = false;
   private boolean secondaryAction = false;
   private boolean realmCaching = false;
+  private boolean usingFadeShader = false;
   
   
   // --- Legacy backward-compatibility stuff & easter eggs ---
@@ -105,7 +114,8 @@ public class PixelRealm extends Screen {
   private float lastPlacedPosX = 0;
   private float lastPlacedPosZ = 0;
   private AtomicBoolean refreshRealm = new AtomicBoolean(false);
-  private float portalLight = 255.;
+  protected float portalLight = 255.;
+  protected boolean isUnderwater = false;
   private float portalCoolDown = 45;
   protected boolean usePortalAllowed = true;
   private float animationTick = 0.;
@@ -689,8 +699,10 @@ public class PixelRealm extends Screen {
     private DirectoryPortal exitPortal = null;
     private String musicPath;
     
-    // TODO: change to COMPATIBILITY_VERSION
-    private String version = "1.1";
+    private HashMap<Integer, TerrainChunkV2> chunks = new HashMap<Integer, TerrainChunkV2>(); 
+    
+    private String version = COMPATIBILITY_VERSION;
+    private int versionCompatibility = 2;
     
     // --- Legacy stuff for backward compatibility ---
     private Stack<PixelRealmState.PRObject> legacy_terrainObjects;
@@ -719,7 +731,7 @@ public class PixelRealm extends Screen {
       
       // For backwards compatibility (just set version = "1.0")
       if (version.equals("1.0") || version.equals("1.1")) {
-        legacy_terrainObjects = new Stack<PRObject>(int(((terrain.renderDistance+5)*2)*((terrain.renderDistance+5)*2)));
+        legacy_terrainObjects = new Stack<PRObject>(int(((terrain.getRenderDistance()+5)*2)*((terrain.getRenderDistance()+5)*2)));
         legacy_autogenStuff = new HashSet<String>();
         app.noiseSeed(getHash(dir));
       }
@@ -734,7 +746,7 @@ public class PixelRealm extends Screen {
       
       // For backwards compatibility (just set version = "1.0")
       if (version.equals("1.0") || version.equals("1.1")) {
-        legacy_terrainObjects = new Stack<PRObject>(int(((terrain.renderDistance+5)*2)*((terrain.renderDistance+5)*2)));
+        legacy_terrainObjects = new Stack<PRObject>(int(((terrain.getRenderDistance()+5)*2)*((terrain.getRenderDistance()+5)*2)));
         legacy_autogenStuff = new HashSet<String>();
         app.noiseSeed(getHash(dir));
       }
@@ -744,25 +756,48 @@ public class PixelRealm extends Screen {
     // --- Realm terrain attributes ---
     
     public abstract class TerrainAttributes {
-      public float renderDistance = 6.;
-      public float groundRepeat = 2.;
-      public float groundSize = 400.;
+      private float renderDistance = 6.;
+      private float groundRepeat = 2.;
+      private float groundSize = 100.;
+      
+      public boolean hasWater = false;
+      public float waterLevel = 50.;
+      
+      public int chunkLimitX = Integer.MAX_VALUE;
+      public int chunkLimitZ = Integer.MAX_VALUE;
+      
+      // Some things are needed for backward compatibilty.
       public float FADE_DIST_OBJECTS = PApplet.pow((renderDistance-4)*groundSize, 2);
       public float FADE_DIST_GROUND = PApplet.pow(PApplet.max(renderDistance-3, 0.)*groundSize, 2);
+      public float BEGIN_FADE = 0.0;
+      public float FADE_LENGTH = 0.0;
       public String NAME;
       
       public TerrainAttributes() {
         NAME = "[unknown]";
+        update();
       }
       
       public void update() {
+        // V1
         FADE_DIST_OBJECTS = PApplet.pow((renderDistance-4)*groundSize, 2);
         FADE_DIST_GROUND = PApplet.pow(max(renderDistance-3, 0)*groundSize, 2);
+        
+        // V2
+        float chunkSizeUnits = groundSize*float(CHUNK_SIZE);
+        BEGIN_FADE = chunkSizeUnits*(renderDistance-1.5);
+        FADE_LENGTH = chunkSizeUnits;
+        
+        if (versionCompatibility == 2) {
+          
+          // Objects are not rendered when this distance is exceeded.
+          FADE_DIST_OBJECTS = PApplet.pow((BEGIN_FADE+FADE_LENGTH), 2);
+        }
       }
       
       // Probably not needed but for backward compatibility perposes.
       public void setRenderDistance(int renderDistance) {
-        this.renderDistance = renderDistance;
+        this.renderDistance = float(renderDistance);
         update();
       }
     
@@ -770,6 +805,64 @@ public class PixelRealm extends Screen {
         this.groundSize = groundSize;
         update();
       }
+      
+      public void setChunkLimit(int x, int z) {
+        chunkLimitX = x;
+        chunkLimitZ = z;
+      }
+      
+      public float getGroundSize() {
+        return groundSize;
+      }
+      
+      public float getGroundRepeat() {
+        return groundRepeat;
+      }
+      
+      public float getRenderDistance() {
+        return renderDistance;
+      }
+      
+      public float getBeginFade() {
+        return BEGIN_FADE;
+      }
+      
+      @SuppressWarnings("unused")
+      public void genTerrainObj(float x, float z) {
+        console.bugWarn("genTerrainObj: TerrainAttributes is the base class and won't generate terrain objects.");
+      }
+      
+      // This magical method is called whenever a new chunk needs to be generated, and is called for each point
+      // for each tile in the chunk.
+      // Override it to implement your own chunk generation algorithm.
+      @SuppressWarnings("unused")
+      public PVector getPoint(float x, float z) {
+        console.bugWarn("getPoint: TerrainAttributes is the base class and won't calculate points.");
+        return new PVector(0,0,0);
+      }
+      
+      public void save(JSONObject j) {
+          j.setString("terrain_type", NAME);
+          j.setBoolean("coins", coins);
+          j.setString("compatibility_version", version);
+          j.setInt("render_distance", (int)getRenderDistance());
+          j.setFloat("ground_size", getGroundSize());
+          j.setBoolean("has_water", hasWater);
+          j.setFloat("water_level", waterLevel);
+          j.setInt("chunk_limit_x", chunkLimitX);
+          j.setInt("chunk_limit_z", chunkLimitZ);
+      }
+      
+      public void load(JSONObject j) {
+        coins = j.getBoolean("coins", false);
+        setRenderDistance(j.getInt("render_distance", 6));
+        setGroundSize(j.getFloat("ground_size", 100.));
+        hasWater = j.getBoolean("has_water", false);
+        waterLevel = j.getFloat("water_level", 50.);
+        chunkLimitX = j.getInt("chunk_limit_x", Integer.MAX_VALUE);
+        chunkLimitZ = j.getInt("chunk_limit_z", Integer.MAX_VALUE);
+      }
+      
     }
     
     // Classic lazy ass coding terrain.
@@ -780,9 +873,243 @@ public class PixelRealm extends Screen {
       public SinesinesineTerrain() {
         NAME = "Sine sine sine";
       }
+      
+      public SinesinesineTerrain(JSONObject j) {
+        NAME = "Sine sine sine";
+        load(j);
+      }
+      
+      public void genTerrainObj(float x, float z) {
+        // Do nothing, handled by legacy renderTerrainV1.
+      }
+      
+      public PVector getPoint(float x, float z) {
+        float y = sin(x*hillFrequency)*hillHeight+sin(z*hillFrequency)*hillHeight;
+        return new PVector(getGroundSize()*(x), y, getGroundSize()*(z));
+      }
+      
+      public void load(JSONObject j) {
+        super.load(j);
+        hillHeight = j.getFloat("hill_height", 0.);
+        hillFrequency = j.getFloat("hill_frequency", 0.5);
+      }
+      
+      public void save(JSONObject j) {
+        super.save(j);
+        
+        j.setString("terrain_type", NAME);
+        j.setFloat("hill_height", hillHeight);
+        j.setFloat("hill_frequency", hillFrequency);
+      }
+    }
+    
+    public class LegacyTerrain extends TerrainAttributes {
+      float MAX_RANDOM_HEIGHT=0.500; 
+      float VARI=0.08;
+      float HILL_WIDTH=0.300; 
+      float MOUNTAIN_FREQUENCY=3.; 
+      float LOW_DIPS_REQUENCY=0.5; 
+      float HIGHEST_MOUNTAIN=1.500; 
+      float LOWEST_DIPS=1.200;
+      float TREE_FREQUENCY = 0.2;
+      int OCTAVE=2; 
+      int NOISE_SEED = 1;
+      
+      public void save(JSONObject j) {
+        super.save(j);
+        try {
+          j.setString("terrain_type", NAME);
+          j.setFloat("max_random_height", MAX_RANDOM_HEIGHT);
+          j.setFloat("variability", VARI);
+          j.setFloat("hill_width", HILL_WIDTH);
+          j.setFloat("mountain_frequency", MOUNTAIN_FREQUENCY);
+          j.setFloat("low_dips_frequency", LOW_DIPS_REQUENCY);
+          j.setFloat("highest_mountain", HIGHEST_MOUNTAIN);
+          j.setFloat("lowest_dips", LOWEST_DIPS);
+          j.setFloat("tree_frequency", TREE_FREQUENCY);
+          j.setInt("noise_octave", OCTAVE);
+          j.setInt("noise_seed", NOISE_SEED);
+        }
+        catch (NullPointerException e) { 
+          console.warn("Realm info read failed: missing terrain properties(s)");
+        }
+        catch (RuntimeException e) {
+          console.warn("Realm info read failed: Unknown JSON error.");
+        }
+      }
+      
+      public void load(JSONObject j) {
+        super.load(j);
+        MAX_RANDOM_HEIGHT=      j.getFloat("max_random_height");
+        VARI=                   j.getFloat("variability");
+        HILL_WIDTH=             j.getFloat("hill_width");
+        MOUNTAIN_FREQUENCY=     j.getFloat("mountain_frequency");
+        LOW_DIPS_REQUENCY=      j.getFloat("low_dips_frequency");
+        HIGHEST_MOUNTAIN=       j.getFloat("highest_mountain");
+        LOWEST_DIPS=            j.getFloat("lowest_dips");
+        TREE_FREQUENCY =        j.getFloat("tree_frequency");
+        OCTAVE=                 j.getInt("noise_octave");
+        NOISE_SEED =            j.getInt("noise_seed");
+      }
+      
+      public LegacyTerrain() {
+        NAME = "Legacy";
+        NOISE_SEED = int(random(0., 99999999.));
+      }
+      
+      public LegacyTerrain(JSONObject j) {
+        NAME = "Legacy";
+        load(j);
+      }
+      
+      private float rand(float x, float y, float min, float max) { 
+        return app.noise(x, y)*(max-min)+min;
+      } 
+      
+      private float getHillHeight(float x, float y) { 
+        float slow=x*y*0.0001; 
+        return floor(rand(x*VARI, y*VARI, 40, 
+          MAX_RANDOM_HEIGHT))+(PApplet.pow(sin(slow*MOUNTAIN_FREQUENCY), 3)*HIGHEST_MOUNTAIN*0.5+HIGHEST_MOUNTAIN)-(sin(slow*LOW_DIPS_REQUENCY)*
+          LOWEST_DIPS*0.5+LOWEST_DIPS);
+      }
+      
+      public void genTerrainObj(float x, float z) {
+        app.noiseSeed(NOISE_SEED);
+        app.noiseDetail(4, 0.5); 
+        x = x*getGroundSize()+getGroundSize()*0.5;
+        z = z*getGroundSize()+getGroundSize()*0.5;
+        float y = plantDown(x, z);
+        
+        if (y > waterLevel && hasWater) return;
+        if (noise(x*100+95423, z*9812+1934825) > TREE_FREQUENCY) return;
+        
+        @SuppressWarnings("unused")
+        TerrainPRObject tree = new TerrainPRObject(
+                x, 
+                y,
+                z, 
+                3.+(3.*noise(x+1280, z+57322))
+        );
+      }
+      
+      public PVector getPoint(float x, float z) {
+        app.noiseSeed(NOISE_SEED);
+        app.noiseDetail(OCTAVE, 2.); 
+        
+        float y = getHillHeight(x, z)*20.;
+        return new PVector(getGroundSize()*(x), y, getGroundSize()*(z));
+      }
     }
     
     
+    
+    
+    public class TerrainChunkV2 {
+      
+      // Somewhat of a unique identifier for the chunk.
+      public int chunkX = 0;
+      public int chunkY = 0;
+      
+      // Redundant: based on chunkX and chunkY. Mainly used cus i cant be bothered to code gud lol.
+      public int hashIndex;
+      
+      public PVector[][][] tiles;
+      public PShape pshapeChunk;
+      
+      public TerrainChunkV2(int cx, int cy) {
+        this.chunkX = cx;
+        this.chunkY = cy;
+        tiles = new PVector[CHUNK_SIZE][CHUNK_SIZE][4];
+        
+        scene.textureWrap(REPEAT);
+        pshapeChunk = createShape();
+        pshapeChunk.beginShape(QUAD);
+        pshapeChunk.textureMode(NORMAL);
+        pshapeChunk.texture(img_grass.get());
+        
+        // Terrain (ground)
+        for (int y = 0; y < CHUNK_SIZE; y++) {
+          for (int x = 0; x < CHUNK_SIZE; x++) {
+            float xx = float(x+chunkX*CHUNK_SIZE);
+            float yy = float(y+chunkY*CHUNK_SIZE);
+            
+            tiles[y][x][0] = calcTile(xx-1., yy-1.);          // Left, top
+            tiles[y][x][1] = calcTile(xx, yy-1.);          // Right, top
+            tiles[y][x][2] = calcTile(xx, yy);          // Right, bottom
+            tiles[y][x][3] = calcTile(xx-1., yy);          // Left, bottom
+            
+            terrain.genTerrainObj(xx-1., yy-1.);
+            
+            
+            PVector[] v = tiles[y][x];
+            
+            
+            pshapeChunk.vertex(v[0].x, v[0].y, v[0].z, 0, 0);                                    
+            pshapeChunk.vertex(v[1].x, v[1].y, v[1].z, 1.0, 0);  
+            pshapeChunk.vertex(v[2].x, v[2].y, v[2].z, 1.0, 1.0);  
+            pshapeChunk.vertex(v[3].x, v[3].y, v[3].z, 0, 1.0);
+          }
+        }
+        pshapeChunk.endShape(QUAD);
+        
+        
+        //float minx = float(chunkX*CHUNK_SIZE)*terrain.getGroundSize();
+        //float miny = float(chunkX*CHUNK_SIZE)*terrain.getGroundSize();
+        
+        //float maxx = minx+float(CHUNK_SIZE)*terrain.getGroundSize();
+        //float maxy = miny+float(CHUNK_SIZE)*terrain.getGroundSize();
+        
+        //console.log("("+minx+", "+miny+", "+maxx+", "+maxy+")");
+        //int n = int(random(0, 2));
+        //for (int i = 0; i < n; i++) {
+          
+        //}
+        
+      }
+      
+      public void saveChunk(JSONObject j) {
+        j.setInt("hash", hashIndex);
+        
+        float[] vectors = new float[tiles.length * tiles[0].length * tiles[0][0].length * 3];
+        
+        int ii = 0;
+        for (int y = 0; y < CHUNK_SIZE; y++) {
+          for (int x = 0; x < CHUNK_SIZE; x++) {
+            for (int i = 0; i < 4; i++) {
+              vectors[ii++] = tiles[y][x][i].x;          // Left, top
+              vectors[ii++] = tiles[y][x][i].y;          // Left, top
+              vectors[ii++] = tiles[y][x][i].z;          // Left, top
+            }
+          }
+        }
+        
+        // Convert float array to byte array
+        byte[] byteArray = new byte[vectors.length * 4]; // 4 bytes for each float
+        for (int i = 0; i < vectors.length; i++) {
+            int intBits = Float.floatToRawIntBits(vectors[i]);
+            byteArray[i * 4] = (byte) (intBits >> 24);
+            byteArray[i * 4 + 1] = (byte) (intBits >> 16);
+            byteArray[i * 4 + 2] = (byte) (intBits >> 8);
+            byteArray[i * 4 + 3] = (byte) intBits;
+        }
+        
+        // Convert our chunk to base64!
+        String base64String = Base64.getEncoder().encodeToString(byteArray);
+        console.log(vectors.length);
+        console.log(base64String.length());
+        console.log(base64String);
+        
+      }
+      
+      public void renderChunk() {
+        scene.shape(pshapeChunk);
+      }
+
+      
+      //public void setTile(int tilex, int tiley, float[] val) {
+      //  vhi[tilex%CHUNK_SIZE][tiley%CHUNK_SIZE] = val;
+      //}
+    }
     
     
     
@@ -807,6 +1134,17 @@ public class PixelRealm extends Screen {
         this.hitboxWi = wi*0.25;
       }
       
+      public TerrainPRObject(float x, float y, float z, float size) {
+        super(x, y, z);
+        this.img = img_tree;
+        this.size = size;
+        readjustSize();
+        randSeed = x+y+z;
+        
+        // Small hitbox
+        this.hitboxWi = wi*0.25;
+      }
+      
       public void readjustSize() {
         // Set the size in case there's a realm refresh.
         this.wi = img.getRandom(randSeed).width*size;
@@ -816,6 +1154,7 @@ public class PixelRealm extends Screen {
       public void display() {
         if (img == null)
           return;
+          
           
         float y1 = y-hi;
         // There's no y2 huehue.
@@ -830,8 +1169,13 @@ public class PixelRealm extends Screen {
         float z2 = z - cos_d;
         
         readjustSize();
+        
+        if (versionCompatibility == 2) {
+          useFadeShader();
+          
+        }
 
-        displayQuad(img.getRandom(randSeed), x1, y1, z1, x2, y1+hi, z2, false);
+        displayQuad(img.getRandom(randSeed), x1, y1, z1, x2, y1+hi, z2);
       }
     }
   
@@ -868,7 +1212,10 @@ public class PixelRealm extends Screen {
       }
   
       public void display() {
-        super.display(true);
+        if (versionCompatibility == 2) {
+          useFadeShader();
+        }
+        displayBillboard();
       }
       
       public void run() {
@@ -1071,7 +1418,7 @@ public class PixelRealm extends Screen {
         if (lights) scene.lights();
         display.recordLogicTime();
   
-        super.display(true);
+        displayBillboard();
       }
     }
   
@@ -1157,7 +1504,7 @@ public class PixelRealm extends Screen {
               float x2 = x - sin_d;
               float z2 = z - cos_d;
   
-              displayQuad(this.img.get(), x1, y1, z1, x2, y1+hi, z2, true);
+              displayQuad(this.img.get(), x1, y1, z1, x2, y1+hi, z2);
             }
           }
         }
@@ -1244,18 +1591,18 @@ public class PixelRealm extends Screen {
             
             String compat_ver = sh.getString("compatibilty_version", "[err]");
             if (!compat_ver.equals(SHORTCUT_COMPATIBILITY_VERSION)) {
-              //console.warn("Incompatiable shortcut "+file.getFilename(this.filename));
+              console.warn("Incompatiable shortcut "+file.getFilename(this.filename));
               return;
             }
             
             shortcutDir = sh.getString("shortcut_dir", "[corrupted]");
             if (shortcutDir.equals("[corrupted]")) {
-              //console.warn("Corrupted shortcut "+file.getFilename(this.filename));
+              console.warn("Corrupted shortcut "+file.getFilename(this.filename));
               return;
             }
             // Check shortcut exists.
             if (!file.exists(shortcutDir)) {
-              //console.warn("Shortcut to "+file.getFilename(this.filename)+" doesn't exist!");
+              console.warn("Shortcut to "+file.getFilename(this.filename)+" doesn't exist!");
               return;
             }
             // If at this point we should have the shortcut dir.
@@ -1269,7 +1616,7 @@ public class PixelRealm extends Screen {
             }
           }
           catch (RuntimeException e) {
-            //console.warn(file.getFilename(this.filename)+" shortcut json error!");
+            console.warn(file.getFilename(this.filename)+" shortcut json error!");
             this.destroy();
             return;
           }
@@ -1284,7 +1631,7 @@ public class PixelRealm extends Screen {
         // Screen glow effect.
         // Calculate distance to portal
         float dist = PApplet.pow(x-playerX, 2)+PApplet.pow(z-playerZ, 2);
-        if (dist < MIN_PORTAL_LIGHT_THRESHOLD) {
+        if (dist < MIN_PORTAL_LIGHT_THRESHOLD && !movementPaused) {
           // If close to the portal, set the portal light to create a portal enter/transistion effect.
           portalLight = max(portalLight, (1.-(dist/MIN_PORTAL_LIGHT_THRESHOLD))*255.);
         }
@@ -1370,7 +1717,7 @@ public class PixelRealm extends Screen {
         // Screen glow effect.
         // Calculate distance to portal
         float dist = PApplet.pow(x-playerX, 2)+PApplet.pow(z-playerZ, 2);
-        if (dist < MIN_PORTAL_LIGHT_THRESHOLD) {
+        if (dist < MIN_PORTAL_LIGHT_THRESHOLD && !movementPaused) {
           // If close to the portal, set the portal light to create a portal enter/transistion effect.
           portalLight = max(portalLight, (1.-(dist/MIN_PORTAL_LIGHT_THRESHOLD))*255.);
         }
@@ -1392,11 +1739,11 @@ public class PixelRealm extends Screen {
       public void display() {
         if (visible) {
           display.recordRendererTime();
-          scene.shader(
-            display.getShaderWithParams("portal_plus", "u_resolution", (float)scene.width, (float)scene.height, "u_time", display.getTimeSeconds(), "u_dir", -direction/(PI*2))
-          );
-          super.display();
-          scene.resetShader();
+          
+          usingFadeShader = false;
+          display.shader(scene, "portal_plus", "u_resolution", (float)scene.width, (float)scene.height, "u_time", display.getTimeSeconds(), "u_dir", -direction/(PI*2));
+          displayBillboard();
+          useFadeShader();
           
   
           scene.noTint();
@@ -1415,6 +1762,7 @@ public class PixelRealm extends Screen {
           scene.text(filename, 0, 0, 0);
           scene.popMatrix();
           if (lights) scene.lights();
+          
           display.recordLogicTime();
   
           // Reset tint
@@ -1464,6 +1812,7 @@ public class PixelRealm extends Screen {
       public boolean visible = true;         // Used for manual turning on/off visibility
       public color tint = color(255);
       protected ItemSlot<PRObject> myOrderingNode = null;
+      
   
       public PRObject() {
         myOrderingNode = ordering.add(this);
@@ -1564,10 +1913,13 @@ public class PixelRealm extends Screen {
       }
   
       public void display() {
-        this.display(false);
+        if (versionCompatibility == 2) {
+          useFadeShader();
+        }
+        displayBillboard();
       }
-  
-      public void display(boolean useFinder) {
+      
+      protected void displayBillboard() {
         if (visible) {
           if (img == null)
             return;
@@ -1584,20 +1936,21 @@ public class PixelRealm extends Screen {
           float x2 = x - sin_d;
           float z2 = z - cos_d;
   
-          displayQuad(this.img.get(), x1, y1, z1, x2, y1+hi, z2, useFinder);
+          displayQuad(this.img.get(), x1, y1, z1, x2, y1+hi, z2);
   
           // Reset tint
           this.tint = color(255);
         }
       }
   
-      protected void displayQuad(PImage im, float x1, float y1, float z1, float x2, float y2, float z2, boolean useFinder) {
+      protected void displayQuad(PImage im, float x1, float y1, float z1, float x2, float y2, float z2) {
         //boolean selected = lineLine(x1,z1,x2,z2,beamX1,beamZ1,beamX2,beamZ2);
         //color selectedColor = color(255);
         //if (hovering()) {
         //  selectedColor = color(255, 127, 127);
         //}
   
+        boolean useFinder = false;
         useFinder &= finderEnabled;
   
         //Now render the image in 3D!!!
@@ -1607,16 +1960,26 @@ public class PixelRealm extends Screen {
         float dist = PApplet.pow((playerX-x), 2)+PApplet.pow((playerZ-z), 2);
   
         boolean dontRender = false;
-        if (dist > terrain.FADE_DIST_OBJECTS) {
-          float fade = calculateFade(dist, terrain.FADE_DIST_OBJECTS);
-          if (fade > 1) {
-            scene.tint(tint, fade);
-          } else {
+        
+        // Only for versions 1.0 and 1.1 since 2.0 has completely different fading mechanics.
+        if (versionCompatibility == 1) {
+          if (dist > terrain.FADE_DIST_OBJECTS) {
+            float fade = calculateFade(dist, terrain.FADE_DIST_OBJECTS);
+            if (fade > 1) {
+              scene.tint(tint, fade);
+            } else {
+              dontRender = true;
+            }
+          } else scene.tint(tint, 255);
+        }
+        else if (versionCompatibility == 2) {
+          float x = playerX-this.x;
+          float z = playerZ-this.z;
+          if (x*x+z*z > terrain.FADE_DIST_OBJECTS) {
             dontRender = true;
           }
-        } else scene.tint(tint, 255);
-  
-  
+        }
+    
         if (useFinder) {
           scene.stroke(255, 127, 127);
           scene.strokeWeight(2.);
@@ -1659,20 +2022,55 @@ public class PixelRealm extends Screen {
       return (playerY >= onSurface(playerX, playerZ)-1.);
     }
     
+    private boolean outOfBounds(float x, float z) {
+      float tilex = floor(x/terrain.groundSize)+1.;
+      float tilez = floor(z/terrain.groundSize)+1.;
+      
+      return (
+        int(tilex)/CHUNK_SIZE > terrain.chunkLimitX ||
+        int(tilex)/CHUNK_SIZE < -terrain.chunkLimitX+1 ||
+        int(tilez)/CHUNK_SIZE > terrain.chunkLimitZ ||
+        int(tilez)/CHUNK_SIZE < -terrain.chunkLimitZ+1
+      );
+    }
     
     private float onSurface(float x, float z) {
+      if (outOfBounds(x,z)) return 999999;
+      
       if (terrain == null) {
         //console.bugWarn("onSurface() needs the terrain to be loaded before it's called!");
         return 0.;
       }
-      float chunkx = floor(x/terrain.groundSize)+1.;
-      float chunkz = floor(z/terrain.groundSize)+1.;  
+      float tilex = floor(x/terrain.groundSize)+1.;
+      float tilez = floor(z/terrain.groundSize)+1.;
+      
+      
+      
   
-      PVector pv1 = calcTile(chunkx-1., chunkz-1.);          // Left, top
-      PVector pv2 = calcTile(chunkx, chunkz-1.);          // Right, top
-      PVector pv3 = calcTile(chunkx, chunkz);          // Right, bottom
-      PVector pv4 = calcTile(chunkx-1., chunkz);          // Left, bottom
+      PVector pv1 = calcTile(tilex-1., tilez-1.);          // Left, top
+      PVector pv2 = calcTile(tilex, tilez-1.);          // Right, top
+      PVector pv3 = calcTile(tilex, tilez);          // Right, bottom
+      PVector pv4 = calcTile(tilex-1., tilez);          // Left, bottom
       return getplayerYOnQuad(pv1, pv2, pv3, pv4, x, z);
+    }
+    
+    // Similar to plantDown but guarentees than the object in question will not be levitating on a sloped surface.
+    private float plantDown(float x, float z) {
+      if (outOfBounds(x,z)) return 999999;
+      
+      if (terrain == null) {
+        //console.bugWarn("onSurface() needs the terrain to be loaded before it's called!");
+        return 0.;
+      }
+      float tilex = floor(x/terrain.groundSize)+1.;
+      float tilez = floor(z/terrain.groundSize)+1.;
+      
+      float lowest = -999999; // Very high in the sky, we want the lowest in the ground.
+      lowest = max(calcTile(tilex-1., tilez-1.).y, lowest);          // Left, top
+      lowest = max(calcTile(tilex, tilez-1.).y, lowest);          // Right, top
+      lowest = max(calcTile(tilex, tilez).y, lowest);          // Right, bottom
+      lowest = max(calcTile(tilex-1., tilez).y, lowest);          // Left, bottom
+      return lowest;
     }
     
     
@@ -1689,19 +2087,9 @@ public class PixelRealm extends Screen {
       return 255-(d*scale);
     }
   
-    // BIG TODO: Adapt for custom terrain.
     private PVector calcTile(float x, float z) {
-      if (terrain instanceof SinesinesineTerrain) {
-        SinesinesineTerrain t = (SinesinesineTerrain)terrain;
-        float y = sin(x*t.hillFrequency)*t.hillHeight+sin(z*t.hillFrequency)*t.hillHeight;
-        return new PVector(t.groundSize*(x), y, t.groundSize*(z));
-      }
-      else {
-        console.bugWarn("calcTile: Unimplemented terrain type.");
-        return new PVector(0,0,0);
-      }
+      return terrain.getPoint(x, z);
     }
-    
     
     protected ItemSlot<PocketItem> addToPockets(PRObject item) {
       String name = getHoldingName(item);
@@ -1977,33 +2365,51 @@ public class PixelRealm extends Screen {
         
         // backward compatibility checking time!
         version = jsonFile.getString("compatibility_version", "");
+        if (version.equals("1.0") || version.equals("1.1")) {
+          versionCompatibility = 1;
+        }
+        else if (version.equals("2.0")) {
+          versionCompatibility = 2;
+        }
         
         
-        // JUST FOR TESTING!!!
-        loadRealmV1(jsonFile);
         
         // Our current version
-        //if (version.equals(COMPATIBILITY_VERSION)) {
-        //  loadRealmV2(jsonFile);
-        //}
-        //// Legacy "world_3d" version where everything was simple and a mess lol.
-        //else if (version.equals("1.0")) {
-        //  loadRealmV1(jsonFile);
-        //}
-        //// Unknown version.
-        //else {
-        //  console.log("Incompatible turf file, backing up old and creating new turf.");
-        //  file.backupMove(dir+REALM_TURF);
-        //  saveRealmJson();
-        //}
+        if (version.equals("2.0")) {
+          loadRealmV2(jsonFile);
+        }
+        // Legacy "world_3d" version where everything was simple and a mess lol.
+        else if (version.equals("1.0") || version.equals("1.1")) {
+          loadRealmV1(jsonFile);
+        }
+        // Unknown version.
+        else {
+          console.log("Incompatible turf file, backing up old and creating new turf.");
+          file.backupMove(dir+REALM_TURF);
+          saveRealmJson();
+        }
         
         
       // File doesn't exist; create new turf file.
       } else {
         //console.log("Creating new realm turf file.");
+        
+        
+        
         if (version.equals("1.0") || version.equals("1.1")) terrain = new SinesinesineTerrain();
         //saveRealmJson();
       }
+      
+      // TODO: REMOVE TESTING CODE
+      //if (version.equals("2.0")) {
+      //  playerX = 0.0;
+      //  playerZ = 0.0;
+      //  LegacyTerrain t = new LegacyTerrain();
+      //  t.setRenderDistance(3);
+      //  t.setGroundSize(150);
+      //  terrain = t;
+      //}
+      
     }
     
     public void loadRealmV1(JSONObject jsonFile) {
@@ -2088,7 +2494,63 @@ public class PixelRealm extends Screen {
     
     // (as of Jan 2024) our latest and current version where we load turf files from.
     public void loadRealmV2(JSONObject jsonFile) {
+      // create pr_objects array
+      JSONArray objects3d = jsonFile.getJSONArray("pr_objects");
+      if (objects3d == null) {
+        console.warn("Realm info read failed, pr_objects array is missing/misnamed.");
+        return;
+      }
       
+      // Load terrain information.
+      // Based on terrain type.
+      String terrainType = jsonFile.getString("terrain_type");
+      if (terrainType.equals("Sine sine sine"))
+        terrain = new SinesinesineTerrain(jsonFile);
+      else if (terrainType.equals("Legacy"))
+        terrain = new LegacyTerrain(jsonFile);
+      else {
+        console.warn("Realm info read failed, "+terrainType+" terrain type unknown");
+        terrain = new SinesinesineTerrain();
+      }
+      
+      // Put FileObjects into hashmap by filename
+      HashMap<String, FileObject> namesToObjects = new HashMap<String, FileObject>();
+      for (FileObject o : files) {
+        if (o != null) {
+          namesToObjects.put(o.filename, o);
+        }
+      }
+      
+      int l = objects3d.size();
+      // Loop thru each file object in the array. Remember each object is uniquely identified by its filename.
+      for (int i = 0; i < l; i++) {
+        try {
+          JSONObject probjjson = objects3d.getJSONObject(i);
+          
+          // Each object is uniquely identified by its filename/folder name.
+          String name = probjjson.getString("filename", engine.APPPATH+engine.GLITCHED_REALM);
+          // Due to the filename used to be called "dir", check for legacy names.
+
+          // Get the object by name so we can do a lil bit of things to it.
+          FileObject o = namesToObjects.remove(name);
+          if (o == null) {
+            // This may happen if a folder/file has been renamed/deleted. Just move
+            // on to the next item.
+            continue;
+          }
+
+          // From here, the way the object is loaded is depending on its type.
+          o.load(probjjson);
+        }
+        // For some reason we can get unexplained nullpointerexceptions.
+        // Just a lazy way to overcome it, literally doesn't affect anything.
+        // Totally. Totally doesn't affect anything.
+        catch (RuntimeException e) {
+        }
+      }
+      
+      // Bye bye Evolving Gateway coins :(
+      coins = false;
     }
     
     
@@ -2107,7 +2569,7 @@ public class PixelRealm extends Screen {
       if (version.equals("1.0") || version.equals("1.1")) {
         success = saveRealmV1(turfJson);
       }
-      else if (version.equals(COMPATIBILITY_VERSION)) {
+      else if (version.equals("2.0")) {
         success = saveRealmV2(turfJson);
       }
       else {
@@ -2136,29 +2598,54 @@ public class PixelRealm extends Screen {
           objects3d.setJSONObject(i++, o.save());
         }
       }
+      jsonFile.setJSONArray("objects3d", objects3d);
       
       // Terrain will most definitely be a sinesinesine terrain.
       if (!(terrain instanceof SinesinesineTerrain)) {
-        console.bugWarn("saveRealmV1: incompatible terrain, when it should be compatbile. Abort save.");
+        console.bugWarn("saveRealmV1: incompatible terrain, should be type SinesinesineTerrain. Abort save.");
         return false;
       }
       SinesinesineTerrain t = (SinesinesineTerrain)terrain;
   
-      jsonFile.setJSONArray("objects3d", objects3d);
       jsonFile.setString("compatibility_version", version);
-      jsonFile.setInt("render_distance", (int)t.renderDistance);
-      jsonFile.setFloat("ground_size", t.groundSize);
+      jsonFile.setInt("render_distance", (int)t.getRenderDistance());
+      jsonFile.setFloat("ground_size", t.getGroundSize());
       jsonFile.setFloat("hill_height", t.hillHeight);
       jsonFile.setFloat("hill_frequency", t.hillFrequency);
       
       jsonFile.setBoolean("coins", coins);
+      
+      console.log("Saved realm");
       
       return true;
     }
     
     
     public boolean saveRealmV2(JSONObject jsonFile) {
-      return false;
+      JSONArray objects3d = new JSONArray();
+      int i = 0;
+      // Save file objects
+      for (FileObject o : files) {
+        if (o != null) {
+          objects3d.setJSONObject(i++, o.save());
+        }
+      }
+      jsonFile.setString("compatibility_version", version);
+      jsonFile.setJSONArray("pr_objects", objects3d);
+      
+      // Save terrain information
+      terrain.save(jsonFile);
+      
+      // Save realm chunks
+      for (TerrainChunkV2 chunk : chunks.values()) {
+        chunk.saveChunk(jsonFile);
+      }
+      
+      
+      // And we're done already!
+      console.log("Saved realm");
+      
+      return true;
     }
     
     
@@ -2416,7 +2903,7 @@ public class PixelRealm extends Screen {
     
     
     
-    
+    boolean wasUnderwater = false;
     
     
     
@@ -2441,6 +2928,8 @@ public class PixelRealm extends Screen {
         speed = SNEAK_SPEED;
         runAcceleration = 0.;
       }
+      
+      boolean splash = (!wasUnderwater && isUnderwater);
   
       // :3
       if (engine.keyAction("jump") && onGround()) speed *= 3;
@@ -2451,6 +2940,10 @@ public class PixelRealm extends Screen {
       // Less movement control while in the air.
       if (!onGround()) {
         speed *= 0.1;
+      }
+      
+      if (isUnderwater) {
+        speed *= UNDERWATER_SPEED_MULTIPLIER;
       }
   
       // TODO: re-enable reposition mode
@@ -2563,11 +3056,18 @@ public class PixelRealm extends Screen {
           cache_flatCosDirection = cos(direction-PI+HALF_PI);
           
           // --- Jump & gravity physics ---
-          if (engine.keyAction("jump") && onGround() && jumpTimeout < 1.) {
-            yvel = JUMP_STRENGTH;
-            playerY -= 10;
-            sound.playSound("jump");
-            jumpTimeout = 30.;
+          if (engine.keyAction("jump")) {
+            float jumpStrength = JUMP_STRENGTH;
+            if (isUnderwater) {
+              yvel = min(yvel+SWIM_UP_SPEED, UNDERWATER_TEMINAL_VEL);
+              jumpStrength = UNDERWATER_JUMP_STRENGTH;
+            }
+            if (onGround() && jumpTimeout < 1.) {
+              yvel = jumpStrength;
+              playerY -= 10;
+              sound.playSound("jump");
+              jumpTimeout = 30.;
+            }
           }
   
           if (jumpTimeout > 0) jumpTimeout -= display.getDelta();
@@ -2576,10 +3076,20 @@ public class PixelRealm extends Screen {
           if (onGround()) {
             yvel = 0.;
             playerY = onSurface(playerX, playerZ);
-          } 
+          }
+          else if (splash) {
+            yvel = 0.;
+          }
           else {
             // Change yvel while we're in the air
-            yvel = min(yvel-GRAVITY*display.getDelta(), TERMINAL_VEL);
+            float gravity = GRAVITY;
+            float terminalVel = TERMINAL_VEL;
+            if (isUnderwater) {
+              gravity = UNDERWATER_GRAVITY;
+              terminalVel = UNDERWATER_TEMINAL_VEL;
+            }
+            
+            yvel = max(yvel-gravity*display.getDelta(), -terminalVel);
           }
   
           if (playerY > 2000.) {
@@ -2588,6 +3098,9 @@ public class PixelRealm extends Screen {
             playerZ = 1000.;
             yvel = 0.;
           }
+          
+          wasUnderwater = isUnderwater;
+          isUnderwater = playerY > terrain.waterLevel  &&  !outOfBounds(playerX, playerZ) && terrain.hasWater;
           
           // If holding an item, allow scaling up and down.
           //if (inventorySelectedItem != null) {
@@ -2648,9 +3161,11 @@ public class PixelRealm extends Screen {
       // Otherwise, proceed.
       SinesinesineTerrain tt = (SinesinesineTerrain)terrain;
       
+      app.noiseDetail(4, 0.5); 
+        
       scene.pushMatrix();
-      float chunkx = floor(playerX/tt.groundSize)+1.;
-      float chunkz = floor(playerZ/tt.groundSize)+1.; 
+      float chunkx = floor(playerX/tt.getGroundSize())+1.;
+      float chunkz = floor(playerZ/tt.getGroundSize())+1.; 
   
       // This only uses a single cycle, dw.
       legacy_terrainObjects.empty();
@@ -2661,10 +3176,10 @@ public class PixelRealm extends Screen {
       scene.hint(ENABLE_DEPTH_TEST);
       display.recordLogicTime();
   
-      for (float tilez = chunkz-tt.renderDistance-1; tilez < chunkz+tt.renderDistance; tilez += 1.) {
+      for (float tilez = chunkz-tt.getRenderDistance()-1; tilez < chunkz+tt.getRenderDistance(); tilez += 1.) {
         //                                                        random bug fix over here.
-        for (float tilex = chunkx-tt.renderDistance-1; tilex < chunkx+tt.renderDistance; tilex += 1.) {
-          float x = tt.groundSize*(tilex-0.5), z = tt.groundSize*(tilez-0.5);
+        for (float tilex = chunkx-tt.getRenderDistance()-1; tilex < chunkx+tt.getRenderDistance(); tilex += 1.) {
+          float x = tt.getGroundSize()*(tilex-0.5), z = tt.getGroundSize()*(tilez-0.5);
           float dist = PApplet.pow((playerX-x), 2)+PApplet.pow((playerZ-z), 2);
   
           boolean dontRender = false;
@@ -2698,9 +3213,9 @@ public class PixelRealm extends Screen {
             
             display.recordRendererTime();
             scene.vertex(v1.x, v1.y, v1.z, 0, 0);                                    
-            scene.vertex(v2.x, v2.y, v2.z, tt.groundRepeat, 0);  
-            scene.vertex(v3.x, v3.y, v3.z,tt.groundRepeat, tt.groundRepeat);  
-            scene.vertex(v4.x, v4.y, v4.z, 0, tt.groundRepeat);       
+            scene.vertex(v2.x, v2.y, v2.z, tt.getGroundRepeat(), 0);  
+            scene.vertex(v3.x, v3.y, v3.z,tt.getGroundRepeat(), tt.getGroundRepeat());  
+            scene.vertex(v4.x, v4.y, v4.z, 0, tt.getGroundRepeat());       
   
   
             scene.endShape();
@@ -2718,8 +3233,8 @@ public class PixelRealm extends Screen {
               // But this is backwards-compatible legacy code.
               String id = str(tilex)+","+str(tilez);
               if (!legacy_autogenStuff.contains(id)) {
-                float terrainX = (tt.groundSize*(tilex-1))+offset;
-                float terrainZ = (tt.groundSize*(tilez-1))+offset;
+                float terrainX = (tt.getGroundSize()*(tilex-1))+offset;
+                float terrainZ = (tt.getGroundSize()*(tilez-1))+offset;
                 float terrainY = onSurface(terrainX, terrainZ)+10;
                 TerrainPRObject tree = new TerrainPRObject(
                   terrainX, 
@@ -2734,6 +3249,9 @@ public class PixelRealm extends Screen {
           }
         }
       }
+      
+      //renderWaterTest();
+      
       display.recordRendererTime();
       scene.noTint();
       scene.colorMode(RGB, 255);
@@ -2742,8 +3260,124 @@ public class PixelRealm extends Screen {
       display.recordLogicTime();
     }
     
+    
+    private void useFadeShader() {
+      if (!usingFadeShader) {
+        display.recordRendererTime();
+        display.shader(scene, "unlit_fog", "fadeStart", terrain.BEGIN_FADE, "fadeLength", terrain.FADE_LENGTH);
+        display.recordLogicTime();
+        usingFadeShader = true;
+      }
+    }  
+    
     public void renderTerrainV2() {
-      console.bugWarn("renderTerrainV2: Not implemented yet!");
+      useFadeShader();
+      
+      float groundSize = terrain.getGroundSize();
+      
+      int renderDistance = int(terrain.getRenderDistance());
+      
+      float chunkWiHi = groundSize*float(CHUNK_SIZE);
+      
+      int chunkx = round((playerX)/(chunkWiHi))-renderDistance-1;
+      int chunkz = round((playerZ)/(chunkWiHi))-renderDistance;
+
+      display.recordRendererTime();
+      scene.hint(ENABLE_DEPTH_TEST);
+      display.recordLogicTime();
+      
+      scene.pushMatrix();
+      
+      int xstart = chunkx;
+      
+      for (int y = 0; y < renderDistance*2; y++) {
+        chunkx = xstart;
+        for (int x = 0; x < renderDistance*2; x++) {
+          chunkx++;
+          if (
+            chunkx > terrain.chunkLimitX ||
+            chunkx < -terrain.chunkLimitX ||
+            chunkz > terrain.chunkLimitZ ||
+            chunkz < -terrain.chunkLimitZ
+          ) continue;
+          
+          int hashIndex = MAX_CHUNKS_XZ*chunkz + chunkx;
+          
+          TerrainChunkV2 chunk = chunks.get(hashIndex);
+          
+          
+          if (chunk == null) {
+            chunk = new TerrainChunkV2(chunkx, chunkz);
+            chunk.hashIndex = hashIndex;
+            chunks.put(hashIndex, chunk);
+          }
+          
+          chunk.renderChunk();
+          
+        }
+        chunkz++;
+      }
+      
+      if (terrain.hasWater)
+        renderWater();
+      
+      
+      scene.popMatrix();
+  
+    }
+    
+    
+    public void renderWater() {
+      scene.noTint();
+      
+      scene.beginShape(QUAD);
+      scene.textureMode(NORMAL);
+      scene.textureWrap(REPEAT);
+      scene.texture(display.systemImages.get("water"));
+      
+      
+      float terrainchunkWiHi = terrain.getGroundSize()*float(CHUNK_SIZE);
+      float waterSize   = 400.;
+      
+      float factorthing = (terrainchunkWiHi/waterSize);
+      float renderDistance = (factorthing*terrain.getRenderDistance());
+      float tilex = round((playerX)/(waterSize))-renderDistance-1;
+      float tilez = round((playerZ)/(waterSize))-renderDistance;
+      
+      float limitX = factorthing*float(terrain.chunkLimitX)*waterSize;
+      float limitZ = factorthing*float(terrain.chunkLimitZ)*waterSize;
+      float fff = waterSize*float(CHUNK_SIZE)*0.25;
+      
+      int irenderDist = int(renderDistance);
+      
+      float xstart = tilex;
+      float ttt = display.getTime()*0.002;
+      
+      for (int y = 0; y < irenderDist*2; y++) {
+        tilex = xstart;
+        for (int x = 0; x < irenderDist*2; x++) {
+          tilex += 1.0;
+          
+          float xx1 = min(max(tilex*waterSize, -limitX), limitX+fff);
+          float zz1 = min(max(tilez*waterSize, -limitZ), limitZ+fff);
+          float xx2 = min(max(tilex*waterSize+waterSize, -limitX), limitX+fff);
+          float zz2 = min(max(tilez*waterSize+waterSize, -limitZ), limitZ+fff);
+          
+                    
+          scene.vertex(xx1,           terrain.waterLevel, zz1, ttt, ttt);                                    
+          scene.vertex(xx2,           terrain.waterLevel, zz1, ttt+1., ttt);  
+          scene.vertex(xx2,           terrain.waterLevel, zz2, ttt+1., ttt+1.);  
+          scene.vertex(xx1,           terrain.waterLevel, zz2, ttt, ttt+1.);  
+          
+          
+        }
+        tilez += 1.0;
+      }
+      
+      
+  
+  
+      scene.endShape();
     }
     
     public void renderSky() {
@@ -2961,6 +3595,27 @@ public class PixelRealm extends Screen {
     public void renderEffects() {
       float FADE = 0.9;
       display.recordRendererTime();
+      if (playerY+(sin(bob)*3.)-PLAYER_HEIGHT-1. > terrain.waterLevel && !outOfBounds(playerX, playerZ) && terrain.hasWater) {
+        scene.beginShape();
+        scene.textureMode(NORMAL);
+        scene.textureWrap(REPEAT);
+        scene.texture(display.systemImages.get("water"));
+        scene.tint(255, 210);
+        
+        
+        float ttt = 0.5; //display.getTime()*0.001;
+        
+        float uvx = 0.0;
+        float uvy = 0.0;
+        
+        scene.vertex(0, 0, ttt, ttt);
+        scene.vertex(scene.width, 0, uvx+ttt, ttt);
+        scene.vertex(scene.width, scene.height, uvx+ttt, uvy+ttt);
+        scene.vertex(0, scene.height, ttt, uvy+ttt);
+        
+        scene.endShape();
+      }
+      
       if (portalLight > 0.1) {
         scene.blendMode(ADD);
         scene.fill(portalLight);
@@ -3302,6 +3957,8 @@ public class PixelRealm extends Screen {
     // Stuff that is currently on-screen is stored in ordering list.
     currRealm.runPlayer();
     currRealm.runPRObjects();
+    scene.resetShader();
+    usingFadeShader = false;
     
     // Now begin all the drawing!
     display.recordRendererTime();
@@ -3333,6 +3990,7 @@ public class PixelRealm extends Screen {
 
     currRealm.renderTerrain();
     currRealm.renderPRObjects(); 
+    scene.resetShader();
     
     // Pop the camera.
     scene.popMatrix();

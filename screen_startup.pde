@@ -5,17 +5,21 @@ public class Startup extends Screen {
     float floatOut = 1.0;
     int timeFromStart = 0;
     boolean nextScreen = false;
+    boolean firstTimeStartup = false;
 
     public Startup(Engine engine) {
         super(engine);
         
-        
+        // Kickstart gstreamer by playing default realm music (but also not really playing it)
         File f = new File(engine.DEFAULT_DIR+PixelRealm.REALM_BGM);
         if (f.exists())
           sound.streamMusic(engine.DEFAULT_DIR+PixelRealm.REALM_BGM);
         else
           sound.streamMusic(engine.APPPATH+PixelRealm.REALM_BGM_DEFAULT);
         //sound.playSound("intro");
+        
+        // if stats.json is missing, this means user is starting timeway for the first time.
+        firstTimeStartup = !file.exists(engine.APPPATH+engine.STATS_FILE);
     }
 
     public void upperBar() {
@@ -86,6 +90,8 @@ public class Startup extends Screen {
               requestScreen(pixelrealm);
             }
         }
+        
+        // Author name below
         app.noStroke();
         app.textAlign(CENTER, CENTER);
         app.textFont(engine.DEFAULT_FONT, 34);
@@ -94,8 +100,15 @@ public class Startup extends Screen {
         app.fill(255, 255-(255*floatIn));
         app.text("by "+engine.AUTHOR, WIDTH/2, HEIGHT/2+150);
         
-        app.noTint();
+        
+        // First time startup
+        if (firstTimeStartup) {
+          app.text("First startup make take some time, please wait...", WIDTH/2, HEIGHT/2+400);
+        }
+        
+        
         // Version in bottom-right.
+        app.noTint();
         app.fill(255);
         app.noStroke();
         app.textAlign(LEFT, CENTER);
@@ -104,6 +117,5 @@ public class Startup extends Screen {
         app.text(engine.VERSION, 10-3, HEIGHT-30-3);
         app.fill(255, 255-(255*floatIn));
         app.text(engine.VERSION, 10, HEIGHT-30);
-        
     }
 }

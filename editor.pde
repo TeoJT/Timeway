@@ -1224,9 +1224,7 @@ public class Editor extends Screen {
             if (upperbarExpand <= 0.001) power.setSleepy();
         }
         
-        app.shader(
-          display.getShaderWithParams("fabric", "color",float((myUpperBarColor>>16)&0xFF)/255.,(float)((myUpperBarColor>>8)&0xFF)/255.,float((myUpperBarColor)&0xFF)/255.,1., "intensity",0.1)
-        );
+        display.shader("fabric", "color",float((myUpperBarColor>>16)&0xFF)/255.,(float)((myUpperBarColor>>8)&0xFF)/255.,float((myUpperBarColor)&0xFF)/255.,1., "intensity",0.1);
         
         if (currMinimenu == null && !cameraMode) 
           display.clip(0, 0, WIDTH, myUpperBarWeight);
@@ -1239,10 +1237,7 @@ public class Editor extends Screen {
     }
     
     public void lowerBar() {
-      
-      app.shader(
-        display.getShaderWithParams("fabric", "color",float((myUpperBarColor>>16)&0xFF)/255.,float((myUpperBarColor>>8)&0xFF)/255.,float((myUpperBarColor)&0xFF)/255.,1., "intensity",0.1)
-      );
+      display.shader("fabric", "color",float((myUpperBarColor>>16)&0xFF)/255.,float((myUpperBarColor>>8)&0xFF)/255.,float((myUpperBarColor)&0xFF)/255.,1., "intensity",0.1);
       
       float LOWER_BAR_EXPAND = 100.;
       if (upperBarDrop == CAMERA_ON_ANIMATION) myLowerBarWeight = LOWER_BAR_WEIGHT+(LOWER_BAR_EXPAND * (1.-upperbarExpand));

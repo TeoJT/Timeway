@@ -1,6 +1,6 @@
 import javax.swing.JOptionPane;
 import processing.sound.*;
-import java.io.FileWriter;   // Import the FileWriter class
+import java.io.FileWriter;
 import java.io.IOException;
 import java.io.StringWriter;
 import java.io.PrintWriter;
@@ -103,7 +103,7 @@ void sketch_openErrorLog(Exception e) {
   
   String errMsg = 
   "Sorry! Timeway crashed :(\n"+
-  "Please provide Neo_2222 with this error log (only if it doesn't contain any personal information you don't want shared), thanks <3\n"+
+  "Please provide Neo_2222 with this error log, thanks <3\n\n\n"+
   e.getClass().toString()+"\nMessage: \""+
   e.getMessage()+"\"\nStack trace:\n"+
   sStackTrace;

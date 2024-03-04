@@ -4,10 +4,12 @@ public class PixelRealmWithUI extends PixelRealm {
   
   private PImage IMG_BORDER_TILE;
   
+  
   private String musicInfo = "";
   private String musicURL = "";
   
   private boolean menuShown = false;
+  private boolean showPlayerPos = false;
   private SpriteSystemPlaceholder gui = null;
   private Menu menu = null;
   
@@ -78,6 +80,7 @@ public class PixelRealmWithUI extends PixelRealm {
     gui = new SpriteSystemPlaceholder(engine, engine.APPPATH+engine.PATH_SPRITES_ATTRIB+"gui/pixelrealm/");
     gui.suppressSpriteWarning = true;
     gui.interactable = false;
+    engine.useSpriteSystem(gui);
     
     // Indicates first time running, run the tutorial.
     if (!file.exists(engine.APPPATH+engine.STATS_FILE)) {
@@ -591,6 +594,7 @@ public class PixelRealmWithUI extends PixelRealm {
   
   // Called from base pixelrealm
   private void errorPrompt(String title, String mssg) {
+    if (gui == null) return;
     DialogMenu m = new DialogMenu(title, "back-newrealm", mssg);
     m.setAppearTimer(20);
     menu = m;
@@ -624,6 +628,7 @@ public class PixelRealmWithUI extends PixelRealm {
   }
   
   protected void prompt(String title, String text, int appearDelay) {
+    if (gui == null) return;
     DialogMenu m = new DialogMenu(title, "back-newrealm", text);
     m.setAppearTimer(appearDelay);
     menu = m;
@@ -632,6 +637,7 @@ public class PixelRealmWithUI extends PixelRealm {
   
   
   protected void promptNewRealm() {
+    if (gui == null) return;
     engine.enterPressed = false;
     menu = new NewRealmMenu();
     menuShown = true;
@@ -684,6 +690,16 @@ public class PixelRealmWithUI extends PixelRealm {
         invx += 70;
       }
       display.recordLogicTime();
+    }
+    
+    if (showPlayerPos) {
+      textFont(engine.DEFAULT_FONT, 40);
+      textAlign(LEFT, TOP);
+      fill(0);
+      text("x "+currRealm.playerX+ "  y "+currRealm.playerY+"  z "+currRealm.playerZ, 20-2, myUpperBarWeight+100-2);
+      fill(255);
+      text("x "+currRealm.playerX+ "  y "+currRealm.playerY+"  z "+currRealm.playerZ, 20, myUpperBarWeight+100);
+      
     }
   }
   
@@ -801,7 +817,7 @@ public class PixelRealmWithUI extends PixelRealm {
   
   protected void promptPickedUpItem() {
     // Pick up item tutorial.
-    if (tutorialStage == 4) {
+    if (tutorialStage == 4 || tutorialStage == 5) {
       numItemsHeld++;
       
       if (numItemsHeld >= 5 || numItemsHeld >= numItemsTotal) {
@@ -819,7 +835,7 @@ public class PixelRealmWithUI extends PixelRealm {
   }
   
   protected void promptPlonkedDownItem() {
-    if (tutorialStage == 5) {
+    if (tutorialStage == 4 || tutorialStage == 5) {
       numItemsHeld--;
       
       if (numItemsHeld <= 0) {
@@ -847,6 +863,12 @@ public class PixelRealmWithUI extends PixelRealm {
     }
     else if (engine.commandEquals(command, "/tutorial")) {
       this.requestTutorial();
+      return true;
+    }
+    else if (engine.commandEquals(command, "/playerpos")) {
+      showPlayerPos = !showPlayerPos;
+      if (showPlayerPos) console.log("Now showing player's position.");
+      else console.log("Player position hidden.");
       return true;
     }
     else return false;

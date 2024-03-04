@@ -50,9 +50,10 @@ class Engine {
   // Info and versioning
   public final String NAME        = "Timeway";
   public final String AUTHOR      = "Teo Taylor";
-  public final String VERSION     = "0.0.7";
+  public final String VERSION     = "0.1.0";
   public final String VERSION_DESCRIPTION = 
-    "- Added shortcuts\n";
+    "- Added tutorial\n"+
+    "- Added template realms";
   // ***************************
   // How versioning works:
   // a.b.c
@@ -1021,9 +1022,10 @@ class Engine {
     // Display system
     private float displayScale = 2.0;
     public PImage errorImg;
+    public PShader errShader;
     private HashMap<String, PImage> systemImages = new HashMap<String, PImage>();;
     public HashMap<String, PFont> fonts = new HashMap<String, PFont>();;
-    private HashMap<String, PShader> shaders = new HashMap<String, PShader>();;
+    private HashMap<String, PShaderEntry> shaders = new HashMap<String, PShaderEntry>();;
     public  float WIDTH = 0, HEIGHT = 0;
     private int loadingFramesLength = 0;
     private int lastFrameMillis = 0;
@@ -1051,6 +1053,17 @@ class Engine {
     public int IDLE_TIME   = 3;
     
     public int timeMode = LOGIC_TIME;
+    
+    class PShaderEntry {
+      public PShaderEntry(PShader s, String p) {
+        shader = s;
+        filepath = p;
+      }
+      public PShader shader;
+      public String filepath = "";
+      public boolean compiled = false;
+      public boolean success = false;
+    }
     
     public void recordRendererTime() {
       long time = System.nanoTime();
@@ -1112,11 +1125,8 @@ class Engine {
         app.fill(255);
         app.textAlign(LEFT, CENTER);
         app.text("opengl", WIDTH*0.1+logic+10, 30);
-        
-      
       }
       catch (ArithmeticException e) {}
-      
       app.popMatrix();
     }
     
@@ -1131,6 +1141,7 @@ class Engine {
         console.info("init: width/height set to "+str(WIDTH)+", "+str(HEIGHT));
     
         generateErrorImg();
+        generateErrorShader();
         
         USE_CPU_CANVAS = settings.getBoolean("fasterImageImport");
         if (USE_CPU_CANVAS) {
@@ -1163,9 +1174,33 @@ class Engine {
       errorImg = createImage(32, 32, RGB);
       errorImg.loadPixels();
       for (int i = 0; i < errorImg.pixels.length; i++) {
-        errorImg.pixels[i] = color(255, 0, 0);
+        errorImg.pixels[i] = color(255, 0, 255);
       }
       errorImg.updatePixels();
+    }
+    
+    private void generateErrorShader() {
+      String[] vertSrc = {
+      "uniform mat4 transformMatrix;",
+      "attribute vec4 position;",
+      "attribute vec4 color;",
+      "varying vec4 vertColor;",
+      "void main() {",
+      "  gl_Position = transformMatrix * position;",
+      "  vertColor = color;",
+      "}"};
+      
+      String[] fragSrc = {
+      "#ifdef GL_ES",
+      "precision mediump float;",
+      "#endif",
+      "uniform vec4 color;",
+      "uniform float intensity;",
+      "void main() {",
+      "gl_FragColor = vec4(1.0, 0.0, 1.0, 1.0);",
+      "}"};
+      
+      errShader = new PShader(app, vertSrc, fragSrc);
     }
     
     public float getScale() {
@@ -1178,6 +1213,19 @@ class Engine {
     public void clearLoadingVars() {
       loadedContent.clear();
       systemImages.clear();
+    }
+    
+    public void loadShader(String path) {
+      if (!file.exists(path)) {
+        console.bugWarn("loadShader: "+path+" doesn't exist.");
+        return;
+      }
+      String name = file.getIsolatedFilename(path);
+      
+      PShader s = app.loadShader(path);
+      PShaderEntry shaderentry = new PShaderEntry(s, path);
+      
+      shaders.put(name, shaderentry);
     }
   
     public PImage getImg(String name) {
@@ -1193,13 +1241,57 @@ class Engine {
       app.resetShader();
     }
     
+    public void shader(String shaderName, Object... uniforms) {
+      initShader(shaderName);
+      app.shader(
+        getShaderWithParams(shaderName, uniforms)
+      );
+    }
+    
+    public void reloadShaders() {
+      HashMap<String, PShaderEntry> sh = new HashMap<String, PShaderEntry>(shaders);
+      
+      for (PShaderEntry s : sh.values()) {
+        this.loadShader(s.filepath);
+      }
+    }
+    
+    public void initShader(String name) {
+      PShaderEntry sh = shaders.get(name);
+      
+      // Switch to the shader to force it to compile:
+      if (!sh.compiled) {
+        try {
+          sh.shader.init();
+          sh.success = true;
+        }
+        catch (RuntimeException e) {
+          console.warn("Shader "+name+" failed to compile: ");
+          String[] err = PApplet.split(e.getMessage(), "\n");
+          for (String line : err) {
+            console.log(line);
+          }
+          sh.success = false;
+        }
+        sh.compiled = true;
+      }
+      
+    }
+    
+    public void shader(PGraphics framebuffer, String shaderName, Object... uniforms) {
+      initShader(shaderName);
+      framebuffer.shader(
+        getShaderWithParams(shaderName, uniforms)
+      );
+    }
+    
     public PShader getShaderWithParams(String shaderName, Object... uniforms) {
-      PShader sh = shaders.get(shaderName);
+      PShader sh = shaders.get(shaderName).shader;
       if (sh == null) {
         console.warnOnce("Shader "+shaderName+" not found!");
-        // TODO: return default shader
-        return null;
+        return errShader;
       }
+      if (!shaders.get(shaderName).success) return errShader;
       int l = uniforms.length;
       
       for (int i = 0; i < l; i++) {
@@ -3359,6 +3451,7 @@ class Engine {
   public Runnable doWhenPromptSubmitted = null;
   public String promptText;
   public boolean inputPromptShown = false;
+  public String lastInput = "";
 
   public void beginInputPrompt(String prompt, Runnable doWhenSubmitted) {
     keyboardMessage = "";
@@ -3379,6 +3472,13 @@ class Engine {
       app.text(promptText, display.WIDTH/2, display.HEIGHT/2-100);
       app.textSize(30);
       app.text(keyboardMessage, display.WIDTH/2, display.HEIGHT/2);
+      
+      if (keyCode == UP) {
+        keyCode = 0;
+        if (lastInput.length() > 0) {
+          keyboardMessage = lastInput;
+        }
+      }
 
       if (enterPressed) {
         // Remove enter character at end
@@ -3387,6 +3487,7 @@ class Engine {
         doWhenPromptSubmitted.run();
         enterPressed = false;
         inputPromptShown = false;
+        lastInput = keyboardMessage;
       }
     }
   }
@@ -3579,9 +3680,7 @@ class Engine {
       float hi = 128;
       float wi = 128*2;
       // TODO have some sort of fabric function instead of this mess.
-      app.shader(
-        display.getShaderWithParams("fabric", "color", float((c>>16)&0xFF)/255., float((c>>8)&0xFF)/255., float((c)&0xFF)/255., 1., "intensity", 0.1)
-      );
+      display.shader("fabric", "color", float((c>>16)&0xFF)/255., float((c>>8)&0xFF)/255., float((c)&0xFF)/255., 1., "intensity", 0.1);
       rect(x1-wi, y1, wi*2, hi);
       display.defaultShader();
       loadingIcon(x1-wi+64, y1+64);
@@ -3641,9 +3740,7 @@ class Engine {
       float hi = 128;
       float wi = 128*2;
       // TODO have some sort of fabric function instead of this mess.
-      app.shader(
-        display.getShaderWithParams("fabric", "color", float((c>>16)&0xFF)/255., float((c>>8)&0xFF)/255., float((c)&0xFF)/255., 1., "intensity", 0.1)
-      );
+      display.shader("fabric", "color", float((c>>16)&0xFF)/255., float((c>>8)&0xFF)/255., float((c)&0xFF)/255., 1., "intensity", 0.1);
       rect(x1-wi, y1, wi*2, hi);
       display.defaultShader();
       loadingIcon(x1-wi+64, y1+64);
@@ -3714,9 +3811,7 @@ class Engine {
       float hi = 128;
       float wi = 128*2;
       // TODO have some sort of fabric function instead of this mess.
-      app.shader(
-      display.getShaderWithParams("fabric", "color", float((c>>16)&0xFF)/255., float((c>>8)&0xFF)/255., float((c)&0xFF)/255., 1., "intensity", 0.1)
-      );
+      display.shader("fabric", "color", float((c>>16)&0xFF)/255., float((c>>8)&0xFF)/255., float((c)&0xFF)/255., 1., "intensity", 0.1);
       rect(x1-wi, y1, wi*2, hi);
       display.defaultShader();
       
@@ -3917,6 +4012,10 @@ class Engine {
     else if (commandEquals(command, "/stopmusic")) {
       console.log("Music stopped");
       sound.stopMusic();
+    }
+    else if (commandEquals(command, "/reloadshaders")) {
+      display.reloadShaders();
+      console.log("Shaders reloaded.");
     }
     
     
@@ -4633,7 +4732,7 @@ class Engine {
     } else if (ext.equals("vlw")) {
       display.fonts.put(name, app.loadFont(path));
     } else if (ext.equals("glsl")) {
-      display.shaders.put(name, app.loadShader(path));
+      display.loadShader(path);
     } else if (ext.equals("wav") || ext.equals("ogg") || ext.equals("mp3")) {
       sound.sounds.put(name, new SoundFile(app, path));
     } else {
@@ -4771,6 +4870,7 @@ class Engine {
     
     
     // LMAO REALLY FUNNY GLITCH, COMMENT THE LINE ABOVE AND UNCOMMENT THIS ONE BELOW!!
+    // Update: the glitch no longer works it just displays a black screen (how sad)
     //i *= 0.9*display.getDelta();
 
     if (i < 0.05) {
@@ -5639,10 +5739,6 @@ class Engine {
 
     // Show the current GUI.
     display.displayScreens();
-    
-    // If we're struggling with our framerate, opt back to a smaller CPU canvas at the
-    // cost of quality
-    display.controlCPUCanvas();
     
     
     
