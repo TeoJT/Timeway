@@ -699,7 +699,8 @@ public class PixelRealm extends Screen {
     private DirectoryPortal exitPortal = null;
     private String musicPath;
     
-    private HashMap<Integer, TerrainChunkV2> chunks = new HashMap<Integer, TerrainChunkV2>(); 
+    private HashMap<Integer, TerrainChunkV2> chunks = new HashMap<Integer, TerrainChunkV2>();
+    private float[][] tileHeightGrid;
     
     private String version = COMPATIBILITY_VERSION;
     private int versionCompatibility = 2;
@@ -835,10 +836,14 @@ public class PixelRealm extends Screen {
       // This magical method is called whenever a new chunk needs to be generated, and is called for each point
       // for each tile in the chunk.
       // Override it to implement your own chunk generation algorithm.
+      public PVector getPointXZ(float x, float z) {
+        return new PVector(getGroundSize()*(x), 0, getGroundSize()*(z));
+      }
+      
       @SuppressWarnings("unused")
-      public PVector getPoint(float x, float z) {
-        console.bugWarn("getPoint: TerrainAttributes is the base class and won't calculate points.");
-        return new PVector(0,0,0);
+      public float getPointY(float x, float z) {
+        console.bugWarn("getPointY: TerrainAttributes is the base class and won't calculate points.");
+        return 0.;
       }
       
       public void save(JSONObject j) {
@@ -883,9 +888,9 @@ public class PixelRealm extends Screen {
         // Do nothing, handled by legacy renderTerrainV1.
       }
       
-      public PVector getPoint(float x, float z) {
+      public float getPointY(float x, float z) {
         float y = sin(x*hillFrequency)*hillHeight+sin(z*hillFrequency)*hillHeight;
-        return new PVector(getGroundSize()*(x), y, getGroundSize()*(z));
+        return y;
       }
       
       public void load(JSONObject j) {
@@ -954,7 +959,7 @@ public class PixelRealm extends Screen {
       
       public LegacyTerrain() {
         NAME = "Legacy";
-        NOISE_SEED = int(random(0., 99999999.));
+        NOISE_SEED = 324895709;//int(random(0., 99999999.));
       }
       
       public LegacyTerrain(JSONObject j) {
@@ -992,17 +997,14 @@ public class PixelRealm extends Screen {
         );
       }
       
-      public PVector getPoint(float x, float z) {
+      public float getPointY(float x, float z) {
         app.noiseSeed(NOISE_SEED);
         app.noiseDetail(OCTAVE, 2.); 
         
         float y = getHillHeight(x, z)*20.;
-        return new PVector(getGroundSize()*(x), y, getGroundSize()*(z));
+        return y;
       }
     }
-    
-    
-    
     
     public class TerrainChunkV2 {
       
@@ -1010,76 +1012,122 @@ public class PixelRealm extends Screen {
       public int chunkX = 0;
       public int chunkY = 0;
       
-      // Redundant: based on chunkX and chunkY. Mainly used cus i cant be bothered to code gud lol.
-      public int hashIndex;
-      
-      public PVector[][][] tiles;
-      public PShape pshapeChunk;
+      public PVector[][] tiles;
+      public PShape pshapeChunk = null;
       
       public TerrainChunkV2(int cx, int cy) {
         this.chunkX = cx;
         this.chunkY = cy;
-        tiles = new PVector[CHUNK_SIZE][CHUNK_SIZE][4];
+        tiles = new PVector[CHUNK_SIZE+1][CHUNK_SIZE+1];
         
-        scene.textureWrap(REPEAT);
-        pshapeChunk = createShape();
-        pshapeChunk.beginShape(QUAD);
-        pshapeChunk.textureMode(NORMAL);
-        pshapeChunk.texture(img_grass.get());
         
         // Terrain (ground)
-        for (int y = 0; y < CHUNK_SIZE; y++) {
-          for (int x = 0; x < CHUNK_SIZE; x++) {
+        for (int y = 0; y < CHUNK_SIZE+1; y++) {
+          for (int x = 0; x < CHUNK_SIZE+1; x++) {
             float xx = float(x+chunkX*CHUNK_SIZE);
             float yy = float(y+chunkY*CHUNK_SIZE);
             
-            tiles[y][x][0] = calcTile(xx-1., yy-1.);          // Left, top
-            tiles[y][x][1] = calcTile(xx, yy-1.);          // Right, top
-            tiles[y][x][2] = calcTile(xx, yy);          // Right, bottom
-            tiles[y][x][3] = calcTile(xx-1., yy);          // Left, bottom
+            tiles[y][x] = calcTile(xx-1., yy-1.);
             
             terrain.genTerrainObj(xx-1., yy-1.);
-            
-            
-            PVector[] v = tiles[y][x];
-            
-            
-            pshapeChunk.vertex(v[0].x, v[0].y, v[0].z, 0, 0);                                    
-            pshapeChunk.vertex(v[1].x, v[1].y, v[1].z, 1.0, 0);  
-            pshapeChunk.vertex(v[2].x, v[2].y, v[2].z, 1.0, 1.0);  
-            pshapeChunk.vertex(v[3].x, v[3].y, v[3].z, 0, 1.0);
           }
         }
-        pshapeChunk.endShape(QUAD);
         
-        
-        //float minx = float(chunkX*CHUNK_SIZE)*terrain.getGroundSize();
-        //float miny = float(chunkX*CHUNK_SIZE)*terrain.getGroundSize();
-        
-        //float maxx = minx+float(CHUNK_SIZE)*terrain.getGroundSize();
-        //float maxy = miny+float(CHUNK_SIZE)*terrain.getGroundSize();
-        
-        //console.log("("+minx+", "+miny+", "+maxx+", "+maxy+")");
-        //int n = int(random(0, 2));
-        //for (int i = 0; i < n; i++) {
-          
-        //}
+        createPShape();
         
       }
       
-      public void saveChunk(JSONObject j) {
+      // Create new chunk by loading data (equivalent to a load function)
+      public TerrainChunkV2(JSONObject json) {
+        float[] vectors = new float[(CHUNK_SIZE+1)*(CHUNK_SIZE+1)];
+        tiles = new PVector[CHUNK_SIZE+1][CHUNK_SIZE+1];
+        chunkX = json.getInt("x", Integer.MAX_VALUE);
+        chunkY = json.getInt("z", Integer.MAX_VALUE);
+        
+        try {
+          if (!json.isNull("data")) {
+            // Decoding is much easier this time lol.
+            byte[] decodedBytes = Base64.getDecoder().decode( json.getString("data").getBytes() );
+            
+            // reconstruct bytes into float array.
+            int floatCount = decodedBytes.length / 4; // assuming each float is represented by 4 bytes
+
+            // Convert Base64 to float array.
+            for (int i = 0; i < floatCount; i++) {
+                int intBits = 0;
+                for (int j = 0; j < 4; j++) {
+                    intBits |= ((decodedBytes[i * 4 + j] & 0xFF) << (8 * j));
+                }
+                vectors[i] = Float.intBitsToFloat(intBits);
+            }
+            
+            int i = 0;
+            // Convert float array to vectors in tiles.
+            for (int y = 0; y < CHUNK_SIZE+1; y++) {
+              for (int x = 0; x < CHUNK_SIZE+1; x++) {
+                float xx = float(x+chunkX*CHUNK_SIZE);
+                float yy = float(y+chunkY*CHUNK_SIZE);
+                
+                PVector v = calcTileXZ(xx-1., yy-1.);
+                v.y = vectors[i++];
+                tiles[y][x] = v;
+              }
+            }
+          }
+        }
+        catch (RuntimeException e) {
+          console.warn("Couldn't load chunk from JSON. Maybe chunk is corrupted?");
+        }
+        createPShape();
+      }
+      
+      
+      // Assumes tiles has already been set
+      private void createPShape() {
+          scene.textureWrap(REPEAT);
+          pshapeChunk = createShape();
+          pshapeChunk.beginShape(QUAD);
+          pshapeChunk.textureMode(NORMAL);
+          pshapeChunk.texture(img_grass.get());
+          
+          for (int y = 0; y < CHUNK_SIZE; y++) {
+            for (int x = 0; x < CHUNK_SIZE; x++) {
+                PVector[] v = new PVector[4];
+                
+                v[0] = tiles[y][x];
+                v[1] = tiles[y][x+1];
+                v[2] = tiles[y+1][x+1];
+                v[3] = tiles[y+1][x];
+                
+                //if (glowingchunk == hashIndex) {
+                //  if (glowingtilex == x && glowingtiley == y) {
+                //    if (blink) continue;
+                //  }
+                //}
+                
+                pshapeChunk.vertex(v[0].x, v[0].y, v[0].z, 0, 0);                                    
+                pshapeChunk.vertex(v[1].x, v[1].y, v[1].z, 1.0, 0);  
+                pshapeChunk.vertex(v[2].x, v[2].y, v[2].z, 1.0, 1.0);  
+                pshapeChunk.vertex(v[3].x, v[3].y, v[3].z, 0, 1.0);
+            }
+          }
+              
+          pshapeChunk.endShape(QUAD);
+      }
+      
+      public JSONObject save() {
+        JSONObject j = new JSONObject();
+        j.setInt("x", chunkX);
+        j.setInt("z", chunkY);
+        int hashIndex = MAX_CHUNKS_XZ*chunkY + chunkX;
         j.setInt("hash", hashIndex);
         
-        float[] vectors = new float[tiles.length * tiles[0].length * tiles[0][0].length * 3];
+        float[] vectors = new float[(tiles.length) * (tiles[0].length)];
         
         int ii = 0;
-        for (int y = 0; y < CHUNK_SIZE; y++) {
-          for (int x = 0; x < CHUNK_SIZE; x++) {
-            for (int i = 0; i < 4; i++) {
-              vectors[ii++] = tiles[y][x][i].x;          // Left, top
-              vectors[ii++] = tiles[y][x][i].y;          // Left, top
-              vectors[ii++] = tiles[y][x][i].z;          // Left, top
-            }
+        for (int y = 0; y < CHUNK_SIZE+1; y++) {
+          for (int x = 0; x < CHUNK_SIZE+1; x++) {
+            vectors[ii++] = tiles[y][x].y;
           }
         }
         
@@ -1087,24 +1135,79 @@ public class PixelRealm extends Screen {
         byte[] byteArray = new byte[vectors.length * 4]; // 4 bytes for each float
         for (int i = 0; i < vectors.length; i++) {
             int intBits = Float.floatToRawIntBits(vectors[i]);
-            byteArray[i * 4] = (byte) (intBits >> 24);
-            byteArray[i * 4 + 1] = (byte) (intBits >> 16);
-            byteArray[i * 4 + 2] = (byte) (intBits >> 8);
-            byteArray[i * 4 + 3] = (byte) intBits;
+            byteArray[i * 4 + 3] = (byte) ((intBits >> 24) & 0xFF);
+            byteArray[i * 4 + 2] = (byte) ((intBits >> 16) & 0xFF);
+            byteArray[i * 4 + 1] = (byte) ((intBits >> 8) & 0xFF);
+            byteArray[i * 4 + 0] = (byte) intBits;
         }
         
         // Convert our chunk to base64!
-        String base64String = Base64.getEncoder().encodeToString(byteArray);
-        console.log(vectors.length);
-        console.log(base64String.length());
-        console.log(base64String);
+        String data = Base64.getEncoder().encodeToString(byteArray);
         
+        j.setString("data", data);
+        return j;
+      }
+      boolean blink = true;
+      public void renderChunk() {
+        //if (glowingchunk == hashIndex) {
+        //  createPShape();
+        //  blink = !blink;
+        //}
+        scene.shape(pshapeChunk);
+        
+        // This below is for hitbox debug purposes
+        
+        //PVector[][] test = new PVector[CHUNK_SIZE+1][CHUNK_SIZE+1];
+        //for (int y = 0; y < CHUNK_SIZE+1; y++) {
+        //   for (int x = 0; x < CHUNK_SIZE+1; x++) {
+             
+        //      float xx = float(x+chunkX*CHUNK_SIZE);
+        //      float yy = float(y+chunkY*CHUNK_SIZE);
+              
+        //      test[y][x] = calcTile(xx-1., yy-1.);
+        //  }
+        //}
+        
+        //scene.beginShape(QUAD);
+        //for (int y = 0; y < CHUNK_SIZE; y++) {
+        //   for (int x = 0; x < CHUNK_SIZE; x++) {
+        //      PVector[] v = new PVector[4];
+        //      v[0] = test[y][x];
+        //      v[1] = test[y][x+1];
+        //      v[2] = test[y+1][x+1];
+        //      v[3] = test[y+1][x];
+              
+              
+        //      scene.noStroke();
+        //      scene.fill(255, 200, 0, 127);
+        //      scene.vertex(v[0].x, v[0].y, v[0].z);                                    
+        //      scene.vertex(v[1].x, v[1].y, v[1].z);  
+        //      scene.vertex(v[2].x, v[2].y, v[2].z);  
+        //      scene.vertex(v[3].x, v[3].y, v[3].z);
+        //  }
+        //}
+        //scene.endShape();
+         
+          
       }
       
-      public void renderChunk() {
-        scene.shape(pshapeChunk);
+      public void doThing() {
+        tiles[int(random(0, 9))][int(random(0, 9))].y = random(-1000, 1000);
+        createPShape();
       }
 
+
+      public void regenerateTerrainObj() {
+        // Terrain (ground)
+        for (int y = 0; y < CHUNK_SIZE+1; y++) {
+          for (int x = 0; x < CHUNK_SIZE+1; x++) {
+            float xx = float(x+chunkX*CHUNK_SIZE);
+            float yy = float(y+chunkY*CHUNK_SIZE);
+            
+            terrain.genTerrainObj(xx-1., yy-1.);
+          }
+        }
+      }
       
       //public void setTile(int tilex, int tiley, float[] val) {
       //  vhi[tilex%CHUNK_SIZE][tiley%CHUNK_SIZE] = val;
@@ -1120,14 +1223,27 @@ public class PixelRealm extends Screen {
     
     // --- Define our PR objects. ---
     class TerrainPRObject extends PRObject {
+      // Randseed is only used in version 1.x.
       private float randSeed = 0.;
+      
+      // Modern version 2.0.
+      private int imgIndex = 0;
+      
+      public TerrainPRObject() {
+        super();
+        this.img = img_tree;
+        // Small hitbox
+        this.hitboxWi = wi*0.25;
+        readjustSize();
+      }
       
       public TerrainPRObject(float x, float y, float z, float size, String id) {
         super(x, y, z);
         this.img = img_tree;
         this.size = size;
         readjustSize();
-        legacy_autogenStuff.add(id);
+        if (legacy_autogenStuff != null)
+          legacy_autogenStuff.add(id);
         randSeed = x+y+z;
         
         // Small hitbox
@@ -1141,14 +1257,23 @@ public class PixelRealm extends Screen {
         readjustSize();
         randSeed = x+y+z;
         
+        // Our RealmImage class allows us to go as high as we want :)
+        imgIndex = int(random(0, 9));
+        
         // Small hitbox
         this.hitboxWi = wi*0.25;
       }
       
       public void readjustSize() {
         // Set the size in case there's a realm refresh.
-        this.wi = img.getRandom(randSeed).width*size;
-        this.hi = img.getRandom(randSeed).height*size;
+        if (versionCompatibility == 1) {
+          this.wi = img.getRandom(randSeed).width*size;
+          this.hi = img.getRandom(randSeed).height*size;
+        }
+        else if (versionCompatibility == 2) {
+          this.wi = img.get(imgIndex).width*size;
+          this.hi = img.get(imgIndex).height*size;
+        }
       }
       
       public void display() {
@@ -1170,12 +1295,49 @@ public class PixelRealm extends Screen {
         
         readjustSize();
         
+        if (versionCompatibility == 1) {
+          displayQuad(img.getRandom(randSeed), x1, y1, z1, x2, y1+hi, z2);
+        }
         if (versionCompatibility == 2) {
           useFadeShader();
-          
+          displayQuad(img.get(imgIndex), x1, y1, z1, x2, y1+hi, z2);
         }
+      }
+      
+      public JSONObject save() {
+        JSONObject PRObject = new JSONObject();
+        PRObject.setString("filename", ".pixelrealm-tree-"+str(imgIndex));
+        PRObject.setFloat("x", this.x);
+        PRObject.setFloat("y", this.y);
+        PRObject.setFloat("z", this.z);
+        PRObject.setFloat("scale", this.size);
+        readjustSize();
+        return PRObject;
+      }
+      
+      
+  
+      public void load(JSONObject json) {
+        // Every 3d object has x y z position.
+        this.x = json.getFloat("x", this.x);
+        this.z = json.getFloat("z", this.z);
+        this.size = json.getFloat("scale", 1.);
+  
+        float yy = onSurface(this.x, this.z);
+        this.y = json.getFloat("y", yy);
 
-        displayQuad(img.getRandom(randSeed), x1, y1, z1, x2, y1+hi, z2);
+        
+        String name = json.getString("filename");     
+        if (!name.substring(0, 17).equals(".pixelrealm-tree-")) {
+          console.bugWarn("Terrain abstract object must be named \".pixelrealm-tree-\"");
+          return;
+        }
+        
+        //console.log(".pixelrealm-tree-"+int(name.charAt(17)-48));
+        imgIndex = int(name.charAt(17)-48);
+        
+        // If the object is below the ground, reset its position.
+        if (y > yy+5.) this.y = yy;
       }
     }
   
@@ -1846,8 +2008,30 @@ public class PixelRealm extends Screen {
           && (playerY > (y-hi)));
       }
       
-      
+      public JSONObject save() {
+        JSONObject PRObject = new JSONObject();
+        PRObject.setFloat("x", this.x);
+        PRObject.setFloat("y", this.y);
+        PRObject.setFloat("z", this.z);
+        PRObject.setFloat("scale", this.size/BACKWARD_COMPAT_SCALE);
+        return PRObject;
+      }
   
+      public void load(JSONObject json) {
+        // We expect the engine to have already loaded a JSON object.
+        // Every 3d object has x y z position.
+        this.x = json.getFloat("x", this.x);
+        this.z = json.getFloat("z", this.z);
+        this.size = json.getFloat("scale", 1.);
+  
+        float yy = onSurface(this.x, this.z);
+        this.y = json.getFloat("y", yy);
+        
+        //console.log("x: "+x+" y: "+y+" z: "+z);
+  
+        // If the object is below the ground, reset its position.
+        if (y > yy+5.) this.y = yy;
+      }
   
       public void checkHovering() {
         float d_sin = cache_flatSinDirection*(wi/2);
@@ -2035,7 +2219,9 @@ public class PixelRealm extends Screen {
     }
     
     private float onSurface(float x, float z) {
-      if (outOfBounds(x,z)) return 999999;
+      if (outOfBounds(x,z)) {
+        return 999999;
+      }
       
       if (terrain == null) {
         //console.bugWarn("onSurface() needs the terrain to be loaded before it's called!");
@@ -2043,20 +2229,19 @@ public class PixelRealm extends Screen {
       }
       float tilex = floor(x/terrain.groundSize)+1.;
       float tilez = floor(z/terrain.groundSize)+1.;
-      
-      
-      
-  
-      PVector pv1 = calcTile(tilex-1., tilez-1.);          // Left, top
-      PVector pv2 = calcTile(tilex, tilez-1.);          // Right, top
+      PVector pv1 = calcTile(tilex-1, tilez-1);          // Left, top
+      PVector pv2 = calcTile(tilex, tilez-1);          // Right, top
       PVector pv3 = calcTile(tilex, tilez);          // Right, bottom
-      PVector pv4 = calcTile(tilex-1., tilez);          // Left, bottom
+      PVector pv4 = calcTile(tilex-1, tilez);          // Left, bottom
+      
       return getplayerYOnQuad(pv1, pv2, pv3, pv4, x, z);
     }
     
     // Similar to plantDown but guarentees than the object in question will not be levitating on a sloped surface.
     private float plantDown(float x, float z) {
-      if (outOfBounds(x,z)) return 999999;
+      if (outOfBounds(x,z)) {
+        return 999999;
+      }
       
       if (terrain == null) {
         //console.bugWarn("onSurface() needs the terrain to be loaded before it's called!");
@@ -2066,10 +2251,10 @@ public class PixelRealm extends Screen {
       float tilez = floor(z/terrain.groundSize)+1.;
       
       float lowest = -999999; // Very high in the sky, we want the lowest in the ground.
-      lowest = max(calcTile(tilex-1., tilez-1.).y, lowest);          // Left, top
-      lowest = max(calcTile(tilex, tilez-1.).y, lowest);          // Right, top
-      lowest = max(calcTile(tilex, tilez).y, lowest);          // Right, bottom
-      lowest = max(calcTile(tilex-1., tilez).y, lowest);          // Left, bottom
+      lowest = max(calcTileY(tilex-1., tilez-1.), lowest);          // Left, top
+      lowest = max(calcTileY(tilex, tilez-1.), lowest);          // Right, top
+      lowest = max(calcTileY(tilex, tilez), lowest);          // Right, bottom
+      lowest = max(calcTileY(tilex-1., tilez), lowest);          // Left, bottom
       return lowest;
     }
     
@@ -2087,8 +2272,83 @@ public class PixelRealm extends Screen {
       return 255-(d*scale);
     }
   
+    private PVector calcTile(float x, float z, boolean debug) {
+      PVector v = calcTileXZ(x,z);
+      v.y = calcTileY(x,z, debug);
+      return v;
+    }
+    
     private PVector calcTile(float x, float z) {
-      return terrain.getPoint(x, z);
+      PVector v = calcTileXZ(x,z);
+      v.y = calcTileY(x,z, false);
+      return v;
+    }
+    
+    private PVector calcTileXZ(float x, float z) {
+      return terrain.getPointXZ(x,z);
+    }
+    
+    
+    private float calcTileY(float x, float z) {
+      return calcTileY(x, z, false);
+    }
+    
+    int glowingchunk = 0;
+    int glowingtilex = 0;
+    int glowingtiley = 0;
+    private float calcTileY(float x, float z, boolean debug) {
+      
+      if (versionCompatibility == 1) return terrain.getPointY(x,z);
+      
+      //int chunkx = int((x + (x < 0 ? 2 : 1))/(CHUNK_SIZE)) - (x < 0 ? 1 : 0);
+      //int chunkz = int((z + (z < 0 ? 1 : 0) )/(CHUNK_SIZE)) - (z < 0 ? 1 : 0);
+      
+      // +x +z  
+      // +x -z
+      // -x +z
+      // -x -z  OK
+      
+      //int chunkx = int((x + (x < 0 ? 1 : -1))/(CHUNK_SIZE)) - (x < 0 ? 0 : 0);
+      //int chunkz = int((z + (x < 0 ? 1 : -1) )/(CHUNK_SIZE)) - (z < 0 ? 0 : 0);
+      
+      int chunkx = int((x+1)/float(CHUNK_SIZE)) - (x < 0 ? 1 : 0);
+      int chunkz = int((z+1)/float(CHUNK_SIZE)) - (z < 0 ? 1 : 0);
+      
+      int tilex = 0;
+      int tilez = 0;
+      if (x >= 0) {
+        tilex = (int(x+1)%(CHUNK_SIZE));
+      }
+      else {
+        tilex = CHUNK_SIZE-abs(int(x+1)%(CHUNK_SIZE));
+      }
+      
+      if (z >= 0) {
+        tilez = (int(z+1)%(CHUNK_SIZE));
+      }
+      else {
+        tilez = CHUNK_SIZE-abs(int(z+1)%(CHUNK_SIZE));
+      }
+      
+            
+      if (debug) {
+        console.log(x+ " " + z + "   "+ tilex + " " + tilez + "   " + chunkx + " " + chunkz);
+      }
+      
+      
+      int hashIndex = (MAX_CHUNKS_XZ)*chunkz + chunkx;
+      glowingchunk = hashIndex;
+
+      
+      glowingtilex = tilex;
+      glowingtiley = tilez;
+      TerrainChunkV2 ch = chunks.get(hashIndex);
+      if (ch != null) {
+        return ch.tiles[abs(tilez)][abs(tilex)].y;
+      }
+      else {
+        return terrain.getPointY(x,z);
+      }
     }
     
     protected ItemSlot<PocketItem> addToPockets(PRObject item) {
@@ -2184,12 +2444,13 @@ public class PixelRealm extends Screen {
       // Get all files (creates the FileObject instances)
       openDir();
       
+      // Get realm's terrain assets (sky, grass, trees, music)
+      loadRealmAssets();
+      
       // Read the JSON (load terrain information and position of these objects)
       loadRealmTerrain();
       if (terrain == null) terrain = new SinesinesineTerrain();
       
-      // Get realm's terrain assets (sky, grass, trees, music)
-      loadRealmAssets();
     }
     
     public void refreshFiles() {
@@ -2392,23 +2653,19 @@ public class PixelRealm extends Screen {
         
       // File doesn't exist; create new turf file.
       } else {
-        //console.log("Creating new realm turf file.");
-        
-        
+        console.log("Creating new realm turf file.");
         
         if (version.equals("1.0") || version.equals("1.1")) terrain = new SinesinesineTerrain();
+        else if (version.equals("2.0")) {
+          playerX = 0.0;
+          playerZ = 0.0;
+          LegacyTerrain t = new LegacyTerrain();
+          t.setRenderDistance(4);
+          t.setGroundSize(150.);
+          terrain = t;
+        }
         //saveRealmJson();
       }
-      
-      // TODO: REMOVE TESTING CODE
-      //if (version.equals("2.0")) {
-      //  playerX = 0.0;
-      //  playerZ = 0.0;
-      //  LegacyTerrain t = new LegacyTerrain();
-      //  t.setRenderDistance(3);
-      //  t.setGroundSize(150);
-      //  terrain = t;
-      //}
       
     }
     
@@ -2513,6 +2770,24 @@ public class PixelRealm extends Screen {
         terrain = new SinesinesineTerrain();
       }
       
+      // Load chunks
+      JSONArray chunksArray = jsonFile.getJSONArray("chunks");
+      int l = chunksArray.size();
+      for (int i = 0; i < l; i++) {
+        try {
+          JSONObject chunkdata = chunksArray.getJSONObject(i);
+          
+          // Load data and put into chunks data.
+          // If has is unassigned a value, put the new chunk into the void where it will never be reached lmao.
+          chunks.put(chunkdata.getInt("hash", Integer.MAX_VALUE), new TerrainChunkV2(chunkdata));
+        }
+        
+        // Just in case teehee.
+        catch (RuntimeException e) {
+        }
+      }
+      
+      
       // Put FileObjects into hashmap by filename
       HashMap<String, FileObject> namesToObjects = new HashMap<String, FileObject>();
       for (FileObject o : files) {
@@ -2521,15 +2796,21 @@ public class PixelRealm extends Screen {
         }
       }
       
-      int l = objects3d.size();
+      l = objects3d.size();
       // Loop thru each file object in the array. Remember each object is uniquely identified by its filename.
       for (int i = 0; i < l; i++) {
-        try {
+        //try {
           JSONObject probjjson = objects3d.getJSONObject(i);
           
           // Each object is uniquely identified by its filename/folder name.
           String name = probjjson.getString("filename", engine.APPPATH+engine.GLITCHED_REALM);
-          // Due to the filename used to be called "dir", check for legacy names.
+          
+          // If the name begins with a "." then it is an abstract object (file that can appear multiple times in one realm)
+          // For now we just have terrain objects (aka trees)
+          if (name.length() >= 17 && name.substring(0, 17).equals(".pixelrealm-tree-")) {
+            TerrainPRObject tree = new TerrainPRObject();
+            tree.load(probjjson);
+          }
 
           // Get the object by name so we can do a lil bit of things to it.
           FileObject o = namesToObjects.remove(name);
@@ -2541,12 +2822,13 @@ public class PixelRealm extends Screen {
 
           // From here, the way the object is loaded is depending on its type.
           o.load(probjjson);
-        }
+        //}
         // For some reason we can get unexplained nullpointerexceptions.
         // Just a lazy way to overcome it, literally doesn't affect anything.
         // Totally. Totally doesn't affect anything.
-        catch (RuntimeException e) {
-        }
+        //catch (RuntimeException e) {
+        //  console.bugWarn(e.getMessage());
+        //}
       }
       
       // Bye bye Evolving Gateway coins :(
@@ -2622,25 +2904,35 @@ public class PixelRealm extends Screen {
     
     
     public boolean saveRealmV2(JSONObject jsonFile) {
+      jsonFile.setString("compatibility_version", version);
+      
+      // Save file objects
       JSONArray objects3d = new JSONArray();
       int i = 0;
-      // Save file objects
       for (FileObject o : files) {
         if (o != null) {
           objects3d.setJSONObject(i++, o.save());
         }
       }
-      jsonFile.setString("compatibility_version", version);
+      
+      for (PRObject o : ordering) {
+        if (o != null && o instanceof TerrainPRObject) {
+          objects3d.setJSONObject(i++, o.save());
+        }
+      }
+      
       jsonFile.setJSONArray("pr_objects", objects3d);
       
       // Save terrain information
       terrain.save(jsonFile);
       
       // Save realm chunks
+      i = 0;
+      JSONArray chunksArray = new JSONArray();
       for (TerrainChunkV2 chunk : chunks.values()) {
-        chunk.saveChunk(jsonFile);
+        chunksArray.setJSONObject(i++, chunk.save());
       }
-      
+      jsonFile.setJSONArray("chunks", chunksArray);
       
       // And we're done already!
       console.log("Saved realm");
@@ -3204,7 +3496,6 @@ public class PixelRealm extends Screen {
               //scene.tint(color(255, 127, 127));
               //console.log(str(chunkx)+" "+str(chunkz));
             }
-  
             PVector v1 = calcTile(tilex-1., tilez-1.);          // Left, top
             PVector v2 = calcTile(tilex, tilez-1.);          // Right, top
             PVector v3 = calcTile(tilex, tilez);          // Right, bottom
@@ -3305,10 +3596,8 @@ public class PixelRealm extends Screen {
           
           TerrainChunkV2 chunk = chunks.get(hashIndex);
           
-          
           if (chunk == null) {
             chunk = new TerrainChunkV2(chunkx, chunkz);
-            chunk.hashIndex = hashIndex;
             chunks.put(hashIndex, chunk);
           }
           
@@ -4160,6 +4449,28 @@ public class PixelRealm extends Screen {
       
       console.log("Teleported to ("+str(currRealm.playerX)+", "+str(currRealm.playerY)+", "+str(currRealm.playerZ)+").");
 
+      return true;
+    }
+    else if (engine.commandEquals(command, "/docoolthing")) {
+      for (PixelRealmState.TerrainChunkV2 chunk : currRealm.chunks.values()) {
+        console.log("aa");
+        chunk.doThing();
+      }
+      return true;
+    }
+    else if (engine.commandEquals(command, "/regeneratetrees")) {
+      for (PixelRealmState.PRObject o : currRealm.ordering) {
+        if (o != null && o instanceof PixelRealmState.TerrainPRObject) {
+          o.destroy();
+        }
+      }
+      
+      for (PixelRealmState.TerrainChunkV2 ch : currRealm.chunks.values()) {
+        if (ch != null) {
+          ch.regenerateTerrainObj();
+        }
+      }
+      console.log("Regenerated stuff.");
       return true;
     }
     else return false;

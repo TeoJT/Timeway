@@ -50,10 +50,10 @@ class Engine {
   // Info and versioning
   public final String NAME        = "Timeway";
   public final String AUTHOR      = "Teo Taylor";
-  public final String VERSION     = "0.1.0";
+  public final String VERSION     = "0.2.0";
   public final String VERSION_DESCRIPTION = 
-    "- Added tutorial\n"+
-    "- Added template realms";
+    "- Added V2 realms\n"+
+    "- Added new Legacy realm terrain attribute";
   // ***************************
   // How versioning works:
   // a.b.c
