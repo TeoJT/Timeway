@@ -9,14 +9,14 @@ public class Benchmark extends Screen {
     super(e);
     textFont(engine.DEFAULT_FONT);
     gui = new SpriteSystemPlaceholder(engine, engine.APPPATH+engine.PATH_SPRITES_ATTRIB+"gui/benchmark/");
-    engine.useSpriteSystem(gui);
+    ui.useSpriteSystem(gui);
     myUpperBarColor = color(100);
     gui.interactable = false;
   }
   
   public void upperBar() {
     super.upperBar();
-    if (engine.button("back", "back_arrow_128", "")) {
+    if (ui.button("back", "back_arrow_128", "")) {
       previousScreen();
     }
     gui.updateSpriteSystem();

@@ -160,7 +160,6 @@ public class Editor extends Screen {
     public String entryName;
     public String entryPath;
     public String entryDir;
-    public MiniMenu currMinimenu = null;
     public color selectedColor = color(255, 255, 255);
     public float selectedFontSize = 20;
     public float xview = 0;
@@ -168,8 +167,6 @@ public class Editor extends Screen {
     public TextPlaceable entryNameText;
     public boolean cameraMode = false;
     public boolean autoScaleDown = false;
-    // TODO: remove ERS, it doesn't work
-    public boolean usingERS = false;           // Not ever changed during runtime, but useful to disable during debugging.
     public boolean changesMade = false;
     public int upperBarDrop = INITIALISE_DROP_ANIMATION;
     public static final int INITIALISE_DROP_ANIMATION = 0;
@@ -195,309 +192,83 @@ public class Editor extends Screen {
     public final static int ERR_UNSUPPORTED_SYSTEM = 3;
 
 
-    public class MiniMenu {
-        public SpriteSystemPlaceholder g;
-        public float x = 0., y = 0.;
-        public float width = 0., height = 0.;
-        public float yappear = 1.;
-        public boolean disappear = false;
-
-        final public float APPEAR_SPEED = 0.1;
-        final public color BACKGROUND_COLOR = color(0, 0, 0, 150);
-
-        public MiniMenu() {
-            // idk what else to put there
-            engine.power.setAwake();
-            yappear = 1.;
-        }
-
-        public MiniMenu(float x, float y) {
-            this();
-            this.x = x;
-            this.y = y;
-        }
-
-        public MiniMenu(float x, float y, float w, float h) {
-            this(x, y);
-            this.width = w;
-            this.height = h;
-        }
-
-        public void close() {
-            // Only bother closing if we're not in any current animation
-            if (!disappear && yappear <= 0.01) {
-                disappear = true;
-                power.setSleepy();
-                yappear = 1.;
-            }
-        }
-
-        public void display() {
-            app.noTint();
-            // Sorry I'm lazy
-            
-            yappear *= PApplet.pow(1.-APPEAR_SPEED, display.getDelta());
-            
-            app.noStroke();
-            app.fill(BACKGROUND_COLOR);
-
-            // Cool menu appaer animation. Or disappear animation.
-            if (!disappear) {
-                float h = this.height-(this.height*yappear);
-                app.rect(x, y, this.width, h);
-                display.clip(x, y, this.width, h);
-            }
-            else {
-                app.rect(x, y, this.width, this.height*yappear);
-                display.clip(x, y, this.width, this.height*yappear);
-                if (yappear <= 0.01) {
-                    engine.power.setSleepy();
-                    currMinimenu = null;
-                }
-            }
-            
-            
-
-            // If we click away from the minimenu, close the minimenu
-            if ((engine.mouseX() > x && engine.mouseX() < x+this.width && engine.mouseY() > y && engine.mouseY() < y+this.height) == false) {
-
-                if (engine.pressDown) {
-                    close();
-                }
-            }
-        }
-    }
-
-    public class ColorPicker extends MiniMenu {
-        public color[] colorArray = {
-            //ffffff
-            color(255, 255, 255),
-            //909090
-            color(144, 144, 144),
-            //4d4d4d
-            color(77, 77, 77),
-            //000000
-            color(0, 0, 0),
-            //ffde96
-            color(255, 222, 150),
-            //ffc64b
-            color(255, 198, 75),
-            //ffae00
-            color(255, 174, 0),
-            //ffb4f6
-            color(255, 180, 246),
-            //ff89b9
-            color(255, 137, 185),
-            //ff5d5f
-            color(255, 93, 95),
-            //cab9ff
-            color(202, 185, 255),
-            //727aff
-            color(114, 122, 255),
-            //38a7ff
-            color(56, 167, 255)
-        };
-
-        public int maxCols = 6;
-
-
-        public ColorPicker(float x, float y, float width, float height) {
-            super(x, y, width, height);
-        }
-
-        public void display() {
-            // Super display to display the background
-            super.display();
-            //app.tint(255, 255.*yappear);
-
-
-            // display all the colors in the colorArray, in a grid, with a new row every MAX_COLS
-
-            float spacing = 20;
-            float selSize = 5;
-
-            // The width of each color box
-            float boxWidth = (this.width/maxCols);
-            // The height of each color box
-            // The height of the box is the aspect ratio of the minimenu
-            float boxHeight = boxWidth*(this.height/this.width);
-            // Loop through each colour
-            for (int i = 0; i < colorArray.length; i++) {
-                // The x position of the color box
-                // Give it a bit of space between each box
-                float boxX = this.x+(i%maxCols)*boxWidth;
-                // The y position of the color box
-                float boxY = this.y+(spacing/2)+(i/maxCols)*boxHeight;
-                // The color of the color box
-                color boxColor = colorArray[i];
-
-                boolean wasHovered = false;
-                // If the mouse is hovering over the color box, tint it
-                if (engine.mouseX() > boxX-selSize && engine.mouseX() < boxX+boxWidth+selSize && engine.mouseY() > boxY-selSize && engine.mouseY() < boxY+boxHeight+selSize) {
-                    boxX -= selSize;
-                    boxY -= selSize;
-                    boxWidth += selSize*2;
-                    boxHeight += selSize*2;
-                    wasHovered = true;
-
-                    // If clicked 
-                    if (engine.leftClick) {
-                        selectedColor = colorArray[i];
-                        // Set the color of the text placeable
-
-                        if (editingPlaceable != null && editingPlaceable instanceof TextPlaceable) {
-                            TextPlaceable editingTextPlaceable = (TextPlaceable)editingPlaceable;
-                            editingTextPlaceable.textColor = selectedColor;
-                        }
-                        close();
-                    }
-                }
-
-                // Display the color box
-                app.fill(boxColor);
-                app.rect((spacing/2)+boxX, boxY, boxWidth-spacing, boxHeight-(spacing/2));
-
-                if (wasHovered) {
-                    // Shrink the width n height back to what it was before
-                    boxX += selSize;
-                    boxY += selSize;
-                    boxWidth -= selSize*2;
-                    boxHeight -= selSize*2;
-                }
-            }
-
-            //Remember to call noTint
-            app.noTint();
-        }
-    }
     
-    public class OptionsMenu extends MiniMenu {
-      private HashSet<String> options = new HashSet<String>();
-      private String selectedOption = null;
-      private static final float SIZE = 30.;
-      private static final float SPACING = 10.;
-      private static final float OFFSET_SPACING_X = 50.;
-      private static final color HOVER_COLOR = 0xFFC200FF;
-      
-      // Keep track if the menu has been selected, and if it has, set this to
-      // false so that our selected action is only performed once (might loop
-      // during the closing animation of the MiniMenu)
-      private boolean selectable = true;
-      
-      public OptionsMenu(String... opts) {
-        super(engine.mouseX(), engine.mouseY());
-        
-        float maxWidth = 0.;
-        float hi = 0.;        
-        app.textFont(engine.DEFAULT_FONT, SIZE);
-        for (String op : opts) {
-          options.add(op);
-          float wi = app.textWidth(op);
-          if (wi > maxWidth) maxWidth = wi;
-          hi += SIZE+SPACING;
-        }
-        
-        this.width = maxWidth+SPACING*2.+OFFSET_SPACING_X;
-        this.height = hi+SPACING;
-      }
-      
-      
-      public void display() {
-        super.display();
-        if (selectedOption != null) 
-          selectable = false;
-        
-        app.textFont(engine.DEFAULT_FONT, SIZE);
-        app.textAlign(LEFT, TOP);
-        
-        float yy = this.y+SPACING;
-        for (String op : options) {
-          float xx = this.x+OFFSET_SPACING_X+SPACING;
-          if (engine.mouseX() > this.x && engine.mouseX() < this.x+this.width && engine.mouseY() > yy && engine.mouseY() < yy+SIZE+SPACING) {
-            app.fill(HOVER_COLOR);
-            if (engine.click) {
-              selectedOption = op;
-              this.close();
-            }
-          }
-          else app.fill(255);
-          app.text(op, xx, yy);
-          yy += SIZE+SPACING;
-        }
-      }
-      
-      public boolean optionSelected() {
-        if (!selectable) return false;
-        return (selectedOption != null);
-      }
-      
-      public boolean optionSelected(String exp) {
-        if (selectedOption == null || !selectable) return false;
-        return selectedOption.equals(exp);
-      }
-    }
+
     
-    public class ImgOptionsMenu extends OptionsMenu {
-      public ImgOptionsMenu() {
-        super("Copy", "Save", "Delete");
-      }
+    
+    private void textOptions() {
+      String[] labels = new String[2];
+      Runnable[] actions = new Runnable[2];
       
-      public void display() {
-        super.display();
-        
-        if (optionSelected()) {
-          if (optionSelected("Copy")) {
-            console.log("Copying images to clipboard not supported yet, sorry!");
-          }
+      labels[0] = "Copy";
+      actions[0] = new Runnable() {public void run() {
           
-          if (optionSelected("Save")) {
-            if (editingPlaceable != null && editingPlaceable instanceof ImagePlaceable) {
-              ImagePlaceable im = (ImagePlaceable)editingPlaceable;
-              file.selectOutput("Save image...", im.getImage());
+          if (editingPlaceable != null) {
+            if (editingPlaceable instanceof TextPlaceable) {
+              TextPlaceable t = (TextPlaceable)editingPlaceable;
+              boolean success = clipboard.copyString(t.text);
+              if (success)
+                console.log("Copied!");
             }
           }
           
-          if (optionSelected("Delete")) {
-            if (editingPlaceable != null) {
-              placeableset.remove(editingPlaceable);
-              changesMade = true;
-            }
-          }
-        }
-      }
-    }
-    
-    public class TextOptionsMenu extends OptionsMenu {
-      public TextOptionsMenu() {
-        super("Copy", "Delete");
-      }
+      }};
       
-      public void display() {
-        super.display();
-        
-        // Oh god this is so unreadable.
-        if (optionSelected()) {
-          if (optionSelected("Copy")) {
-            if (editingPlaceable != null) {
-              if (editingPlaceable instanceof TextPlaceable) {
-                TextPlaceable t = (TextPlaceable)editingPlaceable;
-                boolean success = clipboard.copyString(t.text);
-                if (success)
-                  console.log("Copied!");
-              }
-            }
+      
+      labels[1] = "Delete";
+      actions[1] = new Runnable() {public void run() {
+          
+          if (editingPlaceable != null) {
+            placeableset.remove(editingPlaceable);
+            changesMade = true;
           }
           
-          // TODO: put this in a function.
-          if (optionSelected("Delete")) {
-            if (editingPlaceable != null) {
-              placeableset.remove(editingPlaceable);
-              changesMade = true;
-            }
-          }
-        }
-      }
+      }};
+      
+      
+      
+      ui.createOptionsMenu(labels, actions);
     }
+    
+    
+    private void imageOptions() {
+      
+      String[] labels = new String[3];
+      Runnable[] actions = new Runnable[3];
+      
+      labels[0] = "Copy";
+      actions[0] = new Runnable() {public void run() {
+          
+        console.log("Copying images to clipboard not supported yet, sorry!");
+          
+      }};
+      
+      
+      labels[1] = "Save";
+      actions[1] = new Runnable() {public void run() {
+          
+        if (editingPlaceable != null && editingPlaceable instanceof ImagePlaceable) {
+          ImagePlaceable im = (ImagePlaceable)editingPlaceable;
+          file.selectOutput("Save image...", im.getImage());
+        }
+          
+      }};
+      
+      labels[2] = "Delete";
+      actions[2] = new Runnable() {public void run() {
+          
+        if (editingPlaceable != null) {
+          placeableset.remove(editingPlaceable);
+          changesMade = true;
+        }
+          
+      }};
+      
+      ui.createOptionsMenu(labels, actions);
+    }
+    
+    
+    
 
     public class Placeable {
         public SpriteSystemPlaceholder.Sprite sprite;
@@ -533,7 +304,6 @@ public class Editor extends Screen {
 
         public void update() {
             display();
-            sprite.setRedraw(true);
             placeables.placeable(sprite);
         }
     }
@@ -628,7 +398,7 @@ public class Editor extends Screen {
                 
                 // Mini menu for text
                 if (engine.rightPressDown) {
-                  currMinimenu = new TextOptionsMenu();
+                  textOptions();
                 }
             }
             super.update();
@@ -686,13 +456,10 @@ public class Editor extends Screen {
             if (placeableSelected()) {
                 editingPlaceable = this;
                 if (engine.rightPressDown) {
-                  currMinimenu = new ImgOptionsMenu();
+                  imageOptions();
                 }
             }
             placeables.sprite(sprite.getName(), imageName);
-            
-            // TODO: Remove any old instances of ERS
-            sprite.setRedraw(true);
         }
     }
     
@@ -1014,8 +781,8 @@ public class Editor extends Screen {
     //*****************************************************************
 
     public void runGUI() {
-        engine.useSpriteSystem(gui);
-        engine.spriteSystemClickable = (currMinimenu == null);
+        ui.useSpriteSystem(gui);
+        ui.spriteSystemClickable = !ui.miniMenuShown();
 
         
         if (!cameraMode) {
@@ -1029,7 +796,7 @@ public class Editor extends Screen {
           app.textFont(engine.DEFAULT_FONT);
   
           //************BACK BUTTON************
-          if (engine.button("back", "back_arrow_128", "Save & back")) {
+          if (ui.button("back", "back_arrow_128", "Save & back")) {
                saveEntryJSON();
                if (engine.prevScreen instanceof Explorer) {
                  Explorer prevExplorerScreen = (Explorer)engine.prevScreen;
@@ -1048,13 +815,13 @@ public class Editor extends Screen {
           }
   
           //************FONT COLOUR************
-          if (engine.button("font_color", "fonts_128", "Colour")) {
+          if (ui.button("font_color", "fonts_128", "Colour")) {
               SpriteSystemPlaceholder.Sprite s = gui.getSprite("font_color");
-              currMinimenu = new ColorPicker(s.xpos, s.ypos+100, 300, 200);
+              ui.colorPicker(s.xpos, s.ypos+100);
           }
   
           //************BIGGER FONT************
-          if (engine.button("bigger_font", "bigger_text_128", "Bigger")) {
+          if (ui.button("bigger_font", "bigger_text_128", "Bigger")) {
               if (editingPlaceable != null && editingPlaceable instanceof TextPlaceable) {
                   TextPlaceable editingTextPlaceable = (TextPlaceable)editingPlaceable;
                   selectedFontSize = editingTextPlaceable.fontSize + 2;
@@ -1066,7 +833,7 @@ public class Editor extends Screen {
           }
   
           //************SMALLER FONT************
-          if (engine.button("smaller_font", "smaller_text_128", "Smaller")) {
+          if (ui.button("smaller_font", "smaller_text_128", "Smaller")) {
               if (editingPlaceable != null && editingPlaceable instanceof TextPlaceable) {
                   TextPlaceable editingTextPlaceable = (TextPlaceable)editingPlaceable;
                   selectedFontSize = editingTextPlaceable.fontSize - 2;
@@ -1101,7 +868,7 @@ public class Editor extends Screen {
             app.text(selectedFontSize, s.xpos+s.wi/2, s.ypos+s.hi/2);
   
           // The button code
-          if (engine.button("font_size", "nothing", "Font size")) {
+          if (ui.button("font_size", "nothing", "Font size")) {
               if (editingPlaceable != null && editingPlaceable instanceof TextPlaceable) {
                   TextPlaceable editingTextPlaceable = (TextPlaceable)editingPlaceable;
                   // Doesn't really do anything yet really.
@@ -1113,18 +880,18 @@ public class Editor extends Screen {
           gui.suppressSpriteWarning = false;
           
           //************CAMERA************
-          if (engine.button("camera", "camera_128", "Take photo")) {
+          if (ui.button("camera", "camera_128", "Take photo")) {
             this.beginCamera();
           }
         }
         else {
           
-          if (engine.button("camera_back", "back_arrow_128", "")) {
+          if (ui.button("camera_back", "back_arrow_128", "")) {
             this.endCamera();
           }
           
           if (!camera.error.get() && camera.ready.get()) {
-            if (engine.button("snap", "snap_button_128", "")) {
+            if (ui.button("snap", "snap_button_128", "")) {
               insertImage(camera.updateImage());
               
               // Rest of the stuff is just for cosmetic effects :sparkle_emoji:
@@ -1135,7 +902,7 @@ public class Editor extends Screen {
             // TODO: Add some automatic "position at bottom" function to the messy class.
             gui.getSprite("snap").setY(HEIGHT-myLowerBarWeight+20);
             
-            if (engine.button("camera_flip", "flip_camera_128", "Switch camera")) {
+            if (ui.button("camera_flip", "flip_camera_128", "Switch camera")) {
               preparingCameraMessage = "Switching camera...";
               camera.switchNextCamera();
             }
@@ -1148,11 +915,6 @@ public class Editor extends Screen {
         // so we do it here instead of content()
         gui.updateSpriteSystem();
 
-        // Display the minimenu in front of all the buttons.
-        if (currMinimenu != null) {
-            currMinimenu.display();
-            app.noClip();
-        }
 
     }
     
@@ -1165,7 +927,7 @@ public class Editor extends Screen {
       // Because rendering cameraDisplay takes time on the first run, we should prompt the user
       // that the display is getting set up. I hate this so much.
       app.textFont(engine.DEFAULT_FONT);
-      engine.loadingIcon(WIDTH/2, HEIGHT/2);
+      ui.loadingIcon(WIDTH/2, HEIGHT/2);
       fill(255);
       textSize(30);
       textAlign(CENTER, CENTER);
@@ -1226,7 +988,7 @@ public class Editor extends Screen {
         
         display.shader("fabric", "color",float((myUpperBarColor>>16)&0xFF)/255.,(float)((myUpperBarColor>>8)&0xFF)/255.,float((myUpperBarColor)&0xFF)/255.,1., "intensity",0.1);
         
-        if (currMinimenu == null && !cameraMode) 
+        if (!ui.miniMenuShown() && !cameraMode) 
           display.clip(0, 0, WIDTH, myUpperBarWeight);
         super.upperBar();
         display.defaultShader();
@@ -1256,7 +1018,7 @@ public class Editor extends Screen {
       engine.power.resetFPSSystem();
       
       // TODO: Check whether we have text or image in the clipboard.
-      if (currMinimenu == null) {
+      if (!ui.miniMenuShown()) {
         if (img == null) console.log("Can't paste image from clipboard!");
         else {
           // Resize the image if autoScaleDown is enabled for faster performance.
@@ -1346,7 +1108,7 @@ public class Editor extends Screen {
         // to check that condition)
         boolean mouseInUpperbar = engine.mouseY() < myUpperBarWeight;
         if (engine.pressDown) {
-            if (currMinimenu == null && !mouseInUpperbar) {
+            if(!ui.miniMenuShown() && !mouseInUpperbar) {
 
                 if (editingPlaceable != null) {
                   if (editingPlaceable instanceof TextPlaceable) {
@@ -1448,7 +1210,7 @@ public class Editor extends Screen {
             // and the following conditions need to be met:
             // 1. There's no minimenu open
             // 2. There's no gui element being interacted with
-            if (editingPlaceable == null && currMinimenu == null && !mouseInUpperbar) {
+            if (editingPlaceable == null && !ui.miniMenuShown() && !mouseInUpperbar) {
                 insertText("", engine.mouseX(), engine.mouseY()-20);
             }
         }
@@ -1511,7 +1273,7 @@ public class Editor extends Screen {
           text(errorMessage, WIDTH/2, HEIGHT/2+120);
         }
         else {
-          engine.loadingIcon(WIDTH/2, HEIGHT/2);
+          ui.loadingIcon(WIDTH/2, HEIGHT/2);
           fill(255);
           text("Starting camera...", WIDTH/2, HEIGHT/2+120);
         }
@@ -1568,7 +1330,7 @@ public class Editor extends Screen {
 
     public void content() {
       if (loading) {
-        engine.loadingIcon(WIDTH/2, HEIGHT/2);
+        ui.loadingIcon(WIDTH/2, HEIGHT/2);
       }
       else {
         if (cameraMode) {

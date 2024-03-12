@@ -262,7 +262,7 @@ public class Explorer extends Screen {
       app.text("Explorer", 50, 80);
       
       if (file.loading) {
-        engine.loadingIcon(WIDTH/2, HEIGHT/2);
+        ui.loadingIcon(WIDTH/2, HEIGHT/2);
       }
       else {
         processScroll(0., scrollBottom+1.0);

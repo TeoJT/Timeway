@@ -37,7 +37,6 @@ public class PixelRealmWithUI extends PixelRealm {
   };
   private String[] dm_tutorial_2_alt = { 
     "You... didn't really choose anything, did you?",
-    "What do I know though? Maybe you like the ambience of the void.",
     "Doesn't matter. Let's move on.",
     "Your files look a bit scattered and messy...",
     "Let's learn how to organise things.",
@@ -80,7 +79,7 @@ public class PixelRealmWithUI extends PixelRealm {
     gui = new SpriteSystemPlaceholder(engine, engine.APPPATH+engine.PATH_SPRITES_ATTRIB+"gui/pixelrealm/");
     gui.suppressSpriteWarning = true;
     gui.interactable = false;
-    engine.useSpriteSystem(gui);
+    ui.useSpriteSystem(gui);
     
     // Indicates first time running, run the tutorial.
     if (!file.exists(engine.APPPATH+engine.STATS_FILE)) {
@@ -179,6 +178,12 @@ public class PixelRealmWithUI extends PixelRealm {
       
       display.recordLogicTime();
     }
+    
+    
+    // Code called when menu is closed via (tab)
+    public void close() {
+      
+    }
   }
   
   class TitleMenu extends Menu {
@@ -191,6 +196,10 @@ public class PixelRealmWithUI extends PixelRealm {
       back = gui.getSprite(backgroundName);
       this.title = title;
       this.bgName = backgroundName;
+    }
+    
+    public void setTitle(String t) {
+      this.title = t;
     }
     
     public void display() {
@@ -206,8 +215,9 @@ public class PixelRealmWithUI extends PixelRealm {
   class DialogMenu extends TitleMenu {
     private String[] dialog;
     private int dialogIndex = 0;
-    private Runnable runWhenDone = null;
+    protected Runnable runWhenDone = null;
     private float appearTimer = 0;
+    private boolean enterToContinue = false;
     
     public DialogMenu(String title, String backgroundName, String txt) {
       super(title, backgroundName);
@@ -225,12 +235,21 @@ public class PixelRealmWithUI extends PixelRealm {
       runWhenDone = r;
     }
     
+    public DialogMenu(String title, String backgroundName, String txt, Runnable r) {
+      this(title, backgroundName, txt);
+      runWhenDone = r;
+    }
+    
     public void runWhenDone(Runnable r) {
       runWhenDone = r;
     }
     
     public void setAppearTimer(int t) {
       appearTimer = (float)t;
+    }
+    
+    public void setEnterToContinue(boolean onoff) {
+      enterToContinue = onoff;
     }
     
     public void display() {
@@ -242,10 +261,14 @@ public class PixelRealmWithUI extends PixelRealm {
       
       displayBackground(bgName);
       
+      
+      // Below is enter to continue (ignored if enterToContinue is off);
       fill(255);
       textFont(engine.DEFAULT_FONT, 30);
       textAlign(CENTER, CENTER);
       text(dialog[dialogIndex], getX()+40, getY(), getWidth()-80, getHeight());
+      
+      if (!enterToContinue) return;
       textSize(18);
       text("(Enter/return to contunue)",  getXmid(), getYbottom()-70);
       
@@ -262,9 +285,51 @@ public class PixelRealmWithUI extends PixelRealm {
             runWhenDone.run();
         }
       }
-      
     }
   }
+  
+  class YesNoMenu extends DialogMenu {
+    protected Runnable runWhenDeclined = null;
+    
+    public YesNoMenu(String title, String txt) {
+      super(title, "back-yesno", txt);
+      setEnterToContinue(false);
+    }
+    
+    public YesNoMenu(String title, String txt, Runnable runYes) {
+      super(title, "back-yesno", txt, runYes);
+      setEnterToContinue(false);
+    }
+    
+    public YesNoMenu(String title, String txt, Runnable runYes, Runnable runNo) {
+      super(title, "back-yesno", txt, runYes);
+      runWhenDeclined = runNo;
+      setEnterToContinue(false);
+    }
+    
+    public void display() {
+      super.display();
+      
+      if (ui.button("menu_yes", "tick_128", "Yes")) {
+        sound.playSound("menu_select");
+        menuShown = false;
+        menu = null;
+        if (runWhenDone != null)
+          runWhenDone.run();
+      }
+      if (ui.button("menu_no", "cross_128", "No")) {
+        sound.playSound("menu_select");
+        menuShown = false;
+        menu = null;
+        if (runWhenDeclined != null)
+          runWhenDeclined.run();
+      }
+    }
+  }
+  
+  
+  
+  
   
   class MainMenu extends TitleMenu {
     public MainMenu() {
@@ -274,16 +339,40 @@ public class PixelRealmWithUI extends PixelRealm {
       super.display();
       
       // --- Creator menu ---
-      if (engine.button("creator_1", "new_entry_128", "Creator")) {
+      if (ui.button("creator_1", "new_entry_128", "Creator")) {
         sound.playSound("menu_select");
         menu = new CreatorMenu();
       }
       
-      if (engine.button("pocket_menu", "new_entry_128", "Pockets")) {
+      // --- Pocket menu ---
+      if (ui.button("pocket_menu", "new_entry_128", "Pockets")) {
         sound.playSound("menu_select");
         menu = new PocketMenu();
       }
-      if (engine.button("grabber_1", "grabber_tool_128", "Grabber")) {
+      
+      // --- Edit terrain menu ---
+      if (ui.button("terraform_menu", "new_entry_128", "Terraform")) {
+        sound.playSound("menu_select");
+        
+        Runnable ryes = new Runnable() {
+          public void run() {
+            menu = new CustomiseTerrainMenu();
+            menuShown = true;
+          }
+        };
+        
+        Runnable rno = new Runnable() {
+          public void run() {
+            menuShown = true;
+            menu = new MainMenu();
+          }
+        };
+        
+        menu = new YesNoMenu("Warning", "Modifying the terrain generator will reset all terrain data in this realm.\nContinue?", ryes, rno);
+      }
+      
+      // --- Grabber tool ---
+      if (ui.button("grabber_1", "grabber_tool_128", "Grabber")) {
         // Select the last item in the inventory if not already selected.
         if (globalHoldingObject == null) {
           if (pockets.tail != null) {
@@ -296,7 +385,9 @@ public class PixelRealmWithUI extends PixelRealm {
         menuShown = false;
         sound.playSound("menu_select");
       }
-      if (engine.button("notool_1", "notool_128", "No tool")) {
+      
+      // --- No tool ---
+      if (ui.button("notool_1", "notool_128", "No tool")) {
         currentTool = TOOL_NORMAL;
         globalHoldingObjectSlot = null;
         currRealm.updateHoldingItem(globalHoldingObjectSlot);
@@ -310,18 +401,18 @@ public class PixelRealmWithUI extends PixelRealm {
     public CreatorMenu() {}
     public void display() {
       displayBackground("back-creatormenu");
-      if (engine.button("newentry", "new_entry_128", "New entry")) {
+      if (ui.button("newentry", "new_entry_128", "New entry")) {
         sound.playSound("menu_select");
         newEntry();
       }
       
       
-      if (engine.button("newfolder", "new_folder_128", "New folder")) {
+      if (ui.button("newfolder", "new_folder_128", "New folder")) {
         sound.playSound("menu_select");
         newFolder();
       }
       
-      if (engine.button("newshortcut", "create_shortcut_128", "New shortcut")) {
+      if (ui.button("newshortcut", "create_shortcut_128", "New shortcut")) {
         sound.playSound("menu_select");
         ((PixelRealmState.ShortcutPortal)currRealm.createPRObjectAndPickup(currRealm.createShortcut())).loadShortcut();
         menuShown = false;
@@ -411,7 +502,7 @@ public class PixelRealmWithUI extends PixelRealm {
       gui.sprite("pocket_line2", "white");
       
       
-      if (engine.button("pocket_back", "back_arrow_128", "")) {
+      if (ui.button("pocket_back", "back_arrow_128", "")) {
         sound.playSound("menu_select");
         menu = new Menu();
       }
@@ -510,20 +601,20 @@ public class PixelRealmWithUI extends PixelRealm {
       
       
       if ((engine.keybindPressed("inventorySelectLeft") 
-      || engine.button("newrealm-prev", "back_arrow_128", ""))
+      || ui.button("newrealm-prev", "back_arrow_128", ""))
       && coolDown == 0) {
         tempIndex--;
         if (tempIndex < 0) tempIndex = templates.size()-1;
         preview(tempIndex);
       }
       if ((engine.keybindPressed("inventorySelectRight") 
-      || engine.button("newrealm-next", "forward_arrow_128", ""))
+      || ui.button("newrealm-next", "forward_arrow_128", ""))
       && coolDown == 0) {
         tempIndex++;
         if (tempIndex > templates.size()-1) tempIndex = 0;
         preview(tempIndex);
       }
-      if (engine.enterPressed || engine.button("newrealm-confirm", "tick_128", "")) {
+      if (engine.enterPressed || ui.button("newrealm-confirm", "tick_128", "")) {
         sound.playSound("menu_select");
         engine.enterPressed = false;
         
@@ -583,6 +674,38 @@ public class PixelRealmWithUI extends PixelRealm {
     }
   }
   
+  
+  
+  class CustomiseTerrainMenu extends TitleMenu {
+    
+    public CustomiseTerrainMenu() {
+      super("", "back-newrealm");
+    }
+    
+    public void display() {
+      setTitle("");
+      super.display();
+      
+      float x = cache_backX+50;
+      float y = cache_backY+50;
+      for (PixelRealmState.CustomNode n : currRealm.terrain.customNodes) {
+        n.x = x;
+        n.wi = cache_backWi-100.;
+        
+        n.display(y);
+        
+        y += n.getHeight();
+      }
+      
+      currRealm.terrain.updateAttribs();
+    }
+    
+    public void close() {
+      currRealm.chunks.clear();
+      currRealm.regenerateTrees();
+      //chunks = new HashMap<Integer, TerrainChunkV2>();
+    }
+  }
   
   
   
@@ -655,10 +778,13 @@ public class PixelRealmWithUI extends PixelRealm {
   
   
   public void runMenu() {
+    modifyTerrain = false;
     if (menuShown && menu != null) {
-      engine.useSpriteSystem(gui);
+      ui.useSpriteSystem(gui);
       menu.display();
       gui.updateSpriteSystem();
+      
+      modifyTerrain = (menu instanceof CustomiseTerrainMenu);
     }
   }
   
@@ -717,7 +843,12 @@ public class PixelRealmWithUI extends PixelRealm {
       }
       
       menuShown = !menuShown;
-      menu = new MainMenu();
+      if (menuShown) {
+        menu = new MainMenu();
+      }
+      else {
+        if (menu != null) menu.close();
+      }
       
       // If we're editing a folder/entry name, pressing tab should make the menu disappear
       // and then we can continue moving. If we forget to turn the inputPrompt off, the engine

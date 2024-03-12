@@ -120,6 +120,7 @@ class Engine {
   public AudioModule sound;
   public FilemanagerModule file;
   public ClipboardModule clipboard;
+  public UIModule ui;
   
   
   PGraphics CPU = createGraphics(512, 512);
@@ -176,6 +177,9 @@ class Engine {
   public int timestampCount = 0;
   public boolean allowShowCommandPrompt = true;
   public boolean playWhileUnfocused = true;
+  public HashMap<Long, Float> noiseCache = new HashMap<Long, Float>();
+  public HashSet<Float> noiseCacheConflicts = new HashSet<Float>();
+  
   
   
   
@@ -669,7 +673,6 @@ class Engine {
           //console.log("Power mode MINIMAL");
           break;
         }
-        //redraw();
       }
     }
   
@@ -1401,42 +1404,6 @@ class Engine {
         }
         else app.image(image, x, y, w, h);
         
-        // TODO: failed experiment, remove this
-        //final float IMG_MAX_CHUNK_X = 128;
-        //final float IMG_MAX_CHUNK_Y = 128;
-        
-        //float scalex = w/image.width;
-        //float scaley = h/image.height;
-        
-        //for (float iy = 0; iy < image.height; iy += IMG_MAX_CHUNK_Y) {
-        //  float maxy = IMG_MAX_CHUNK_Y;
-        //  float textop = iy/image.height;
-        //  float texbottom = (iy+maxy)/image.height;
-        //  for (float ix = 0; ix < image.width; ix += IMG_MAX_CHUNK_X) {
-        //    float maxx = IMG_MAX_CHUNK_X;
-            
-        //    float texleft = ix/image.width;
-        //    float texright = (ix+maxx)/image.width;
-            
-        //    float iix = x+(ix*scalex);
-        //    float iixw = iix+(maxx*scalex);
-        //    float iiy = y+(iy*scaley);
-        //    float iiyh = iiy+(maxy*scaley);
-            
-            
-        //    app.beginShape();
-        //    app.textureMode(NORMAL);
-        //    app.textureWrap(CLAMP);
-        //    app.texture(image);
-        //    app.vertex(iix, iiy, texleft, textop);
-        //    app.vertex(iixw, iiy, texright, textop);
-        //    app.vertex(iixw, iiyh, texright, texbottom);
-        //    app.vertex(iix, iiyh, texleft, texbottom);
-        //    app.endShape();
-        //  }
-        //}
-        
-        //timestamp("ok good");
         return;
       } else {
         app.noStroke();
@@ -1535,7 +1502,7 @@ class Engine {
     public void displayScreens() {
       if (transitionScreens) {
         power.setAwake();
-        transition = smoothLikeButter(transition);
+        transition = ui.smoothLikeButter(transition);
   
         // Sorry for the code duplication!
         switch (transitionDirection) {
@@ -1583,7 +1550,6 @@ class Engine {
       } else {
         currScreen.display();
       }
-      timestamp("end display");
       display.recordLogicTime();
     }
     
@@ -1643,6 +1609,477 @@ class Engine {
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+  public class UIModule {
+    
+    public float guiFade = 0;
+    public SpriteSystemPlaceholder currentSpritePlaceholderSystem;
+    public boolean spriteSystemClickable = false;
+    public MiniMenu currMinimenu = null;
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    public class MiniMenu {
+        public SpriteSystemPlaceholder g;
+        public float x = 0., y = 0.;
+        public float width = 0., height = 0.;
+        public float yappear = 1.;
+        public boolean disappear = false;
+
+        final public float APPEAR_SPEED = 0.1;
+        final public color BACKGROUND_COLOR = color(0, 0, 0, 150);
+        
+        public MiniMenu() {
+            power.setAwake();
+            yappear = 1.;
+        }
+        
+        public MiniMenu(float x, float y) {
+          this();
+          this.x = x;
+          this.y = y;
+        }
+        
+        public MiniMenu(float x, float y, float w, float h) {
+          this(x, y);
+          this.width = w;
+          this.height = h;
+        }
+
+        public void close() {
+            // Only bother closing if we're not in any current animation
+            if (!disappear && yappear <= 0.01) {
+                disappear = true;
+                power.setSleepy();
+                yappear = 1.;
+            }
+        }
+
+        public void display() {
+            app.noTint();
+            // Sorry I'm lazy
+            
+            yappear *= PApplet.pow(1.-APPEAR_SPEED, display.getDelta());
+            
+            app.noStroke();
+            app.fill(BACKGROUND_COLOR);
+
+            // Cool menu appaer animation. Or disappear animation.
+            if (!disappear) {
+                float h = this.height-(this.height*yappear);
+                app.rect(x, y, this.width, h);
+                display.clip(x, y, this.width, h);
+            }
+            else {
+                app.rect(x, y, this.width, this.height*yappear);
+                display.clip(x, y, this.width, this.height*yappear);
+                if (yappear <= 0.01) {
+                    power.setSleepy();
+                    currMinimenu = null;
+                }
+            }
+            
+            
+
+            // If we click away from the minimenu, close the minimenu
+            if ((mouseX() > x && mouseX() < x+this.width && mouseY() > y && mouseY() < y+this.height) == false) {
+
+                if (pressDown) {
+                    close();
+                }
+            }
+            //app.noClip();
+        }
+    }
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    public class OptionsMenu extends MiniMenu {
+      private ArrayList<String> options = new ArrayList<String>();
+      private ArrayList<Runnable> actions = new ArrayList<Runnable>();
+      private String selectedOption = null;
+      private static final float SIZE = 30.;
+      private static final float SPACING = 10.;
+      private static final float OFFSET_SPACING_X = 50.;
+      private static final color HOVER_COLOR = 0xFFC200FF;
+      
+      // Keep track if the menu has been selected, and if it has, set this to
+      // false so that our selected action is only performed once (might loop
+      // during the closing animation of the MiniMenu)
+      private boolean selectable = true;
+      
+      // Deprecated.
+      //public OptionsMenu(String... opts) {
+      //  super(mouseX(), mouseY());
+        
+      //  float maxWidth = 0.;
+      //  float hi = 0.;        
+      //  app.textFont(DEFAULT_FONT, SIZE);
+      //  for (String op : opts) {
+      //    options.add(op);
+      //    float wi = app.textWidth(op);
+      //    if (wi > maxWidth) maxWidth = wi;
+      //    hi += SIZE+SPACING;
+      //  }
+        
+      //  this.width = maxWidth+SPACING*2.+OFFSET_SPACING_X;
+      //  this.height = hi+SPACING;
+      //}
+      
+      public OptionsMenu(String[] opts, Runnable[] acts) {
+        super(mouseX(), mouseY());
+        
+        float maxWidth = 0.;
+        float hi = 0.;        
+        app.textFont(DEFAULT_FONT, SIZE);
+        
+        if (opts.length != acts.length) {
+          console.bugWarn("OptionsMenu: options and actions not equal length.");
+        }
+        else {
+          for (int i = 0; i < opts.length; i++) {
+            options.add(opts[i]);
+            actions.add(acts[i]);
+            float wi = app.textWidth(opts[i]);
+            if (wi > maxWidth) maxWidth = wi;
+            hi += SIZE+SPACING;
+          }
+        }
+        
+        
+        this.width = maxWidth+SPACING*2.+OFFSET_SPACING_X;
+        this.height = hi+SPACING;
+      }
+      
+      public OptionsMenu(ArrayList<String> opts, ArrayList<Runnable> acts) {
+        super(mouseX(), mouseY());
+        
+        float maxWidth = 0.;
+        float hi = 0.;        
+        app.textFont(DEFAULT_FONT, SIZE);
+        
+        options = opts;
+        actions = acts;
+        
+        for (int i = 0; i < opts.size(); i++) {
+          float wi = app.textWidth(opts.get(i));
+          if (wi > maxWidth) maxWidth = wi;
+          hi += SIZE+SPACING;
+        }
+        
+        this.width = maxWidth+SPACING*2.+OFFSET_SPACING_X;
+        this.height = hi+SPACING;
+      }
+      
+      
+      public void display() {
+        super.display();
+        if (selectedOption != null) 
+          selectable = false;
+        
+        app.textFont(DEFAULT_FONT, SIZE);
+        app.textAlign(LEFT, TOP);
+        
+        float yy = this.y+SPACING;
+        for (int i = 0; i < options.size(); i++) {
+          String op = options.get(i);
+          float xx = this.x+OFFSET_SPACING_X+SPACING;
+          if (mouseX() > this.x && mouseX() < this.x+this.width && mouseY() > yy && mouseY() < yy+SIZE+SPACING) {
+            app.fill(HOVER_COLOR);
+            if (click && selectable) {
+              actions.get(i).run();
+              selectedOption = op;
+              this.close();
+            }
+          }
+          else app.fill(255);
+          app.text(op, xx, yy);
+          yy += SIZE+SPACING;
+        }
+      }
+      
+      public boolean optionSelected() {
+        if (!selectable) return false;
+        return (selectedOption != null);
+      }
+    }
+    
+    public void createOptionsMenu(String[] opts, Runnable[] acts) {
+      currMinimenu = new OptionsMenu(opts, acts);
+    }
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    // BIG TODO: Obviously we want to pimp up this menu and add more colors.
+    // This is probably one of the oldest yet most used code in Timeway that hasn't been updated in FOREVER.
+    public class ColorPicker extends MiniMenu {
+        public boolean selected = false;
+        public color selectedColor;
+      
+        public color[] colorArray = {
+            //ffffff
+            color(255, 255, 255),
+            //909090
+            color(144, 144, 144),
+            //4d4d4d
+            color(77, 77, 77),
+            //000000
+            color(0, 0, 0),
+            //ffde96
+            color(255, 222, 150),
+            //ffc64b
+            color(255, 198, 75),
+            //ffae00
+            color(255, 174, 0),
+            //ffb4f6
+            color(255, 180, 246),
+            //ff89b9
+            color(255, 137, 185),
+            //ff5d5f
+            color(255, 93, 95),
+            //cab9ff
+            color(202, 185, 255),
+            //727aff
+            color(114, 122, 255),
+            //38a7ff
+            color(56, 167, 255),
+            
+            color(189, 226, 149)
+        };
+
+        public int maxCols = 6;
+
+
+        public ColorPicker(float x, float y, float width, float height) {
+            super(x, y, width, height);
+        }
+
+        public void display() {
+            // Super display to display the background
+            super.display();
+            //app.tint(255, 255.*yappear);
+
+
+            // display all the colors in the colorArray, in a grid, with a new row every MAX_COLS
+
+            float spacing = 20;
+            float selSize = 5;
+
+            // The width of each color box
+            float boxWidth = (this.width/maxCols);
+            // The height of each color box
+            // The height of the box is the aspect ratio of the minimenu
+            float boxHeight = boxWidth*(this.height/this.width);
+            // Loop through each colour
+            for (int i = 0; i < colorArray.length; i++) {
+                // The x position of the color box
+                // Give it a bit of space between each box
+                float boxX = this.x+(i%maxCols)*boxWidth;
+                // The y position of the color box
+                float boxY = this.y+(spacing/2)+(i/maxCols)*boxHeight;
+                // The color of the color box
+                color boxColor = colorArray[i];
+
+                boolean wasHovered = false;
+                // If the mouse is hovering over the color box, tint it
+                if (mouseX() > boxX-selSize && mouseX() < boxX+boxWidth+selSize && mouseY() > boxY-selSize && mouseY() < boxY+boxHeight+selSize) {
+                    boxX -= selSize;
+                    boxY -= selSize;
+                    boxWidth += selSize*2;
+                    boxHeight += selSize*2;
+                    wasHovered = true;
+
+                    // If clicked 
+                    if (leftClick && !disappear) {
+                        selectedColor = colorArray[i];
+                        
+                        
+                        // Set the color of the text placeable
+                        //if (editingPlaceable != null && editingPlaceable instanceof TextPlaceable) {
+                        //    TextPlaceable editingTextPlaceable = (TextPlaceable)editingPlaceable;
+                        //    editingTextPlaceable.textColor = selectedColor;
+                        //}
+                        close();
+                    }
+                }
+
+                // Display the color box
+                app.fill(boxColor);
+                app.rect((spacing/2)+boxX, boxY, boxWidth-spacing, boxHeight-(spacing/2));
+
+                if (wasHovered) {
+                    // Shrink the width n height back to what it was before
+                    boxX += selSize;
+                    boxY += selSize;
+                    boxWidth -= selSize*2;
+                    boxHeight -= selSize*2;
+                }
+            }
+
+            //Remember to call noTint
+            app.noTint();
+        }
+    }
+    
+    
+    public void colorPicker(float x, float y) {
+      currMinimenu = new ColorPicker(x, y, 300, 200);
+    }
+    
+    
+    public void displayMiniMenu() {
+      // Display the minimenu in front of all the buttons.
+      if (miniMenuShown()) {
+          app.pushMatrix();
+          app.scale(display.getScale());
+          currMinimenu.display();
+          app.noClip();
+          app.popMatrix();
+      }
+    }
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    public UIModule() {
+      
+    }
+
+  
+    public void useSpriteSystem(SpriteSystemPlaceholder system) {
+      this.currentSpritePlaceholderSystem = system;
+      this.spriteSystemClickable = true;
+      this.guiFade = 255.;
+    }
+  
+    public boolean button(String name, String texture, String displayText) {
+  
+      if (this.currentSpritePlaceholderSystem == null) {
+        console.bugWarn("You forgot to call useSpriteSystem()!");
+        return false;
+      }
+  
+      // This doesn't change at all.
+      // I just wanna keep it in case it comes in useful later on.
+      boolean guiClickable = true;
+  
+      // Don't want our messy code to spam the console lol.
+      currentSpritePlaceholderSystem.suppressSpriteWarning = true;
+  
+      boolean hover = false;
+  
+      // Full brightness when not hovering
+      app.tint(255, guiFade);
+      app.fill(255, guiFade);
+  
+      // To click:
+      // - Must not be in a minimenu
+      // - Must not be in gui move sprite / edit mode.
+      // - also the guiClickable thing.
+      if (currentSpritePlaceholderSystem.buttonHover(name) && guiClickable && !currentSpritePlaceholderSystem.interactable && spriteSystemClickable) {
+        // Slight gray to indicate hover
+        app.tint(230, guiFade);
+        app.fill(230, guiFade);
+        hover = true;
+      }
+  
+      // Display the button, will be affected by the hover color.
+      currentSpritePlaceholderSystem.button(name, texture, displayText);
+      app.noTint();
+  
+      // Don't have "the boy who called wolf", situation, turn back on warnings
+      // for genuine troubleshooting.
+      currentSpritePlaceholderSystem.suppressSpriteWarning = false;
+  
+      // Only when the button is actually clicked.
+      return hover && mouseEventClick;
+    }
+    
+    public void loadingIcon(float x, float y, float widthheight) {
+      display.imgCentre("load-"+appendZeros(counter(max(display.loadingFramesLength, 1), 3), 4), x, y, widthheight, widthheight);
+    }
+  
+    public void loadingIcon(float x, float y) {
+      loadingIcon(x, y, 128);
+    }
+    
+  
+    public float smoothLikeButter(float i) {
+  
+      // I wanna emulate some of the cruddy performance from the old fps system
+      // so we limit the display delta especially when we get sudden fps dips.
+      // Max it at 4 because that was the minimum framerate we could do in SLEEPY mode,
+      // 15fps!
+      float d = min(display.getDelta(), 4.);
+      i *= pow(0.9, d);
+      
+      
+      // LMAO REALLY FUNNY GLITCH, COMMENT THE LINE ABOVE AND UNCOMMENT THIS ONE BELOW!!
+      // Update: the glitch no longer works it just displays a black screen (how sad)
+      //i *= 0.9*display.getDelta();
+  
+      if (i < 0.05) {
+        return i-0.001;
+      }
+      return i;
+    }
+    
+    public boolean miniMenuShown() {
+      return (currMinimenu != null);
+    }
+  }
+
+
+
+  
 
 
 
@@ -3391,6 +3828,7 @@ class Engine {
     sharedResources = new SharedResourcesModule();
     display = new DisplayModule();
     power = new PowerModeModule();
+    ui = new UIModule();
     sound = new AudioModule();
     clipboard = new ClipboardModule();
     
@@ -3683,7 +4121,7 @@ class Engine {
       display.shader("fabric", "color", float((c>>16)&0xFF)/255., float((c>>8)&0xFF)/255., float((c)&0xFF)/255., 1., "intensity", 0.1);
       rect(x1-wi, y1, wi*2, hi);
       display.defaultShader();
-      loadingIcon(x1-wi+64, y1+64);
+      ui.loadingIcon(x1-wi+64, y1+64);
 
       fill(255);
       textAlign(LEFT, TOP);
@@ -3743,7 +4181,7 @@ class Engine {
       display.shader("fabric", "color", float((c>>16)&0xFF)/255., float((c>>8)&0xFF)/255., float((c)&0xFF)/255., 1., "intensity", 0.1);
       rect(x1-wi, y1, wi*2, hi);
       display.defaultShader();
-      loadingIcon(x1-wi+64, y1+64);
+      ui.loadingIcon(x1-wi+64, y1+64);
 
       fill(255);
       textAlign(LEFT, TOP);
@@ -4226,11 +4664,6 @@ class Engine {
   }
 
   
-
-  //*************************************************************
-  //*************************************************************
-  //*******************LITERALLY EVERY CLASS*********************
-  //*********************Console class***************************
   // Literally copied right from sketchiepad.
   // Probably gonna be hella messy code.
   // But oh well.
@@ -4797,88 +5230,6 @@ class Engine {
     return false;
   }
 
-
-  public float guiFade = 0;
-  public SpriteSystemPlaceholder currentSpritePlaceholderSystem;
-  public boolean spriteSystemClickable = false;
-
-  public void useSpriteSystem(SpriteSystemPlaceholder system) {
-    this.currentSpritePlaceholderSystem = system;
-    this.spriteSystemClickable = true;
-    this.guiFade = 255.;
-  }
-
-  public boolean button(String name, String texture, String displayText) {
-
-    if (this.currentSpritePlaceholderSystem == null) {
-      console.bugWarn("You forgot to call useSpriteSystem()!");
-      return false;
-    }
-
-    // This doesn't change at all.
-    // I just wanna keep it in case it comes in useful later on.
-    boolean guiClickable = true;
-
-    // Don't want our messy code to spam the console lol.
-    currentSpritePlaceholderSystem.suppressSpriteWarning = true;
-
-    boolean hover = false;
-
-    // Full brightness when not hovering
-    app.tint(255, guiFade);
-    app.fill(255, guiFade);
-
-    // To click:
-    // - Must not be in a minimenu
-    // - Must not be in gui move sprite / edit mode.
-    // - also the guiClickable thing.
-    if (currentSpritePlaceholderSystem.buttonHover(name) && guiClickable && !currentSpritePlaceholderSystem.interactable && spriteSystemClickable) {
-      // Slight gray to indicate hover
-      app.tint(230, guiFade);
-      app.fill(230, guiFade);
-      hover = true;
-    }
-
-    // Display the button, will be affected by the hover color.
-    currentSpritePlaceholderSystem.button(name, texture, displayText);
-    app.noTint();
-
-    // Don't have "the boy who called wolf", situation, turn back on warnings
-    // for genuine troubleshooting.
-    currentSpritePlaceholderSystem.suppressSpriteWarning = false;
-
-    // Only when the button is actually clicked.
-    return hover && mouseEventClick;
-  }
-  
-  public void loadingIcon(float x, float y, float widthheight) {
-    display.imgCentre("load-"+appendZeros(counter(max(display.loadingFramesLength, 1), 3), 4), x, y, widthheight, widthheight);
-  }
-
-  public void loadingIcon(float x, float y) {
-    loadingIcon(x, y, 128);
-  }
-
-  public float smoothLikeButter(float i) {
-
-    // I wanna emulate some of the cruddy performance from the old fps system
-    // so we limit the display delta especially when we get sudden fps dips.
-    // Max it at 4 because that was the minimum framerate we could do in SLEEPY mode,
-    // 15fps!
-    float d = min(display.getDelta(), 4.);
-    i *= pow(0.9, d);
-    
-    
-    // LMAO REALLY FUNNY GLITCH, COMMENT THE LINE ABOVE AND UNCOMMENT THIS ONE BELOW!!
-    // Update: the glitch no longer works it just displays a black screen (how sad)
-    //i *= 0.9*display.getDelta();
-
-    if (i < 0.05) {
-      return i-0.001;
-    }
-    return i;
-  }
-
   public String getLastModified(String path) {
     Path file = Paths.get(path);
 
@@ -5268,6 +5619,43 @@ class Engine {
     }
 
     return cachePath;
+  }
+  
+  private float noise_seed = random(0, 189456790123485.);
+  private float noise_octave = 2.;
+  private float noise_falloff = 0.5;
+  
+  public float noise(float x, float y) {
+    //4420.0825
+    //32760.305
+    //519930
+    
+    long k = (long)(x*4420.0825) + (long)(y*32760.305)*519930 + (long)noise_octave*1048576 + (long)(noise_falloff*1048576.) + (long)noise_seed;
+    Float val = noiseCache.get(k);
+    if (val == null) {
+      float newval = app.noise(x, y);
+      
+      noiseCache.put(k, newval);
+      return newval;
+    }
+    else {
+      return (float)val;
+    }
+  }
+  
+  public float noise(float x) {
+    return this.noise(x, 0);
+  }
+  
+  public void noiseSeed(int seed) {
+    noise_seed = (float)seed;
+    app.noiseSeed(seed);
+  }
+
+  public void noiseDetail(int octave, float fall) {
+    noise_octave = (float)octave;
+    noise_falloff = fall;
+    app.noiseDetail(octave, fall);
   }
 
 
@@ -5740,6 +6128,8 @@ class Engine {
     // Show the current GUI.
     display.displayScreens();
     
+    ui.displayMiniMenu();
+    
     
     
     // If Timeway is updating, a little notice and progress
@@ -5834,6 +6224,7 @@ public abstract class Screen {
   protected Engine.AudioModule sound;
   protected Engine.FilemanagerModule file;
   protected Engine.ClipboardModule clipboard;
+  protected Engine.UIModule ui;
   
   protected float screenx = 0;
   protected float screeny = 0;
@@ -5857,6 +6248,7 @@ public abstract class Screen {
     this.sharedResources = engine.sharedResources;
     this.settings = engine.settings;
     this.display = engine.display;
+    this.ui = engine.ui;
     this.power = engine.power;
     this.sound = engine.sound;
     this.file = engine.file;
@@ -5964,6 +6356,9 @@ public abstract class Screen {
       this.content();
       this.upperBar();
       this.lowerBar();
+      
+      // Show the minimenu if any.
+      
       app.popMatrix();
     }
   }

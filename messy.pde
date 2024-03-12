@@ -393,15 +393,6 @@ public final class SpriteSystemPlaceholder {
                 return this.hi;
             }
             
-            public boolean redraw() {
-                return redraw;
-            }
-            
-            public void setRedraw(boolean b) {
-                redraw = b;
-            }
-            
-            
             
             private boolean polyPoint(PVector[] vertices, float px, float py) {
                 boolean collision = false;

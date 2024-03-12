@@ -57,15 +57,14 @@ public class Startup extends Screen {
           break;
         }
         
-        // BIG MASSIVE TODO: This doesn't actually wait for Timeway to load. It's just mostly a lil hello thing lmao.
-        // Obviously we need to make the loading actually work in a seperate thread while this screen loads everything.
-        // Render logo
+        // Yup we deliberately make the loading time longer just so we can display the logo
+        // long enough lol.
         if (engine.isLoading() || timeFromStart < 30) {
             floatIn *= 0.9;
             app.tint(255, 255-(255*floatIn));
             display.imgCentre("logo", WIDTH/2, HEIGHT/2 - floatIn*100);
 
-            engine.loadingIcon(WIDTH/2, HEIGHT*0.8);
+            ui.loadingIcon(WIDTH/2, HEIGHT*0.8);
             
             // TODO: add loading notes, including "caching CPU canvas"
         }

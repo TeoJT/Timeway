@@ -23,8 +23,6 @@ String sketch_ERR_LOG_PATH;
 // error info)
 final boolean sketch_FORCE_CRASH_SCREEN = false;
 
-// TODO: Sorry ill put that in the engine code later.
-
 void settings() {
   try {
     if (platform == LINUX)

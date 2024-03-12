@@ -27,6 +27,9 @@ public class PixelRealm extends Screen {
   final static int    MAX_MEM_USAGE = 1024*1024*1024;   // 1GB
   final static int    DISPLAY_SCALE = 4;
   final static int    FOLDER_SIZE_LIMIT = 500;  // If a folder has over this number of files, moving is restricted to prevent any potentially dangerous data moves.
+  final static float  MIN_PORTAL_LIGHT_THRESHOLD = 19600.;   // 140 ^ 2
+  final static int    CHUNK_SIZE = 8;
+  final static int    MAX_CHUNKS_XZ = 32768;
   
   // Movement/player constants.
   final static float BOB_SPEED = 0.4;
@@ -45,9 +48,6 @@ public class PixelRealm extends Screen {
   final static float UNDERWATER_JUMP_STRENGTH = 4.;
   final static float PLAYER_HEIGHT = 80;
   final static float PLAYER_WIDTH  = 20;
-  final static float MIN_PORTAL_LIGHT_THRESHOLD = 19600.;   // 140 ^ 2
-  final static int   CHUNK_SIZE = 8;
-  final static int   MAX_CHUNKS_XZ = 32768;
   final static float UNDERWATER_TEMINAL_VEL = 3.0;
   final static float SWIM_UP_SPEED = 0.8;
   
@@ -73,9 +73,6 @@ public class PixelRealm extends Screen {
   private PImage REALM_SKY_DEFAULT;
   private PImage REALM_TREE_DEFAULT;
   
-  // Other assets (might remove later)
-  private RealmTexture IMG_COIN;
-  
   
   // --- Cache (sort of) ---
   private float cache_flatSinDirection;
@@ -86,6 +83,7 @@ public class PixelRealm extends Screen {
   private boolean secondaryAction = false;
   private boolean realmCaching = false;
   private boolean usingFadeShader = false;
+  private RealmTexture IMG_COIN;
   
   
   // --- Legacy backward-compatibility stuff & easter eggs ---
@@ -118,6 +116,11 @@ public class PixelRealm extends Screen {
   protected boolean isUnderwater = false;
   private float portalCoolDown = 45;
   protected boolean usePortalAllowed = true;
+  protected boolean modifyTerrain = false;
+      
+  
+  
+  // TODO: Animationtick not required with display.getTime()?
   private float animationTick = 0.;
   
   // Inventory//pocket
@@ -176,10 +179,6 @@ public class PixelRealm extends Screen {
     
     // --- Sounds and music ---
     sound.loopSound("portal");
-    
-
-
-    // TODO: Make canvas width 640 pixels ALWAYS with backwards compat for 1500x221 skies.
     
     // --- Create graphics canvas ---
     // Disable texture filtering
@@ -354,7 +353,7 @@ public class PixelRealm extends Screen {
     public PImage getRandom(float seed) {
       PImage p;
       if (aniImg != null) {
-        p = this.get(int( app.noise(seed) * float(aniImg.length) * 3.)%aniImg.length);
+        p = this.get(int( engine.noise(seed) * float(aniImg.length) * 3.)%aniImg.length);
       }
       else {
         p = this.get();
@@ -695,11 +694,11 @@ public class PixelRealm extends Screen {
     public RealmTexture img_grass = new RealmTexture(REALM_GRASS_DEFAULT);
     public RealmTexture img_tree  = new RealmTexture(REALM_TREE_DEFAULT);
     public RealmTexture img_sky   = new RealmTexture(REALM_SKY_DEFAULT);
-    private TerrainAttributes terrain;
+    protected TerrainAttributes terrain;
     private DirectoryPortal exitPortal = null;
     private String musicPath;
     
-    private HashMap<Integer, TerrainChunkV2> chunks = new HashMap<Integer, TerrainChunkV2>();
+    public HashMap<Integer, TerrainChunkV2> chunks = new HashMap<Integer, TerrainChunkV2>();
     private float[][] tileHeightGrid;
     
     private String version = COMPATIBILITY_VERSION;
@@ -734,7 +733,7 @@ public class PixelRealm extends Screen {
       if (version.equals("1.0") || version.equals("1.1")) {
         legacy_terrainObjects = new Stack<PRObject>(int(((terrain.getRenderDistance()+5)*2)*((terrain.getRenderDistance()+5)*2)));
         legacy_autogenStuff = new HashSet<String>();
-        app.noiseSeed(getHash(dir));
+        engine.noiseSeed(getHash(dir));
       }
     }
     
@@ -749,7 +748,103 @@ public class PixelRealm extends Screen {
       if (version.equals("1.0") || version.equals("1.1")) {
         legacy_terrainObjects = new Stack<PRObject>(int(((terrain.getRenderDistance()+5)*2)*((terrain.getRenderDistance()+5)*2)));
         legacy_autogenStuff = new HashSet<String>();
-        app.noiseSeed(getHash(dir));
+        engine.noiseSeed(getHash(dir));
+      }
+    }
+    
+    
+    public abstract class CustomNode {
+      public String label = "";
+      public float x = 0.;
+      public float wi = 100.;
+      private float y = 0;
+      
+      public float valFloat = 0.;
+      public boolean valBool = false;
+      public int valInt = 0;
+      
+      public static final float CONTROL_X = 200.;
+      public CustomNode(String l) {
+        label = l;
+      }
+      
+      public float getHeight() {
+        return 100.;
+      }
+      
+      protected boolean inBox() {
+        boolean hovering = (engine.mouseX() > x+CONTROL_X-10 && engine.mouseY() > y && engine.mouseX() < x+wi+10 && engine.mouseY() < y+getHeight());
+        return hovering && !ui.miniMenuShown();
+      }
+      
+      public boolean getValBool() {
+        return false;
+      }
+      
+      public void display(float y) {
+        this.y = y;
+        y += 20;
+        
+        app.fill(255);
+        app.textFont(engine.DEFAULT_FONT, 20);
+        app.textAlign(LEFT, CENTER);
+        
+        app.text(label, x, y);
+      }
+    }
+    
+    public class CustomSlider extends CustomNode {
+      public float min = 0.;
+      public float max = 100.;
+      public CustomSlider(String l, float min, float max, float initVal) {
+        super(l);
+        this.min = min;
+        this.max = max;
+        this.valFloat = initVal;
+      }
+      
+      @Override
+      public float getHeight() {
+        return 50.;
+      }
+      
+      protected void getSliderVal() {
+        if (inBox()) {
+          app.stroke(160);
+          if (mousePressed) {
+            valFloat = min+((engine.mouseX()-x-CONTROL_X)/(wi-CONTROL_X))*(max-min);
+            valFloat = min(max(valFloat, min), max);
+          }
+        }
+        else {
+          app.stroke(127);
+        }
+      }
+      
+      protected void showVal(float y) {
+        app.fill(255);
+        app.textFont(engine.DEFAULT_FONT, 26);
+        app.textAlign(RIGHT, CENTER);
+        app.text(nf(valFloat, 0, 2), x+CONTROL_X-12, y);
+      }
+      
+      protected void renderSlider(float y) {
+        app.strokeWeight(5);
+        app.line(x+CONTROL_X, y, x+wi, y);
+        
+        app.noStroke();
+        app.fill(255);
+        
+        float percentage = (valFloat-min)/(max-min);
+        app.rect(x+CONTROL_X+percentage*(wi-CONTROL_X)-5, y-15, 10, 30);
+      }
+      
+      public void display(float y) {
+        super.display(y);
+        y += 20;
+        getSliderVal();
+        showVal(y);
+        renderSlider(y);
       }
     }
     
@@ -757,6 +852,8 @@ public class PixelRealm extends Screen {
     // --- Realm terrain attributes ---
     
     public abstract class TerrainAttributes {
+      public ArrayList<CustomNode> customNodes = new ArrayList<CustomNode>();
+      
       private float renderDistance = 6.;
       private float groundRepeat = 2.;
       private float groundSize = 100.;
@@ -779,20 +876,24 @@ public class PixelRealm extends Screen {
         update();
       }
       
+      public void updateAttribs() {
+        
+      }
+      
+      
       public void update() {
         // V1
-        FADE_DIST_OBJECTS = PApplet.pow((renderDistance-4)*groundSize, 2);
-        FADE_DIST_GROUND = PApplet.pow(max(renderDistance-3, 0)*groundSize, 2);
+        FADE_DIST_OBJECTS = PApplet.pow((getRenderDistance()-4)*groundSize, 2);
+        FADE_DIST_GROUND = PApplet.pow(max(getRenderDistance()-3, 0)*groundSize, 2);
         
         // V2
         float chunkSizeUnits = groundSize*float(CHUNK_SIZE);
-        BEGIN_FADE = chunkSizeUnits*(renderDistance-1.5);
+        BEGIN_FADE = chunkSizeUnits*(getRenderDistance()-1.5);
         FADE_LENGTH = chunkSizeUnits;
         
         if (versionCompatibility == 2) {
-          
           // Objects are not rendered when this distance is exceeded.
-          FADE_DIST_OBJECTS = PApplet.pow((BEGIN_FADE+FADE_LENGTH), 2);
+          FADE_DIST_OBJECTS = PApplet.pow((BEGIN_FADE+FADE_LENGTH+FADE_LENGTH), 2);
         }
       }
       
@@ -821,6 +922,7 @@ public class PixelRealm extends Screen {
       }
       
       public float getRenderDistance() {
+        //if (modifyTerrain) return PApplet.min(renderDistance, 3.);
         return renderDistance;
       }
       
@@ -880,7 +982,7 @@ public class PixelRealm extends Screen {
       }
       
       public SinesinesineTerrain(JSONObject j) {
-        NAME = "Sine sine sine";
+        this();
         load(j);
       }
       
@@ -957,18 +1059,42 @@ public class PixelRealm extends Screen {
         NOISE_SEED =            j.getInt("noise_seed");
       }
       
+      private CustomSlider maxHeightSlider;
+      private CustomSlider minHeightSlider;
+      private CustomSlider variSlider;
+      private CustomSlider waterLevelSlider;
+      
       public LegacyTerrain() {
         NAME = "Legacy";
-        NOISE_SEED = 324895709;//int(random(0., 99999999.));
+        NOISE_SEED = int(random(0., 99999999.));
+        
+        customNodes.add(maxHeightSlider = new CustomSlider("Max height", 0., 2., MAX_RANDOM_HEIGHT));
+        customNodes.add(minHeightSlider = new CustomSlider("Min height", 0., 2., LOW_DIPS_REQUENCY));
+        customNodes.add(variSlider      = new CustomSlider("Variability", 0., 0.5, VARI));
+        customNodes.add(waterLevelSlider      = new CustomSlider("Water level", -500, 500, waterLevel));
+      }
+      
+      @Override
+      public void updateAttribs() {
+        MAX_RANDOM_HEIGHT = maxHeightSlider.valFloat;
+        LOW_DIPS_REQUENCY = minHeightSlider.valFloat;
+        VARI = variSlider.valFloat;
+        
+        // Up is minus and down is positive.
+        // This may be confusing for the user.
+        // So just flip the signs here.
+        waterLevel = -waterLevelSlider.valFloat;
+        hasWater = (waterLevel < 499.);
       }
       
       public LegacyTerrain(JSONObject j) {
-        NAME = "Legacy";
+        this();
         load(j);
       }
       
       private float rand(float x, float y, float min, float max) { 
-        return app.noise(x, y)*(max-min)+min;
+          engine.timestamp("noise");
+        return engine.noise(x, y)*(max-min)+min;
       } 
       
       private float getHillHeight(float x, float y) { 
@@ -979,27 +1105,27 @@ public class PixelRealm extends Screen {
       }
       
       public void genTerrainObj(float x, float z) {
-        app.noiseSeed(NOISE_SEED);
-        app.noiseDetail(4, 0.5); 
+        engine.noiseSeed(NOISE_SEED);
+        engine.noiseDetail(4, 0.5); 
         x = x*getGroundSize()+getGroundSize()*0.5;
         z = z*getGroundSize()+getGroundSize()*0.5;
         float y = plantDown(x, z);
         
         if (y > waterLevel && hasWater) return;
-        if (noise(x*100+95423, z*9812+1934825) > TREE_FREQUENCY) return;
+        if (engine.noise(x*100+95423, z*9812+1934825) > TREE_FREQUENCY) return;
         
         @SuppressWarnings("unused")
         TerrainPRObject tree = new TerrainPRObject(
                 x, 
                 y,
                 z, 
-                3.+(3.*noise(x+1280, z+57322))
+                3.+(3.*engine.noise(x+1280, z+57322))
         );
       }
       
       public float getPointY(float x, float z) {
-        app.noiseSeed(NOISE_SEED);
-        app.noiseDetail(OCTAVE, 2.); 
+        engine.noiseSeed(NOISE_SEED);
+        engine.noiseDetail(OCTAVE, 2.); 
         
         float y = getHillHeight(x, z)*20.;
         return y;
@@ -1088,6 +1214,7 @@ public class PixelRealm extends Screen {
           pshapeChunk = createShape();
           pshapeChunk.beginShape(QUAD);
           pshapeChunk.textureMode(NORMAL);
+          // TODO: add code ready for custom tile textures.
           pshapeChunk.texture(img_grass.get());
           
           for (int y = 0; y < CHUNK_SIZE; y++) {
@@ -1153,7 +1280,37 @@ public class PixelRealm extends Screen {
         //  createPShape();
         //  blink = !blink;
         //}
-        scene.shape(pshapeChunk);
+        
+        // In modifyTerrain mode, terrain is re-generated every frame (slow but dynamic, used for previewing custom terrain)
+        // In non-modifyTerrain mode, terrain uses PShapes stored in GPU memory (fast but rigid, to change tile data you must re-generate entire chunk)
+        if (!modifyTerrain) {
+          scene.shape(pshapeChunk);
+        }
+        else {
+          PVector[][] temp = new PVector[CHUNK_SIZE+1][CHUNK_SIZE+1];
+          for (int y = 0; y < CHUNK_SIZE+1; y++) {
+             for (int x = 0; x < CHUNK_SIZE+1; x++) {
+                float xx = float(x+chunkX*CHUNK_SIZE);
+                float yy = float(y+chunkY*CHUNK_SIZE);
+                temp[y][x] = calcTile(xx-1., yy-1.);
+            }
+          }
+          
+          scene.textureWrap(REPEAT);
+          scene.beginShape(QUAD);
+          scene.textureMode(NORMAL);
+          // TODO: add code ready for custom tile textures.
+          scene.texture(img_grass.get());
+          for (int y = 0; y < CHUNK_SIZE; y++) {
+            for (int x = 0; x < CHUNK_SIZE; x++) {
+              scene.vertex(temp[y][x].x,     temp[y][x].y,     temp[y][x].z, 0, 0);                                    
+              scene.vertex(temp[y][x+1].x,   temp[y][x+1].y,   temp[y][x+1].z, 1.0, 0);  
+              scene.vertex(temp[y+1][x+1].x, temp[y+1][x+1].y, temp[y+1][x+1].z, 1.0, 1.0);  
+              scene.vertex(temp[y+1][x].x,   temp[y+1][x].y,   temp[y+1][x].z, 0, 1.0);
+            }
+          }
+          scene.endShape();
+        }
         
         // This below is for hitbox debug purposes
         
@@ -1905,7 +2062,12 @@ public class PixelRealm extends Screen {
           usingFadeShader = false;
           display.shader(scene, "portal_plus", "u_resolution", (float)scene.width, (float)scene.height, "u_time", display.getTimeSeconds(), "u_dir", -direction/(PI*2));
           displayBillboard();
-          useFadeShader();
+          if (versionCompatibility == 2) {
+            useFadeShader();
+          }
+          else if (versionCompatibility == 1) {
+            scene.resetShader();
+          }
           
   
           scene.noTint();
@@ -2299,55 +2461,61 @@ public class PixelRealm extends Screen {
     private float calcTileY(float x, float z, boolean debug) {
       
       if (versionCompatibility == 1) return terrain.getPointY(x,z);
-      
-      //int chunkx = int((x + (x < 0 ? 2 : 1))/(CHUNK_SIZE)) - (x < 0 ? 1 : 0);
-      //int chunkz = int((z + (z < 0 ? 1 : 0) )/(CHUNK_SIZE)) - (z < 0 ? 1 : 0);
-      
-      // +x +z  
-      // +x -z
-      // -x +z
-      // -x -z  OK
-      
-      //int chunkx = int((x + (x < 0 ? 1 : -1))/(CHUNK_SIZE)) - (x < 0 ? 0 : 0);
-      //int chunkz = int((z + (x < 0 ? 1 : -1) )/(CHUNK_SIZE)) - (z < 0 ? 0 : 0);
-      
-      int chunkx = int((x+1)/float(CHUNK_SIZE)) - (x < 0 ? 1 : 0);
-      int chunkz = int((z+1)/float(CHUNK_SIZE)) - (z < 0 ? 1 : 0);
-      
-      int tilex = 0;
-      int tilez = 0;
-      if (x >= 0) {
-        tilex = (int(x+1)%(CHUNK_SIZE));
-      }
       else {
-        tilex = CHUNK_SIZE-abs(int(x+1)%(CHUNK_SIZE));
-      }
-      
-      if (z >= 0) {
-        tilez = (int(z+1)%(CHUNK_SIZE));
-      }
-      else {
-        tilez = CHUNK_SIZE-abs(int(z+1)%(CHUNK_SIZE));
-      }
-      
-            
-      if (debug) {
-        console.log(x+ " " + z + "   "+ tilex + " " + tilez + "   " + chunkx + " " + chunkz);
-      }
-      
-      
-      int hashIndex = (MAX_CHUNKS_XZ)*chunkz + chunkx;
-      glowingchunk = hashIndex;
-
-      
-      glowingtilex = tilex;
-      glowingtiley = tilez;
-      TerrainChunkV2 ch = chunks.get(hashIndex);
-      if (ch != null) {
-        return ch.tiles[abs(tilez)][abs(tilex)].y;
-      }
-      else {
-        return terrain.getPointY(x,z);
+        //int chunkx = int((x + (x < 0 ? 2 : 1))/(CHUNK_SIZE)) - (x < 0 ? 1 : 0);
+        //int chunkz = int((z + (z < 0 ? 1 : 0) )/(CHUNK_SIZE)) - (z < 0 ? 1 : 0);
+        
+        //int chunkx = int((x + (x < 0 ? 1 : -1))/(CHUNK_SIZE)) - (x < 0 ? 0 : 0);
+        //int chunkz = int((z + (x < 0 ? 1 : -1) )/(CHUNK_SIZE)) - (z < 0 ? 0 : 0);
+        engine.timestamp("find chunk");
+        int chunkx = int((x+1)/float(CHUNK_SIZE)) - (x < 0 ? 1 : 0);
+        int chunkz = int((z+1)/float(CHUNK_SIZE)) - (z < 0 ? 1 : 0);
+        
+        engine.timestamp("find tilex");
+        int tilex = 0;
+        int tilez = 0;
+        if (x >= 0) {
+          tilex = (int(x+1)%(CHUNK_SIZE));
+        }
+        else {
+          tilex = CHUNK_SIZE-abs(int(x+1)%(CHUNK_SIZE));
+        }
+        engine.timestamp("find tilez");
+        
+        if (z >= 0) {
+          tilez = (int(z+1)%(CHUNK_SIZE));
+        }
+        else {
+          tilez = CHUNK_SIZE-abs(int(z+1)%(CHUNK_SIZE));
+        }
+        
+              
+        if (debug) {
+          console.log(x+ " " + z + "   "+ tilex + " " + tilez + "   " + chunkx + " " + chunkz);
+        }
+        
+        
+        engine.timestamp("calc hashindex");
+        int hashIndex = (MAX_CHUNKS_XZ)*chunkz + chunkx;
+        glowingchunk = hashIndex;
+  
+        
+        engine.timestamp("find cached");
+        glowingtilex = tilex;
+        glowingtiley = tilez;
+        TerrainChunkV2 ch = chunks.get(hashIndex);
+        
+        engine.timestamp("get cached");
+        // return cached tile.
+        if (ch != null && !modifyTerrain) {
+          engine.timestamp("cached");
+          return ch.tiles[abs(tilez)][abs(tilex)].y;
+        }
+        // If the chunk has not been cached or we want the terrain to change real-time...
+        else {
+          engine.timestamp("calc point");
+          return terrain.getPointY(x,z);
+        }
       }
     }
     
@@ -2562,6 +2730,10 @@ public class PixelRealm extends Screen {
       
       
       JSONObject somejson = new JSONObject();
+      
+      // Create pocket folder if it doesn't exist to prevent Timeway from sh*tting itself
+      if (!file.exists(engine.APPPATH+engine.POCKET_PATH)) new File(engine.APPPATH+engine.POCKET_PATH).mkdir();
+      
       File[] pocketFolder = (new File(engine.APPPATH+engine.POCKET_PATH)).listFiles();
       for (File f : pocketFolder) {
         String path = f.getAbsolutePath();
@@ -2705,7 +2877,7 @@ public class PixelRealm extends Screen {
       if (legacy_autogenStuff == null) {
         legacy_autogenStuff = new HashSet<String>();
       }
-      app.noiseSeed(getHash(stateDirectory));
+      engine.noiseSeed(getHash(stateDirectory));
 
       int l = objects3d.size();
       // Loop thru each file object in the array. Remember each object is uniquely identified by its filename.
@@ -3453,7 +3625,7 @@ public class PixelRealm extends Screen {
       // Otherwise, proceed.
       SinesinesineTerrain tt = (SinesinesineTerrain)terrain;
       
-      app.noiseDetail(4, 0.5); 
+      engine.noiseDetail(4, 0.5); 
         
       scene.pushMatrix();
       float chunkx = floor(playerX/tt.getGroundSize())+1.;
@@ -3464,7 +3636,7 @@ public class PixelRealm extends Screen {
       
       
       display.recordRendererTime();
-      // TODO: fix the bug once and for all!
+      
       scene.hint(ENABLE_DEPTH_TEST);
       display.recordLogicTime();
   
@@ -3482,7 +3654,7 @@ public class PixelRealm extends Screen {
           } else scene.noTint();
   
           if (!dontRender) {
-            float noisePosition = noise(tilex, tilez);
+            float noisePosition = engine.noise(tilex, tilez);
             
             display.recordRendererTime();
             scene.beginShape();
@@ -3580,7 +3752,6 @@ public class PixelRealm extends Screen {
       scene.pushMatrix();
       
       int xstart = chunkx;
-      
       for (int y = 0; y < renderDistance*2; y++) {
         chunkx = xstart;
         for (int x = 0; x < renderDistance*2; x++) {
@@ -3858,6 +4029,20 @@ public class PixelRealm extends Screen {
         //console.log(o.getClass().getSimpleName());
       }
       ordering.insertionSort();
+    }
+    
+    public void regenerateTrees() {
+      for (PixelRealmState.PRObject o : currRealm.ordering) {
+        if (o != null && o instanceof PixelRealmState.TerrainPRObject) {
+          o.destroy();
+        }
+      }
+      
+      for (PixelRealmState.TerrainChunkV2 ch : currRealm.chunks.values()) {
+        if (ch != null) {
+          ch.regenerateTerrainObj();
+        }
+      }
     }
     
     private String getHoldingName(PRObject item) {
@@ -4297,8 +4482,7 @@ public class PixelRealm extends Screen {
     image(scene, (WIDTH/2)-wi/2, (HEIGHT/2)-hi/2, wi, hi);
     display.recordLogicTime();
     
-    // TODO: show gui.
-    //runGUI();
+    
     if (showMemUsage)
       displayMemUsageBar();
       
@@ -4339,27 +4523,52 @@ public class PixelRealm extends Screen {
   public void upperBar() {
     super.upperBar();
     display.recordRendererTime();
-    app.textFont(engine.DEFAULT_FONT);
-    app.textSize(36);
     app.textAlign(LEFT, TOP);
     app.fill(0);
+    app.textFont(engine.DEFAULT_FONT, 36);
     
     if (currRealm == null) return;
     
     if (engine.mouseX() > 0. && engine.mouseX() < app.textWidth(currRealm.stateDirectory) && engine.mouseY() > 0. && engine.mouseY() < myUpperBarWeight) {
       app.fill(50);
-      if (engine.leftClick) {
+      if (engine.rightPressDown) {
+        // Create minimenu.
+          
+        String[] labels = new String[2];
+        Runnable[] actions = new Runnable[2];
+        
+        labels[0] = "Open";
+        actions[0] = new Runnable() {public void run() {
+            
+          file.open(currRealm.stateDirectory);
+            
+        }};
+        
+        
+        labels[1] = "Copy";
+        actions[1] = new Runnable() {public void run() {
+            
+          console.log("Path copied!");
+          clipboard.copyString(currRealm.stateDirectory);
+            
+        }};
+        
+        ui.createOptionsMenu(labels, actions);
+      }
+      else if (engine.leftClick) {
         console.log("Path copied!");
         clipboard.copyString(currRealm.stateDirectory);
       }
     }
-    else 
+    else {
       app.fill(0);
+    }
+    app.textFont(engine.DEFAULT_FONT, 36);
     app.text(currRealm.stateDirectory, 10, 10);
     
     
     if (loading > 0) {
-      engine.loadingIcon(WIDTH-myUpperBarWeight/2-10, myUpperBarWeight/2, myUpperBarWeight);
+      ui.loadingIcon(WIDTH-myUpperBarWeight/2-10, myUpperBarWeight/2, myUpperBarWeight);
       
       // Doesn't matter too much that it's being converted to an int,
       // it doesn't need to be accurate.
@@ -4459,17 +4668,7 @@ public class PixelRealm extends Screen {
       return true;
     }
     else if (engine.commandEquals(command, "/regeneratetrees")) {
-      for (PixelRealmState.PRObject o : currRealm.ordering) {
-        if (o != null && o instanceof PixelRealmState.TerrainPRObject) {
-          o.destroy();
-        }
-      }
-      
-      for (PixelRealmState.TerrainChunkV2 ch : currRealm.chunks.values()) {
-        if (ch != null) {
-          ch.regenerateTerrainObj();
-        }
-      }
+      currRealm.regenerateTrees();
       console.log("Regenerated stuff.");
       return true;
     }
@@ -4598,7 +4797,7 @@ class WorldLegacy extends Screen {
     }
   }
   private void beginRandom() { 
-    app.noiseSeed(myRandomSeed);
+    engine.noiseSeed(myRandomSeed);
   } 
   public float rand(float i, float min, float max) { 
     beginRandom();
@@ -4617,7 +4816,7 @@ class WorldLegacy extends Screen {
     return lerp(y1, y2, i);
   } 
   public void content() { 
-    app.noiseDetail(OCTAVE, 2.); 
+    engine.noiseDetail(OCTAVE, 2.); 
     display.img("sky_1", 0, myUpperBarWeight, 
       WIDTH, this.height); 
     if (displayStars) drawNightSkyStars(); 
