@@ -50,10 +50,10 @@ class Engine {
   // Info and versioning
   public final String NAME        = "Timeway";
   public final String AUTHOR      = "Teo Taylor";
-  public final String VERSION     = "0.2.0";
+  public final String VERSION     = "0.1.1";
   public final String VERSION_DESCRIPTION = 
-    "- Added V2 realms\n"+
-    "- Added new Legacy realm terrain attribute";
+    "- Added terrain customisation\n"+
+    "- Fixed a buncha bugs.";
   // ***************************
   // How versioning works:
   // a.b.c
@@ -1853,6 +1853,7 @@ class Engine {
     public class ColorPicker extends MiniMenu {
         public boolean selected = false;
         public color selectedColor;
+        public Runnable runWhenPicked = null;
       
         public color[] colorArray = {
             //ffffff
@@ -1888,8 +1889,9 @@ class Engine {
         public int maxCols = 6;
 
 
-        public ColorPicker(float x, float y, float width, float height) {
+        public ColorPicker(float x, float y, float width, float height, Runnable r) {
             super(x, y, width, height);
+            runWhenPicked = r;
         }
 
         public void display() {
@@ -1931,12 +1933,10 @@ class Engine {
                     if (leftClick && !disappear) {
                         selectedColor = colorArray[i];
                         
+                        if (runWhenPicked != null) {
+                          runWhenPicked.run();
+                        }
                         
-                        // Set the color of the text placeable
-                        //if (editingPlaceable != null && editingPlaceable instanceof TextPlaceable) {
-                        //    TextPlaceable editingTextPlaceable = (TextPlaceable)editingPlaceable;
-                        //    editingTextPlaceable.textColor = selectedColor;
-                        //}
                         close();
                     }
                 }
@@ -1960,8 +1960,16 @@ class Engine {
     }
     
     
-    public void colorPicker(float x, float y) {
-      currMinimenu = new ColorPicker(x, y, 300, 200);
+    public void colorPicker(float x, float y, Runnable runWhenPicked) {
+      currMinimenu = new ColorPicker(x, y, 300, 200, runWhenPicked);
+    }
+    
+    public color getPickedColor() {
+      if (!(currMinimenu instanceof ColorPicker)) {
+        console.bugWarn("getPickedColor: currMinimenu is not a ColorPicker!");
+        return 0;
+      }
+      return ((ColorPicker)currMinimenu).selectedColor;
     }
     
     
@@ -3287,6 +3295,8 @@ class Engine {
         return "unknown_128";
       case FILE_TYPE_DOC:
         return "doc_128";
+      case FILE_TYPE_TIMEWAYENTRY:
+        return "timeway_entry_64";
       default:
         return "unknown_128";
       }
@@ -3310,8 +3320,10 @@ class Engine {
       if (ext.equals("doc")
         || ext.equals("docx")
         || ext.equals("txt")
-        || ext.equals(ENTRY_EXTENSION)
         || ext.equals("pdf")) return FileType.FILE_TYPE_DOC;
+        
+      if (ext.equals(ENTRY_EXTENSION))
+        return FileType.FILE_TYPE_TIMEWAYENTRY;
   
       if (ext.equals("mp3")
         || ext.equals("wav")
@@ -6378,5 +6390,6 @@ public enum FileType {
     FILE_TYPE_MUSIC, 
     FILE_TYPE_MODEL, 
     FILE_TYPE_DOC,
+    FILE_TYPE_TIMEWAYENTRY,
     FILE_TYPE_SHORTCUT
 }

@@ -361,7 +361,7 @@ public class Editor extends Screen {
 
             String displayText = "";
             if (editing()) {
-                if (app.frameCount % 60 < 30)
+                if (int(display.getTime()) % 60 < 30)
                     displayText = engine.keyboardMessage+"|";
                 else
                     displayText = engine.keyboardMessage;
@@ -817,7 +817,19 @@ public class Editor extends Screen {
           //************FONT COLOUR************
           if (ui.button("font_color", "fonts_128", "Colour")) {
               SpriteSystemPlaceholder.Sprite s = gui.getSprite("font_color");
-              ui.colorPicker(s.xpos, s.ypos+100);
+              
+              Runnable r = new Runnable() {
+                public void run() {
+                  // Set the color of the text placeable
+                  if (editingPlaceable != null && editingPlaceable instanceof TextPlaceable) {
+                      TextPlaceable editingTextPlaceable = (TextPlaceable)editingPlaceable;
+                      selectedColor = ui.getPickedColor();
+                      editingTextPlaceable.textColor = selectedColor;
+                  }
+                }
+              };
+              
+              ui.colorPicker(s.xpos, s.ypos+100, r);
           }
   
           //************BIGGER FONT************

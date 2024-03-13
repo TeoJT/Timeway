@@ -217,7 +217,7 @@ public class PixelRealmWithUI extends PixelRealm {
     private int dialogIndex = 0;
     protected Runnable runWhenDone = null;
     private float appearTimer = 0;
-    private boolean enterToContinue = false;
+    private boolean enterToContinue = true;
     
     public DialogMenu(String title, String backgroundName, String txt) {
       super(title, backgroundName);
@@ -358,6 +358,7 @@ public class PixelRealmWithUI extends PixelRealm {
           public void run() {
             menu = new CustomiseTerrainMenu();
             menuShown = true;
+            currRealm.terraformWarning = false;
           }
         };
         
@@ -368,7 +369,36 @@ public class PixelRealmWithUI extends PixelRealm {
           }
         };
         
-        menu = new YesNoMenu("Warning", "Modifying the terrain generator will reset all terrain data in this realm.\nContinue?", ryes, rno);
+        if (currRealm.versionCompatibility == 1 || currRealm.versionCompatibility != 2) {
+          // Additional functionality for upgrading the realm.
+          ryes = new Runnable() {
+            public void run() {
+              if (!COMPATIBILITY_VERSION.equals("2.0")) {
+                menuShown = false;
+                menu = null;
+                console.bugWarn("Expecting COMPATIBILITY_VERSION "+COMPATIBILITY_VERSION+". Please remember to change this part of the code!");
+                return;
+              }
+              
+              currRealm.version = COMPATIBILITY_VERSION;
+              currRealm.versionCompatibility = 2;
+              
+              menu = new CustomiseTerrainMenu();
+              menuShown = true;
+              currRealm.terraformWarning = false;
+              
+            }
+          };
+          menu = new YesNoMenu("Old version", "This realm uses version "+currRealm.version+" and needs to be upgraded to "+COMPATIBILITY_VERSION+" to be terraformed. Upgrade now and continue?", ryes, rno);
+        }
+        else if (currRealm.terraformWarning) {
+          menu = new YesNoMenu("Warning", "Modifying the terrain generator will reset all terrain data in this realm.\nContinue?", ryes, rno);
+        }
+        else {
+          menu = new CustomiseTerrainMenu();
+          menuShown = true;
+          currRealm.terraformWarning = false;
+        }
       }
       
       // --- Grabber tool ---
@@ -678,16 +708,68 @@ public class PixelRealmWithUI extends PixelRealm {
   
   class CustomiseTerrainMenu extends TitleMenu {
     
+    private int generatorIndex = 1;
+    
     public CustomiseTerrainMenu() {
-      super("", "back-newrealm");
+      super("", "back-customise");
     }
+    
+    
+    //private void switchGenerator(int index) {
+      // we can try doing this another day.
+      //try {
+      //  //currRealm.terrain = (PixelRealmState.TerrainAttributes)Class.forName(terrainGenerators[index]).getConstructor().newInstance();
+      //  Class.forName(terrainGenerators[index]).getConstructor(String.class);
+      //  console.log(currRealm.terrain.getClass().getSimpleName());
+      //}
+      //catch (ClassNotFoundException e) {
+      //  console.log("Cant get class name");
+      //}
+      //catch (Exception e) {
+      //  console.bugWarn(""+e.getMessage());
+      //  console.bugWarn("Unknown error: "+e.getClass().getSimpleName());
+        
+      //}
+    //}
+    
+    public static final int NUM_GENERATORS = 2; 
     
     public void display() {
       setTitle("");
       super.display();
       
+      
+      app.fill(255);
+      app.textFont(engine.DEFAULT_FONT, 20);
+      app.textAlign(LEFT, TOP);
+      app.text("Generator", cache_backX+50, cache_backY+85);
+      
+      app.textAlign(CENTER, TOP);
+      app.textSize(24);
+      app.text(currRealm.terrain.NAME, cache_backX+cache_backWi/2, cache_backY+85);
+      
+      
+      if (ui.button("customise-prev", "back_arrow_128", "")) {
+        generatorIndex--;
+        if (generatorIndex < 0) generatorIndex = NUM_GENERATORS-1;
+        //switchGenerator(generatorIndex);
+        currRealm.switchTerrain(generatorIndex);
+      }
+      if (ui.button("customise-next", "forward_arrow_128", "")) {
+        generatorIndex++;
+        if (generatorIndex >= NUM_GENERATORS) generatorIndex = 0;
+        currRealm.switchTerrain(generatorIndex);
+      }
+      
+      if (ui.button("customise-ok", "tick_128", "Done")) {
+        close();
+        menuShown = false;
+        menu = null;
+      }
+      
+      // Display all parameters for the specified generator that is selected.
       float x = cache_backX+50;
-      float y = cache_backY+50;
+      float y = cache_backY+50+95;
       for (PixelRealmState.CustomNode n : currRealm.terrain.customNodes) {
         n.x = x;
         n.wi = cache_backWi-100.;

@@ -109,11 +109,34 @@ version = version.replace(".", "_")
 
 actionsComplete = False
 
+
+# When application.windows64 was created, all hidden . files were removed.
+# We must re-add them.
+# We can do this by traversing the data/engine folder and copying all hidden files to application.windows64/data/engine
+import concurrent.futures
+
+if (os.path.isdir("application.windows64")):
+    # Check if the folder application.windows64/data/engine exists
+    if (os.path.isdir("data/engine")):
+        # Traverse the data/engine folder
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            for root, dirs, files in os.walk("data/engine"):
+                for file in files:
+                    if (file.startswith(".")):
+                        # Copy the file to application.windows64/data/engine
+                        dest_dir = os.path.join("application.windows64/data/engine", os.path.relpath(root, "data/engine"))
+                        os.makedirs(dest_dir, exist_ok=True)
+                        executor.submit(shutil.copy, os.path.join(root, file), os.path.join(dest_dir, file))
+                        print("Copied "+file+" to "+os.path.join(dest_dir, file))
+
+        print(color.GREEN+"Re-added hidden files to application.windows64/data/engine"+color.NONE)
+
 # Check for folder application.windows64 folder
 new_name_windows = "timeway_windows_"+version
 if (os.path.isdir("application.windows64")):
     # rename to timeway_windows_(version)
     os.rename("application.windows64", new_name_windows)
+
 
 # If a folder with files called timeway_windows exists from a previous packaging, delete it.
 if (os.path.isdir("timeway_windows")):
@@ -183,15 +206,15 @@ if (os.path.isdir("timeway_windows_"+version)):
     files_to_remove = []
     for root, dirs, files in os.walk(new_name_windows):
         for file in files:
-            if (file.startswith(".pixelrealm")):
+            if (file.startswith(".pixelrealm")) and ("realmtemplates" not in root):
                 files_to_remove.append(os.path.join(root, file))
     
     if (len(files_to_remove) > 0):
-        print(color.GOLD+"Found "+str(len(files_to_remove))+" .pixelrealm files. Remove them? Y/N"+color.NONE)
         if (input().lower() == "y"):
             for file in files_to_remove:
                 os.remove(file)
                 print("Removed "+file)
+        print("Removed "+str(len(files_to_remove))+" residue .pixelrealm files.")
     
 
     # Finally, compress the folder to a zip file

@@ -52,6 +52,13 @@ public class PixelRealm extends Screen {
   final static float SWIM_UP_SPEED = 0.8;
   
   
+  protected final String[] terrainGenerators = {
+    "Timeway$PixelRealm$PixelRealmState$LegacyTerrain",
+    "Timeway$PixelRealm$PixelRealmState$SinesinesineTerrain"
+  };
+    
+  
+  
   // Tool constants
   protected final static int TOOL_NORMAL = 1;
   protected final static int TOOL_GRABBER = 2;
@@ -107,7 +114,6 @@ public class PixelRealm extends Screen {
   protected boolean launchWhenPlaced = false; 
   protected int     currentTool = TOOL_NORMAL;
   private boolean isWalking = false;
-  private boolean nearObject = false;
   public boolean movementPaused = false;
   private float lastPlacedPosX = 0;
   private float lastPlacedPosZ = 0;
@@ -696,13 +702,13 @@ public class PixelRealm extends Screen {
     public RealmTexture img_sky   = new RealmTexture(REALM_SKY_DEFAULT);
     protected TerrainAttributes terrain;
     private DirectoryPortal exitPortal = null;
-    private String musicPath;
+    private String musicPath = engine.APPPATH+REALM_BGM_DEFAULT;
     
     public HashMap<Integer, TerrainChunkV2> chunks = new HashMap<Integer, TerrainChunkV2>();
     private float[][] tileHeightGrid;
     
-    private String version = COMPATIBILITY_VERSION;
-    private int versionCompatibility = 2;
+    public String version = COMPATIBILITY_VERSION;
+    public int versionCompatibility = 2;
     
     // --- Legacy stuff for backward compatibility ---
     private Stack<PixelRealmState.PRObject> legacy_terrainObjects;
@@ -711,6 +717,7 @@ public class PixelRealm extends Screen {
     public int collectedCoins = 0;
     public boolean coins = false;
     private boolean createdCoins = false;
+    public boolean terraformWarning = true;
     
     // All objects that are visible on the scene, their interactable actions are run.
     protected LinkedList<PRObject> ordering = new LinkedList<PRObject>();
@@ -763,7 +770,7 @@ public class PixelRealm extends Screen {
       public boolean valBool = false;
       public int valInt = 0;
       
-      public static final float CONTROL_X = 200.;
+      public static final float CONTROL_X = 300.;
       public CustomNode(String l) {
         label = l;
       }
@@ -796,6 +803,10 @@ public class PixelRealm extends Screen {
     public class CustomSlider extends CustomNode {
       public float min = 0.;
       public float max = 100.;
+      protected String maxLabel = null;
+      protected String minLabel = null;
+      
+      
       public CustomSlider(String l, float min, float max, float initVal) {
         super(l);
         this.min = min;
@@ -805,7 +816,7 @@ public class PixelRealm extends Screen {
       
       @Override
       public float getHeight() {
-        return 50.;
+        return 40.;
       }
       
       protected void getSliderVal() {
@@ -825,7 +836,11 @@ public class PixelRealm extends Screen {
         app.fill(255);
         app.textFont(engine.DEFAULT_FONT, 26);
         app.textAlign(RIGHT, CENTER);
-        app.text(nf(valFloat, 0, 2), x+CONTROL_X-12, y);
+        
+        String disp = nf(valFloat, 0, 2);
+        if (valFloat == max && maxLabel != null) disp = maxLabel;
+        if (valFloat == min && minLabel != null) disp = minLabel;
+        app.text(disp, x+CONTROL_X-12, y);
       }
       
       protected void renderSlider(float y) {
@@ -836,6 +851,7 @@ public class PixelRealm extends Screen {
         app.fill(255);
         
         float percentage = (valFloat-min)/(max-min);
+        
         app.rect(x+CONTROL_X+percentage*(wi-CONTROL_X)-5, y-15, 10, 30);
       }
       
@@ -846,7 +862,53 @@ public class PixelRealm extends Screen {
         showVal(y);
         renderSlider(y);
       }
+      
+      public void setWhenMax(String label) {
+        maxLabel = label;
+      }
+      
+      public void setWhenMin(String label) {
+        minLabel = label;
+      }
     }
+    
+    
+    public class CustomSliderInt extends CustomSlider {
+      
+      public CustomSliderInt(String l, int min, int max, int initVal) {
+        super(l, (float)min, (float)max, (float)initVal);
+        valInt = initVal;
+      }
+      
+      @Override
+      protected void showVal(float y) {
+        app.fill(255);
+        app.textFont(engine.DEFAULT_FONT, 26);
+        app.textAlign(RIGHT, CENTER);
+        
+        String disp = str((int)round(valFloat));
+        if (valFloat == max && maxLabel != null) disp = maxLabel;
+        if (valFloat == min && minLabel != null) disp = minLabel;
+        app.text(disp, x+CONTROL_X-12, y);
+      }
+      
+      @Override
+      protected void renderSlider(float y) {
+        app.strokeWeight(5);
+        app.line(x+CONTROL_X, y, x+wi, y);
+        
+        app.noStroke();
+        app.fill(255);
+        
+        valInt = round(valFloat);
+        float percentage = (round(valFloat)-min)/(max-min);
+        app.rect(x+CONTROL_X+percentage*(wi-CONTROL_X)-5, y-15, 10, 30);
+      }
+    }
+    
+    
+    
+    
     
     
     // --- Realm terrain attributes ---
@@ -977,17 +1039,85 @@ public class PixelRealm extends Screen {
       public float hillHeight = 0.;
       public float hillFrequency = 0.5;
       
+      private CustomSlider hillHeightSlider;
+      private CustomSlider hillFrequencySlider;
+      
+      
+      private CustomSliderInt renderDistSlider;
+      private CustomSliderInt chunkLimitSlider;
+      private CustomSlider waterLevelSlider;
+      private CustomSlider groundSizeSlider;
+      
       public SinesinesineTerrain() {
         NAME = "Sine sine sine";
+        createCustomiseNode();
       }
       
       public SinesinesineTerrain(JSONObject j) {
-        this();
+        NAME = "Sine sine sine";
         load(j);
+        createCustomiseNode();
       }
       
+      private void createCustomiseNode() {
+        customNodes = new ArrayList<CustomNode>();
+        customNodes.add(hillHeightSlider = new CustomSlider("Height", 0., 800., hillHeight));
+        customNodes.add(hillFrequencySlider = new CustomSlider("Frequency", 0.0, 3.0, hillFrequency));
+        
+        customNodes.add(groundSizeSlider = new CustomSlider("Tile size", 50., 2000., getGroundSize()));
+        customNodes.add(renderDistSlider = new CustomSliderInt("Render dist", 1, 20, (int)getRenderDistance()));
+        customNodes.add(chunkLimitSlider = new CustomSliderInt("Chunk limit", 1, 200, 200));
+        customNodes.add(waterLevelSlider = new CustomSlider("Water level", -300, 300, -waterLevel));
+        waterLevelSlider.setWhenMin("No water");
+        chunkLimitSlider.setWhenMax("Unlimited");
+      }
+      
+      
+      public void updateAttribs() {
+        
+        hillHeight = hillHeightSlider.valFloat;
+        hillFrequency = hillFrequencySlider.valFloat;
+        
+        setGroundSize(groundSizeSlider.valFloat);
+        setRenderDistance(renderDistSlider.valInt);
+        chunkLimitX = chunkLimitSlider.valInt;
+        if (chunkLimitX == 200) chunkLimitX = Integer.MAX_VALUE;
+        chunkLimitZ = chunkLimitX;
+        
+        // Up is minus and down is positive.
+        // This may be confusing for the user.
+        // So just flip the signs here.
+        waterLevel = -waterLevelSlider.valFloat;
+        hasWater = (waterLevel < 300.);
+      }
+      
+      // Based on (copied from) the v1 terrain renderer,
+      // Not called by legacy v1 terrain renderer
       public void genTerrainObj(float x, float z) {
-        // Do nothing, handled by legacy renderTerrainV1.
+        engine.noiseDetail(2, 0.5);
+        float noisePosition = engine.noise(x, z);
+        
+        final float treeLikelyhood = 0.6;
+        final float randomOffset = 70;
+
+        if (noisePosition > treeLikelyhood) {
+          float pureStaticNoise = (noisePosition-treeLikelyhood);
+          float offset = -randomOffset+(pureStaticNoise*randomOffset*2);
+
+          float terrainX = (getGroundSize()*(x-1))+offset;
+          float terrainZ = (getGroundSize()*(z-1))+offset;
+          float terrainY = onSurface(terrainX, terrainZ)+10;
+          
+          if (terrainY > waterLevel && hasWater) return;
+          
+          @SuppressWarnings("unused")
+          TerrainPRObject tree = new TerrainPRObject(
+            terrainX, 
+            terrainY, 
+            terrainZ, 
+            3+(30*pureStaticNoise)
+          );
+        }
       }
       
       public float getPointY(float x, float z) {
@@ -1060,36 +1190,67 @@ public class PixelRealm extends Screen {
       }
       
       private CustomSlider maxHeightSlider;
-      private CustomSlider minHeightSlider;
       private CustomSlider variSlider;
+      private CustomSlider hillFrequencySlider;
+      private CustomSlider treeSlider;
+      private CustomSliderInt octaveSlider;
+      
       private CustomSlider waterLevelSlider;
+      private CustomSliderInt renderDistSlider;
+      private CustomSliderInt chunkLimitSlider;
+      private CustomSlider groundSizeSlider;
       
       public LegacyTerrain() {
         NAME = "Legacy";
         NOISE_SEED = int(random(0., 99999999.));
-        
-        customNodes.add(maxHeightSlider = new CustomSlider("Max height", 0., 2., MAX_RANDOM_HEIGHT));
-        customNodes.add(minHeightSlider = new CustomSlider("Min height", 0., 2., LOW_DIPS_REQUENCY));
-        customNodes.add(variSlider      = new CustomSlider("Variability", 0., 0.5, VARI));
-        customNodes.add(waterLevelSlider      = new CustomSlider("Water level", -500, 500, waterLevel));
-      }
-      
-      @Override
-      public void updateAttribs() {
-        MAX_RANDOM_HEIGHT = maxHeightSlider.valFloat;
-        LOW_DIPS_REQUENCY = minHeightSlider.valFloat;
-        VARI = variSlider.valFloat;
-        
-        // Up is minus and down is positive.
-        // This may be confusing for the user.
-        // So just flip the signs here.
-        waterLevel = -waterLevelSlider.valFloat;
-        hasWater = (waterLevel < 499.);
+        createCustomiseNode();
       }
       
       public LegacyTerrain(JSONObject j) {
         this();
         load(j);
+        createCustomiseNode();
+      }
+      
+      private void createCustomiseNode() {
+        customNodes = new ArrayList<CustomNode>();
+        customNodes.add(maxHeightSlider  = new CustomSlider("Max height", -200., 200., -HIGHEST_MOUNTAIN));
+        customNodes.add(variSlider       = new CustomSlider("Variability", 0., 0.5, VARI));
+        customNodes.add(hillFrequencySlider = new CustomSlider("Hill frequency", 0., 400., MOUNTAIN_FREQUENCY));
+        customNodes.add(treeSlider = new CustomSlider("Tree frequency", 0., 1.0, TREE_FREQUENCY));
+        treeSlider.setWhenMin("No trees");
+        customNodes.add(octaveSlider = new CustomSliderInt("Noise Octave", 1, 8, OCTAVE));
+        
+        
+        customNodes.add(groundSizeSlider = new CustomSlider("Tile size", 50., 2000., getGroundSize()));
+        customNodes.add(renderDistSlider = new CustomSliderInt("Render dist", 1, 15, (int)getRenderDistance()));
+        customNodes.add(chunkLimitSlider = new CustomSliderInt("Chunk limit", 1, 200, 200));
+        customNodes.add(waterLevelSlider = new CustomSlider("Water level", -800, 2000, -waterLevel));
+        waterLevelSlider.setWhenMin("No water");
+        chunkLimitSlider.setWhenMax("Unlimited");
+        
+      }
+      
+      @Override
+      public void updateAttribs() {
+        HIGHEST_MOUNTAIN = -maxHeightSlider.valFloat;
+        VARI = variSlider.valFloat;
+        MOUNTAIN_FREQUENCY = hillFrequencySlider.valFloat;
+        TREE_FREQUENCY = treeSlider.valFloat;
+        OCTAVE = octaveSlider.valInt;
+        
+        setGroundSize(groundSizeSlider.valFloat);
+        setRenderDistance(renderDistSlider.valInt);
+        
+        chunkLimitX = chunkLimitSlider.valInt;
+        if (chunkLimitX == 200) chunkLimitX = Integer.MAX_VALUE;
+        chunkLimitZ = chunkLimitX;
+        
+        // Up is minus and down is positive.
+        // This may be confusing for the user.
+        // So just flip the signs here.
+        waterLevel = -waterLevelSlider.valFloat;
+        hasWater = (waterLevel < 800.);
       }
       
       private float rand(float x, float y, float min, float max) { 
@@ -1098,9 +1259,8 @@ public class PixelRealm extends Screen {
       } 
       
       private float getHillHeight(float x, float y) { 
-        float slow=x*y*0.0001; 
         return floor(rand(x*VARI, y*VARI, 40, 
-          MAX_RANDOM_HEIGHT))+(PApplet.pow(sin(slow*MOUNTAIN_FREQUENCY), 3)*HIGHEST_MOUNTAIN*0.5+HIGHEST_MOUNTAIN)-(sin(slow*LOW_DIPS_REQUENCY)*
+          MAX_RANDOM_HEIGHT))+(PApplet.pow(sin(x*0.0001*MOUNTAIN_FREQUENCY)+sin(y*0.000173*MOUNTAIN_FREQUENCY), 3)*HIGHEST_MOUNTAIN*0.5+HIGHEST_MOUNTAIN)-(sin(x*0.0001*LOW_DIPS_REQUENCY)*
           LOWEST_DIPS*0.5+LOWEST_DIPS);
       }
       
@@ -1131,6 +1291,21 @@ public class PixelRealm extends Screen {
         return y;
       }
     }
+    
+    
+    public void switchTerrain(int index) {
+      switch (index) {
+        case 0:
+        terrain = new SinesinesineTerrain();
+        break;
+        case 1:
+        terrain = new LegacyTerrain();
+        break;
+      }
+    }
+    
+    
+    
     
     public class TerrainChunkV2 {
       
@@ -2381,13 +2556,12 @@ public class PixelRealm extends Screen {
     }
     
     private float onSurface(float x, float z) {
-      if (outOfBounds(x,z)) {
-        return 999999;
-      }
-      
       if (terrain == null) {
         //console.bugWarn("onSurface() needs the terrain to be loaded before it's called!");
         return 0.;
+      }
+      if (outOfBounds(x,z)) {
+        return 999999;
       }
       float tilex = floor(x/terrain.groundSize)+1.;
       float tilez = floor(z/terrain.groundSize)+1.;
@@ -2401,13 +2575,12 @@ public class PixelRealm extends Screen {
     
     // Similar to plantDown but guarentees than the object in question will not be levitating on a sloped surface.
     private float plantDown(float x, float z) {
-      if (outOfBounds(x,z)) {
-        return 999999;
-      }
-      
       if (terrain == null) {
         //console.bugWarn("onSurface() needs the terrain to be loaded before it's called!");
         return 0.;
+      }
+      if (outOfBounds(x,z)) {
+        return 999999;
       }
       float tilex = floor(x/terrain.groundSize)+1.;
       float tilez = floor(z/terrain.groundSize)+1.;
@@ -2612,11 +2785,13 @@ public class PixelRealm extends Screen {
       // Get all files (creates the FileObject instances)
       openDir();
       
-      // Get realm's terrain assets (sky, grass, trees, music)
-      loadRealmAssets();
+      // NOTE: Due to differing versions being sensitive to the ordering of loadRealmAssets(),
+      // loadRealmAssets is called in loadRealmTerrain in order to prevent a bug. Unmaintainable, yes,
+      // but hey we're choosing backward compatibility so it's a cost we gotta pay.
       
       // Read the JSON (load terrain information and position of these objects)
       loadRealmTerrain();
+      
       if (terrain == null) terrain = new SinesinesineTerrain();
       
     }
@@ -2625,18 +2800,18 @@ public class PixelRealm extends Screen {
       // Reset memory usage
       memUsage.set(0);
       files = new LinkedList<FileObject>();
+      ordering = new LinkedList<PRObject>();
       
       // Reload everything!
       openDir();
       loadRealmTerrain();
-      loadRealmAssets();
       if (terrain == null) terrain = new SinesinesineTerrain();
     }
     
     public void refreshEverything() {
+      saveRealmJson();
       portalLight = 255;
       refreshFiles();
-      loadRealmAssets();
     }
     
     public FileObject createPRObjectAndPickup(String path) {
@@ -2797,6 +2972,9 @@ public class PixelRealm extends Screen {
         
         
         // backward compatibility checking time!
+        // Also the time we load realm assets since 
+        // 1.x -> assets need to be loaded AFTER getting version.
+        // 2.x -> assets need to be loaded BEFORE loading terrain (cus PShapes in gpu memory n all. Makes sense?)
         version = jsonFile.getString("compatibility_version", "");
         if (version.equals("1.0") || version.equals("1.1")) {
           versionCompatibility = 1;
@@ -2804,6 +2982,8 @@ public class PixelRealm extends Screen {
         else if (version.equals("2.0")) {
           versionCompatibility = 2;
         }
+        // Satisfies the 2 conditions stated above for 1.x and 2.x!
+        loadRealmAssets();
         
         
         
@@ -3600,6 +3780,10 @@ public class PixelRealm extends Screen {
             }
           }
       }
+      
+      if (modifyTerrain) {
+        playerY = onSurface(playerX, playerZ);
+      }
     }
     
     
@@ -3915,6 +4099,11 @@ public class PixelRealm extends Screen {
             return;
           }
           // If we get past this point we gutch!!
+          
+          // Ooh, remember to add the file to the linkedlist.
+          // I think that was the cause of a very annoying bug.
+          // Also, due to if conditions earlier, this is guarenteed to NOT be an abstract object.
+          files.add((FileObject)holdingObject);
         }
         
         // Need to do a few things when we move files like that.a
@@ -4260,7 +4449,7 @@ public class PixelRealm extends Screen {
     boolean success = true;
     // Abort if unsuccessful.
     for (PocketItem p : pockets) {
-      success &= p.changeRealm(currRealm.stateDirectory);
+      success &= p.changeRealm(currRealm.stateDirectory);;
     }
     if (!success) {
       // bump back the player lol.
@@ -4301,6 +4490,10 @@ public class PixelRealm extends Screen {
     else
       currRealm = new PixelRealmState(to, fro);
         
+        
+    console.log(to);
+    console.log(fro);
+    console.log(currRealm.musicPath);
     
     // Creating a new realm won't start the music automatically cus we like manual bug-free control.
     sound.streamMusicWithFade(currRealm.musicPath);
@@ -4319,18 +4512,20 @@ public class PixelRealm extends Screen {
     boolean success = true;
     // Abort if unsuccessful.
     for (PocketItem p : pockets) {
-      success &= p.changeRealm(currRealm.stateDirectory);
+      success &= p.changeRealm(currRealm.stateDirectory);;
     }
     if (!success) {
       sound.playSound("nope");
       return;
     }
     currRealm.saveRealmJson();
-    currRealm.refreshFiles();
-    currRealm.updateHoldingItem(globalHoldingObjectSlot);
+    
     sound.streamMusicWithFade(r.musicPath);
     portalCoolDown = 30.;
     currRealm = r;
+    currRealm.refreshFiles();
+    // so that our currently holding item doesn't disappear when we go into the next realm.
+    currRealm.updateHoldingItem(globalHoldingObjectSlot);
   }
   
   // This took bloody ages to figure out so it better work 100% of the timeee
@@ -4488,24 +4683,26 @@ public class PixelRealm extends Screen {
       
     // Quickwarp controls (outside of player controls because we need non-state
     // class to run it)
-    for (int i = 0; i < 10; i++) {
-      // Go through all the keys 0-9 and check if it's being pressed
-      if (engine.keybindPressed("quickWarp"+str(i)) && usePortalAllowed) {
-        // Save current realm
-        quickWarpRealms[quickWarpIndex] = currRealm;
-        
-        if (i == quickWarpIndex) console.log("Going back to default dir");
-        if (quickWarpRealms[i] == null || i == quickWarpIndex) {
-          String dir = engine.DEFAULT_DIR;
-          switchToRealm( new PixelRealmState(dir, file.directorify(file.getPrevDir(dir))) );
+    if (!movementPaused) {
+      for (int i = 0; i < 10; i++) {
+        // Go through all the keys 0-9 and check if it's being pressed
+        if (engine.keybindPressed("quickWarp"+str(i)) && usePortalAllowed) {
+          // Save current realm
+          quickWarpRealms[quickWarpIndex] = currRealm;
+          
+          if (i == quickWarpIndex) console.log("Going back to default dir");
+          if (quickWarpRealms[i] == null || i == quickWarpIndex) {
+            String dir = engine.DEFAULT_DIR;
+            gotoRealm(dir, file.directorify(file.getPrevDir(dir)));
+          }
+          else {
+            switchToRealm (quickWarpRealms[i]);
+          }
+          quickWarpIndex = i;
+          sound.playSound("swish");
+          portalLight = 255;
+          break;
         }
-        else {
-          switchToRealm (quickWarpRealms[i]);
-        }
-        quickWarpIndex = i;
-        sound.playSound("swish");
-        portalLight = 255;
-        break;
       }
     }
   }
@@ -4605,6 +4802,11 @@ public class PixelRealm extends Screen {
     else if (command.equals("/refreshdir")) {
       console.log("Refreshing dir...");
       currRealm.refreshFiles();
+      return true;
+    }
+    else if (command.equals("/refreshassets")) {
+      console.log("Refreshing assets...");
+      currRealm.loadRealmAssets();
       return true;
     }
     //else if (command.equals("/editgui")) {
