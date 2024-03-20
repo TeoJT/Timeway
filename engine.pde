@@ -2800,8 +2800,7 @@ class Engine {
       
       // Doesn't seem to throw an exception or report an error is the file isn't
       // found so let's do it ourselves.
-      File f = new File(path);
-      if (!f.exists()) {
+      if (!file.exists(path)) {
         console.bugWarn("loadNewMusic: "+path+" doesn't exist!");
         return null;
       }
@@ -2900,11 +2899,12 @@ class Engine {
       
 
       // Fade the music.
+      boolean useNewLibraryVersion = false; // javaPlatform >= 17;
+      
       if (musicFadeOut < 1.) {
-        if (musicFadeOut > 0.005) {
+        if (musicFadeOut > 0.005 && !useNewLibraryVersion) {
           // Fade the old music out
           float vol = musicFadeOut *= PApplet.pow(MUSIC_FADE_SPEED, display.getDelta());
-          
           if (streamMusic != null)
             streamMusic.playbinSetVolume(vol);
 
@@ -2914,12 +2914,15 @@ class Engine {
             streamMusicFadeTo.play();
             streamMusicFadeTo.volume((1.-vol)*masterVolume);
           } 
+          
+          
           //else 
           //  console.bugWarnOnce("streamMusicFadeTo shouldn't be null here.");
         } else {
           if (streamMusic != null)
             streamMusic.stop();
           if (streamMusicFadeTo != null) streamMusic = streamMusicFadeTo;
+          if (useNewLibraryVersion) streamMusic.play();
           musicFadeOut = 1.;
         }
       }
@@ -4100,7 +4103,7 @@ class Engine {
       case LINUX:
         plat = "linux-download-size";
         break;
-      case MACOSX:
+      case MACOS:
         plat = "macos-download-size";
         break;
       }
@@ -4224,7 +4227,7 @@ class Engine {
             case LINUX:
               exeloc = updateInfo.getString("linux-executable-location", "");
               break;
-            case MACOSX:
+            case MACOS:
               exeloc = updateInfo.getString("macos-executable-location", "");
               break;
           }
@@ -4285,7 +4288,7 @@ class Engine {
       case LINUX:
       console.bugWarn("getExeFilename(): Not implemented for Linux");
       break;
-      case MACOSX:
+      case MACOS:
       console.bugWarn("getExeFilename(): Not implemented for MacOS");
       break;
     }
@@ -4303,7 +4306,7 @@ class Engine {
       case LINUX:
       console.bugWarn("restart(): Not implemented for Linux");
       return;
-      case MACOSX:
+      case MACOS:
       console.bugWarn("restart(): Not implemented for MacOS");
       return;
     }
@@ -4605,7 +4608,7 @@ class Engine {
         case LINUX:
           downloadURL = updateInfo.getString("linux-download", "[none]");
           break;
-        case MACOSX:
+        case MACOS:
           downloadURL = updateInfo.getString("macos-download", "[none]");
           break;
         }
