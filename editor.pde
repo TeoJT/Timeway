@@ -481,9 +481,6 @@ public class Editor extends Screen {
         this.entryPath = entryPath;
         camera = new DCapture(engine);
         
-        // Reset cpu canvas to original size, it will automatically shrink as needed.
-        display.currentCPUCanvas = 0;
-        
         // Because of the really annoying delay thing, we wanna create a canvas that uses the cpu to draw the frame instead
         // of the P2D renderer struggling to draw things. In the future, we can implement this into the engine so that it can
         // be used in other places and not just for the camera.
@@ -1169,8 +1166,6 @@ public class Editor extends Screen {
         
         if (engine.keyPressed && key == 0x16) // Ctrl+v
         {
-            // Timeout so that we don't immediately shrink our cpu canvas since a delay is expected.
-            display.smallerCanvasTimeout = 10;
             
             if (clipboard.isImage()) {
               PImage pastedImage = clipboard.getImage();

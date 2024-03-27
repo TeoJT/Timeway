@@ -117,9 +117,6 @@ class Engine {
   public FilemanagerModule file;
   public ClipboardModule clipboard;
   public UIModule ui;
-  
-  
-  PGraphics CPU = createGraphics(512, 512);
 
 
   
@@ -1526,8 +1523,7 @@ class Engine {
       return delta;
     }
     
-    // Frames since the beginning of the program (always 1 second = 60 time, even if running at 30fps)
-    // accounting for missed frames.
+    // Frames since the beginning of the program, accounting for missed frames (always 1 second = 60 frames, even if running at 30fps)
     public float getTime() {
       return time;
     }
@@ -3779,9 +3775,6 @@ class Engine {
     // PApplet & engine init stuff
     app = p;
     app.background(0);
-    
-    CPU.noSmooth();
-    
     loadedContent = new HashSet<String>();
     
     console = new Console();
@@ -5479,14 +5472,6 @@ class Engine {
     }
   }
   
-  public PImage experimentalScaleDown(PImage image) {
-    CPU.beginDraw();
-    CPU.clear();
-    CPU.image(image, 0, 0, CPU.width, CPU.height);
-    CPU.endDraw();
-    PImage p = new PImage(CPU.getImage());
-    return p;
-  }
 
 
   public String saveCacheImage(String originalPath, PImage image) {
@@ -5931,6 +5916,8 @@ class Engine {
       return (cachedClipboardObject instanceof String);
     }
   
+    // That can be the future's problem lol
+    @SuppressWarnings("deprecation")
     public PImage getImage()
     {
       PImage img = null;

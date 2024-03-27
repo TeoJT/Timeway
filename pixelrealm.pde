@@ -4865,7 +4865,7 @@ public class PixelRealm extends Screen {
     //} 
     else if (command.equals("/evolvinggateway")) {
       if (legacy_portalEasteregg) {
-        sharedResources.set("legacy_evolvinggateway_easteregg", new Boolean(false));
+        sharedResources.set("legacy_evolvinggateway_easteregg", false);
         legacy_portalEasteregg = false;
         console.log("Legacy Evolving Gateway style portals disabled.");
         
@@ -4875,7 +4875,7 @@ public class PixelRealm extends Screen {
         }}}
       }
       else {
-        sharedResources.set("legacy_evolvinggateway_easteregg", new Boolean(true));
+        sharedResources.set("legacy_evolvinggateway_easteregg", true);
         legacy_portalEasteregg = true;
         console.log("Welcome back to Evolving Gateway!");
         

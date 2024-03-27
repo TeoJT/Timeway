@@ -70,7 +70,6 @@ public class Startup extends Screen {
         }
         // Logo fade out as the screen moves away.
         else {
-            display.cacheCPUCanvas();
             floatOut *= 0.9;
             app.tint(255, (255*floatOut));
             display.imgCentre("logo", WIDTH/2, HEIGHT/2);
