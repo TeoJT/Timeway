@@ -35,7 +35,6 @@ import java.nio.FloatBuffer;
 import java.nio.file.Paths;
 
 
-
 import java.util.ArrayList;
 import java.util.List;
 
@@ -97,9 +96,6 @@ class Engine {
   public       PFont  DEFAULT_FONT;
   public       String DEFAULT_DIR;
   public       String DEFAULT_FONT_NAME = "Typewriter";
-  
-  // EXPERIMENTAL THING STILL
-  public      boolean USE_CPU_CANVAS = false;
 
 
   public final String ENTRY_EXTENSION = "timewayentry";
@@ -341,8 +337,6 @@ class Engine {
       
       public void loadDefaultSettings() {
         defaultSettings = new HashMap<String, Object>();
-        defaultSettings.putIfAbsent("forceDevMode", false);
-        defaultSettings.putIfAbsent("repressDevMode", false);
         defaultSettings.putIfAbsent("fullscreen", false);
         defaultSettings.putIfAbsent("scrollSensitivity", 20.0);
         defaultSettings.putIfAbsent("dynamicFramerate", true);
@@ -1035,9 +1029,6 @@ class Engine {
     private int thisFrameMillis = 0;
     private int totalTimeMillis = 0;
     private float time = 0.;
-    private PGraphics[] CPUCanvas;
-    private int currentCPUCanvas = 0;
-    public float smallerCanvasTimeout = 300;
     private float selectBorderTime = 0.;
     public boolean showCPUBenchmarks = false;
     
@@ -1146,12 +1137,6 @@ class Engine {
         generateErrorImg();
         generateErrorShader();
         
-        USE_CPU_CANVAS = settings.getBoolean("fasterImageImport");
-        if (USE_CPU_CANVAS) {
-          CPUCanvas = new PGraphics[MAX_CPU_CANVAS];
-          CPUCanvas[0] = createGraphics(app.width, app.height);
-        }
-        
         resetTimes();
     }
     
@@ -1161,16 +1146,6 @@ class Engine {
     
     public boolean showFPS() {
       return showFPS;
-    }
-    
-    // Displaying it for the first time automatically caches it (and causes a massive ass delay)
-    public void cacheCPUCanvas() {
-      if (USE_CPU_CANVAS) {
-        CPUCanvas[0].beginDraw();
-        CPUCanvas[0].clear();
-        CPUCanvas[0].endDraw();
-        app.image(CPUCanvas[0], 0, 0);
-      }
     }
     
     private void generateErrorImg() {
@@ -1377,32 +1352,7 @@ class Engine {
         return;
       }
       // If image is loaded render.
-      if (image.width > 0 && image.height > 0) {
-        
-        // Images which are large on some devices causes a large delay as OpenGL caches the image.
-        // A workaround is to render the image to a canvas rendered by the CPU instead, bypassing any caching.
-        // However, this comes at the cost of increased CPU usage and increased power use.
-        // Only use it if 
-        // 1. image is large enough
-        // 2. We've enabled the CPU canvas (obviously)
-        // 3. powerSaver is disabled (we'd rather have large caching delays than increased overall power usage)
-        if (image.width > 1024 && image.height > 1024 && USE_CPU_CANVAS && !power.getPowerSaver()) {
-          PGraphics canv = CPUCanvas[currentCPUCanvas];
-          float canvDispSclX = canv.width/WIDTH;
-          float canvDispSclY = canv.height/HEIGHT;
-          recordRendererTime();
-          canv.beginDraw();
-          //CPUCanvas.clear();
-          //CPUCanvas.clip(x*canvDispSclX,y*canvDispSclY,w*canvDispSclX,h*canvDispSclY);
-          canv.image(image, x*canvDispSclX, y*canvDispSclY, w*canvDispSclX, h*canvDispSclY);
-          //CPUCanvas.noClip();
-          canv.endDraw();
-          app.clip(x*displayScale+currScreen.screenx, y*displayScale+currScreen.screeny, w*displayScale, h*displayScale);
-          app.image(canv, 0, 0, WIDTH, HEIGHT);
-          app.noClip();
-          recordLogicTime();
-        }
-        else app.image(image, x, y, w, h);
+      if (image.width > 0 && image.height > 0) {app.image(image, x, y, w, h);
         
         return;
       } else {
@@ -1553,22 +1503,6 @@ class Engine {
       display.recordLogicTime();
     }
     
-    public void controlCPUCanvas() {
-      if (USE_CPU_CANVAS) {
-        // TODO: FPS system changes, you prolly wanna update this
-        if ((frameRate < 13 || getLiveFPS() < 9) && smallerCanvasTimeout < 1. && power.getPowerMode() != PowerMode.MINIMAL) {
-          currentCPUCanvas++;
-          if (currentCPUCanvas < MAX_CPU_CANVAS && CPUCanvas[currentCPUCanvas] == null) {
-            int w = CPUCanvas[currentCPUCanvas-1].width;
-            int h = CPUCanvas[currentCPUCanvas-1].height;
-            CPUCanvas[currentCPUCanvas] = createGraphics(w/2, h/2);
-          }
-          smallerCanvasTimeout = 120;
-        }
-        else smallerCanvasTimeout -= display.getDelta();
-      }
-    }
-    
     public void clip(float x, float y, float wi, float hi) {
       float s = getScale();
       app.clip(x*s, y*s, wi*s, hi*s);
@@ -1655,6 +1589,7 @@ class Engine {
         public MiniMenu() {
             power.setAwake();
             yappear = 1.;
+            sound.playSound("fade_in");
         }
         
         public MiniMenu(float x, float y) {
@@ -1675,6 +1610,7 @@ class Engine {
                 disappear = true;
                 power.setSleepy();
                 yappear = 1.;
+                sound.playSound("fade_out");
             }
         }
 
@@ -1818,6 +1754,7 @@ class Engine {
           if (mouseX() > this.x && mouseX() < this.x+this.width && mouseY() > yy && mouseY() < yy+SIZE+SPACING) {
             app.fill(HOVER_COLOR);
             if (click && selectable) {
+              sound.playSound("select_any");
               actions.get(i).run();
               selectedOption = op;
               this.close();
@@ -1934,6 +1871,7 @@ class Engine {
                         selectedColor = colorArray[i];
                         
                         if (runWhenPicked != null) {
+                          sound.playSound("select_color");
                           runWhenPicked.run();
                         }
                         
@@ -2708,10 +2646,20 @@ class Engine {
     }
   
     public void playSound(String name) {
+      playSound(name, 1.0);
+    }
+    
+    public void playSoundOnce(String name) {
       SoundFile s = getSound(name);
       if (s != null) {
-        if (s.isPlaying()) s.stop();
-        s.play();
+        if (!s.isPlaying()) s.play();
+      }
+    }
+    
+    public void pauseSound(String name) {
+      SoundFile s = getSound(name);
+      if (s != null) {
+        if (s.isPlaying()) s.pause();
       }
     }
     
@@ -2731,6 +2679,7 @@ class Engine {
           s.loop();
       }
     }
+    
   
     public void setSoundVolume(String name, float vol) {
       SoundFile s = getSound(name);
@@ -3880,11 +3829,7 @@ class Engine {
     power.setDynamicFramerate(settings.getBoolean("dynamicFramerate"));
     DEFAULT_FONT_NAME = settings.getString("defaultSystemFont");
     
-    
     DEFAULT_FONT = display.getFont(DEFAULT_FONT_NAME);
-    checkDevMode();
-    
-    
 
     clearKeyBuffer();
 
@@ -4470,6 +4415,34 @@ class Engine {
       display.reloadShaders();
       console.log("Shaders reloaded.");
     }
+    //else if (commandEquals(command, "/thread")) {
+      
+    //  String arg = "";
+    //  if (command.length() > 8)
+    //    arg = command.substring(8);
+      
+    //  Thread[] threads = new Thread[Thread.activeCount()];
+    //  Thread.enumerate(threads);
+    //  for (Thread thread : threads) {
+    //    if (!thread.isAlive()) continue;
+    //      if (thread.getName().equals(arg)) {
+    //        console.log(arg+"   M A X     P R I O R I T Y");
+    //        thread.setPriority(Thread.MAX_PRIORITY);
+    //        //console.log("K I L L E D   "+arg);
+    //        //try {
+    //        //  thread.stop();
+    //        //}
+    //        //catch (RuntimeException e) {
+    //        //  console.warn("Killing "+arg+" failed");
+    //        //}
+    //      }
+    //      else {
+    //        thread.setPriority(Thread.MIN_PRIORITY);
+    //        console.log(thread.getName() + " " + thread.getPriority());
+    //      }
+    //  }
+      
+    //}
     
     
     // No commands
@@ -4628,41 +4601,6 @@ class Engine {
       }
 
       showUpdateScreen = update;
-    }
-  }
-
-  public void checkDevMode() {
-    if (settings.getBoolean("forceDevMode")) {
-      if (settings.getBoolean("repressDevMode")) {
-        console.warn("Wut. Dev mode is both forced and repressed. Enabling by default.");
-      }
-      devMode = true;
-      console.log("Dev mode enabled by config.");
-      return;
-    }
-
-    String path = "just a sample string so the length isn't zero lol amongus.";
-    try {
-      path = (new File(Engine.class.getProtectionDomain().getCodeSource().getLocation().toURI()).getPath());
-    }
-    catch (Exception e) {
-      devMode = false;
-      console.warn("Couldn't check dev mode, disabling by default.");
-    }
-
-    // Check if the last characters of path is "/timeway/out"
-    if (path.substring(path.length()-12).equals("/timeway/out")) {
-
-      if (settings.getBoolean("repressDevMode")) {
-        devMode = false;
-        console.log("Dev mode disabled by config.");
-        return;
-      } else {
-        console.log("Dev mode enabled.");
-        devMode = true;
-      }
-    } else {
-      devMode = false;
     }
   }
   
@@ -5685,6 +5623,11 @@ class Engine {
     if (sound == null) console.bugWarn("setOriginalSound: the sound you provided is null! Is your runnable load code working??");
     originalSound = sound;
   }
+  
+  
+  public class InputModule {
+    
+  }
 
 
   private float holdKeyFrames = 0.;
@@ -5933,26 +5876,6 @@ class Engine {
 
 
 
-  public void devInfo() {
-    if (devMode) {
-      app.noStroke();
-      app.fill(0, 0, 0, 127);
-      app.rect(0, 0, 150, 150);
-      app.fill(255);
-      app.textSize(16);
-      app.textAlign(LEFT);
-      app.text("Dev"+
-        "\nFPS: "+int(app.frameRate)+
-        "\nX: "+mouseX()+
-        "\nY: "+mouseY()+
-        "\nSleepy:  "+power.getSleepyMode()
-        , 10, 20);
-    }
-
-    if (app.keyPressed && app.keyCode == ALT) {
-      devMode = false;
-    }
-  }
 
   public void backspace() {
     if (this.keyboardMessage.length() > 0) {
@@ -6193,8 +6116,6 @@ class Engine {
       text(txt, 7, y+2);
       popMatrix();
     }
-
-    devInfo();
 
     // Display console
     // TODO: this renders the console 4 times which is BAD.

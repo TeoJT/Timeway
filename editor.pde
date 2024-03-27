@@ -842,6 +842,7 @@ public class Editor extends Screen {
               else {
                   selectedFontSize += 2;
               }
+              sound.playSound("select_bigger");
           }
   
           //************SMALLER FONT************
@@ -859,6 +860,7 @@ public class Editor extends Screen {
               if (selectedFontSize < MIN_FONT_SIZE) {
                   selectedFontSize = MIN_FONT_SIZE;
               }
+              sound.playSound("select_smaller");
           }
   
           //************FONT SIZE************
@@ -893,12 +895,14 @@ public class Editor extends Screen {
           
           //************CAMERA************
           if (ui.button("camera", "camera_128", "Take photo")) {
+            sound.playSound("select_any");
             this.beginCamera();
           }
         }
         else {
           
           if (ui.button("camera_back", "back_arrow_128", "")) {
+            sound.playSound("select_any");
             this.endCamera();
           }
           
@@ -915,6 +919,7 @@ public class Editor extends Screen {
             gui.getSprite("snap").setY(HEIGHT-myLowerBarWeight+20);
             
             if (ui.button("camera_flip", "flip_camera_128", "Switch camera")) {
+              sound.playSound("select_any");
               preparingCameraMessage = "Switching camera...";
               camera.switchNextCamera();
             }

@@ -119,10 +119,12 @@ public class PixelRealm extends Screen {
   private float lastPlacedPosZ = 0;
   private AtomicBoolean refreshRealm = new AtomicBoolean(false);
   protected float portalLight = 255.;
+  protected boolean isInWater = false;
   protected boolean isUnderwater = false;
   private float portalCoolDown = 45;
   protected boolean usePortalAllowed = true;
   protected boolean modifyTerrain = false;
+  protected int nodeSound = 0;
       
   
   
@@ -185,6 +187,8 @@ public class PixelRealm extends Screen {
     
     // --- Sounds and music ---
     sound.loopSound("portal");
+    sound.setSoundVolume("underwater", 0.);
+    sound.loopSound("underwater");
     
     // --- Create graphics canvas ---
     // Disable texture filtering
@@ -765,6 +769,7 @@ public class PixelRealm extends Screen {
       public float x = 0.;
       public float wi = 100.;
       private float y = 0;
+      public int sound = 0;
       
       public float valFloat = 0.;
       public boolean valBool = false;
@@ -807,11 +812,12 @@ public class PixelRealm extends Screen {
       protected String minLabel = null;
       
       
-      public CustomSlider(String l, float min, float max, float initVal) {
+      public CustomSlider(String l, float min, float max, float initVal, int s) {
         super(l);
         this.min = min;
         this.max = max;
         this.valFloat = initVal;
+        this.sound = s;
       }
       
       @Override
@@ -825,6 +831,7 @@ public class PixelRealm extends Screen {
           if (mousePressed) {
             valFloat = min+((engine.mouseX()-x-CONTROL_X)/(wi-CONTROL_X))*(max-min);
             valFloat = min(max(valFloat, min), max);
+            nodeSound = this.sound;
           }
         }
         else {
@@ -875,8 +882,8 @@ public class PixelRealm extends Screen {
     
     public class CustomSliderInt extends CustomSlider {
       
-      public CustomSliderInt(String l, int min, int max, int initVal) {
-        super(l, (float)min, (float)max, (float)initVal);
+      public CustomSliderInt(String l, int min, int max, int initVal, int s) {
+        super(l, (float)min, (float)max, (float)initVal, s);
         valInt = initVal;
       }
       
@@ -1060,14 +1067,20 @@ public class PixelRealm extends Screen {
       }
       
       private void createCustomiseNode() {
-        customNodes = new ArrayList<CustomNode>();
-        customNodes.add(hillHeightSlider = new CustomSlider("Height", 0., 800., hillHeight));
-        customNodes.add(hillFrequencySlider = new CustomSlider("Frequency", 0.0, 3.0, hillFrequency));
+        // Quick reminder of sounds:
+        // terraform_1 - Woopwoopwoopwoopwoopwoopwoopwoopwoopwoopwoop
+        // terraform_2 - Sounds like you're doing some good kneading to the terrain
+        // terraform_3 - Sounds like you're doing something subtle/sounds like water
+        // terraform_4 - Sounds like you're doing something weird
         
-        customNodes.add(groundSizeSlider = new CustomSlider("Tile size", 50., 2000., getGroundSize()));
-        customNodes.add(renderDistSlider = new CustomSliderInt("Render dist", 1, 20, (int)getRenderDistance()));
-        customNodes.add(chunkLimitSlider = new CustomSliderInt("Chunk limit", 1, 200, 200));
-        customNodes.add(waterLevelSlider = new CustomSlider("Water level", -300, 300, -waterLevel));
+        customNodes = new ArrayList<CustomNode>();
+        customNodes.add(hillHeightSlider = new CustomSlider("Height", 0., 800., hillHeight, 2));
+        customNodes.add(hillFrequencySlider = new CustomSlider("Frequency", 0.0, 3.0, hillFrequency, 1));
+        
+        customNodes.add(groundSizeSlider = new CustomSlider("Tile size", 50., 2000., getGroundSize(), 4));
+        customNodes.add(renderDistSlider = new CustomSliderInt("Render dist", 1, 20, (int)getRenderDistance(), 3));
+        customNodes.add(chunkLimitSlider = new CustomSliderInt("Chunk limit", 1, 200, 200, 4));
+        customNodes.add(waterLevelSlider = new CustomSlider("Water level", -300, 300, -waterLevel, 3));
         waterLevelSlider.setWhenMin("No water");
         chunkLimitSlider.setWhenMax("Unlimited");
       }
@@ -1213,19 +1226,25 @@ public class PixelRealm extends Screen {
       }
       
       private void createCustomiseNode() {
+        // Quick reminder of sounds:
+        // terraform_1 - Woopwoopwoopwoopwoopwoopwoopwoopwoopwoopwoop
+        // terraform_2 - Sounds like you're doing some good kneading to the terrain
+        // terraform_3 - Sounds like you're doing subtle/sounds like water
+        // terraform_4 - Sounds like you're doing something weird
+        
         customNodes = new ArrayList<CustomNode>();
-        customNodes.add(maxHeightSlider  = new CustomSlider("Max height", -200., 200., -HIGHEST_MOUNTAIN));
-        customNodes.add(variSlider       = new CustomSlider("Variability", 0., 0.5, VARI));
-        customNodes.add(hillFrequencySlider = new CustomSlider("Hill frequency", 0., 400., MOUNTAIN_FREQUENCY));
-        customNodes.add(treeSlider = new CustomSlider("Tree frequency", 0., 1.0, TREE_FREQUENCY));
+        customNodes.add(maxHeightSlider  = new CustomSlider("Max height", -200., 200., -HIGHEST_MOUNTAIN, 1));
+        customNodes.add(variSlider       = new CustomSlider("Variability", 0., 0.5, VARI, 2));
+        customNodes.add(hillFrequencySlider = new CustomSlider("Hill frequency", 0., 400., MOUNTAIN_FREQUENCY, 2));
+        customNodes.add(treeSlider = new CustomSlider("Tree frequency", 0., 1.0, TREE_FREQUENCY, 4));
         treeSlider.setWhenMin("No trees");
-        customNodes.add(octaveSlider = new CustomSliderInt("Noise Octave", 1, 8, OCTAVE));
+        customNodes.add(octaveSlider = new CustomSliderInt("Noise Octave", 1, 8, OCTAVE, 4));
         
         
-        customNodes.add(groundSizeSlider = new CustomSlider("Tile size", 50., 2000., getGroundSize()));
-        customNodes.add(renderDistSlider = new CustomSliderInt("Render dist", 1, 15, (int)getRenderDistance()));
-        customNodes.add(chunkLimitSlider = new CustomSliderInt("Chunk limit", 1, 200, 200));
-        customNodes.add(waterLevelSlider = new CustomSlider("Water level", -800, 2000, -waterLevel));
+        customNodes.add(groundSizeSlider = new CustomSlider("Tile size", 50., 2000., getGroundSize(), 4));
+        customNodes.add(renderDistSlider = new CustomSliderInt("Render dist", 1, 15, (int)getRenderDistance(), 3));
+        customNodes.add(chunkLimitSlider = new CustomSliderInt("Chunk limit", 1, 200, 200, 4));
+        customNodes.add(waterLevelSlider = new CustomSlider("Water level", -800, 2000, -waterLevel, 3));
         waterLevelSlider.setWhenMin("No water");
         chunkLimitSlider.setWhenMax("Unlimited");
         
@@ -3547,7 +3566,7 @@ public class PixelRealm extends Screen {
     
     
     
-    boolean wasUnderwater = false;
+    boolean wasInWater = false;
     
     
     
@@ -3573,7 +3592,7 @@ public class PixelRealm extends Screen {
         runAcceleration = 0.;
       }
       
-      boolean splash = (!wasUnderwater && isUnderwater);
+      boolean splash = (!wasInWater && isInWater);
   
       // :3
       if (engine.keyAction("jump") && onGround()) speed *= 3;
@@ -3586,7 +3605,7 @@ public class PixelRealm extends Screen {
         speed *= 0.1;
       }
       
-      if (isUnderwater) {
+      if (isInWater) {
         speed *= UNDERWATER_SPEED_MULTIPLIER;
       }
   
@@ -3692,6 +3711,10 @@ public class PixelRealm extends Screen {
               if (bob-HALF_PI > TWO_PI-HALF_PI) {
                 bob = 0.;
                 sound.playSound("step", random(0.9, 1.2));
+                //if (isInWater) 
+                //  // TODO: get an actual water step sound effect
+                //  sound.playSound("water_jump", random(1.9, 2.5));
+                //else
               }
             }
           }
@@ -3702,16 +3725,37 @@ public class PixelRealm extends Screen {
           // --- Jump & gravity physics ---
           if (engine.keyAction("jump")) {
             float jumpStrength = JUMP_STRENGTH;
-            if (isUnderwater) {
+            if (isInWater) {
               yvel = min(yvel+SWIM_UP_SPEED, UNDERWATER_TEMINAL_VEL);
               jumpStrength = UNDERWATER_JUMP_STRENGTH;
+              if (jumpTimeout <= 0.) {
+                sound.loopSound("swimming");
+                sound.pauseSound("underwater");
+              }
             }
+            // No longer in water.
+            else {
+              sound.pauseSound("swimming");
+            }
+            
             if (onGround() && jumpTimeout < 1.) {
               yvel = jumpStrength;
               playerY -= 10;
-              sound.playSound("jump");
-              jumpTimeout = 30.;
+              if (isInWater) {
+                sound.playSound("water_jump");
+                jumpTimeout = 40.;
+              }
+              else {
+                sound.playSound("jump");
+                jumpTimeout = 30.;
+              }
             }
+          }
+          // No longer pressing space,
+          // don't need to check if we're underwater
+          else {
+            sound.pauseSound("swimming");
+            if (isUnderwater) sound.loopSound("underwater");
           }
   
           if (jumpTimeout > 0) jumpTimeout -= display.getDelta();
@@ -3723,12 +3767,13 @@ public class PixelRealm extends Screen {
           }
           else if (splash) {
             yvel = 0.;
+            sound.playSound("splash", 2.0);
           }
           else {
             // Change yvel while we're in the air
             float gravity = GRAVITY;
             float terminalVel = TERMINAL_VEL;
-            if (isUnderwater) {
+            if (isInWater) {
               gravity = UNDERWATER_GRAVITY;
               terminalVel = UNDERWATER_TEMINAL_VEL;
             }
@@ -3743,8 +3788,11 @@ public class PixelRealm extends Screen {
             yvel = 0.;
           }
           
-          wasUnderwater = isUnderwater;
-          isUnderwater = playerY > terrain.waterLevel  &&  !outOfBounds(playerX, playerZ) && terrain.hasWater;
+          wasInWater = isInWater;
+          isInWater = playerY > terrain.waterLevel  &&  !outOfBounds(playerX, playerZ) && terrain.hasWater;
+          
+          // Head under the water.
+          isUnderwater = playerY+(sin(bob)*3.)-PLAYER_HEIGHT-1. > terrain.waterLevel && !outOfBounds(playerX, playerZ) && terrain.hasWater;
           
           // If holding an item, allow scaling up and down.
           //if (inventorySelectedItem != null) {
@@ -4258,7 +4306,8 @@ public class PixelRealm extends Screen {
     public void renderEffects() {
       float FADE = 0.9;
       display.recordRendererTime();
-      if (playerY+(sin(bob)*3.)-PLAYER_HEIGHT-1. > terrain.waterLevel && !outOfBounds(playerX, playerZ) && terrain.hasWater) {
+      if (isUnderwater) {
+        sound.setSoundVolume("underwater", 1.0);
         scene.beginShape();
         scene.textureMode(NORMAL);
         scene.textureWrap(REPEAT);
@@ -4277,6 +4326,9 @@ public class PixelRealm extends Screen {
         scene.vertex(0, scene.height, ttt, uvy+ttt);
         
         scene.endShape();
+      }
+      else {
+        sound.setSoundVolume("underwater", 0.0);
       }
       
       if (portalLight > 0.1) {
@@ -4490,10 +4542,6 @@ public class PixelRealm extends Screen {
     else
       currRealm = new PixelRealmState(to, fro);
         
-        
-    console.log(to);
-    console.log(fro);
-    console.log(currRealm.musicPath);
     
     // Creating a new realm won't start the music automatically cus we like manual bug-free control.
     sound.streamMusicWithFade(currRealm.musicPath);

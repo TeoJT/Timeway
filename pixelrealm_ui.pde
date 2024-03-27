@@ -218,6 +218,7 @@ public class PixelRealmWithUI extends PixelRealm {
     protected Runnable runWhenDone = null;
     private float appearTimer = 0;
     private boolean enterToContinue = true;
+    private boolean playedSound = false;
     
     public DialogMenu(String title, String backgroundName, String txt) {
       super(title, backgroundName);
@@ -258,6 +259,11 @@ public class PixelRealmWithUI extends PixelRealm {
         movementPaused = false;
         return;
       }
+      if (!playedSound) {
+        sound.playSound("menu_prompt");
+        playedSound = true;
+      }
+    
       
       displayBackground(bgName);
       
@@ -750,18 +756,21 @@ public class PixelRealmWithUI extends PixelRealm {
       
       
       if (ui.button("customise-prev", "back_arrow_128", "")) {
+        sound.playSound("menu_select");
         generatorIndex--;
         if (generatorIndex < 0) generatorIndex = NUM_GENERATORS-1;
         //switchGenerator(generatorIndex);
         currRealm.switchTerrain(generatorIndex);
       }
       if (ui.button("customise-next", "forward_arrow_128", "")) {
+        sound.playSound("menu_select");
         generatorIndex++;
         if (generatorIndex >= NUM_GENERATORS) generatorIndex = 0;
         currRealm.switchTerrain(generatorIndex);
       }
       
       if (ui.button("customise-ok", "tick_128", "Done")) {
+        sound.playSound("menu_select");
         close();
         menuShown = false;
         menu = null;
@@ -770,6 +779,7 @@ public class PixelRealmWithUI extends PixelRealm {
       // Display all parameters for the specified generator that is selected.
       float x = cache_backX+50;
       float y = cache_backY+50+95;
+      nodeSound = 0;
       for (PixelRealmState.CustomNode n : currRealm.terrain.customNodes) {
         n.x = x;
         n.wi = cache_backWi-100.;
@@ -777,6 +787,14 @@ public class PixelRealmWithUI extends PixelRealm {
         n.display(y);
         
         y += n.getHeight();
+      }
+      if (nodeSound != 0)
+        sound.loopSound("terraform_"+str(nodeSound));
+      else {
+        sound.pauseSound("terraform_1");
+        sound.pauseSound("terraform_2");
+        sound.pauseSound("terraform_3");
+        sound.pauseSound("terraform_4");
       }
       
       currRealm.terrain.updateAttribs();
