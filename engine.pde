@@ -86,9 +86,7 @@ class Engine {
   // Static constants
   public static final float   KEY_HOLD_TIME       = 30.; // 30 frames
   public static final int     POWER_CHECK_INTERVAL = 5000;
-  public static final int     PRESSED_KEY_ARRAY_LENGTH = 10;
   public static final String  CACHE_COMPATIBILITY_VERSION = "0.3";
-  public static final int     MAX_CPU_CANVAS = 8;
   public static final boolean CACHE_MUSIC = true;
   
 
@@ -108,6 +106,7 @@ class Engine {
   public PApplet app;
   public String APPPATH = sketchPath().replace('\\', '/')+"/";
   
+  // Modules
   public Console console;
   public SharedResourcesModule sharedResources;
   public SettingsModule settings;
@@ -117,6 +116,7 @@ class Engine {
   public FilemanagerModule file;
   public ClipboardModule clipboard;
   public UIModule ui;
+  public InputModule input;
 
 
   
@@ -131,30 +131,6 @@ class Engine {
   public int transitionDirection = RIGHT;
   public boolean initialScreen = true;
 
-  // Mouse & keyboard
-  public boolean click = false;
-  public boolean leftClick = false;
-  public boolean rightClick = false;
-  public boolean pressDown  = false;
-  public boolean mouseDown = false;
-  public boolean mouseEventClick = true;
-  public float   rawScroll = 0;
-  public float   scroll = 0;
-  public float   scrollSensitivity = 30.0;             //TODO: scroll sensitivity from the config file.
-  public boolean addNewlineWhenEnterPressed = true;
-  public boolean noMove = false;
-  public String keyboardMessage = "";
-  public boolean controlKeyPressed = false;
-  public boolean keyPressed = false;
-  public boolean enterPressed = false;
-  public char lastKeyPressed = 0;
-  public int lastKeycodePressed = 0;
-  public float keyHoldCounter = 0;
-  public float clickStartX = 0;
-  public float clickStartY = 0;
-  public boolean pressedArray[] = new boolean[PRESSED_KEY_ARRAY_LENGTH];
-  public char currentKeyArray[] = new char[PRESSED_KEY_ARRAY_LENGTH];
-  public boolean shiftKeyPressed = false;
 
   // Settings & config
   public boolean devMode = false;
@@ -397,11 +373,8 @@ class Engine {
         console.log("Config file not found, creating one.");
         returnSettings = new JSONObject();
   
-        // Alphabetically sort the settings so that the config is a lil easier to configure.
-        // TODO: doesn't actually work, you should prolly delete that
-        TreeSet<String> sortedSet = new TreeSet<String>(defaultConfig.keySet());
   
-        for (String k : sortedSet) {
+        for (String k : (HashSet<String>)defaultConfig.keySet()) {
           if (defaultConfig.get(k) instanceof Boolean)
             returnSettings.setBoolean(k, (boolean)defaultConfig.get(k));
           else if (defaultConfig.get(k) instanceof String)
@@ -1565,13 +1538,6 @@ class Engine {
     
     
     
-    
-    
-    
-    
-    
-    
-    
     public class MiniMenu {
         public SpriteSystemPlaceholder g;
         public float x = 0., y = 0.;
@@ -1639,7 +1605,7 @@ class Engine {
             // If we click away from the minimenu, close the minimenu
             if ((mouseX() > x && mouseX() < x+this.width && mouseY() > y && mouseY() < y+this.height) == false) {
 
-                if (pressDown) {
+                if (input.primaryClick) {
                     close();
                 }
             }
@@ -1749,7 +1715,7 @@ class Engine {
           float xx = this.x+OFFSET_SPACING_X+SPACING;
           if (mouseX() > this.x && mouseX() < this.x+this.width && mouseY() > yy && mouseY() < yy+SIZE+SPACING) {
             app.fill(HOVER_COLOR);
-            if (click && selectable) {
+            if (input.primaryClick && selectable) {
               sound.playSound("select_any");
               actions.get(i).run();
               selectedOption = op;
@@ -1863,7 +1829,7 @@ class Engine {
                     wasHovered = true;
 
                     // If clicked 
-                    if (leftClick && !disappear) {
+                    if (input.primaryClick && !disappear) {
                         selectedColor = colorArray[i];
                         
                         if (runWhenPicked != null) {
@@ -1982,7 +1948,7 @@ class Engine {
       currentSpritePlaceholderSystem.suppressSpriteWarning = false;
   
       // Only when the button is actually clicked.
-      return hover && mouseEventClick;
+      return hover && input.primaryClick;
     }
     
     public void loadingIcon(float x, float y, float widthheight) {
@@ -3781,6 +3747,7 @@ class Engine {
     console.info("Hello console");
     
     settings = new SettingsModule();
+    input = new InputModule();
     file = new FilemanagerModule(this);
     sharedResources = new SharedResourcesModule();
     display = new DisplayModule();
@@ -3818,26 +3785,15 @@ class Engine {
     
 
 
-    scrollSensitivity = settings.getFloat("scrollSensitivity");
     power.setDynamicFramerate(settings.getBoolean("dynamicFramerate"));
     DEFAULT_FONT_NAME = settings.getString("defaultSystemFont");
     
     DEFAULT_FONT = display.getFont(DEFAULT_FONT_NAME);
 
-    clearKeyBuffer();
-
-
     // Init loading screen.
     currScreen = new Startup(this);
   }
 
-  public void clearKeyBuffer() {
-    //Clear the key buffer, ready for us to press some nice keys.
-    for (int i = 0; i < PRESSED_KEY_ARRAY_LENGTH; i++) {
-      currentKeyArray[i] = 0;
-      pressedArray[i] = false;
-    }
-  }
 
   public Runnable doWhenPromptSubmitted = null;
   public String promptText;
@@ -3845,11 +3801,11 @@ class Engine {
   public String lastInput = "";
 
   public void beginInputPrompt(String prompt, Runnable doWhenSubmitted) {
-    keyboardMessage = "";
+    input.keyboardMessage = "";
     inputPromptShown = true;
+    input.addNewlineWhenEnterPressed = false;
     promptText = prompt;
     doWhenPromptSubmitted = doWhenSubmitted;
-    enterPressed = false;
   }
 
   public void displayInputPrompt() {
@@ -3862,23 +3818,22 @@ class Engine {
       app.textFont(DEFAULT_FONT, 60);
       app.text(promptText, display.WIDTH/2, display.HEIGHT/2-100);
       app.textSize(30);
-      app.text(keyboardMessage, display.WIDTH/2, display.HEIGHT/2);
+      app.text(input.keyboardMessage, display.WIDTH/2, display.HEIGHT/2);
       
       if (keyCode == UP) {
         keyCode = 0;
         if (lastInput.length() > 0) {
-          keyboardMessage = lastInput;
+          input.keyboardMessage = lastInput;
         }
       }
 
-      if (enterPressed) {
+      if (input.enterOnce) {
         // Remove enter character at end
-        int ll = max(keyboardMessage.length()-1, 0);   // Don't allow it to go lower than 0
-        if (keyboardMessage.charAt(ll) == '\n') keyboardMessage = keyboardMessage.substring(0, ll);
+        int ll = max(input.keyboardMessage.length()-1, 0);   // Don't allow it to go lower than 0
+        if (input.keyboardMessage.charAt(ll) == '\n') input.keyboardMessage = input.keyboardMessage.substring(0, ll);
         doWhenPromptSubmitted.run();
-        enterPressed = false;
         inputPromptShown = false;
-        lastInput = keyboardMessage;
+        lastInput = input.keyboardMessage;
       }
     }
   }
@@ -4289,12 +4244,12 @@ class Engine {
     Runnable r = new Runnable() {
       public void run() {
         commandPromptShown = false;
-        runCommand(keyboardMessage);
+        runCommand(input.keyboardMessage);
       }
     };
 
     beginInputPrompt("Enter command", r);
-    keyboardMessage = "/";
+    input.keyboardMessage = "/";
   }
 
   private boolean commandEquals(String input, String expected) {
@@ -4323,11 +4278,12 @@ class Engine {
       // Count the number of characters, add one.
       // That's how you deal with substirng.
       String arg = "";
-      if (command.length() > 16)
-        arg = command.substring(16);
+      if (command.length() > 17)
+        arg = command.substring(17);
 
       power.setForcedPowerMode(arg);
       if (arg.equals("HIGH") || arg.equals("NORMAL") || arg.equals("SLEEPY") || arg.equals("MINIMAL")) console.log("Forced power mode set to "+arg);
+      else console.log("Unknown power mode "+arg);
     } else if (commandEquals(command, "/disableforcepowermode")) {
       console.log("Disabled forced powermode.");
       power.disableForcedPowerMode();
@@ -5610,281 +5566,336 @@ class Engine {
   }
   
   
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
   public class InputModule {
     
-  }
-
-
-  private float holdKeyFrames = 0.;
-  public boolean leftPressDown = false;
-  public boolean rightPressDown = false;
-
-  public void inputManagement() {
-
-    //*************MOUSE*************
-    leftClick  = false;   // True one frame after left  mouse is pressed and then released
-    rightClick = false;   // True one frame after right mouse is pressed and then released
-    pressDown  = false;   // True for one frame instantly when mouse is pressed.
-    leftPressDown  = false;   // True for one frame instantly when mouse is pressed.
-    rightPressDown  = false;   // True for one frame instantly when mouse is pressed.
-
-    if (app.mousePressed && !click) {
-      click = true;
-      pressDown = true;
-      leftPressDown = (app.mouseButton == LEFT);
-      rightPressDown = (app.mouseButton == RIGHT);
-      
-      noMove = true;
-      clickStartX = mouseX();
-      clickStartY = mouseY();
-    }
-    if (!app.mousePressed && click) {
-      click = false;
-      if (clickStartX != mouseX() || clickStartY != mouseY()) {
-        noMove = false;
-      }
-      if (app.mouseButton == LEFT) {
-        leftClick = true;
-      } else if (app.mouseButton == RIGHT) {
-        rightClick = true;
-      }
-    }
-
-
-    //*************KEYBOARD*************
-    if (keyActionPressed && !keyAction(keyActionPressedName))
-      keyActionPressed = false;
-
-    if (keyHoldCounter >= 1.) {
-      keyHoldCounter += display.getDelta();
-    }
-
-    if (keyHoldCounter > KEY_HOLD_TIME) {
-      power.setAwake();
-      // good fix for bad framerates.
-      // However we want smooth framerates so we set it to awake mode so this
-      // code barely matters oop.
-      for (int i = int(holdKeyFrames*0.5); i >= 2; i--) {
-        keyboardAction(lastKeyPressed, lastKeycodePressed);
-        holdKeyFrames -= 2;
-      }
-      holdKeyFrames += display.getDelta();
-      
-    }
-
-    //*************MOUSE WHEEL*************
-    if (rawScroll != 0) {
-      scroll = rawScroll*-scrollSensitivity;
-    } else {
-      scroll *= 0.5;
-    }
-    rawScroll = 0.;
-  }
-
-  // yeah this doesn't work
-  // Truth be told I should set up a multiple keys system but I'll do that later if I need it.
-  // So right now only one a-z 0-9 key can be pressed at a time and only one code key can be pressed.
-  public boolean keys(char... keys) {
-    boolean pressed = true;
-    if (!this.keyPressed) return false;
-    for (char k : keys) {
-      if (int(k) == CONTROL) {
-        pressed &= controlKeyPressed;
-      } else { 
-        pressed &= (this.lastKeyPressed == k);
-      }
-    }
-
-    return pressed;
-  }
-
-  public void keyboardAction(char kkey, int kkeyCode) {
-    this.keyPressed = true;
-    if (kkey == CODED) {
-      //console.log(str(int(kkey)));
-      switch (kkeyCode) {
-      case BACKSPACE:
-        if (this.keyboardMessage.length() > 0) {
-          this.keyboardMessage = this.keyboardMessage.substring(0, this.keyboardMessage.length()-1);
-        }
-        break;
-      case ENTER:
-        this.enterPressed = true;
-        break;
-      case CONTROL:
-        this.controlKeyPressed = true;
-        break;
-      case SHIFT:
-        this.shiftKeyPressed = true;
-        break;
-      default:
-        println("Key code: "+kkeyCode);
-        break;
-      }
-    } else if (kkey == '\n') {
-      if (this.addNewlineWhenEnterPressed) {
-        this.keyboardMessage += "\n";
-      }
-      this.enterPressed = true;
-    } else if (kkey == CONTROL) {
-      controlKeyPressed = true;
-    } else if (kkey == 8) {    //Backspace
-      this.backspace();
-    } else {
-      this.keyboardMessage += kkey;
-      //this.lastKeyPressed = kkey;
-    }
-
-    // The key hold part (yay).
-    int i = -1;
-    boolean loop = true;
-
-    //Look through the key pressed array...
-    //We're trying to find a blank spot, if the key isn't already being pressed...
-    while (loop) {
-      i++;
-
-      //make sure the key isn't already being pressed...
-      if ((i >= PRESSED_KEY_ARRAY_LENGTH)) loop = false;
-      else if (Character.toLowerCase(currentKeyArray[i]) == Character.toLowerCase(key)) loop = false;
-      else {
-        //Once we find a spot write the key here.
-        if (currentKeyArray[i] == 0) {
-          loop = false;
-          currentKeyArray[i] = key;
-        }
-      }
-    }
-  }
-
-  public void releaseKeyboardAction() {
-    int i = -1;
-    boolean loop = true;
-
-    if (key == CODED) {
-      switch (keyCode) {
-      case BACKSPACE:
-        break;
-      case ENTER:
-        this.enterPressed = false;
-        break;
-      case CONTROL:
-        this.controlKeyPressed = false;
-        break;
-      case SHIFT:
-        this.shiftKeyPressed = false;
-        break;
-      }
-    }
-
-    //Look through the key pressed array...
-    //We're trying to find a blank spot, if the key isn't already being pressed...
-    while (loop) {
-      i++;
-
-      //Check to make sure we're not going beyond the length of the array...
-      if (i >= PRESSED_KEY_ARRAY_LENGTH) {
-        loop = false;
-      } else {
-        //If we found that key, erase it from the array.
-        if (Character.toLowerCase(currentKeyArray[i]) == Character.toLowerCase(key)) {
-          loop = false;
-          currentKeyArray[i] = 0;
-        }
-      }
-    }
-  }
-
-  public boolean keyDown(char k) {
-    if (!inputPromptShown) {
-      // TODO: use a hashmap instead of an array.
-      for (int i = 0; i < PRESSED_KEY_ARRAY_LENGTH; i++) {
-        if (currentKeyArray[i] == k) {
-          return true;
-        }
-      }
-    }
-    return false;
-  }
-
-  public boolean keyAction(String keybindName) {
-    char k = settings.getKeybinding(keybindName);
+    // Mouse & keyboard
+    public boolean primaryClick = false;
+    public boolean secondaryClick = false;
+    public boolean primaryDown = false;
+    public boolean secondaryDown = false;
+    public boolean keyOnce = false;
+    public boolean keyDown = false;
     
-    // Special keys/buttons
-    if (int(k) == settings.LEFT_CLICK)
-      return this.leftClick;
-    else if (int(k) == settings.RIGHT_CLICK)
-      return this.rightClick;
-    else 
-      // Otherwise just tell us if the key is down or not
-      return anyKeyDown(k);
-  }
-
-  private boolean keyActionPressed = false;
-  private String keyActionPressedName = "";
-
-  public boolean keyActionOnce(String keybindName) {
-    if (!keyActionPressed) {
-      if (keyAction(keybindName)) {
-        keyActionPressedName = keybindName;
-        keyActionPressed = true;
-        return true;
-      }
+    public boolean mouseMoved = false;
+    
+    public float   rawScroll = 0;
+    public float   scroll = 0;
+    public float   scrollSensitivity = 30.0;
+    
+    public String keyboardMessage = "";
+    public boolean addNewlineWhenEnterPressed = true;
+    
+    // used for one-time click
+    private boolean click = false;
+    private boolean eventClick = false;   // This is used sort of as a backup click as a solution to the problem where the user clicks in quick succession, but there aren't enough frames inbetween.
+    private float normalClickTimeout = 0.;
+    private float keyHoldCounter = 0;
+    private float clickStartX = 0;
+    private float clickStartY = 0;
+    private char lastKeyPressed = 0;
+    private int lastKeycodePressed = 0;
+    private float holdKeyFrames = 0.;
+    
+    private float cache_mouseX = 0.0;
+    private float cache_mouseY = 0.0;
+    
+    public int keys[]     = new int[1024];
+    
+    // Down
+    public boolean backspaceDown = false;
+    public boolean shiftDown = false;
+    public boolean ctrlDown = false;
+    public boolean altDown  = false;
+    public boolean enterDown = false;
+    
+    // Down counters
+    private int backspaceDownCounter = 0;
+    private int shiftDownCounter = 0;
+    private int ctrlDownCounter = 0;
+    private int altDownCounter  = 0;
+    private int enterDownCounter = 0;
+    
+    // Once
+    public boolean backspaceOnce = false;
+    public boolean shiftOnce = false;
+    public boolean ctrlOnce = false;
+    public boolean altOnce  = false;
+    public boolean enterOnce = false;
+    
+    public InputModule() {
+      scrollSensitivity = settings.getFloat("scrollSensitivity");
     }
-
-    return false;
-  }
-
-  public boolean keybindPressed(String keybindName) {
-    if (inputPromptShown) return false;
-    // Unnecessary note:
-    // Hey by implementing modules I just fixed a potential bug by accident! :3
-    return (this.keyPressed && int(key) == settings.getKeybinding(keybindName));
-  }
-
-  public boolean anyKeyDown(char k) {
-    if (!inputPromptShown) {
-      k = Character.toLowerCase(k);
-      // TODO: use a hashmap instead of an array.
-      for (int i = 0; i < PRESSED_KEY_ARRAY_LENGTH; i++) {
-        if (Character.toLowerCase(currentKeyArray[i]) == k) {
-          return true;
+    
+      
+    public void runInputManagement() {
+      //*************MOUSE MOVEMENT*************
+      cache_mouseX = mouseX/display.getScale();
+      cache_mouseY = mouseY/display.getScale();
+      
+      
+      
+      //*************MOUSE CLICKING*************
+      // "Shouldn't it be (app.mouseButton == LEFT)?"
+      // One word. MacOS.
+      primaryDown = app.mousePressed && (app.mouseButton != RIGHT);
+      secondaryDown = (app.mousePressed &&  (app.mouseButton == RIGHT));
+      
+      // If the mouse begins click on the frame, this will be later updated to true.
+      // Then next frame this will be set to false, and because of the one-click code,
+      // this will not be updated at all hence remaining false.
+      primaryClick = false;
+      secondaryClick = false;
+      
+      normalClickTimeout -= display.getDelta();
+  
+      // Here, we use either our default click method or we use the "void mouseClicked" method to
+      // mitigate the cases where the mouse is clicked rapidly but not released fast enough for the click variable to be set to false.
+      // In order to stop double-click bugs (where we click once but it registers twice because of click and eventClick firing on slightly different frames),
+      // we need to introduce a small timeout for event clicks which are always a few frames later.
+      if ((app.mousePressed && !click) || (eventClick)) {
+        click = true;
+        
+        // While normal click might not be able to register a mouseup for a few frames, rely on the event click
+        // in case user rapidly clicks.
+        if (!eventClick)
+          normalClickTimeout = 15.;
+        eventClick = false;
+        
+        primaryClick = (app.mouseButton != RIGHT);
+        
+        secondaryClick = (app.mouseButton == RIGHT);
+        
+        mouseMoved = false;
+        clickStartX = mouseX();
+        clickStartY = mouseY();
+      }
+      else if (!app.mousePressed && click) {
+        click = false;
+        
+        if (clickStartX != mouseX() || clickStartY != mouseY()) {
+          mouseMoved = true;
         }
       }
+  
+  
+      //*************KEYBOARD*************
+      
+      // Oneshot key control
+      for (int i = 0; i < 1024; i++) {
+        if (keys[i] > 0) keys[i]++;
+      }
+      
+      // Special keys oneshots
+      if (backspaceDown) backspaceDownCounter++; else backspaceDownCounter = 0; 
+      if (shiftDown) shiftDownCounter++; else shiftDownCounter = 0;
+      if (ctrlDown) ctrlDownCounter++; else ctrlDownCounter = 0;
+      if (altDown) altDownCounter++; else altDownCounter = 0;
+      if (enterDown) enterDownCounter++; else enterDownCounter = 0;
+      
+      backspaceOnce = (backspaceDownCounter == 1);
+      shiftOnce = (shiftDownCounter == 1);
+      ctrlOnce = (ctrlDownCounter == 1);
+      altOnce = (altDownCounter == 1);
+      enterOnce = (enterDownCounter == 1);
+      
+      // Holding counter (for repeating held keys)
+      if (keyHoldCounter >= 1.) {
+        keyHoldCounter += display.getDelta();
+      }
+      // The code that actually repeats the held key.
+      if (keyHoldCounter > KEY_HOLD_TIME) {
+        power.setAwake();
+        // good fix for bad framerates.
+        // However we want smooth framerates so we set it to awake mode so this
+        // code barely matters oop.
+        for (int i = int(holdKeyFrames*0.5); i >= 2; i--) {
+          keyboardAction(lastKeyPressed, lastKeycodePressed);
+          holdKeyFrames -= 2;
+        }
+        holdKeyFrames += display.getDelta();
+      }
+  
+      //*************MOUSE WHEEL*************
+      if (rawScroll != 0) {
+        scroll = rawScroll*-scrollSensitivity;
+      } else {
+        scroll *= 0.5;
+      }
+      rawScroll = 0.;
     }
-    return false;
+    
+  
+    // To be called by base sketch code.
+    public void releaseKeyboardAction(char kkey, int kkeyCode) {
+      // Special keys
+      if (kkey == CODED) {
+        switch (kkeyCode) {
+        case CONTROL:
+          ctrlDown = false;
+          break;
+        case SHIFT:
+          shiftDown = false;
+          break;
+        case ALT:
+          altDown = false;
+          break;
+        }
+      }
+      else if (kkey == BACKSPACE || kkey == RETURN) {
+        backspaceDown = false;
+      }
+      else if (kkey == ENTER) {
+        enterDown = false;
+      }
+      else {
+        // Down keys
+        int val = int(Character.toLowerCase(kkey));
+        
+        if (val >= 1024) return;
+        
+        keys[val] = 0;
+      }
+    }
+  
+    public boolean keyDown(char k) {
+      if (inputPromptShown) return false;
+      
+      int val = int(Character.toLowerCase(k));
+      
+      return keys[val] >= 1;
+    }
+    
+    public boolean keyDownOnce(char k) {
+      if (inputPromptShown) return false;
+      
+      int val = int(Character.toLowerCase(k));
+      
+      return keys[val] == 2;
+    }
+    
+  
+    public boolean keyAction(String keybindName) {
+      char k = settings.getKeybinding(keybindName);
+      
+      // Special keys/buttons
+      if (int(k) == settings.LEFT_CLICK)
+        return this.primaryClick;
+      else if (int(k) == settings.RIGHT_CLICK)
+        return this.secondaryClick;
+      else 
+        // Otherwise just tell us if the key is down or not
+        return keyDown(k);
+    }
+  
+    public boolean keyActionOnce(String keybindName) {
+      char k = settings.getKeybinding(keybindName);
+      
+      // Special keys/buttons
+      if (int(k) == settings.LEFT_CLICK)
+        return this.primaryClick;
+      else if (int(k) == settings.RIGHT_CLICK)
+        return this.secondaryClick;
+      else 
+        // Otherwise just tell us if the key is down or not
+        return keyDownOnce(k);
+    }
+  
+    public void backspace() {
+      if (this.keyboardMessage.length() > 0) {
+        this.keyboardMessage = this.keyboardMessage.substring(0, this.keyboardMessage.length()-1);
+      }
+    }
+    
+    public float mouseX() {
+      return cache_mouseX;
+    }
+  
+    public float mouseY() {
+      return cache_mouseY;
+    }
+    
+    public void clickEventAction() {
+      // We don't want to trigger a click if the normal clicking system receives a click.
+      if (normalClickTimeout < 0.) {
+        eventClick = true;
+      }
+    }
+    
+    public void keyboardAction(char kkey, int kkeyCode) {
+      if (kkey == CODED) {
+        console.log(str(int(kkey)));
+        switch (kkeyCode) {
+          case CONTROL:
+            ctrlDown = true;
+            return;
+          case SHIFT:
+            shiftDown = true;
+            break;
+          case ALT:
+            altDown = true;
+            return;
+        }
+      } else if (kkey == ENTER || kkey == RETURN) {
+        if (this.addNewlineWhenEnterPressed) {
+          this.keyboardMessage += "\n";
+        }
+        enterDown = true;
+      } else if (kkey == BACKSPACE) {    // Backspace
+        this.backspace();
+        backspaceDown = true;
+      }
+      this.keyboardMessage += kkey;
+      
+      // And actually set the current pressed key state
+      int val = int(Character.toLowerCase(kkey));
+      
+      if (val >= 1024) return;
+      
+      keys[val] = 1;
+    }
   }
 
-  
-
-
-
-
-
-
-  public void backspace() {
-    if (this.keyboardMessage.length() > 0) {
-      this.keyboardMessage = this.keyboardMessage.substring(0, this.keyboardMessage.length()-1);
-    }
-  }
-  
-  // TODO: this is called a lot, this could be optimised.
+  // Cus why replace 9999999 lines of code when you can write 6 new lines of code that makes sure everything still works.
   public float mouseX() {
-    return mouseX/display.getScale();
+    return input.mouseX();
   }
-
   public float mouseY() {
-    return mouseY/display.getScale();
+    return input.mouseY();
   }
 
 
-  //void keyPressed()
-  //{
-  //  //if (key == 0x16) // Ctrl+v
-  //  //{
-  //    pastedMessage = GetTextFromClipboard();
-  //    pastedImage = GetImageFromClipboard();
-  //}
+
 
 
   
@@ -6038,8 +6049,6 @@ class Engine {
     sound.processSound();
     processCaching();
 
-    // Get updates
-    processUpdate();
 
 
     if (display != null) display.recordRendererTime();
@@ -6048,7 +6057,11 @@ class Engine {
     app.background(0);
     if (display != null) display.recordLogicTime();
 
-    inputManagement();
+    // Update inputs
+    input.runInputManagement();
+    
+    // Get updates
+    processUpdate();
 
     // Show the current GUI.
     display.displayScreens();
@@ -6063,7 +6076,7 @@ class Engine {
 
 
     // Allow command prompt to be shown.
-    if (keybindPressed("showCommandPrompt") && allowShowCommandPrompt)
+    if (input.keyActionOnce("showCommandPrompt") && allowShowCommandPrompt)
       showCommandPrompt();
 
 
@@ -6090,27 +6103,24 @@ class Engine {
     if (display.showFPS()) {
       pushMatrix();
       app.scale(display.getScale());
-      textFont(DEFAULT_FONT, 32);
-      textAlign(LEFT, TOP);
+      app.textFont(DEFAULT_FONT, 32);
+      app.textAlign(LEFT, TOP);
       float y = 5;
       if (currScreen != null) y = currScreen.myUpperBarWeight+5;
       
       String txt = str(round(frameRate))+"\n"+power.getPowerModeString();
       
-      fill(0);
-      text(txt, 5, y);
-      fill(255);
-      text(txt, 7, y+2);
-      popMatrix();
+      app.fill(0);
+      app.text(txt, 5, y);
+      app.fill(255);
+      app.text(txt, 7, y+2);
+      app.popMatrix();
     }
 
     // Display console
     // TODO: this renders the console 4 times which is BAD.
     // We need to make the animation execute 4 times, not the drawing routines.
     console.display(true);
-
-    mouseEventClick = false;
-    this.keyPressed = false;
     
     display.resetTimes();
     
@@ -6142,6 +6152,7 @@ public abstract class Screen {
   protected PApplet app;
   protected Engine.SharedResourcesModule sharedResources;
   protected Engine.SettingsModule settings;
+  protected Engine.InputModule input;
   protected Engine.DisplayModule display;
   protected Engine.PowerModeModule power;
   protected Engine.AudioModule sound;
@@ -6170,6 +6181,7 @@ public abstract class Screen {
     
     this.sharedResources = engine.sharedResources;
     this.settings = engine.settings;
+    this.input = engine.input;
     this.display = engine.display;
     this.ui = engine.ui;
     this.power = engine.power;
@@ -6227,7 +6239,6 @@ public abstract class Screen {
       engine.prevScreen = this;
       engine.currScreen = screen;
       screen.startScreenTransition();
-      engine.clearKeyBuffer();
       engine.power.resetFPSSystem();
       engine.allowShowCommandPrompt = true;
       //engine.setAwake();
@@ -6241,7 +6252,6 @@ public abstract class Screen {
       requestScreen(this.engine.prevScreen);
       engine.transitionDirection = LEFT;
       engine.power.setAwake();
-      engine.clearKeyBuffer();
     }
   }
 

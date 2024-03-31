@@ -278,10 +278,7 @@ public class PixelRealmWithUI extends PixelRealm {
       textSize(18);
       text("(Enter/return to contunue)",  getXmid(), getYbottom()-70);
       
-      if (engine.enterPressed) {
-        // For some reason we need to set "enterpressed" false ourselves.
-        // What is this?!
-        engine.enterPressed = false;
+      if (input.enterOnce) {
         sound.playSound("menu_select");
         dialogIndex++;
         if (dialogIndex >= dialog.length) {
@@ -460,17 +457,17 @@ public class PixelRealmWithUI extends PixelRealm {
 
       Runnable r = new Runnable() {
         public void run() {
-          if (engine.keyboardMessage.length() <= 1) {
+          if (input.keyboardMessage.length() <= 1) {
             console.log("Please enter a valid folder name!");
             return;
           }
-          String folderpath = currRealm.stateDirectory+engine.keyboardMessage;
+          String folderpath = currRealm.stateDirectory+input.keyboardMessage;
           if (!file.exists(folderpath)) {
             new File(folderpath).mkdirs();
           }
           else {
             sound.playSound("nope");
-            console.log(engine.keyboardMessage+" already exists!");
+            console.log(input.keyboardMessage+" already exists!");
             return;
           }
           
@@ -491,15 +488,15 @@ public class PixelRealmWithUI extends PixelRealm {
 
       Runnable r = new Runnable() {
         public void run() {
-          if (engine.keyboardMessage.length() <= 1) {
+          if (input.keyboardMessage.length() <= 1) {
             console.log("Please enter a valid folder name!");
             return;
           }
           
-          String path = currRealm.stateDirectory+engine.keyboardMessage+"."+engine.ENTRY_EXTENSION;
+          String path = currRealm.stateDirectory+input.keyboardMessage+"."+engine.ENTRY_EXTENSION;
           if (file.exists(path)) {
             sound.playSound("nope");
-            console.log(engine.keyboardMessage+" already exists!");
+            console.log(input.keyboardMessage+" already exists!");
             return;
           }
           
@@ -636,23 +633,22 @@ public class PixelRealmWithUI extends PixelRealm {
       }
       
       
-      if ((engine.keybindPressed("inventorySelectLeft") 
+      if ((input.keyActionOnce("inventorySelectLeft") 
       || ui.button("newrealm-prev", "back_arrow_128", ""))
       && coolDown == 0) {
         tempIndex--;
         if (tempIndex < 0) tempIndex = templates.size()-1;
         preview(tempIndex);
       }
-      if ((engine.keybindPressed("inventorySelectRight") 
+      if ((input.keyActionOnce("inventorySelectRight") 
       || ui.button("newrealm-next", "forward_arrow_128", ""))
       && coolDown == 0) {
         tempIndex++;
         if (tempIndex > templates.size()-1) tempIndex = 0;
         preview(tempIndex);
       }
-      if (engine.enterPressed || ui.button("newrealm-confirm", "tick_128", "")) {
+      if (input.enterOnce || ui.button("newrealm-confirm", "tick_128", "")) {
         sound.playSound("menu_select");
-        engine.enterPressed = false;
         
         // User didn't select any realm.
         if (tempIndex == -1) {
@@ -861,7 +857,6 @@ public class PixelRealmWithUI extends PixelRealm {
   
   protected void promptNewRealm() {
     if (gui == null) return;
-    engine.enterPressed = false;
     menu = new NewRealmMenu();
     menuShown = true;
   }
@@ -935,7 +930,7 @@ public class PixelRealmWithUI extends PixelRealm {
     // Hacky way of allowing an exception for our input prompt menu's
     boolean tmp = engine.inputPromptShown;
     engine.inputPromptShown = false;
-    if (engine.keybindPressed("menu") && !engine.commandPromptShown) {
+    if (input.keyActionOnce("menu") && !engine.commandPromptShown) {
       // Do not allow menu to be closed when set to be on.
       if (menuShown && doNotAllowCloseMenu) { 
         engine.inputPromptShown = tmp;
@@ -995,7 +990,7 @@ public class PixelRealmWithUI extends PixelRealm {
       display.imgCentre("music", x-wi-30, y, 40, 40);
       app.noTint();
       
-      if (musicURL.length() > 0 && engine.mouseY() > y && engine.leftClick) {
+      if (musicURL.length() > 0 && engine.mouseY() > y && input.primaryClick) {
         app.link(musicURL);
       }
     }
@@ -1035,7 +1030,6 @@ public class PixelRealmWithUI extends PixelRealm {
     
     changedTemplate = false;
     usePortalAllowed = false;
-    engine.enterPressed = false;
     doNotAllowCloseMenu = true;
     Runnable r = new Runnable() {
       public void run() {
@@ -1053,7 +1047,6 @@ public class PixelRealmWithUI extends PixelRealm {
       
       if (numItemsHeld >= 5 || numItemsHeld >= numItemsTotal) {
         tutorialStage = 0;
-        engine.enterPressed = false;
         menuShown = true;
         Runnable r = new Runnable() {
         public void run() { 
@@ -1071,7 +1064,6 @@ public class PixelRealmWithUI extends PixelRealm {
       
       if (numItemsHeld <= 0) {
         tutorialStage = 0;
-        engine.enterPressed = false;
         menuShown = true;
         Runnable r = new Runnable() {
         public void run() { 
@@ -1137,7 +1129,7 @@ public class PixelRealmWithUI extends PixelRealm {
         mssg = "Let's try moving!\nWSAD: Move, Q/E: look left/right, R: run, [space]: jump, [shift]: walk slowly.";
         
         // Let the player run around a bit, then move on to the next tutorial.
-        if (engine.keyAction("moveForewards") || engine.keyAction("moveBackwards") || engine.keyAction("moveLeft") || engine.keyAction("moveRight")){
+        if (input.keyAction("moveForewards") || input.keyAction("moveBackwards") || input.keyAction("moveLeft") || input.keyAction("moveRight")){
           moveAmount += display.getDelta();
           if (moveAmount >= 350.) {
             moveAmount = 0.;
@@ -1145,7 +1137,6 @@ public class PixelRealmWithUI extends PixelRealm {
             
             // Next tutorial.
             menuShown = true;
-            engine.enterPressed = false;
             Runnable r = new Runnable() {
               public void run() {
                 promptNewRealm();
@@ -1173,7 +1164,6 @@ public class PixelRealmWithUI extends PixelRealm {
               }};
           
           tutorialStage = 0;
-          engine.enterPressed = false;
           menuShown = true;
           // If the player hasn't chosen anything, show the alt dialog
           if (changedTemplate) {
@@ -1200,7 +1190,6 @@ public class PixelRealmWithUI extends PixelRealm {
         if (currentTool == TOOL_GRABBER) {
           doNotAllowCloseMenu = true;
           tutorialStage = 0;
-          engine.enterPressed = false;
           menuShown = true;
           Runnable r = new Runnable() {
           public void run() { 

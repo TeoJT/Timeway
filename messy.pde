@@ -781,7 +781,7 @@ public final class SpriteSystemPlaceholder {
                         rot = atan(-decx/decy)+PI;
                     }
                     
-                    float a = float(wi)/float(hi);
+                    //float a = float(wi)/float(hi);
                     float s = sin(rot);//, c = a*-cos(rot);
                     if (s != 0.0) {
                         radius = decx/s;
@@ -831,9 +831,7 @@ public final class SpriteSystemPlaceholder {
         }
 
         private int totalSprites = 0;
-        private void setLayer(String name, float z) {
-            this.spriteWithName(name).setZ(z);
-        }
+        
         public Sprite getSprite(String name) {
             try {
             return sprites.get(spriteNames.get(name));
@@ -895,7 +893,7 @@ public final class SpriteSystemPlaceholder {
             spriteNames.put(name, sprites.size()-1);
         }
         
-        private Sprite spriteWithName(String name) {
+        public Sprite spriteWithName(String name) {
             return sprites.get(spriteNames.get(name));
         }
         public void newSprite(String name) {
@@ -1010,7 +1008,7 @@ public final class SpriteSystemPlaceholder {
         // should be in the engine class anyways.
         public boolean buttonClicked(String identifier) {
             Sprite s = getSprite(identifier);
-            return (s.mouseWithinHitbox() && engine.leftClick);
+            return (s.mouseWithinHitbox() && engine.input.primaryClick);
         }
 
         public boolean buttonHover(String identifier) {
@@ -1132,9 +1130,7 @@ public final class SpriteSystemPlaceholder {
         
         //idk man. I'm not in the mood to name things today lol.
         public void keyboardInteractionEnabler() {
-          //println(ctrl);
-          // Yeah whatever.
-          if (engine.keyPressed && engine.lastKeyPressed == char('~')) {
+          if (engine.input.ctrlDown && engine.input.keyDownOnce('~')) {
             if (!this.interactable) {
               this.interactable = true;
               engine.console.log("Sprite system interactability enabled.");
@@ -1201,10 +1197,6 @@ public final class SpriteSystemPlaceholder {
     
     public int size(){
         return top+1; 
-    }
-    
-    public void seek(int index) {
-    
     }
     
     public void empty() {

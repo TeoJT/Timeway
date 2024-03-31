@@ -290,9 +290,12 @@ public class Editor extends Screen {
         
         
         protected boolean placeableSelected() {
-          return (sprite.mouseWithinHitbox() && placeables.selectedSprite == sprite && engine.pressDown && engine.noMove);
+          return (sprite.mouseWithinHitbox() && placeables.selectedSprite == sprite && input.primaryDown && !input.mouseMoved);
         }
 
+        protected boolean placeableSelectedSecondary() {
+          return (sprite.mouseWithinHitbox() && placeables.selectedSprite == sprite && input.secondaryDown && !input.mouseMoved);
+        }
 
         
         // Just a placeholder display for the base class.
@@ -362,9 +365,9 @@ public class Editor extends Screen {
             String displayText = "";
             if (editing()) {
                 if (int(display.getTime()) % 60 < 30)
-                    displayText = engine.keyboardMessage+"|";
+                    displayText = input.keyboardMessage+"|";
                 else
-                    displayText = engine.keyboardMessage;
+                    displayText = input.keyboardMessage;
             }
               else {
                   displayText = text;
@@ -383,23 +386,22 @@ public class Editor extends Screen {
             placeables.hackSpriteDimensions(sprite, int(app.textWidth(text)), int((app.textAscent()+app.textDescent()+lineSpacing)*(countNewlines(text)+1) + EXPAND_HITBOX));
 
             if (editing()) {
-                engine.addNewlineWhenEnterPressed = true;
+                input.addNewlineWhenEnterPressed = true;
                 // Oh my god if this bug fix doesn't work I'm gonna lose it
                 // DO NOT allow the command prompt to appear by pressing '/' and make the current text we're writing disappear
                 // while writing text
                 engine.allowShowCommandPrompt = false;
-                text = engine.keyboardMessage;
+                text = input.keyboardMessage;
             }
             
-            if (placeableSelected()) {
+            if (placeableSelected() || placeableSelectedSecondary()) {
                 engine.allowShowCommandPrompt = false;
                 editingPlaceable = this;
-                engine.keyboardMessage = text;
-                
+                input.keyboardMessage = text;
+            }
                 // Mini menu for text
-                if (engine.rightPressDown) {
-                  textOptions();
-                }
+            if (placeableSelectedSecondary()) {
+              textOptions();
             }
             super.update();
         }
@@ -453,11 +455,12 @@ public class Editor extends Screen {
                                       }
         
         public void update() {
+            if (placeableSelectedSecondary()) {
+              editingPlaceable = this;
+              imageOptions();
+            }
             if (placeableSelected()) {
                 editingPlaceable = this;
-                if (engine.rightPressDown) {
-                  imageOptions();
-                }
             }
             placeables.sprite(sprite.getName(), imageName);
         }
@@ -831,6 +834,7 @@ public class Editor extends Screen {
   
           //************BIGGER FONT************
           if (ui.button("bigger_font", "bigger_text_128", "Bigger")) {
+              power.setAwake();
               if (editingPlaceable != null && editingPlaceable instanceof TextPlaceable) {
                   TextPlaceable editingTextPlaceable = (TextPlaceable)editingPlaceable;
                   selectedFontSize = editingTextPlaceable.fontSize + 2;
@@ -844,6 +848,7 @@ public class Editor extends Screen {
   
           //************SMALLER FONT************
           if (ui.button("smaller_font", "smaller_text_128", "Smaller")) {
+              power.setAwake();
               if (editingPlaceable != null && editingPlaceable instanceof TextPlaceable) {
                   TextPlaceable editingTextPlaceable = (TextPlaceable)editingPlaceable;
                   selectedFontSize = editingTextPlaceable.fontSize - 2;
@@ -986,7 +991,7 @@ public class Editor extends Screen {
     public void upperBar() {
         // The upper bar expand down animation when the screen loads.
         if (upperbarExpand > 0.001) {
-            engine.power.setAwake();
+            power.setAwake();
             upperbarExpand *= PApplet.pow(0.8, display.getDelta());
             
             float newBarWeight = UPPER_BAR_DROP_WEIGHT;
@@ -1095,7 +1100,7 @@ public class Editor extends Screen {
         editingTextPlaceable.sprite.xpos = x;
         editingTextPlaceable.sprite.ypos = y;
         editingPlaceable = editingTextPlaceable;
-        engine.keyboardMessage = initText;
+        input.keyboardMessage = initText;
         engine.allowShowCommandPrompt = false;
     }
     
@@ -1108,8 +1113,8 @@ public class Editor extends Screen {
         // 2 Update all objects which will check if any of them have been clicked.
         // 3 If there's been a click from step 1 then check if any object has been clicked.
         boolean clickedThing = false;
-        if (engine.leftClick) {
-            if (engine.noMove) {
+        if (input.primaryClick) {
+            if (!input.mouseMoved) {
                 clickedThing = true;
             }
         }
@@ -1121,7 +1126,7 @@ public class Editor extends Screen {
         // 2. GUI element is clicked (we just check the mouse is in the upper bar
         // to check that condition)
         boolean mouseInUpperbar = engine.mouseY() < myUpperBarWeight;
-        if (engine.pressDown) {
+        if (input.primaryClick) {
             if(!ui.miniMenuShown() && !mouseInUpperbar) {
 
                 if (editingPlaceable != null) {
@@ -1152,7 +1157,7 @@ public class Editor extends Screen {
             }
         }
         
-        if (engine.keyPressed && key == 3) { // Ctrl+c
+        if (input.ctrlDown && input.keyDownOnce('c')) { // Ctrl+c
           if (editingPlaceable != null) {
             if (editingPlaceable instanceof TextPlaceable) {
               TextPlaceable t = (TextPlaceable)editingPlaceable;
@@ -1164,7 +1169,7 @@ public class Editor extends Screen {
           }
         }
         
-        if (engine.keyPressed && key == 0x16) // Ctrl+v
+        if (input.ctrlDown && input.keyDownOnce('v')) // Ctrl+v
         {
             
             if (clipboard.isImage()) {
@@ -1178,7 +1183,7 @@ public class Editor extends Screen {
               if (editingPlaceable != null) {
                 // If we're currently editing text, append it
                 if (editingPlaceable instanceof TextPlaceable) {
-                  engine.keyboardMessage += pastedString;
+                  input.keyboardMessage += pastedString;
                 }
                 else if (editingPlaceable instanceof ImagePlaceable) {
                   // Place it just underneath the image.
@@ -1199,7 +1204,7 @@ public class Editor extends Screen {
         }
         
         
-        if (engine.keyPressed && key == DELETE) {
+        if (input.keyDownOnce(DELETE)) {
           if (editingPlaceable != null) {
             placeableset.remove(editingPlaceable);
             changesMade = true;

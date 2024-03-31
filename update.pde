@@ -60,7 +60,7 @@ public class Updater extends Screen {
     textAlign(CENTER, CENTER);
     fill(c);
     text(display, x+wi/2, y+hi/2);
-    return hovering && engine.click;
+    return hovering && input.primaryClick;
   }
   
   public void content() {
@@ -113,7 +113,7 @@ public class Updater extends Screen {
         case LINUX:
           downloadURL = updateInfo.getString("linux-download", "");
           break;
-        case MACOSX:
+        case MACOS:
           downloadURL = updateInfo.getString("macos-download", "");
           break;
       }

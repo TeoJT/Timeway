@@ -21,10 +21,11 @@ String sketch_ERR_LOG_PATH;
 // Set to true if you want to show the error log like in an exported build
 // rather than throw the error to processing (can be useful if you need more
 // error info)
-final boolean sketch_FORCE_CRASH_SCREEN = true;
+final boolean sketch_FORCE_CRASH_SCREEN = false;
 
 void settings() {
   try {
+    // TODO... we're disabling graphics acceleration?!
     if (platform == LINUX)
       System.setProperty("jogl.disable.openglcore", "true");
     size(displayWidth, displayHeight, P2D);
@@ -32,7 +33,7 @@ void settings() {
     smooth(1);
     
     
-    // Ugly, I know. But we're at the most low level point in the program, so ain't
+    // Ugly, I know. But we're at the lowest level point in the program, so ain't
     // much we can do.
     PJOGL.setIcon("data/engine/img/icon.png");
   }
@@ -160,47 +161,41 @@ void draw() {
 }
 
 
-// ... apart from this. This is just keyboard stuff because I'm still using
-// processing in 2022 when I've learned way more stuff and know that processing
-// prolly isn't the best system to use but heck it.
 void keyPressed() {
-  if (timewayEngine != null) {
-    timewayEngine.keyboardAction(key, keyCode);
-    timewayEngine.lastKeyPressed     = key;
-    timewayEngine.lastKeycodePressed = keyCode;
+  if (timewayEngine != null && timewayEngine.input != null) {
+    timewayEngine.input.keyboardAction(key, keyCode);
+    timewayEngine.input.lastKeyPressed     = key;
+    timewayEngine.input.lastKeycodePressed = keyCode;
 
     // Begin the timer. This will automatically increment once it's != 0.
-    timewayEngine.keyHoldCounter = 1;
+    timewayEngine.input.keyHoldCounter = 1;
   }
-  //println(int(key));
 }
 
 
 void keyReleased() {
     // Stop the hold timer. This will no longer increment.
-  if (timewayEngine != null) {
-    timewayEngine.keyHoldCounter = 0;
-    timewayEngine.controlKeyPressed = false;
-    //timewayEngine.lastKeyPressed = 0;
-    timewayEngine.releaseKeyboardAction();
+  if (timewayEngine != null && timewayEngine.input != null) {
+    timewayEngine.input.keyHoldCounter = 0;
+    timewayEngine.input.releaseKeyboardAction(key, keyCode);
   }
   
 }
 
 void mouseWheel(MouseEvent event) {
-  if (timewayEngine != null) timewayEngine.rawScroll = event.getCount();
+  if (timewayEngine != null && timewayEngine.input != null) timewayEngine.input.rawScroll = event.getCount();
   //println(event.scrollAmount());
   //TODO: ifShiftDown is horizontal scrolling!
   //println(event.isShiftDown());
   //println(timewayEngine.rawScroll);
 }
 
-void mouseClicked() {
-  if (timewayEngine != null) timewayEngine.mouseEventClick = true;
-}
-
 void outputFileSelected(File selection) {
   if (timewayEngine != null) {
     timewayEngine.file.outputFileSelected(selection);
   }
+}
+
+void mouseClicked() {
+  if (timewayEngine != null && timewayEngine.input != null) timewayEngine.input.clickEventAction();
 }

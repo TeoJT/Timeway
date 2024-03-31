@@ -709,7 +709,6 @@ public class PixelRealm extends Screen {
     private String musicPath = engine.APPPATH+REALM_BGM_DEFAULT;
     
     public HashMap<Integer, TerrainChunkV2> chunks = new HashMap<Integer, TerrainChunkV2>();
-    private float[][] tileHeightGrid;
     
     public String version = COMPATIBILITY_VERSION;
     public int versionCompatibility = 2;
@@ -2402,9 +2401,8 @@ public class PixelRealm extends Screen {
         float beamX1 = playerX;
         float beamZ1 = playerZ;
   
-        // TODO: optimise.
-        float beamX2 = playerX+sin(direction)*SELECT_FAR;
-        float beamZ2 = playerZ+cos(direction)*SELECT_FAR;
+        float beamX2 = playerX+cache_playerSinDirection*SELECT_FAR;
+        float beamZ2 = playerZ+cache_playerCosDirection*SELECT_FAR;
   
         //boolean withinYrange = (y-hi < playerY-
   
@@ -2625,7 +2623,8 @@ public class PixelRealm extends Screen {
       // that we're fading away tiles furthest from us, not closest to us.
       return 255-(d*scale);
     }
-  
+    
+    @SuppressWarnings("unused")
     private PVector calcTile(float x, float z, boolean debug) {
       PVector v = calcTileXZ(x,z);
       v.y = calcTileY(x,z, debug);
@@ -3395,7 +3394,7 @@ public class PixelRealm extends Screen {
         // If we're going backwards, we might as well position ourselves in the opposite direction
         // This is just a really hack'd up script.
         float additionalDir = 0;
-        if (engine.keyAction("moveBackwards")) {
+        if (input.keyAction("moveBackwards")) {
           additionalDir = PI;
           if (chosenDir >= 2)
             chosenDir -= 2;
@@ -3575,19 +3574,21 @@ public class PixelRealm extends Screen {
     // ----- Pixel Realm logic code -----
     
     public void runPlayer() {
-      primaryAction = engine.keyActionOnce("primaryAction");
-      secondaryAction = engine.keyActionOnce("secondaryAction");
+      primaryAction = input.keyActionOnce("primaryAction");
+      secondaryAction = input.keyActionOnce("secondaryAction");
       
       if (!movementPaused) {
         
       isWalking = false;
       float speed = WALK_ACCELERATION;
   
-      if (engine.keyAction("dash")) {
+      if (input.keyAction("dash")) {
         speed = RUN_SPEED+runAcceleration;
         if (RUN_SPEED+runAcceleration <= MAX_SPEED) runAcceleration+=RUN_ACCELERATION;
       } else runAcceleration = 0.;
-      if (engine.shiftKeyPressed) {
+      
+      // TODO: Make keybinding instead of fixed.
+      if (input.shiftDown) {
         speed = SNEAK_SPEED;
         runAcceleration = 0.;
       }
@@ -3595,10 +3596,13 @@ public class PixelRealm extends Screen {
       boolean splash = (!wasInWater && isInWater);
   
       // :3
-      if (engine.keyAction("jump") && onGround()) speed *= 3;
+      if (input.keyAction("jump") && onGround()) speed *= 3;
   
       float sin_d = sin(direction);
       float cos_d = cos(direction);
+      
+      cache_playerSinDirection = sin_d;
+      cache_playerCosDirection = cos_d;
       
       // Less movement control while in the air.
       if (!onGround()) {
@@ -3618,7 +3622,7 @@ public class PixelRealm extends Screen {
       //  }
       //}
       
-      if (engine.keybindPressed("prevDirectory") && usePortalAllowed) {
+      if (input.keyActionOnce("prevDirectory") && usePortalAllowed) {
         //sound.fadeAndStopMusic();
         //requestScreen(new Explorer(engine, stateDirectory));
         if (!file.atRootDir(stateDirectory)) {
@@ -3633,37 +3637,37 @@ public class PixelRealm extends Screen {
           float movex = 0.;
           float movez = 0.;
           float rot = 0.;
-          if (engine.keyAction("moveForewards")) {
+          if (input.keyAction("moveForewards")) {
             movex += sin_d*speed;
             movez += cos_d*speed;
   
             isWalking = true;
           }
-          if (engine.keyAction("moveLeft")) {
+          if (input.keyAction("moveLeft")) {
             movex += cos_d*speed;
             movez += -sin_d*speed;
   
             isWalking = true;
           }
-          if (engine.keyAction("moveBackwards")) {
+          if (input.keyAction("moveBackwards")) {
             movex += -sin_d*speed;
             movez += -cos_d*speed;
   
             isWalking = true;
           }
-          if (engine.keyAction("moveRight")) {
+          if (input.keyAction("moveRight")) {
             movex += -cos_d*speed;
             movez += sin_d*speed;
             isWalking = true;
           }
   
   
-          if (engine.shiftKeyPressed) {
-            if (engine.keyAction("lookRight")) rot = -SLOW_TURN_SPEED*display.getDelta();
-            if (engine.keyAction("lookLeft")) rot =  SLOW_TURN_SPEED*display.getDelta();
+          if (input.shiftDown) {
+            if (input.keyAction("lookRight")) rot = -SLOW_TURN_SPEED*display.getDelta();
+            if (input.keyAction("lookLeft")) rot =  SLOW_TURN_SPEED*display.getDelta();
           } else {
-            if (engine.keyAction("lookRight")) rot = -TURN_SPEED*display.getDelta();
-            if (engine.keyAction("lookLeft")) rot =  TURN_SPEED*display.getDelta();
+            if (input.keyAction("lookRight")) rot = -TURN_SPEED*display.getDelta();
+            if (input.keyAction("lookLeft")) rot =  TURN_SPEED*display.getDelta();
           }
   
   
@@ -3723,7 +3727,7 @@ public class PixelRealm extends Screen {
           cache_flatCosDirection = cos(direction-PI+HALF_PI);
           
           // --- Jump & gravity physics ---
-          if (engine.keyAction("jump")) {
+          if (input.keyAction("jump")) {
             float jumpStrength = JUMP_STRENGTH;
             if (isInWater) {
               yvel = min(yvel+SWIM_UP_SPEED, UNDERWATER_TEMINAL_VEL);
@@ -3767,7 +3771,7 @@ public class PixelRealm extends Screen {
           }
           else if (splash) {
             yvel = 0.;
-            sound.playSound("splash", 2.0);
+            sound.playSound("splash", random(0.8, 1.4));
           }
           else {
             // Change yvel while we're in the air
@@ -3813,14 +3817,14 @@ public class PixelRealm extends Screen {
           
           // Sorry for the cluster of code but if you read it it's really simpleeeeeeeee
           if (globalHoldingObjectSlot != null) {
-            if (engine.keyActionOnce("inventorySelectLeft") && globalHoldingObjectSlot.prev != null) {
+            if (input.keyActionOnce("inventorySelectLeft") && globalHoldingObjectSlot.prev != null) {
               launchWhenPlaced = false;
               globalHoldingObjectSlot = globalHoldingObjectSlot.prev;
               updateHoldingItem(globalHoldingObjectSlot);
               sound.playSound("pickup");
             }
             
-            if (engine.keyActionOnce("inventorySelectRight") && globalHoldingObjectSlot.next != null) {
+            if (input.keyActionOnce("inventorySelectRight") && globalHoldingObjectSlot.next != null) {
               launchWhenPlaced = false;
               globalHoldingObjectSlot = globalHoldingObjectSlot.next;
               updateHoldingItem(globalHoldingObjectSlot);
@@ -4734,7 +4738,7 @@ public class PixelRealm extends Screen {
     if (!movementPaused) {
       for (int i = 0; i < 10; i++) {
         // Go through all the keys 0-9 and check if it's being pressed
-        if (engine.keybindPressed("quickWarp"+str(i)) && usePortalAllowed) {
+        if (input.keyActionOnce("quickWarp"+str(i)) && usePortalAllowed) {
           // Save current realm
           quickWarpRealms[quickWarpIndex] = currRealm;
           
@@ -4776,7 +4780,7 @@ public class PixelRealm extends Screen {
     
     if (engine.mouseX() > 0. && engine.mouseX() < app.textWidth(currRealm.stateDirectory) && engine.mouseY() > 0. && engine.mouseY() < myUpperBarWeight) {
       app.fill(50);
-      if (engine.rightPressDown) {
+      if (input.secondaryClick) {
         // Create minimenu.
           
         String[] labels = new String[2];
@@ -4800,7 +4804,7 @@ public class PixelRealm extends Screen {
         
         ui.createOptionsMenu(labels, actions);
       }
-      else if (engine.leftClick) {
+      else if (input.primaryClick) {
         console.log("Path copied!");
         clipboard.copyString(currRealm.stateDirectory);
       }
@@ -4888,7 +4892,7 @@ public class PixelRealm extends Screen {
     }
     else if (command.equals("/memusage")) {
       showMemUsage = !showMemUsage;
-      sharedResources.set("show_mem_bar", new Boolean(showMemUsage));
+      sharedResources.set("show_mem_bar", showMemUsage);
       if (showMemUsage) console.log("Memory usage bar shown.");
       else console.log("Memory usage bar hidden.");
       return true;
@@ -5074,7 +5078,7 @@ class WorldLegacy extends Screen {
     float prevWaveHeight=WATER_LEVEL;
     float prevHeight=0; 
     float floorPos=this.height+myUpperBarWeight; 
-    if (engine.mouseEventClick) xscroll+=5; 
+    if (input.primaryClick) xscroll+=5; 
     xscroll+=50; 
     moveStarX=1;
     float[] chunks=new float[int(WIDTH/hillWidth)*2]; 
@@ -5114,6 +5118,6 @@ class WorldLegacy extends Screen {
       app.textAlign(LEFT, TOP);
       app.text("Press backspace to go back", 10, myUpperBarWeight+5);
     } 
-    if (engine.keyDown(BACKSPACE)) previousScreen();
+    if (input.keyDownOnce(BACKSPACE)) previousScreen();
   }
 }

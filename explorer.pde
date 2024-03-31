@@ -64,7 +64,7 @@ public class Explorer extends Screen {
             app.fill(100, 0, 255);
             app.tint(100, 0, 255);
             // if mouse is hovering over text and left click is pressed, go to this directory/open the file
-            if (engine.pressDown) {
+            if (input.primaryClick) {
               if (file.currentFiles[i].isDirectory())
                 scrollOffset = 0.;
                 
@@ -96,7 +96,7 @@ public class Explorer extends Screen {
   private void processScroll(float top, float bottom) {
     final float ELASTIC_MAX = 100.;
     
-    if (engine.scroll != 0.0) {
+    if (input.scroll != 0.0) {
       engine.power.setAwake();
     }
     else {
@@ -123,8 +123,8 @@ public class Explorer extends Screen {
     for (int i = 0; i < n; i++) {
       if (scrollOffset > top) {
           scrollOffset -= (scrollOffset-top)*0.1;
-          if (engine.scroll < 0.0) scrollOffset += engine.scroll;
-          else scrollOffset += engine.scroll*(max(0.0, ((ELASTIC_MAX+top)-scrollOffset)/ELASTIC_MAX));
+          if (input.scroll < 0.0) scrollOffset += input.scroll;
+          else scrollOffset += input.scroll*(max(0.0, ((ELASTIC_MAX+top)-scrollOffset)/ELASTIC_MAX));
       }
       else if (-scrollOffset > bottom) {
           // TODO: Actually get some pen and paper and make the elastic band edge work.
@@ -135,7 +135,7 @@ public class Explorer extends Screen {
           //if (engine.scroll > 0.0) scrollOffset += engine.scroll;
           //else scrollOffset += engine.scroll*(max(0.0, ((-scrollOffset)-(ELASTIC_MAX+bottom))/ELASTIC_MAX));
       }
-      else scrollOffset += engine.scroll;
+      else scrollOffset += input.scroll;
     }
   }
   
@@ -179,7 +179,7 @@ public class Explorer extends Screen {
         gui.suppressSpriteWarning = false;
 
         // Only when the button is actually clicked.
-        return hover && engine.mouseEventClick;
+        return hover && input.primaryClick;
     }
     
   
@@ -198,11 +198,11 @@ public class Explorer extends Screen {
       
       Runnable r = new Runnable() {
         public void run() {
-          if (engine.keyboardMessage.length() <= 1) {
+          if (input.keyboardMessage.length() <= 1) {
             console.log("Please enter a valid folder name!");
             return;
           }
-          String foldername = file.currentDir+engine.keyboardMessage;
+          String foldername = file.currentDir+input.keyboardMessage;
           new File(foldername).mkdirs();
           refreshDir();
         }
