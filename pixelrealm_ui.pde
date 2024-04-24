@@ -594,16 +594,20 @@ public class PixelRealmWithUI extends PixelRealm {
         }
       }
       
+      currRealm.chunks.clear();
+      currRealm.ordering = new LinkedList();
+      currRealm.legacy_autogenStuff = new HashSet<String>();
+      
+      
       // Load terrain
       currRealm.loadRealmTerrain(path);
-      currRealm.loadRealmAssets(path);
-      for (PixelRealmState.PRObject p : currRealm.ordering) {
-        p.surface();
-        if (p instanceof PixelRealmState.TerrainPRObject) {
-          PixelRealmState.TerrainPRObject t = (PixelRealmState.TerrainPRObject)p;
-          t.readjustSize();
-        }
-      }
+      //for (PixelRealmState.PRObject p : currRealm.ordering) {
+      //  p.surface();
+      //  if (p instanceof PixelRealmState.TerrainPRObject) {
+      //    PixelRealmState.TerrainPRObject t = (PixelRealmState.TerrainPRObject)p;
+      //    t.readjustSize();
+      //  }
+      //}
       currRealm.playerY = currRealm.onSurface(currRealm.playerX, currRealm.playerZ);
       sound.stopMusic();
       sound.streamMusic(currRealm.musicPath);
@@ -712,6 +716,8 @@ public class PixelRealmWithUI extends PixelRealm {
     
     private int generatorIndex = 1;
     
+    private boolean mouseDown = true;
+    
     public CustomiseTerrainMenu() {
       super("", "back-customise");
     }
@@ -776,14 +782,24 @@ public class PixelRealmWithUI extends PixelRealm {
       float x = cache_backX+50;
       float y = cache_backY+50+95;
       nodeSound = 0;
-      for (PixelRealmState.CustomNode n : currRealm.terrain.customNodes) {
-        n.x = x;
-        n.wi = cache_backWi-100.;
-        
-        n.display(y);
-        
-        y += n.getHeight();
+      
+      // True upon the menu appearing, and stays true as long as the user holds down the mouse.
+      // Once the user lets go, mouseDown is permantally set to false.
+      // This is used to avoid a slider from being unintentionally clicked when the mouse is down
+      // from the previous menu.
+      mouseDown &= input.primaryDown;
+      
+      if (!mouseDown) {
+        for (PixelRealmState.CustomNode n : currRealm.terrain.customNodes) {
+          n.x = x;
+          n.wi = cache_backWi-100.;
+          
+          n.display(y);
+          
+          y += n.getHeight();
+        }
       }
+      
       if (nodeSound != 0)
         sound.loopSound("terraform_"+str(nodeSound));
       else {
@@ -1045,15 +1061,17 @@ public class PixelRealmWithUI extends PixelRealm {
     if (tutorialStage == 4 || tutorialStage == 5) {
       numItemsHeld++;
       
-      if (numItemsHeld >= 5 || numItemsHeld >= numItemsTotal) {
-        tutorialStage = 0;
-        menuShown = true;
-        Runnable r = new Runnable() {
-        public void run() { 
-          tutorialStage = 5; 
-        }};
-        tutorialStage = 0;
-        menu = new DialogMenu("", "back_welcome", dm_tutorial_4, r);
+      if (tutorialStage == 4) {
+        if (numItemsHeld >= 5 || numItemsHeld >= numItemsTotal) {
+          tutorialStage = 0;
+          menuShown = true;
+          Runnable r = new Runnable() {
+          public void run() { 
+            tutorialStage = 5; 
+          }};
+          tutorialStage = 0;
+          menu = new DialogMenu("", "back_welcome", dm_tutorial_4, r);
+        }
       }
     }
   }
@@ -1062,19 +1080,21 @@ public class PixelRealmWithUI extends PixelRealm {
     if (tutorialStage == 4 || tutorialStage == 5) {
       numItemsHeld--;
       
-      if (numItemsHeld <= 0) {
-        tutorialStage = 0;
-        menuShown = true;
-        Runnable r = new Runnable() {
-        public void run() { 
-          usePortalAllowed = true;
-          tutorialStage = 0; 
-          doNotAllowCloseMenu = false;
-          // For now just save some file so that it exists.
-          app.saveJSONObject(new JSONObject(), engine.APPPATH+engine.STATS_FILE);
-        }};
-        tutorialStage = 0;
-        menu = new DialogMenu("", "back_welcome", dm_tutorial_end, r);
+      if (tutorialStage == 5) {
+        if (numItemsHeld <= 0) {
+          tutorialStage = 0;
+          menuShown = true;
+          Runnable r = new Runnable() {
+          public void run() { 
+            usePortalAllowed = true;
+            tutorialStage = 0; 
+            doNotAllowCloseMenu = false;
+            // For now just save some file so that it exists.
+            app.saveJSONObject(new JSONObject(), engine.APPPATH+engine.STATS_FILE);
+          }};
+          tutorialStage = 0;
+          menu = new DialogMenu("", "back_welcome", dm_tutorial_end, r);
+        }
       }
     }
   }

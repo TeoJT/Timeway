@@ -99,10 +99,10 @@ public class PixelRealm extends Screen {
   private boolean legacy_portalEasteregg = false;
   private float coinCounterBounce = 0.;
   
-  private PImage REALM_GRASS_DEFAULT_LEGACY;
-  private PImage REALM_SKY_DEFAULT_LEGACY;
-  private PImage REALM_TREE_DEFAULT_LEGACY;
-  private String REALM_BGM_DEFAULT_LEGACY = "data/engine/music/pixelrealm_default_bgm_legacy.wav";
+  public PImage REALM_GRASS_DEFAULT_LEGACY;
+  public PImage REALM_SKY_DEFAULT_LEGACY;
+  public PImage REALM_TREE_DEFAULT_LEGACY;
+  public final static String REALM_BGM_DEFAULT_LEGACY = "data/engine/music/pixelrealm_default_bgm_legacy.wav";
   
   // --- Global state and working variables (doesn't require per-realm states) ---
   private PGraphics scene;
@@ -621,6 +621,9 @@ public class PixelRealm extends Screen {
         return false;
       }
       
+      // Safety measure: can't move back certain files.
+      // TODO
+      
       if (!syncd) {
         // Can't move files that have the same filename as another file
         // in the pocket.
@@ -715,7 +718,7 @@ public class PixelRealm extends Screen {
     
     // --- Legacy stuff for backward compatibility ---
     private Stack<PixelRealmState.PRObject> legacy_terrainObjects;
-    private HashSet<String> legacy_autogenStuff;
+    public HashSet<String> legacy_autogenStuff;
     public boolean lights = false;
     public int collectedCoins = 0;
     public boolean coins = false;
@@ -1287,7 +1290,9 @@ public class PixelRealm extends Screen {
         engine.noiseDetail(4, 0.5); 
         x = x*getGroundSize()+getGroundSize()*0.5;
         z = z*getGroundSize()+getGroundSize()*0.5;
-        float y = plantDown(x, z);
+
+        //float y = plantDown(x, z);
+        float y = onSurface(x, z);
         
         if (y > waterLevel && hasWater) return;
         if (engine.noise(x*100+95423, z*9812+1934825) > TREE_FREQUENCY) return;
@@ -3001,7 +3006,7 @@ public class PixelRealm extends Screen {
           versionCompatibility = 2;
         }
         // Satisfies the 2 conditions stated above for 1.x and 2.x!
-        loadRealmAssets();
+        loadRealmAssets(dir);
         
         
         
@@ -3567,7 +3572,7 @@ public class PixelRealm extends Screen {
     
     boolean wasInWater = false;
     
-    
+    boolean wasOnGround = false;
     
     // Finally, the most important code of all
     
@@ -3766,8 +3771,9 @@ public class PixelRealm extends Screen {
           playerY -= yvel*display.getDelta();
           
           if (onGround()) {
-            yvel = 0.;
             playerY = onSurface(playerX, playerZ);
+            yvel = 0.;
+            //console.log(playerY-prevYPos);
           }
           else if (splash) {
             yvel = 0.;
@@ -3836,6 +3842,8 @@ public class PixelRealm extends Screen {
       if (modifyTerrain) {
         playerY = onSurface(playerX, playerZ);
       }
+      
+      wasOnGround = onGround();
     }
     
     
@@ -4498,8 +4506,21 @@ public class PixelRealm extends Screen {
       bumpBack();
       return;
     }
+    
+    if (file.directorify(to).equals(file.directorify(engine.APPPATH+engine.POCKET_PATH))) {
+      prompt("Nice try", "You can't go into Timeway's pocket directory. Doing so would cause a paradox.", 20);
+      bumpBack();
+      return;
+    }
+    if (file.directorify(to).equals(file.directorify(engine.APPPATH+engine.CACHE_PATH))) {
+      prompt("Nice try", "You can't go into Timeway's cache directory. Doing so would cause a paradox.", 20);
+      bumpBack();
+      return;
+    }
+    
     portalLight = 255.;
     portalCoolDown = 30.;
+    
     
     // Update inventory for moving realms (move files)
     boolean success = true;
@@ -4816,11 +4837,12 @@ public class PixelRealm extends Screen {
     app.text(currRealm.stateDirectory, 10, 10);
     
     
-    if (loading > 0) {
+    if (loading > 0 || sound.loadingMusic()) {
       ui.loadingIcon(WIDTH-myUpperBarWeight/2-10, myUpperBarWeight/2, myUpperBarWeight);
       
       // Doesn't matter too much that it's being converted to an int,
       // it doesn't need to be accurate.
+      // It's simply an approximate timeout timer for the loading icon to disappear.
       loading -= (int)display.getDelta();
     }
     display.recordLogicTime();
@@ -4924,6 +4946,39 @@ public class PixelRealm extends Screen {
     else if (engine.commandEquals(command, "/regeneratetrees")) {
       currRealm.regenerateTrees();
       console.log("Regenerated stuff.");
+      return true;
+    }
+    else if (engine.commandEquals(command, "/goto")) {
+      String[] args = getArgs(command);
+      if (args.length >= 1) {
+        String path = args[0].trim().replaceAll("\\\\", "/");
+        if (file.exists(path) && file.isDirectory(path)) {
+          console.log("Transported to realm "+path+".");
+          gotoRealm(path);
+        }
+        else {
+          console.log(path+" is not a valid realm/folder!");
+        }
+      }
+      else {
+        console.log("Please provide a path where you want to go!");
+      }
+      return true;
+    }
+    else if (engine.commandEquals(command, "/outerchunkrelocation")) {
+      for (PixelRealmState.PRObject p : currRealm.files) {
+        int count = 0;
+        while (currRealm.outOfBounds(p.x, p.z)) {
+          p.x = random(-10000, 10000);
+          p.z = random(-10000, 10000);
+          count++;
+          if (count > 1000) {
+            console.warn("Couldn't relocate item cus we ain't smart enough.");
+            break;
+          }
+        }
+        p.surface();
+      }
       return true;
     }
     else return false;

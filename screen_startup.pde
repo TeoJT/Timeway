@@ -100,9 +100,9 @@ public class Startup extends Screen {
         
         
         // First time startup
-        if (firstTimeStartup) {
-          app.text("First startup make take some time, please wait...", WIDTH/2, HEIGHT/2+400);
-        }
+        //if (firstTimeStartup) {
+        //  app.text("First startup make take some time, please wait...", WIDTH/2, HEIGHT/2+400);
+        //}
         
         
         // Version in bottom-right.

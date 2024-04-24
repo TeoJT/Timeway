@@ -238,8 +238,8 @@ class Engine {
   public class SettingsModule {
       private JSONObject settings;
       private JSONObject keybindings;
-      private HashMap <String, Object> defaultSettings;
-      private HashMap <String, Character> defaultKeybindings;
+      private HashMap<String, Object> defaultSettings = new HashMap<String, Object>();
+      private HashMap<String, Character> defaultKeybindings = new HashMap<String, Character>();
       
       public SettingsModule() {
         loadDefaultSettings();
@@ -374,7 +374,7 @@ class Engine {
         returnSettings = new JSONObject();
   
   
-        for (String k : (HashSet<String>)defaultConfig.keySet()) {
+        for (String k : (Iterable<String>)defaultConfig.keySet()) {
           if (defaultConfig.get(k) instanceof Boolean)
             returnSettings.setBoolean(k, (boolean)defaultConfig.get(k));
           else if (defaultConfig.get(k) instanceof String)
@@ -702,6 +702,7 @@ class Engine {
           prevPowerMode = powerMode;
           setPowerMode(PowerMode.MINIMAL);
           focusedMode = false;
+          input.releaseAllInput();
           
           if (playWhileUnfocused)
             sound.setQuietVolume();
@@ -2022,10 +2023,15 @@ class Engine {
     public       float  VOLUME_QUIET = 0.;
     public boolean CACHE_MISS_NO_MUSIC = false;
     public boolean WAIT_FOR_GSTREAMER_START = true;
-    private Sound soundSystem;
     private HashMap<String, SoundFile> cachedMusicMap;   // Used as an alternative if gstreamer is still starting up.
+    
     public final String MUSIC_CACHE_FILE = "music_cache.json";
     public final int MAX_MUSIC_CACHE_SIZE_KB = 1024*256;  // 256 MB
+    public final String[] FORCE_CACHE_MUSIC = {
+      "data/engine/music/pixelrealm_default_bgm.wav",
+      "data/engine/music/pixelrealm_default_bgm_legacy.wav"
+    };
+    
     
     // So that we can use both SoundFile and Movie types without complicated code
     class Music {
@@ -2048,7 +2054,7 @@ class Engine {
           mode = CACHED;
           SoundFile m = cachedMusicMap.get(path);
           if (m != null) {
-            //console.log("Cache hit");
+            //console.log("Cache hit "+path);
             cachedMusic = m;
             cachedMusic.amp(1.0);
           }
@@ -2204,7 +2210,6 @@ class Engine {
     }
     
     public AudioModule() {
-      soundSystem = new Sound(app);
       sounds = new HashMap<String, SoundFile>();
       cachedMusicMap = new HashMap<String, SoundFile>();
       VOLUME_NORMAL = settings.getFloat("volumeNormal");
@@ -2584,6 +2589,22 @@ class Engine {
             cachedMusicMap.put(c.originalpath, music);
             //console.log(c.originalpath);
           }
+          
+          
+          // We're not done yet!
+          // Step 3 load force-cached music
+          for (String filename : FORCE_CACHE_MUSIC) {
+            if (!(new File(filename).isAbsolute())) {
+              filename = (APPPATH+filename).replaceAll("//", "/");
+            }
+            
+            if (!file.exists(filename)) {
+              console.bugWarn("loadMusicCache: constant FORCE_CACHE_MUSIC filename entry "+filename+" does not exist!");
+            }
+            
+            SoundFile music = new SoundFile(app, filename, false);
+            cachedMusicMap.put(filename, music);
+          }
               
           
         }
@@ -2651,7 +2672,7 @@ class Engine {
     private float masterVolume = 1.;
     public void setMasterVolume(float vol) {
       masterVolume = vol;
-      soundSystem.volume(vol);
+      Sound.volume(vol);
     }
   
   
@@ -2792,7 +2813,6 @@ class Engine {
       // Once gstreamer has loaded up, begin playing the music we actually want to play.
       if (reloadMusic && !loadingMusic()) {
         if (CACHE_MUSIC) {
-          //console.log("SWITCH");
           if (streamMusic != null) streamMusic.switchMode();
           if (streamMusicFadeTo != null) streamMusicFadeTo.switchMode();
           // We no longer need the cached music map. Just to be safe, don't null it
@@ -3826,13 +3846,21 @@ class Engine {
           input.keyboardMessage = lastInput;
         }
       }
+      
+      if (input.ctrlDown && input.keys[int('v')] == 2) {
+        //input.keyboardMessage = input.keyboardMessage.substring(0, input.keyboardMessage.length()-1);
+        if (clipboard.isString()) {
+          input.keyboardMessage += clipboard.getText();
+        }
+      }
 
       if (input.enterOnce) {
+        inputPromptShown = false;
+        if (input.keyboardMessage.length() <= 0) return;
         // Remove enter character at end
         int ll = max(input.keyboardMessage.length()-1, 0);   // Don't allow it to go lower than 0
         if (input.keyboardMessage.charAt(ll) == '\n') input.keyboardMessage = input.keyboardMessage.substring(0, ll);
         doWhenPromptSubmitted.run();
-        inputPromptShown = false;
         lastInput = input.keyboardMessage;
       }
     }
@@ -5115,16 +5143,26 @@ class Engine {
   }
 
   public boolean isLoading() {
+    // Report loading if standard assets (images etc) are still being loaded
     if (loadedEverything.get() == false) return true;
     
+    // If caching's turned off wait for GStreamer.
     if (!CACHE_MUSIC) {
       if (sound.loadingMusic()) return true;
     }
     else {
+      // Otherwise, proceed right ahead if-
+      // The home dir's .pixelrealm-bgm is cached
+      // The default music/legacy default music is being played (these are automatically cached.
+      // If we're not using the default music and the home realm with the .pixelrealm file isn't cached,
+      // we have no choice but to wait (or start with silence but this isn't desireable so lets just report that its still loading) 
+      
       boolean cacheHit = false;
       cacheHit |= sound.cacheHit(DEFAULT_DIR+"/"+PixelRealm.REALM_BGM+".wav");
       cacheHit |= sound.cacheHit(DEFAULT_DIR+"/"+PixelRealm.REALM_BGM+".ogg");
       cacheHit |= sound.cacheHit(DEFAULT_DIR+"/"+PixelRealm.REALM_BGM+".mp3");
+      cacheHit |= sound.cacheHit(APPPATH+PixelRealm.REALM_BGM_DEFAULT);
+      cacheHit |= sound.cacheHit(APPPATH+PixelRealm.REALM_BGM_DEFAULT_LEGACY);
       if (sound.loadingMusic() && !cacheHit)
         return true;
     }
@@ -5713,7 +5751,9 @@ class Engine {
       
       // Oneshot key control
       for (int i = 0; i < 1024; i++) {
-        if (keys[i] > 0) keys[i]++;
+        if (keys[i] > 0) {
+          keys[i]++;
+        }
       }
       
       // Special keys oneshots
@@ -5778,21 +5818,18 @@ class Engine {
       else if (kkey == ENTER) {
         enterDown = false;
       }
-      else {
-        // Down keys
-        int val = int(Character.toLowerCase(kkey));
-        
-        if (val >= 1024) return;
-        
-        keys[val] = 0;
-      }
+      // Down keys
+      int val = int(Character.toLowerCase(kkey));
+      
+      if (val >= 1024) return;
+      
+      keys[val] = 0;
     }
   
     public boolean keyDown(char k) {
       if (inputPromptShown) return false;
       
       int val = int(Character.toLowerCase(k));
-      
       return keys[val] >= 1;
     }
     
@@ -5800,6 +5837,10 @@ class Engine {
       if (inputPromptShown) return false;
       
       int val = int(Character.toLowerCase(k));
+      
+      //if (keys[val] > 0) {
+      //  console.log(val);
+      //}
       
       return keys[val] == 2;
     }
@@ -5826,9 +5867,10 @@ class Engine {
         return this.primaryClick;
       else if (int(k) == settings.RIGHT_CLICK)
         return this.secondaryClick;
-      else 
+      else {
         // Otherwise just tell us if the key is down or not
         return keyDownOnce(k);
+      }
     }
   
     public void backspace() {
@@ -5852,9 +5894,21 @@ class Engine {
       }
     }
     
+    public void releaseAllInput() {
+      for (int i = 0; i < 1024; i++) {
+        keys[i] = 0;
+      }
+      primaryClick = false;
+      secondaryClick = false;
+      primaryDown = false;
+      secondaryDown = false;
+      click = false;
+      eventClick = false;
+      keyHoldCounter = 0.;
+    }
+    
     public void keyboardAction(char kkey, int kkeyCode) {
       if (kkey == CODED) {
-        console.log(str(int(kkey)));
         switch (kkeyCode) {
           case CONTROL:
             ctrlDown = true;
@@ -5875,13 +5929,15 @@ class Engine {
         this.backspace();
         backspaceDown = true;
       }
-      this.keyboardMessage += kkey;
+      else {
+        this.keyboardMessage += kkey;
+      }
       
       // And actually set the current pressed key state
-      int val = int(Character.toLowerCase(kkey));
+      int val = int(Character.toLowerCase(kkeyCode));
       
       if (val >= 1024) return;
-      
+      if (keys[val] > 0) return;
       keys[val] = 1;
     }
   }
