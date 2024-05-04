@@ -32,6 +32,7 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.ShortBuffer;
 import java.nio.FloatBuffer;
+import java.nio.IntBuffer;
 import java.nio.file.Paths;
 
 
@@ -1170,10 +1171,26 @@ class Engine {
         return;
       }
       String name = file.getIsolatedFilename(path);
+      String ext  = file.getExt(path);
+      
+      // If we're loading a vertex shader, we also have to load the corresponding 
+      // fragment shader.
+      if (ext.equals("vert")) {
+        String fragPath = file.getDir(path)+"/"+name+".frag";
+        if (file.exists(fragPath)) {
+          PShader s = app.loadShader(path, fragPath);
+          PShaderEntry shaderentry = new PShaderEntry(s, path);
+          shaders.put(name, shaderentry);
+          return;
+        }
+        else {
+          // File not found, continue to the normal fragment-only code.
+          console.warn("loadShader: corresponding "+name+" fragment shader file not found.");
+        }
+      }
       
       PShader s = app.loadShader(path);
       PShaderEntry shaderentry = new PShaderEntry(s, path);
-      
       shaders.put(name, shaderentry);
     }
   
@@ -1195,6 +1212,16 @@ class Engine {
       app.shader(
         getShaderWithParams(shaderName, uniforms)
       );
+    }
+    
+    public void shader(String shaderName) {
+      initShader(shaderName);
+      PShader sh = shaders.get(shaderName).shader;
+      if (sh == null) {
+        console.warnOnce("Shader "+shaderName+" not found!");
+        return;
+      }
+      app.shader(sh);
     }
     
     public void reloadShaders() {
@@ -1506,10 +1533,441 @@ class Engine {
       return time/display.BASE_FRAMERATE;
     }
     
+    
+    ///////////////////////////////////////////////////////////////////////
+    //                      UVImage stuff
+    ///////////////////////////////////////////////////////////////////////
+    
+    public PShader atlasShader;
+    public PGL pgl;
+    public DynamicTextureAtlas atlas;
+    
+    public class DynamicTextureAtlas {
+      private int glTexID = 0;
+      private IntBuffer texData;
+      public int[][] stencilAlloc;
+      
+      static final int TEX_WIDTH = 4096;
+      static final int TEX_HEIGHT = 4096;
+      
+      public DynamicTextureAtlas() {
+        init();
+        if (atlasShader == null) {
+          //atlasShader = display.shader("fabric");
+          atlasShader.init();
+        }
+      }
+      
+    
+      void init() {
+        pgl = beginPGL();
+        IntBuffer intBuffer = IntBuffer.allocate(1);
+        pgl.genTextures(1, intBuffer);
+        glTexID = intBuffer.get(0);
+      
+        texData = IntBuffer.allocate(TEX_WIDTH*TEX_HEIGHT);
+        stencilAlloc = new int[TEX_HEIGHT][(TEX_WIDTH/32)];  // ints are 32 bits wide.
+        
+        // Clear it out with black pixels
+        for (int i = 0; i < TEX_WIDTH*TEX_HEIGHT; i++) {
+          texData.put(i, 0xFF000000);
+        }
+        
+        // Clear allocation stencil buffer to no allocation anywhere.
+        for (int y = 0; y < stencilAlloc.length; y++) {
+          for (int x = 0; x < stencilAlloc[0].length; x++) {
+            stencilAlloc[y][x] = 0;
+          }
+        }
+        
+        // Put it into GPU memory
+        texData.rewind();
+        //long before = System.nanoTime();
+        pgl.activeTexture(PGL.TEXTURE0);
+        pgl.bindTexture(PGL.TEXTURE_2D, glTexID);
+        pgl.texImage2D(PGL.TEXTURE_2D, 0, PGL.RGBA, TEX_WIDTH, TEX_HEIGHT, 0, PGL.RGBA, PGL.UNSIGNED_BYTE, texData);
+        
+        //pgl.texParameteri(PGL.TEXTURE_2D, PGL.TEXTURE_MAG_FILTER, PGL.NEAREST);
+        //pgl.texParameteri(PGL.TEXTURE_2D, PGL.TEXTURE_MIN_FILTER, PGL.NEAREST);
+        pgl.texParameteri(PGL.TEXTURE_2D, PGL.TEXTURE_MAG_FILTER, PGL.LINEAR);
+        pgl.texParameteri(PGL.TEXTURE_2D, PGL.TEXTURE_MIN_FILTER, PGL.LINEAR_MIPMAP_LINEAR);
+        //println("texImage2D time: "+str((System.nanoTime()-before)/1000)+"us");
+        endPGL();
+      }
+      
+      // The atlas is dynamic so this means new textures can be added to it on the fly.
+      // To do this, we need to neatly find a spot for each texture in the atlas.
+      
+      // There are 3 operations based on operations:
+      // 1.  Clear space tracker (CST); when used area < n, we save the next available space using cursors.
+      // 2.  Random pos: When used area >= n, pick random coordinates and check area is clear.
+      //     We can later do a bit of optimisation to tightly pack the image to the next image instead of having small bubbles.
+      // 2.5 (maybe) move to a different atlas/texture unit if we have enough slots and/or spare processing time.
+      // 3.  Linearly search; If the number of random positions we do > threshold, linearly search the entire atlas, top to bottom.
+      //     The least efficient method, but basically guarenteed way of finding a spot, if there's any spot large enough in the atlas.
+      
+      private int cursorTrackerX = 0;
+      private int cursorTrackerY = 0;
+      
+      // Expensive check space operation.
+      private boolean checkSpace(int startx, int starty, int w, int h) {
+        int endx = (startx+w)/32;
+        int endy = starty+h;
+        
+        // Create a line
+        int line[] = new int[TEX_WIDTH/32];
+        int l = startx+w;
+        for (int i = startx; i < l; i++) {
+          line[i/32] |= 1 << (i%32);
+        }
+        
+        // Definite nope.
+        if (endx > TEX_WIDTH/32 || endy > TEX_HEIGHT) {
+          return false;
+        }
+        
+        startx /= 32;
+        for (int y = starty; y < endy; y++) {
+          for (int x = startx; x < endx; x++) {
+            
+            if (stencilAlloc[y][x] == 0) {
+            }
+            else if ((stencilAlloc[y][x] & line[x]) == 0) {
+            }
+            else return false;
+          }
+        }
+        return true;
+      }
+      
+      // Fastest, not guarenteed to find a space
+      private int[] findSpaceUsingTracker(int w, int h) {
+        println("Using tracker");
+        //int ctx = cursorTrackerX-cursorTrackerX%32+32;
+        int ctx = cursorTrackerX;
+        int cty = cursorTrackerY;
+        
+        if (ctx+w > TEX_WIDTH) {
+          cty += h;
+          ctx = 0;
+        }
+        if (cty+h > TEX_HEIGHT) {
+          // There is no longer any space at that point.
+          return null;
+        }
+        
+        boolean found = checkSpace(ctx, cty, w, h);
+        int[] ret = {ctx, cty};
+        
+        if (found) {
+          ctx += w;
+          cursorTrackerX = ctx;
+          cursorTrackerY = cty;
+        }
+        // Space that we expected to be empty is taken.
+        else {
+          println("Tracker failed to find at ", ctx, cty, w, h);
+          return null;
+        }
+        
+        
+        println("Tracker found ", ctx, cty, w, h);
+        return ret;
+      }
+      
+      // Not the fastest but good for finding a space when densely populated.
+      private int[] findSpaceUsingRandom(int w, int h, int numAttempts) {
+        
+        // Select random spaces and see if there's a free space in that spot.
+        for (int i = 0; i < numAttempts; i++) {
+          int x = int(random(0, TEX_WIDTH-w));
+          int y = int(random(0, TEX_HEIGHT-h));
+          
+          if (checkSpace(x, y, w, h)) {
+            // TODO: find the closest next texture so we can tightly place the image next to it
+            // minimizing space bubbles.
+            int[] ret = {x, y};
+            println("Random found ", x, y, w, h, "after", i, "attempts");
+            return ret;
+          }
+        }
+        
+        // Give up after a certain number of attempts.
+        System.err.println("Random failed to find");
+        return null;
+      }
+      
+      private int[] findSpaceUsingRandom(int w, int h) {
+        // Idk let's try 128 for a start.
+        return findSpaceUsingRandom(w, h, 128);
+      }
+      
+      // Slowest, almost guarenteed to find a space.
+      // TODO: Implement (eventually), it's so slow that I don't
+      // see much point in doing it.
+      //private int[] findSpaceLinear() {
+      //  return new int[2];
+      //}
+      
+      // Returns 4 floats of the top-left and bottom-right uv coords  
+      public float[] addNow(PImage img, boolean grayScale) {
   
+        int w = img.width;
+        int h = img.height;
+        
+        // TODO: deal with large textures that won't fit into the atlas texture
+        
+        // We need to find a space.
+        // Use seperate algorithms in an attempt to find a space.
+        // 1. tracker
+        int[] pos = findSpaceUsingTracker(w, h);
+        // Attempt failed, try different algorithm.
+        if (pos == null) {
+          pos = findSpaceUsingRandom(w, h);
+          
+          // Too many attempts made.
+          if (pos == null) {
+            // For now we just abandom all hope yay.
+            return null;
+          }
+          else {
+            // Maybe there's a free space after the random space we found.
+            // Let's update the tracker variables!
+            cursorTrackerX = pos[0]+w;
+            cursorTrackerY = pos[1]+h;
+            if (cursorTrackerX > TEX_WIDTH) {
+              // idk place it under it doesnt matter.
+              cursorTrackerY += h;
+              cursorTrackerX = pos[0];
+            }
+          }
+        }
+        
+        // At this point we should have a free space pos.
+        
+        
+        // Write the texture data in the space we just found.
+        int endx = pos[0]+w;
+        int endy = pos[1]+h;
+        img.loadPixels();
+        int imx = 0;
+        int imy = 0;
+        texData.rewind();
+        for (int y = pos[1]; y < endy; y++) {
+          for (int x = pos[0]; x < endx; x++) {
+            int c = img.pixels[imy*img.width+imx];
+            int a = c >> 24 & 0xFF;
+            int r = c >> 16 & 0xFF;
+            int g = c >> 8 & 0xFF;
+            int b = c & 0xFF;
+            //a << 24 | b << 16 | g << 8 | r
+            // Ordering is: ABGR
+            // TODO: alpha seems to mess things up?
+            if (grayScale) {
+              
+              texData.put(TEX_WIDTH*y + x,  b << 24 | b << 16 | b << 8 | b);
+            }
+            else {
+              texData.put(TEX_WIDTH*y + x, ( a << 24 |  b << 16 | g << 8 | r));
+            }
+            // Update stencil allocation buffer too by the bit.
+            stencilAlloc[y][x/32] |= 1 << (x%32);
+            imx++;
+          }
+          imy++;
+          imx = 0;
+        }
+        texData.rewind();
+        
+        //int before = millis();
+        
+        //println(str(numTexturesCreated++)+"/"+str(units.length));
+        
+        //println("texImage2D time: "+str(millis()-before));
+        
+        //println(uv1x, uv1y, uv2x, uv2y);
+        
+        float[] ret = new float[4];
+        ret[0] = (float)pos[0]/float(TEX_WIDTH);
+        ret[1] = (float)pos[1]/float(TEX_HEIGHT);
+        ret[2] = (float)(pos[0]+w)/float(TEX_WIDTH);
+        ret[3] = (float)(pos[1]+h)/float(TEX_HEIGHT);
+        
+        return ret;
+      }
+      
+      void update() {
+        pgl = beginPGL();
+        pgl.activeTexture(PGL.TEXTURE0);
+        pgl.bindTexture(PGL.TEXTURE_2D, glTexID);
+        pgl.texImage2D(PGL.TEXTURE_2D, 0, PGL.RGBA, TEX_WIDTH, TEX_HEIGHT, 0, PGL.RGBA, PGL.UNSIGNED_BYTE, texData);
+        
+        pgl.generateMipmap(PGL.TEXTURE_2D);
+        endPGL();
+      }
+      
+      public void clear(UVImage img) {
+        int startx = int(img.uvxStart*float(TEX_WIDTH));
+        int starty = int(img.uvyStart*float(TEX_HEIGHT));
+        int endx = int(img.uvxEnd*float(TEX_WIDTH));
+        int endy = int(img.uvyEnd*float(TEX_HEIGHT));
+        
+        for (int y = starty; y < endy; y++) {
+          for (int x = startx; x < endx; x++) {
+            stencilAlloc[y][x/32] &= 0xFFFFFFFE << (x%32);
+          }
+        }
+      }
+      
+      // This is a little tricky because we can't track openGL calls and we want to
+      // prioritise performance, we need to call bind() each time we begin to use the
+      // atlas.
+      public void bind() {
+        shader("tex");
+        pgl = beginPGL();
+        pgl.texParameteri(PGL.TEXTURE_2D, PGL.TEXTURE_MAG_FILTER, PGL.NEAREST);
+        pgl.texParameteri(PGL.TEXTURE_2D, PGL.TEXTURE_MIN_FILTER, PGL.NEAREST);
+        pgl.activeTexture(PGL.TEXTURE0);
+        pgl.bindTexture(PGL.TEXTURE_2D, glTexID);
+        endPGL();
+      }
+      
+      public void image(UVImage img, float x, float y, float w, float h) {
+        pushMatrix();
+        translate(x, y);
+        scale(w, h);
+        //img.display();
+        
+        beginShape(QUADS);
+        noStroke();
+        vertex(0, 0, img.uvxStart, img.uvyStart);
+        vertex(1, 0, img.uvxEnd, img.uvyStart);
+        vertex(1, 1, img.uvxEnd, img.uvyEnd);
+        vertex(0, 1, img.uvxStart, img.uvyEnd);
+        endShape();
+        
+        popMatrix();
+      }
+      
+      public void image(UVImage img, float x, float y) {
+        image(img, x, y, img.width, img.height);
+      }
+    }
+    
+    
+    
+    
+    
+    
+    
+    
+    public void image(UVImage img, float x, float y, float w, float h) {
+      atlas.image(img, x, y, w, h);
+    }
+    
+    public void image(UVImage img, float x, float y) {
+      atlas.image(img, x, y);
+    }
+    
+    
+    int index = 0;
+    
+    UVImage createUVImage(PImage img) {
+      return createUVImage(img, false);
+    }
+    
+    UVImage createUVImage(PImage img, boolean monoChrome) {
+      float[] res = atlas.addNow(img, monoChrome);
+      
+      if (res != null) {
+        UVImage newImg = new UVImage(res);
+        newImg.width = img.width;
+        newImg.height = img.height;
+        return newImg;
+      }
+      // TODO: Error handling for when the atlas is full.
+      return null;
+    }
+    
+    void showStencilMap() {
+      loadPixels();
+      for (int y = 0; y < height; y++) {
+        for (int x = 0; x < width; x++) {
+          int atx = int((float(x)/width)*float(atlas.stencilAlloc[0].length));
+          int aty = int((float(y)/height)*float(atlas.stencilAlloc.length));
+          pixels[y*width+x] = (atlas.stencilAlloc[aty][atx]) == 0 ? color(0) : color(255);
+        }
+      }
+      updatePixels();
+    }
   }
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+  
+    
+
+  public class UVImage {
+    
+    public float uvxStart, uvyStart, uvxEnd, uvyEnd;
+    public float width = 0, height = 0;
+    private PShape shape;
+    
+    public UVImage(float[] uvs) {
+      uvxStart = uvs[0];
+      uvyStart = uvs[1];
+      uvxEnd   = uvs[2];
+      uvyEnd   = uvs[3];
+      
+      shape = createShape();
+      
+      shape.beginShape(QUADS);
+      //texture(grass);
+      shape.noStroke();
+      shape.vertex(0, 0, uvxStart, uvyStart);
+      shape.vertex(1, 0, uvxEnd, uvyStart);
+      shape.vertex(1, 1, uvxEnd, uvyEnd);
+      shape.vertex(0, 1, uvxStart, uvyEnd);
+      shape.endShape();
+    }
+    
+    public void display() {
+      shape(shape);
+    }
+  }
+  
+
+
+
+
+  
 
 
 
@@ -5094,9 +5552,11 @@ class Engine {
       display.fonts.put(name, app.createFont(path, 32));
     } else if (ext.equals("vlw")) {
       display.fonts.put(name, app.loadFont(path));
-    } else if (ext.equals("glsl")) {
+    } else if (ext.equals("glsl") || ext.equals("vert")) {
       display.loadShader(path);
-    } else if (ext.equals("wav") || ext.equals("ogg") || ext.equals("mp3")) {
+    } else if (ext.equals("frag")) {
+    }
+    else if (ext.equals("wav") || ext.equals("ogg") || ext.equals("mp3")) {
       sound.sounds.put(name, new SoundFile(app, path));
     } else {
       console.warn("Unknown file type "+ext+" for file "+name+", skipping.");
@@ -6182,7 +6642,6 @@ class Engine {
     
     if (display != null) display.timeMode = display.IDLE_TIME;
   }
-  
 }
 
 //*******************************************
