@@ -2,7 +2,7 @@ public class PixelRealmWithUI extends PixelRealm {
   
   private final String TEMPLATE_METADATA_FILENAME = "realmtemplate.json";
   
-  private PImage IMG_BORDER_TILE;
+  private UVImage IMG_BORDER_TILE;
   
   
   private String musicInfo = "";
@@ -74,7 +74,7 @@ public class PixelRealmWithUI extends PixelRealm {
     super(engine, dir);
     // Ugh. whatever.
     
-    IMG_BORDER_TILE = display.systemImages.get("menuborder");
+    IMG_BORDER_TILE = (UVImage)display.systemImages.get("menuborder");
 
     gui = new SpriteSystemPlaceholder(engine, engine.APPPATH+engine.PATH_SPRITES_ATTRIB+"gui/pixelrealm/");
     gui.suppressSpriteWarning = true;
@@ -148,8 +148,8 @@ public class PixelRealmWithUI extends PixelRealm {
         cache_backWi = (float)wi;
         cache_backHi = (float)hi;
         
-        cache_tilesWi = wi/IMG_BORDER_TILE.width;
-        cache_tilesHi = hi/IMG_BORDER_TILE.height;
+        cache_tilesWi = wi/(int)IMG_BORDER_TILE.width;
+        cache_tilesHi = hi/(int)IMG_BORDER_TILE.height;
         
         cached = true;
       }
@@ -159,20 +159,20 @@ public class PixelRealmWithUI extends PixelRealm {
       // Horizontal
       float x = cache_backX;
       float y = cache_backY;
-      float bottomOffset = float(cache_tilesHi*IMG_BORDER_TILE.height);
+      float bottomOffset = (cache_tilesHi*IMG_BORDER_TILE.height);
       for (int ix = 0; ix < cache_tilesWi; ix++) {
-        image(IMG_BORDER_TILE, x, y);
-        image(IMG_BORDER_TILE, x, y+bottomOffset);
+        display.image(IMG_BORDER_TILE, x, y);
+        display.image(IMG_BORDER_TILE, x, y+bottomOffset);
         x += IMG_BORDER_TILE.width;
       }
       
       // Vertical
       x = cache_backX;
       y = cache_backY;
-      float sideOffset = float(cache_tilesWi*IMG_BORDER_TILE.width);
+      float sideOffset = (cache_tilesWi*IMG_BORDER_TILE.width);
       for (int iy = 0; iy < cache_tilesHi+1; iy++) {
-        image(IMG_BORDER_TILE, x, y);
-        image(IMG_BORDER_TILE, x+sideOffset, y);
+        display.image(IMG_BORDER_TILE, x, y);
+        display.image(IMG_BORDER_TILE, x+sideOffset, y);
         y += IMG_BORDER_TILE.height;
       }
       
@@ -923,7 +923,7 @@ public class PixelRealmWithUI extends PixelRealm {
         }
   
         if (p.item != null && p.item.img != null) 
-          image(p.item.img.get(), x, y, 64, 64);
+          display.image(p.item.img.get(), x, y, 64, 64);
         invx += 70;
       }
       display.recordLogicTime();

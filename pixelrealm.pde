@@ -76,9 +76,9 @@ public class PixelRealm extends Screen {
   public final static String REALM_BGM_DEFAULT = "data/engine/music/pixelrealm_default_bgm.wav";
   
   // Defaults (Loaded on constructor)
-  private PImage REALM_GRASS_DEFAULT;
-  private PImage REALM_SKY_DEFAULT;
-  private PImage REALM_TREE_DEFAULT;
+  private UVImage REALM_GRASS_DEFAULT;
+  private LargeImage REALM_SKY_DEFAULT;
+  private UVImage REALM_TREE_DEFAULT;
   
   
   // --- Cache (sort of) ---
@@ -99,12 +99,13 @@ public class PixelRealm extends Screen {
   private boolean legacy_portalEasteregg = false;
   private float coinCounterBounce = 0.;
   
-  public PImage REALM_GRASS_DEFAULT_LEGACY;
-  public PImage REALM_SKY_DEFAULT_LEGACY;
-  public PImage REALM_TREE_DEFAULT_LEGACY;
+  public UVImage REALM_GRASS_DEFAULT_LEGACY;
+  public LargeImage REALM_SKY_DEFAULT_LEGACY;
+  public UVImage REALM_TREE_DEFAULT_LEGACY;
   public final static String REALM_BGM_DEFAULT_LEGACY = "data/engine/music/pixelrealm_default_bgm_legacy.wav";
   
   // --- Global state and working variables (doesn't require per-realm states) ---
+  private Canvas sceneCanvas;
   private PGraphics scene;
   private float runAcceleration = 0.;
   private float bob = 0.0;
@@ -117,7 +118,7 @@ public class PixelRealm extends Screen {
   public boolean movementPaused = false;
   private float lastPlacedPosX = 0;
   private float lastPlacedPosZ = 0;
-  private AtomicBoolean refreshRealm = new AtomicBoolean(false);
+  //private AtomicBoolean refreshRealm = new AtomicBoolean(false);
   protected float portalLight = 255.;
   protected boolean isInWater = false;
   protected boolean isUnderwater = false;
@@ -174,13 +175,13 @@ public class PixelRealm extends Screen {
     // --- Load default assets ---
     // TODO (eventually): load screen's assets, not everything from the loading screen (even tho that would be a minor optimisation)
     // (get rid of the . at the start cus hidden files are no good)
-    REALM_SKY_DEFAULT = display.systemImages.get("pixelrealm-sky");
-    REALM_TREE_DEFAULT = display.systemImages.get("pixelrealm-terrain_object");
-    REALM_GRASS_DEFAULT = display.systemImages.get("pixelrealm-grass");
+    REALM_SKY_DEFAULT = (LargeImage)display.systemImages.get("pixelrealm-sky");
+    REALM_TREE_DEFAULT = (UVImage)display.systemImages.get("pixelrealm-terrain_object");
+    REALM_GRASS_DEFAULT = (UVImage)display.systemImages.get("pixelrealm-grass");
     
-    REALM_SKY_DEFAULT_LEGACY = display.systemImages.get("pixelrealm-sky-legacy");
-    REALM_TREE_DEFAULT_LEGACY = display.systemImages.get("pixelrealm-terrain_object-legacy");
-    REALM_GRASS_DEFAULT_LEGACY = display.systemImages.get("pixelrealm-grass-legacy");
+    REALM_SKY_DEFAULT_LEGACY = (LargeImage)display.systemImages.get("pixelrealm-sky-legacy");
+    REALM_TREE_DEFAULT_LEGACY = (UVImage)display.systemImages.get("pixelrealm-terrain_object-legacy");
+    REALM_GRASS_DEFAULT_LEGACY = (UVImage)display.systemImages.get("pixelrealm-grass-legacy");
   
     String[] COINS = { "coin_0", "coin_1", "coin_2", "coin_3", "coin_4", "coin_5"};;
     IMG_COIN = new RealmTexture(COINS);
@@ -191,8 +192,9 @@ public class PixelRealm extends Screen {
     sound.loopSound("underwater");
     
     // --- Create graphics canvas ---
+    sceneCanvas = new Canvas((int(WIDTH/DISPLAY_SCALE)), int(this.height/DISPLAY_SCALE), P3D);
     // Disable texture filtering
-    scene = createGraphics((int(WIDTH/DISPLAY_SCALE)), int(this.height/DISPLAY_SCALE), P3D);
+    scene = sceneCanvas.graphics;
     ((PGraphicsOpenGL)scene).textureSampling(2);        
     scene.hint(DISABLE_OPENGL_ERRORS);
     
@@ -237,19 +239,19 @@ public class PixelRealm extends Screen {
   
   // Classes we need
   class RealmTexture {
-    private PImage singleImg = null;
-    private PImage[] aniImg = null;
+    private FastImage singleImg = null;
+    private FastImage[] aniImg = null;
     private final static float ANIMATION_INTERVAL = 10.;
     public float width = 0;
     public float height = 0;
     
-    public RealmTexture(PImage img) {
+    public RealmTexture(FastImage img) {
       set(img);
     }
-    public void set(PImage img) {
+    public void set(FastImage img) {
       if (img == null) {
         console.bugWarn("set: passing a null image");
-        singleImg = display.systemImages.get("white");
+        singleImg = (UVImage)display.systemImages.get("white");
         width = singleImg.width;
         height = singleImg.height;
         return;
@@ -259,13 +261,13 @@ public class PixelRealm extends Screen {
       width = singleImg.width;
       height = singleImg.height;
     }
-    public RealmTexture(PImage[] imgs) {
+    public RealmTexture(FastImage[] imgs) {
       set(imgs);
     }
-    public void set(PImage[] imgs) {
+    public void set(FastImage[] imgs) {
       if (imgs.length == 0) {
         console.bugWarn("set PImage[]: passing an empty list");
-        singleImg = display.systemImages.get("white");
+        singleImg = (UVImage)display.systemImages.get("white");
         width = singleImg.width;
         height = singleImg.height;
         return;
@@ -277,21 +279,21 @@ public class PixelRealm extends Screen {
         return;
       }
       singleImg = null;
-      aniImg = new PImage[imgs.length];
+      aniImg = new FastImage[imgs.length];
       int i = 0;
-      for (PImage p : imgs) {
+      for (FastImage p : imgs) {
         aniImg[i++] = p;
       }
       width = aniImg[0].width;
       height = aniImg[0].height;
     }
-    public RealmTexture(ArrayList<PImage> imgs) {
+    public RealmTexture(ArrayList<FastImage> imgs) {
       set(imgs);
     }
-    public void set(ArrayList<PImage> imgs) {
+    public void set(ArrayList<FastImage> imgs) {
       if (imgs.size() == 0) {
         console.bugWarn("set ArrayList: passing an empty list");
-        singleImg = display.systemImages.get("white");
+        singleImg = (UVImage)display.systemImages.get("white");
         return;
       }
       else if (imgs.size() == 1) {
@@ -301,9 +303,9 @@ public class PixelRealm extends Screen {
         return;
       }
       singleImg = null;
-      aniImg = new PImage[imgs.size()];
+      aniImg = new FastImage[imgs.size()];
       int i = 0;
-      for (PImage p : imgs) {
+      for (FastImage p : imgs) {
         aniImg[i++] = p;
       }
       width = aniImg[0].width;
@@ -315,17 +317,17 @@ public class PixelRealm extends Screen {
     public void set(String[] imgs) {
       if (imgs.length == 0) {
         console.bugWarn("set String[]: passing an empty list");
-        singleImg = display.systemImages.get("white");
+        singleImg = (UVImage)display.systemImages.get("white");
         return;
       }
       else if (imgs.length == 1) {
-        singleImg = display.systemImages.get(imgs[0]);
+        singleImg = (UVImage)display.systemImages.get(imgs[0]);
         width = singleImg.width;
         height = singleImg.height;
         return;
       }
       singleImg = null;
-      aniImg = new PImage[imgs.length];
+      aniImg = new UVImage[imgs.length];
       int i = 0;
       for (String s : imgs) {
         aniImg[i++] = display.systemImages.get(s);
@@ -339,7 +341,7 @@ public class PixelRealm extends Screen {
       singleImg = display.systemImages.get(imgName);
     }
     
-    public PImage get(int index) {
+    public FastImage get(int index) {
       if (singleImg != null) {
         width = singleImg.width;
         height = singleImg.height;
@@ -352,16 +354,16 @@ public class PixelRealm extends Screen {
       }
     }
     
-    public PImage get() {
+    public FastImage get() {
       return this.get(int(animationTick/ANIMATION_INTERVAL));
     }
     
-    public PImage getRandom() {
+    public FastImage getRandom() {
       return this.get(int(app.random(0., aniImg.length)));
     }
     
-    public PImage getRandom(float seed) {
-      PImage p;
+    public FastImage getRandom(float seed) {
+      FastImage p;
       if (aniImg != null) {
         p = this.get(int( engine.noise(seed) * float(aniImg.length) * 3.)%aniImg.length);
       }
@@ -1410,10 +1412,12 @@ public class PixelRealm extends Screen {
       private void createPShape() {
           scene.textureWrap(REPEAT);
           pshapeChunk = createShape();
-          pshapeChunk.beginShape(QUAD);
+          pshapeChunk.beginShape(QUADS);
           pshapeChunk.textureMode(NORMAL);
           // TODO: add code ready for custom tile textures.
-          pshapeChunk.texture(img_grass.get());
+          //pshapeChunk.texture(img_grass.get());
+          
+          UVImage grassuv = (UVImage)img_grass.get();
           
           for (int y = 0; y < CHUNK_SIZE; y++) {
             for (int x = 0; x < CHUNK_SIZE; x++) {
@@ -1430,10 +1434,10 @@ public class PixelRealm extends Screen {
                 //  }
                 //}
                 
-                pshapeChunk.vertex(v[0].x, v[0].y, v[0].z, 0, 0);                                    
-                pshapeChunk.vertex(v[1].x, v[1].y, v[1].z, 1.0, 0);  
-                pshapeChunk.vertex(v[2].x, v[2].y, v[2].z, 1.0, 1.0);  
-                pshapeChunk.vertex(v[3].x, v[3].y, v[3].z, 0, 1.0);
+                pshapeChunk.vertex(v[0].x, v[0].y, v[0].z, grassuv.startx, grassuv.starty);                                    
+                pshapeChunk.vertex(v[1].x, v[1].y, v[1].z, grassuv.endx, grassuv.starty);  
+                pshapeChunk.vertex(v[2].x, v[2].y, v[2].z, grassuv.endx, grassuv.endy);  
+                pshapeChunk.vertex(v[3].x, v[3].y, v[3].z, grassuv.startx, grassuv.endy);
             }
           }
               
@@ -1498,13 +1502,15 @@ public class PixelRealm extends Screen {
           scene.beginShape(QUAD);
           scene.textureMode(NORMAL);
           // TODO: add code ready for custom tile textures.
-          scene.texture(img_grass.get());
+          //scene.texture(img_grass.get());
+          UVImage uv = (UVImage)img_grass.get();
+          
           for (int y = 0; y < CHUNK_SIZE; y++) {
             for (int x = 0; x < CHUNK_SIZE; x++) {
-              scene.vertex(temp[y][x].x,     temp[y][x].y,     temp[y][x].z, 0, 0);                                    
-              scene.vertex(temp[y][x+1].x,   temp[y][x+1].y,   temp[y][x+1].z, 1.0, 0);  
-              scene.vertex(temp[y+1][x+1].x, temp[y+1][x+1].y, temp[y+1][x+1].z, 1.0, 1.0);  
-              scene.vertex(temp[y+1][x].x,   temp[y+1][x].y,   temp[y+1][x].z, 0, 1.0);
+              scene.vertex(temp[y][x].x,     temp[y][x].y,     temp[y][x].z, uv.startx, uv.starty);                                    
+              scene.vertex(temp[y][x+1].x,   temp[y][x+1].y,   temp[y][x+1].z, uv.endx, uv.starty);  
+              scene.vertex(temp[y+1][x+1].x, temp[y+1][x+1].y, temp[y+1][x+1].z, uv.endx, uv.endy);  
+              scene.vertex(temp[y+1][x].x,   temp[y+1][x].y,   temp[y+1][x].z, uv.startx, uv.endy);
             }
           }
           scene.endShape();
@@ -1651,11 +1657,11 @@ public class PixelRealm extends Screen {
         readjustSize();
         
         if (versionCompatibility == 1) {
-          displayQuad(img.getRandom(randSeed), x1, y1, z1, x2, y1+hi, z2);
+          displayQuad((UVImage)img.getRandom(randSeed), x1, y1, z1, x2, y1+hi, z2);
         }
         if (versionCompatibility == 2) {
           useFadeShader();
-          displayQuad(img.get(imgIndex), x1, y1, z1, x2, y1+hi, z2);
+          displayQuad((UVImage)img.get(imgIndex), x1, y1, z1, x2, y1+hi, z2);
         }
       }
       
@@ -1809,13 +1815,15 @@ public class PixelRealm extends Screen {
             }
             else {
               incrementMemUsage(size);
-              if (file.getExt(path).equals("gif")) {
-                Gif newGif = new Gif(app, path);
-                newGif.loop();
-                img = new RealmTexture(newGif);
-              }
+              // Gif is not a thing for now
+              //if (file.getExt(path).equals("gif")) {
+              //  Gif newGif = new Gif(app, path);
+              //  newGif.loop();
+              //  img = new RealmTexture(newGif);
+              //}
               // TODO: idk error check here
-              else {
+              //else
+              {
                 // TODO: this is NOT thread-safe here!
                 PImage im = engine.tryLoadImageCache(path, new Runnable() {
                   public void run() {
@@ -1825,7 +1833,15 @@ public class PixelRealm extends Screen {
                   }
                 }
                 );
-                img = new RealmTexture(im);
+                UVImage uvim = display.createUVImage(im);
+                if (uvim != null) {
+                  img = new RealmTexture(uvim);
+                }
+                else {
+                  console.warn("Failed to allocate uvImage");
+                }
+                
+                
               }
             }
             
@@ -1997,7 +2013,7 @@ public class PixelRealm extends Screen {
                 if (cacheFlag) {
                   engine.setCachingShrink(MAX_CACHE_SIZE, 0);
                   //this.img = engine.experimentalScaleDown(img);
-                  engine.saveCacheImage(this.dir, img.get());
+                  //engine.saveCacheImage(this.dir, img.get());
                   cacheFlag = true;
                 }
   
@@ -2021,7 +2037,7 @@ public class PixelRealm extends Screen {
               float x2 = x - sin_d;
               float z2 = z - cos_d;
   
-              displayQuad(this.img.get(), x1, y1, z1, x2, y1+hi, z2);
+              displayQuad((UVImage)this.img.get(), x1, y1, z1, x2, y1+hi, z2);
             }
           }
         }
@@ -2258,13 +2274,15 @@ public class PixelRealm extends Screen {
           display.recordRendererTime();
           
           usingFadeShader = false;
-          display.shader(scene, "portal_plus", "u_resolution", (float)scene.width, (float)scene.height, "u_time", display.getTimeSeconds(), "u_dir", -direction/(PI*2));
+          //display.shader(scene, "portal_plus", "u_time", display.getTimeSeconds(), "u_dir", -direction/(PI*2));
+          
+          //display.shader(scene, "portal_plus", "u_resolution", (float)scene.width, (float)scene.height, "u_time", display.getTimeSeconds(), "u_dir", -direction/(PI*2));
           displayBillboard();
           if (versionCompatibility == 2) {
             useFadeShader();
           }
           else if (versionCompatibility == 1) {
-            scene.resetShader();
+            //display.resetShader(scene);
           }
           
   
@@ -2479,14 +2497,14 @@ public class PixelRealm extends Screen {
           float x2 = x - sin_d;
           float z2 = z - cos_d;
   
-          displayQuad(this.img.get(), x1, y1, z1, x2, y1+hi, z2);
+          displayQuad((UVImage)this.img.get(), x1, y1, z1, x2, y1+hi, z2);
   
           // Reset tint
           this.tint = color(255);
         }
       }
   
-      protected void displayQuad(PImage im, float x1, float y1, float z1, float x2, float y2, float z2) {
+      protected void displayQuad(UVImage im, float x1, float y1, float z1, float x2, float y2, float z2) {
         //boolean selected = lineLine(x1,z1,x2,z2,beamX1,beamZ1,beamX2,beamZ2);
         //color selectedColor = color(255);
         //if (hovering()) {
@@ -2540,12 +2558,12 @@ public class PixelRealm extends Screen {
           if (!dontRender) {
             scene.textureMode(NORMAL);
             scene.textureWrap(REPEAT);
-            scene.texture(im);
+            //scene.texture(im);
           }
-          scene.vertex(x1, y1, z1, 0, 0);           // Bottom left
-          scene.vertex(x2, y1, z2, 0.995, 0);    // Bottom right
-          scene.vertex(x2, y2, z2, 0.995, 0.995); // Top right
-          scene.vertex(x1, y2, z1, 0, 0.995);  // Top left
+          scene.vertex(x1, y1, z1, im.startx, im.starty);           // Bottom left
+          scene.vertex(x2, y1, z2, im.endx, im.starty);    // Bottom right
+          scene.vertex(x2, y2, z2, im.endx, im.endy); // Top right
+          scene.vertex(x1, y2, z1, im.startx, im.endy);  // Top left
           if (useFinder) scene.vertex(x1, y1, z1, 0, 0);  // Extra vertex to render a complete square if finder is enabled.
           // Not necessary if just rendering the quad without the line.
           scene.noTint();
@@ -2595,7 +2613,8 @@ public class PixelRealm extends Screen {
       return getplayerYOnQuad(pv1, pv2, pv3, pv4, x, z);
     }
     
-    // Similar to plantDown but guarentees than the object in question will not be levitating on a sloped surface.
+    // Similar to plantDown but guarentees that the object in question will not be levitating on a sloped surface.
+    @SuppressWarnings("unused")
     private float plantDown(float x, float z) {
       if (terrain == null) {
         //console.bugWarn("onSurface() needs the terrain to be loaded before it's called!");
@@ -3449,10 +3468,19 @@ public class PixelRealm extends Screen {
     public Object getRealmFile(Object defaultFile, String... paths) {
       for (String path : paths) {
         if (file.exists(path)) {
-          if (file.getExt(path).equals("png") || file.getExt(path).equals("gif")) {
-            incrementMemUsage(file.getImageUncompressedSize(path));
-            return loadImage(path);
+          // Really botch'd fix here.
+          // Check if the name starts with .pixelrealm-sky and if so load the largeImage.
+          console.log((file.getFilename(path).substring(0, REALM_SKY.length())));
+          if ((file.getFilename(path).substring(0, REALM_SKY.length())).equals(REALM_SKY) 
+          && (file.getExt(path).equals("png") || file.getExt(path).equals("gif"))) {
+            return display.createLargeImage(loadImage(path));
           }
+          // Default: UVImage (small)
+          else if (file.getExt(path).equals("png") || file.getExt(path).equals("gif")) {
+            incrementMemUsage(file.getImageUncompressedSize(path));
+            return display.createUVImage(loadImage(path));
+          }
+          // Sounds
           else if (file.getExt(path).equals("wav"))
             return new SoundFile(engine.app, stateDirectory+path);
         }
@@ -3471,9 +3499,9 @@ public class PixelRealm extends Screen {
       // Portal light to make it look like a transition effect
       //portalLight = 255;
       
-      PImage DEFAULT_GRASS = REALM_GRASS_DEFAULT;
-      PImage DEFAULT_TREE = REALM_TREE_DEFAULT;
-      PImage DEFAULT_SKY = REALM_SKY_DEFAULT;
+      UVImage DEFAULT_GRASS = REALM_GRASS_DEFAULT;
+      UVImage DEFAULT_TREE = REALM_TREE_DEFAULT;
+      LargeImage DEFAULT_SKY = REALM_SKY_DEFAULT;
       String DEFAULT_BGM = REALM_BGM_DEFAULT;
       
       
@@ -3488,13 +3516,13 @@ public class PixelRealm extends Screen {
       
       
       // TODO: read any image format (png, gif, etc)
-      img_grass = new RealmTexture((PImage)getRealmFile(DEFAULT_GRASS, dir+REALM_GRASS+".png"));
+      img_grass = new RealmTexture((UVImage)getRealmFile(DEFAULT_GRASS, dir+REALM_GRASS+".png"));
       
       /// here we search for the terrain objects textures from the dir.
-      ArrayList<PImage> imgs = new ArrayList<PImage>();
+      ArrayList<FastImage> imgs = new ArrayList<FastImage>();
   
       if (file.exists(DEFAULT_SKY+".gif")) {
-        img_sky = new RealmTexture(((Gif)getRealmFile(DEFAULT_SKY, dir+REALM_SKY+".gif")).getPImages());
+        //img_sky = new RealmTexture(((Gif)getRealmFile(DEFAULT_SKY, dir+REALM_SKY+".gif")).getPImages());
         //if (img_sky.get().width != 1500)
         //  console.warn("Width of "+REALM_SKY+" is "+str(img_sky.get().width)+"px, should be 1500px for best visual results!");
       }
@@ -3502,12 +3530,12 @@ public class PixelRealm extends Screen {
         
         // Get either a sky called sky-1 or just sky
         int i = 1;
-        PImage sky = (PImage)getRealmFile(DEFAULT_SKY, dir+REALM_SKY+".png", dir+REALM_SKY+"-1.png");
+        LargeImage sky = (LargeImage)getRealmFile(DEFAULT_SKY, dir+REALM_SKY+".png", dir+REALM_SKY+"-1.png");
         imgs.add(sky);
         
         // If we find a sky, keep looking for sky-2, sky-3 etc
         while (sky != DEFAULT_SKY && i <= 9) {
-          sky = (PImage)getRealmFile(DEFAULT_SKY, dir+REALM_SKY+"-"+str(i+1)+".png");
+          sky = (LargeImage)getRealmFile(DEFAULT_SKY, dir+REALM_SKY+"-"+str(i+1)+".png");
           if (sky != DEFAULT_SKY) {
             //if (sky.width != 1500)
             //  console.warn("Width of "+REALM_SKY+" is "+str(sky.width)+"px, should be 1500px for best visual results!");
@@ -3520,17 +3548,17 @@ public class PixelRealm extends Screen {
       }
       
       
-      imgs = new ArrayList<PImage>();
+      imgs = new ArrayList<FastImage>();
   
       // Try to find the first terrain object texture, it will return default if not found
-      PImage terrainobj = (PImage)getRealmFile(DEFAULT_TREE, dir+REALM_TREE_LEGACY+"-1.png", dir+REALM_TREE+"-1.png", dir+REALM_TREE+".png");
+      UVImage terrainobj = (UVImage)getRealmFile(DEFAULT_TREE, dir+REALM_TREE_LEGACY+"-1.png", dir+REALM_TREE+"-1.png", dir+REALM_TREE+".png");
       imgs.add(terrainobj);
   
       int i = 1;
       // Run this loop only if the terrain_objects files exist and only for how many pixelrealm-terrain_objects
       // there are in the folder.
       while (terrainobj != DEFAULT_TREE && i <= 9) {
-        terrainobj = (PImage)getRealmFile(DEFAULT_TREE, dir+REALM_TREE_LEGACY+"-"+str(i+1)+".png", dir+REALM_TREE+"-"+str(i+1)+".png");
+        terrainobj = (UVImage)getRealmFile(DEFAULT_TREE, dir+REALM_TREE_LEGACY+"-"+str(i+1)+".png", dir+REALM_TREE+"-"+str(i+1)+".png");
         if (terrainobj != DEFAULT_TREE) {
           imgs.add(terrainobj);
         }
@@ -3904,7 +3932,7 @@ public class PixelRealm extends Screen {
             scene.beginShape();
             scene.textureMode(NORMAL);
             scene.textureWrap(REPEAT);
-            scene.texture(img_grass.get());
+            //scene.texture(img_grass.get());
             display.recordLogicTime();
   
   
@@ -3917,6 +3945,7 @@ public class PixelRealm extends Screen {
             PVector v3 = calcTile(tilex, tilez);          // Right, bottom
             PVector v4 = calcTile(tilex-1., tilez);          // Left, bottom
             
+            //UVImage uv = img_grass.get();
             
             display.recordRendererTime();
             scene.vertex(v1.x, v1.y, v1.z, 0, 0);                                    
@@ -3971,7 +4000,7 @@ public class PixelRealm extends Screen {
     private void useFadeShader() {
       if (!usingFadeShader) {
         display.recordRendererTime();
-        display.shader(scene, "unlit_fog", "fadeStart", terrain.BEGIN_FADE, "fadeLength", terrain.FADE_LENGTH);
+        //display.shader(scene, "unlit_fog", "fadeStart", terrain.BEGIN_FADE, "fadeLength", terrain.FADE_LENGTH);
         display.recordLogicTime();
         usingFadeShader = true;
       }
@@ -4037,7 +4066,11 @@ public class PixelRealm extends Screen {
       scene.beginShape(QUAD);
       scene.textureMode(NORMAL);
       scene.textureWrap(REPEAT);
-      scene.texture(display.systemImages.get("water"));
+      
+      
+      // TODO: Water
+      
+      //(UVImage)display.systemImages.get("water");
       
       
       float terrainchunkWiHi = terrain.getGroundSize()*float(CHUNK_SIZE);
@@ -4099,23 +4132,19 @@ public class PixelRealm extends Screen {
       float skyViewportLeft = skyDelta;
       float skyViewportRight = skyDelta+sky_fov;
   
-      scene.beginShape();
       scene.textureMode(NORMAL);
       scene.textureWrap(REPEAT);
-      scene.texture(img_sky.get());
       
+      LargeImage sky = (LargeImage)img_sky.get();
       
-      scene.vertex(0, 0, skyViewportLeft, 0.);
-      scene.vertex(scene.width, 0, skyViewportRight, 0.);
-      scene.vertex(scene.width, img_sky.get().height, skyViewportRight, 1.);
-      scene.vertex(0, img_sky.get().height, skyViewportLeft, 1.);
+      // Top part
+      sky.setUV(skyViewportLeft, 0., skyViewportRight, 1.0);
+      display.image(sky, 0, 0, scene.width, img_sky.get().height);
       
-      scene.vertex(0, img_sky.get().height, skyViewportLeft, 1.);
-      scene.vertex(scene.width, img_sky.get().height, skyViewportRight, 1.);
-      scene.vertex(scene.width, height, skyViewportRight, 0.9999);
-      scene.vertex(0,   height, skyViewportLeft, 0.9999);
+      // Bottom part that just stretches til it reaches the bottom of the screen, for sky textures that aren't scaled properly.
+      sky.setUV(skyViewportLeft, 0.9999, skyViewportRight, 1.0);
+      display.image(sky, 0, img_sky.get().height, scene.width, height);
       
-      scene.endShape();
       display.recordLogicTime();
     }
     
@@ -4323,7 +4352,7 @@ public class PixelRealm extends Screen {
         scene.beginShape();
         scene.textureMode(NORMAL);
         scene.textureWrap(REPEAT);
-        scene.texture(display.systemImages.get("water"));
+        //scene.texture(display.systemImages.get("water"));
         scene.tint(255, 210);
         
         
@@ -4357,7 +4386,7 @@ public class PixelRealm extends Screen {
       if (currRealm.collectedCoins > 0 && currRealm.collectedCoins < 100) {
         scene.textFont(engine.DEFAULT_FONT, 16);
         float y = 8.-coinCounterBounce*6.;
-        scene.image(IMG_COIN.get(), 10, y, 16, 17);
+        display.image((UVImage)IMG_COIN.get(), 10, y, 16, 17);
         scene.textAlign(LEFT, TOP);
         scene.fill(255);
         scene.text("x "+str(collectedCoins), 30, y);
@@ -4693,18 +4722,20 @@ public class PixelRealm extends Screen {
     runMultithreadedLoader();
     
     //This function assumes you have not called portal.beginDraw().
-    if (legacy_portalEasteregg) evolvingGatewayRenderPortal();
+    // Gone :(
+    //if (legacy_portalEasteregg) evolvingGatewayRenderPortal();
     
     // Do all non-display logic (for stuff that is displayed)
     // Stuff that is currently on-screen is stored in ordering list.
     currRealm.runPlayer();
     currRealm.runPRObjects();
-    scene.resetShader();
     usingFadeShader = false;
     
     // Now begin all the drawing!
     display.recordRendererTime();
     scene.beginDraw();
+    display.resetShader(scene);
+    display.usePGraphics(scene);
     display.recordLogicTime();
     currRealm.renderSky();
     
@@ -4730,9 +4761,11 @@ public class PixelRealm extends Screen {
       display.recordLogicTime();
     }
 
+    // From this point on we use our cool FastImage rendering system.
+    display.bind();
     currRealm.renderTerrain();
     currRealm.renderPRObjects(); 
-    scene.resetShader();
+    display.resetShader(scene);
     
     // Pop the camera.
     scene.popMatrix();
@@ -4745,6 +4778,7 @@ public class PixelRealm extends Screen {
     
     display.recordRendererTime();
     scene.endDraw();
+    display.usePGraphics(g);
     float wi = scene.width*DISPLAY_SCALE;
     float hi = this.height;
     image(scene, (WIDTH/2)-wi/2, (HEIGHT/2)-hi/2, wi, hi);
@@ -4999,6 +5033,7 @@ public class PixelRealm extends Screen {
       return args;
     }
   }
+}
   
   
   
@@ -5007,17 +5042,18 @@ public class PixelRealm extends Screen {
   
   
   // Easter egg code
-  final int portPartNum = 90;
-  float portPartX[] = new float[portPartNum];
-  float portPartY[] = new float[portPartNum];
-  float portPartVX[] = new float[portPartNum];
-  float portPartVY[] = new float[portPartNum];
-  float portPartTick[] = new float[portPartNum];
-  void setupLegacyPortal() {legacy_portal = createGraphics(128, 128+96, P2D); ((PGraphicsOpenGL)legacy_portal).textureSampling(2); legacy_portal.hint(DISABLE_OPENGL_ERRORS);for (int i = 0; i < portPartNum; i++) {portPartX[i] = -999;}}
-  public void evolvingGatewayRenderPortal() {     legacy_portal.beginDraw(); legacy_portal.background(color(0, 0, 255), 0); legacy_portal.blendMode(ADD);     float w = 48, h = 48;     int n = 1;     switch (engine.power.getPowerMode()) {     case HIGH:       n = 1;       break;     case NORMAL:       n = 2;       break;     case SLEEPY:       n = 4;       break;     case MINIMAL:       n = 1;       break;     }      for (int j = 0; j < n; j++) {       if (int(random(0, 2)) == 0) {         int i = 0;
-boolean finding = true;         while (finding) {           if (int(portPartX[i]) == -999) {             finding = false;             portPartVX[i] = random(-0.5, 0.5);             portPartVY[i] = random(-0.2, 0.2);              portPartX[i] = legacy_portal.width/2;             portPartY[i] = random(h, legacy_portal.height-60);              portPartTick[i] = 255;
-  }            i++;           if (i >= portPartNum) {             finding = false;           }         }       }               for (int i = 0; i < portPartNum; i++) {         if (int(portPartX[i]) != -999) {           portPartVX[i] *= 0.99;           portPartVY[i] *= 0.99;            portPartX[i] += portPartVX[i];           portPartY[i] += portPartVY[i];              portPartTick[i] -= 2;            if (portPartTick[i] <= 0) {             portPartX[i] = -999;           }    }       }     }      for (int i = 0; i < portPartNum; i++) {       if (int(portPartX[i]) != -999) {         legacy_portal.tint(color(128, 128, 255), portPartTick[i]);            legacy_portal.image(display.systemImages.get("glow"), portPartX[i]-(w/2), portPartY[i]+(h/2), w, h);       }     }      legacy_portal.blendMode(NORMAL);     legacy_portal.endDraw();   }
-}
+  // Gone :(
+//  final int portPartNum = 90;
+//  float portPartX[] = new float[portPartNum];
+//  float portPartY[] = new float[portPartNum];
+//  float portPartVX[] = new float[portPartNum];
+//  float portPartVY[] = new float[portPartNum];
+//  float portPartTick[] = new float[portPartNum];
+//  void setupLegacyPortal() {legacy_portal = createGraphics(128, 128+96, P2D); ((PGraphicsOpenGL)legacy_portal).textureSampling(2); legacy_portal.hint(DISABLE_OPENGL_ERRORS);for (int i = 0; i < portPartNum; i++) {portPartX[i] = -999;}}
+//  public void evolvingGatewayRenderPortal() {     legacy_portal.beginDraw(); legacy_portal.background(color(0, 0, 255), 0); legacy_portal.blendMode(ADD);     float w = 48, h = 48;     int n = 1;     switch (engine.power.getPowerMode()) {     case HIGH:       n = 1;       break;     case NORMAL:       n = 2;       break;     case SLEEPY:       n = 4;       break;     case MINIMAL:       n = 1;       break;     }      for (int j = 0; j < n; j++) {       if (int(random(0, 2)) == 0) {         int i = 0;
+//boolean finding = true;         while (finding) {           if (int(portPartX[i]) == -999) {             finding = false;             portPartVX[i] = random(-0.5, 0.5);             portPartVY[i] = random(-0.2, 0.2);              portPartX[i] = legacy_portal.width/2;             portPartY[i] = random(h, legacy_portal.height-60);              portPartTick[i] = 255;
+//  }            i++;           if (i >= portPartNum) {             finding = false;           }         }       }               for (int i = 0; i < portPartNum; i++) {         if (int(portPartX[i]) != -999) {           portPartVX[i] *= 0.99;           portPartVY[i] *= 0.99;            portPartX[i] += portPartVX[i];           portPartY[i] += portPartVY[i];              portPartTick[i] -= 2;            if (portPartTick[i] <= 0) {             portPartX[i] = -999;           }    }       }     }      for (int i = 0; i < portPartNum; i++) {       if (int(portPartX[i]) != -999) {         legacy_portal.tint(color(128, 128, 255), portPartTick[i]);            legacy_portal.image(display.systemImages.get("glow"), portPartX[i]-(w/2), portPartY[i]+(h/2), w, h);       }     }      legacy_portal.blendMode(NORMAL);     legacy_portal.endDraw();   }
+//}
 
 
 

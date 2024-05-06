@@ -1,9 +1,0 @@
-[Desktop Entry]
-Name=Timeway
-Comment=Explore your files in the Pixel Realm
-Keywords=Ghidra;ghidra
-Exec=/home/neo/apps/Timeway/Timeway
-Icon=/home/neo/apps/Timeway/data/engine/img/icon.png
-Terminal=false
-Type=Application
-Categories=Utility;Game;Productivity;Explorer

@@ -991,8 +991,9 @@ class Engine {
     // Display system
     private float displayScale = 2.0;
     public PImage errorImg;
+    public UVImage errorUV;
     public PShader errShader;
-    private HashMap<String, PImage> systemImages = new HashMap<String, PImage>();;
+    private HashMap<String, FastImage> systemImages = new HashMap<String, FastImage>();;
     public HashMap<String, PFont> fonts = new HashMap<String, PFont>();;
     private HashMap<String, PShaderEntry> shaders = new HashMap<String, PShaderEntry>();;
     public  float WIDTH = 0, HEIGHT = 0;
@@ -1105,6 +1106,9 @@ class Engine {
         WIDTH = width/displayScale;
         HEIGHT = height/displayScale;
         console.info("init: width/height set to "+str(WIDTH)+", "+str(HEIGHT));
+        
+        currentPG = g;
+        stencilMapDisplay = new Canvas(256, 256, JAVA2D);
     
         generateErrorImg();
         generateErrorShader();
@@ -1127,6 +1131,8 @@ class Engine {
         errorImg.pixels[i] = color(255, 0, 255);
       }
       errorImg.updatePixels();
+      
+      errorUV = createUVImage(errorImg);
     }
     
     private void generateErrorShader() {
@@ -1178,7 +1184,7 @@ class Engine {
       if (ext.equals("vert")) {
         String fragPath = file.getDir(path)+"/"+name+".frag";
         if (file.exists(fragPath)) {
-          PShader s = app.loadShader(path, fragPath);
+          PShader s = app.loadShader(fragPath, path);
           PShaderEntry shaderentry = new PShaderEntry(s, path);
           shaders.put(name, shaderentry);
           return;
@@ -1194,17 +1200,21 @@ class Engine {
       shaders.put(name, shaderentry);
     }
   
-    public PImage getImg(String name) {
+    public FastImage getImg(String name) {
       if (systemImages.get(name) != null) {
         return systemImages.get(name);
       } else {
         console.warnOnce("Image "+name+" doesn't exist.");
-        return errorImg;
+        return errorUV;
       }
     }
   
-    public void defaultShader() {
+    public void resetShader() {
       app.resetShader();
+    }
+    
+    public void resetShader(PGraphics p) {
+      p.resetShader();
     }
     
     public void shader(String shaderName, Object... uniforms) {
@@ -1325,6 +1335,41 @@ class Engine {
       return sh;
     }
     
+    public void img(FastImage image, float x, float y, float w, float h) {
+      if (wireframe) {
+        recordRendererTime();
+        app.stroke(sin(selectBorderTime)*127+127, 100);
+        selectBorderTime += 0.1*getDelta();
+        app.strokeWeight(3);
+        app.noFill();
+        app.rect(x, y, w, h);
+        app.noStroke();
+      } else {
+        app.noStroke();
+      }
+      if (image == null) {
+        this.image(errorUV, x, y, w, h);
+        recordLogicTime();
+        console.warnOnce("Image listed as 'loaded' but image doesn't seem to exist.");
+        return;
+      }
+      if (image.width == -1 || image.height == -1) {
+        app.image(errorImg, x, y, w, h);
+        recordLogicTime();
+        console.warnOnce("Corrupted image.");
+        return;
+      }
+      // If image is loaded render.
+      if (image.width > 0 && image.height > 0) {
+        this.image(image, x, y, w, h);
+        
+        return;
+      } else {
+        app.noStroke();
+        return;
+      }
+    }
+    
     public void img(PImage image, float x, float y, float w, float h) {
       if (wireframe) {
         recordRendererTime();
@@ -1350,7 +1395,8 @@ class Engine {
         return;
       }
       // If image is loaded render.
-      if (image.width > 0 && image.height > 0) {app.image(image, x, y, w, h);
+      if (image.width > 0 && image.height > 0) {
+        app.image(image, x, y, w, h);
         
         return;
       } else {
@@ -1401,12 +1447,12 @@ class Engine {
     }
   
     public void img(String name, float x, float y) {
-      PImage image = systemImages.get(name);
+      FastImage image = systemImages.get(name);
       if (image != null) {
         img(systemImages.get(name), x, y, image.width, image.height);
       } else {
         recordRendererTime();
-        app.image(errorImg, x, y, errorImg.width, errorImg.height);
+        this.image(errorUV, x, y, errorImg.width, errorImg.height);
         recordLogicTime();
         console.warnOnce("Image "+name+" does not exist");
       }
@@ -1414,16 +1460,16 @@ class Engine {
   
   
     public void imgCentre(String name, float x, float y, float w, float h) {
-      PImage image = systemImages.get(name);
+      FastImage image = systemImages.get(name);
       if (image == null) {
-        img(errorImg, x-errorImg.width/2, y-errorImg.height/2, w, h);
+        img(errorUV, x-errorImg.width/2, y-errorImg.height/2, w, h);
       } else {
         img(image, x-w/2, y-h/2, w, h);
       }
     }
   
     public void imgCentre(String name, float x, float y) {
-      PImage image = systemImages.get(name);
+      FastImage image = systemImages.get(name);
       if (image == null) {
         img(errorImg, x-errorImg.width/2, y-errorImg.height/2, errorImg.width, errorImg.height);
       } else {
@@ -1538,29 +1584,61 @@ class Engine {
     //                      UVImage stuff
     ///////////////////////////////////////////////////////////////////////
     
-    public PShader atlasShader;
     public PGL pgl;
-    public DynamicTextureAtlas atlas;
+    private int currentBoundAtlas = 0;
+    private PGraphics currentPG;
     
-    public class DynamicTextureAtlas {
+    // idk 8 seems enough for now.
+    DynamicTextureAtlas[] atlases = new DynamicTextureAtlas[8];
+    
+    
+    
+    final static int UNLOCK_THRESHOLD = 9000000;
+    
+public class DynamicTextureAtlas {
       private int glTexID = 0;
       private IntBuffer texData;
       public int[][] stencilAlloc;
+      
+      // Keeps track of how many pixels have filled the atlas.
+      private int pixelsFill = 0;
+      
+      // Once a random allocation fails in this atlas,
+      // a new atlas will be used and this one will be marked as "locked"
+      // to prevent new textures being written to it until textures have been removed
+      // such that the pixelsFill < UNLOCK_THRESHOLD.
+      private boolean locked = false;
+      
+      private boolean needsUpdating = false;
       
       static final int TEX_WIDTH = 4096;
       static final int TEX_HEIGHT = 4096;
       
       public DynamicTextureAtlas() {
         init();
-        if (atlasShader == null) {
-          //atlasShader = display.shader("fabric");
-          atlasShader.init();
+      }
+      
+      // Returns whether or not its locked, and checks the pixel fill just
+      // to make sure if it can be unlocked.
+      public boolean unlocked() {
+        // If locked, check if enough textures have been removed since being locked.
+        if (locked) {
+          if (pixelsFill < UNLOCK_THRESHOLD) {
+            locked = false;
+            return true;
+          }
+          else {
+            return false;
+          }
         }
+        
+        // Not locked so return true;
+        return true;
       }
       
     
       void init() {
-        pgl = beginPGL();
+        pgl = currentPG.beginPGL();
         IntBuffer intBuffer = IntBuffer.allocate(1);
         pgl.genTextures(1, intBuffer);
         glTexID = intBuffer.get(0);
@@ -1592,7 +1670,7 @@ class Engine {
         pgl.texParameteri(PGL.TEXTURE_2D, PGL.TEXTURE_MAG_FILTER, PGL.LINEAR);
         pgl.texParameteri(PGL.TEXTURE_2D, PGL.TEXTURE_MIN_FILTER, PGL.LINEAR_MIPMAP_LINEAR);
         //println("texImage2D time: "+str((System.nanoTime()-before)/1000)+"us");
-        endPGL();
+        currentPG.endPGL();
       }
       
       // The atlas is dynamic so this means new textures can be added to it on the fly.
@@ -1608,6 +1686,7 @@ class Engine {
       
       private int cursorTrackerX = 0;
       private int cursorTrackerY = 0;
+      private int trackerMaxHeight = 0;
       
       // Expensive check space operation.
       private boolean checkSpace(int startx, int starty, int w, int h) {
@@ -1642,13 +1721,14 @@ class Engine {
       
       // Fastest, not guarenteed to find a space
       private int[] findSpaceUsingTracker(int w, int h) {
-        println("Using tracker");
+        console.info("findSpaceUsingTracker: Using tracker");
         //int ctx = cursorTrackerX-cursorTrackerX%32+32;
         int ctx = cursorTrackerX;
         int cty = cursorTrackerY;
         
         if (ctx+w > TEX_WIDTH) {
-          cty += h;
+          cty += trackerMaxHeight;
+          trackerMaxHeight = 0;
           ctx = 0;
         }
         if (cty+h > TEX_HEIGHT) {
@@ -1663,15 +1743,20 @@ class Engine {
           ctx += w;
           cursorTrackerX = ctx;
           cursorTrackerY = cty;
+          // Max height so that we can squeeze texture more efficiently
+          // and increase chances of tracker search being successful.
+          if (h > trackerMaxHeight) {
+            trackerMaxHeight = h;
+          }
         }
         // Space that we expected to be empty is taken.
         else {
-          println("Tracker failed to find at ", ctx, cty, w, h);
+          console.info("findSpaceUsingTracker: Tracker failed to find at "+ ctx+" "+cty+" "+w+" "+h);
           return null;
         }
         
         
-        println("Tracker found ", ctx, cty, w, h);
+        console.info("findSpaceUsingTracker: Tracker found "+" "+ctx+" "+cty+" "+w+" "+h);
         return ret;
       }
       
@@ -1687,13 +1772,13 @@ class Engine {
             // TODO: find the closest next texture so we can tightly place the image next to it
             // minimizing space bubbles.
             int[] ret = {x, y};
-            println("Random found ", x, y, w, h, "after", i, "attempts");
+            console.info("findSpaceUsingRandom: Random found "+x+" "+y+" "+w+" "+h+" after "+i+" attempts");
             return ret;
           }
         }
         
         // Give up after a certain number of attempts.
-        System.err.println("Random failed to find");
+        console.info("Random failed to find");
         return null;
       }
       
@@ -1710,12 +1795,20 @@ class Engine {
       //}
       
       // Returns 4 floats of the top-left and bottom-right uv coords  
-      public float[] addNow(PImage img, boolean grayScale) {
-  
-        int w = img.width;
-        int h = img.height;
+      public UVImage addNow(PImage img, float repeatX, float repeatY, boolean grayScale) {
+        int w = int((float)img.width*repeatX);
+        int h = int((float)img.height*repeatY);
         
-        // TODO: deal with large textures that won't fit into the atlas texture
+        if (w == 0 || h == 0 || img.height-1 == 0 || img.width-1 == 0) {
+          UVImage newImg = new UVImage(0,0,0,0);
+          newImg.width = 0;
+          newImg.height = 0;
+          newImg.atlasUVx1 = 0;
+          newImg.atlasUVy1 = 0;
+          newImg.atlasUVx2 = 0;
+          newImg.atlasUVy2 = 0;
+          return newImg;
+        }
         
         // We need to find a space.
         // Use seperate algorithms in an attempt to find a space.
@@ -1727,17 +1820,21 @@ class Engine {
           
           // Too many attempts made.
           if (pos == null) {
-            // For now we just abandom all hope yay.
+            // If searching for a random spot fails, we consider the atlas to be full
+            // and lock it so no further textures are added until the pixel fill is reduced.
+            locked = true;
             return null;
           }
           else {
             // Maybe there's a free space after the random space we found.
             // Let's update the tracker variables!
             cursorTrackerX = pos[0]+w;
-            cursorTrackerY = pos[1]+h;
+            cursorTrackerY = pos[1];
+            
             if (cursorTrackerX > TEX_WIDTH) {
               // idk place it under it doesnt matter.
-              cursorTrackerY += h;
+              cursorTrackerY += trackerMaxHeight;
+              trackerMaxHeight = 0;
               cursorTrackerX = pos[0];
             }
           }
@@ -1755,7 +1852,9 @@ class Engine {
         texData.rewind();
         for (int y = pos[1]; y < endy; y++) {
           for (int x = pos[0]; x < endx; x++) {
-            int c = img.pixels[imy*img.width+imx];
+            // This weird pixel access sum basically gets the pixel at the x and y position, wrapping back round
+            // every time the coords cross the width and height.
+            int c = img.pixels[(imy%(img.height-1))*img.width+(imx%(img.width-1))];
             int a = c >> 24 & 0xFF;
             int r = c >> 16 & 0xFF;
             int g = c >> 8 & 0xFF;
@@ -1778,128 +1877,304 @@ class Engine {
           imx = 0;
         }
         texData.rewind();
+        needsUpdating = true;
         
-        //int before = millis();
+        // Update pixels fill.
+        pixelsFill += w*h;
+        console.info("(increase) pixels used now: "+pixelsFill);
         
-        //println(str(numTexturesCreated++)+"/"+str(units.length));
+        UVImage newImg = new UVImage(
+          (float)pos[0]/float(TEX_WIDTH),
+          (float)pos[1]/float(TEX_HEIGHT),
+          (float)(pos[0]+img.width)/float(TEX_WIDTH),
+          (float)(pos[1]+img.height)/float(TEX_HEIGHT)
+        );
+        newImg.width = (float)img.width;
+        newImg.height = (float)img.height;
+        newImg.atlasUVx1 = pos[0];
+        newImg.atlasUVy1 = pos[1];
+        // Remember, w and h take into account the repeat.
+        newImg.atlasUVx2 = pos[0]+w;
+        newImg.atlasUVy2 = pos[1]+h;
         
-        //println("texImage2D time: "+str(millis()-before));
-        
-        //println(uv1x, uv1y, uv2x, uv2y);
-        
-        float[] ret = new float[4];
-        ret[0] = (float)pos[0]/float(TEX_WIDTH);
-        ret[1] = (float)pos[1]/float(TEX_HEIGHT);
-        ret[2] = (float)(pos[0]+w)/float(TEX_WIDTH);
-        ret[3] = (float)(pos[1]+h)/float(TEX_HEIGHT);
-        
-        return ret;
+        return newImg;
       }
       
       void update() {
-        pgl = beginPGL();
-        pgl.activeTexture(PGL.TEXTURE0);
-        pgl.bindTexture(PGL.TEXTURE_2D, glTexID);
-        pgl.texImage2D(PGL.TEXTURE_2D, 0, PGL.RGBA, TEX_WIDTH, TEX_HEIGHT, 0, PGL.RGBA, PGL.UNSIGNED_BYTE, texData);
-        
-        pgl.generateMipmap(PGL.TEXTURE_2D);
-        endPGL();
+        // Only update if necessary to save performance.
+        if (needsUpdating) {
+          pgl = currentPG.beginPGL();
+          pgl.activeTexture(PGL.TEXTURE0);
+          pgl.bindTexture(PGL.TEXTURE_2D, glTexID);
+          pgl.texImage2D(PGL.TEXTURE_2D, 0, PGL.RGBA, TEX_WIDTH, TEX_HEIGHT, 0, PGL.RGBA, PGL.UNSIGNED_BYTE, texData);
+          
+          pgl.generateMipmap(PGL.TEXTURE_2D);
+          currentPG.endPGL();
+          needsUpdating = false;
+        }
       }
       
       public void clear(UVImage img) {
-        int startx = int(img.uvxStart*float(TEX_WIDTH));
-        int starty = int(img.uvyStart*float(TEX_HEIGHT));
-        int endx = int(img.uvxEnd*float(TEX_WIDTH));
-        int endy = int(img.uvyEnd*float(TEX_HEIGHT));
+        int startx = img.atlasUVx1;
+        int starty = img.atlasUVy1;
+        int endx = img.atlasUVx2;
+        int endy = img.atlasUVy2;
         
         for (int y = starty; y < endy; y++) {
           for (int x = startx; x < endx; x++) {
             stencilAlloc[y][x/32] &= 0xFFFFFFFE << (x%32);
           }
         }
+        // Clear pixels fill.
+        pixelsFill -= (endx-startx)*(endy-starty);
+        console.info("(decrease) pixels used now: "+pixelsFill);
+        
+        // No need to set needsUpdating because we haven't modified the actual GPU texture memory,
+        // just the stencil which resides on the CPU side.
       }
       
       // This is a little tricky because we can't track openGL calls and we want to
       // prioritise performance, we need to call bind() each time we begin to use the
       // atlas.
       public void bind() {
-        shader("tex");
-        pgl = beginPGL();
+        pgl = currentPG.beginPGL();
         pgl.texParameteri(PGL.TEXTURE_2D, PGL.TEXTURE_MAG_FILTER, PGL.NEAREST);
         pgl.texParameteri(PGL.TEXTURE_2D, PGL.TEXTURE_MIN_FILTER, PGL.NEAREST);
         pgl.activeTexture(PGL.TEXTURE0);
         pgl.bindTexture(PGL.TEXTURE_2D, glTexID);
-        endPGL();
+        currentPG.endPGL();
       }
       
       public void image(UVImage img, float x, float y, float w, float h) {
-        pushMatrix();
-        translate(x, y);
-        scale(w, h);
+        currentPG.pushMatrix();
+        currentPG.translate(x, y);
+        currentPG.scale(w, h);
         //img.display();
         
-        beginShape(QUADS);
-        noStroke();
-        vertex(0, 0, img.uvxStart, img.uvyStart);
-        vertex(1, 0, img.uvxEnd, img.uvyStart);
-        vertex(1, 1, img.uvxEnd, img.uvyEnd);
-        vertex(0, 1, img.uvxStart, img.uvyEnd);
-        endShape();
+        // Convert to 0.0-1.0 values.
+        // Prolly could be optimised.
+        // TODO: optimise UV updating
+        float uvx1 = (img.width*img.uvx1)/float(TEX_WIDTH);
+        float uvy1 = (img.height*img.uvy1)/float(TEX_HEIGHT);
+        float uvx2 = (img.width*(img.uvx2-1.))/float(TEX_WIDTH);
+        float uvy2 = (img.height*(img.uvy2-1.))/float(TEX_HEIGHT);
         
-        popMatrix();
+        
+        currentPG.beginShape(QUADS);
+        currentPG.noStroke();
+        currentPG.vertex(0, 0, img.startx+uvx1, img.starty+uvy1);
+        currentPG.vertex(1, 0, img.endx+uvx2, img.starty+uvy1);
+        currentPG.vertex(1, 1, img.endx+uvx2, img.endy+uvy2);
+        currentPG.vertex(0, 1, img.startx+uvx1, img.endy+uvy2);
+        currentPG.endShape();
+        
+        currentPG.popMatrix();
       }
+    }
+    
+    public void usePGraphics(PGraphics pg) {
+      if (!(pg instanceof PGraphicsOpenGL)) {
+        console.bugWarn("usePGraphics: PGraphics must be of type OpenGL (P2D/P3D)");
+        return;
+      }
+      currentPG = pg;
+    }
+    
+    private void bindAtlas(int id) {
+      if (currentBoundAtlas != id) {
+        atlases[id].bind();
+        currentBoundAtlas = id;
+      }
+    }
+    
+    public void image(FastImage img, float x, float y, float w, float h) {
+      if (img instanceof UVImage) {
+        UVImage uvimg = (UVImage)img;
+        bindAtlas(uvimg.atlasID);
+        atlases[uvimg.atlasID].image(uvimg, x, y, w, h);
+      }
+      else if (img instanceof LargeImage) {
+        LargeImage largeimg = (LargeImage)img;
+        
+        // Set to -1 so that any uvImages know to re-bind the atlas upon beginning rendering.
+        currentBoundAtlas = -1;
+        
+        // Bind the texture
+        pgl = currentPG.beginPGL();
+        pgl.texParameteri(PGL.TEXTURE_2D, PGL.TEXTURE_MAG_FILTER, PGL.NEAREST);
+        pgl.texParameteri(PGL.TEXTURE_2D, PGL.TEXTURE_MIN_FILTER, PGL.NEAREST);
+        pgl.activeTexture(PGL.TEXTURE0);
+        pgl.bindTexture(PGL.TEXTURE_2D, largeimg.glTexID);
+        currentPG.endPGL();
+        
+        currentPG.pushMatrix();
+        currentPG.translate(x, y);
+        currentPG.scale(w, h);
+        
+        
+        // TODO: optimise UV updating
+        //println(shape.getVertexCount());
+        largeimg.shape.beginTessellation();
+        largeimg.shape.setTextureUV(0, largeimg.uvx1, largeimg.uvy1);
+        largeimg.shape.setTextureUV(1, largeimg.uvx2, largeimg.uvy1);
+        largeimg.shape.setTextureUV(2, largeimg.uvx2, largeimg.uvy2);
+        largeimg.shape.setTextureUV(3, largeimg.uvx1, largeimg.uvy2);
+        largeimg.shape.endTessellation();
+        currentPG.shape(largeimg.shape);
+        
+        
+        currentPG.popMatrix();
+      }
+    }
+    
+    public void image(FastImage img, float x, float y) {
+      image(img, x, y, img.width, img.height);
+    }
+    
+    public void destroyImage(UVImage img) {
+      atlases[img.atlasID].clear(img);
+    }
+    
+    
+    public UVImage createUVImage(PImage img) {
+      return createUVImage(img, 1., 1., false);
+    }
+    
+    public UVImage createUVImage(PImage img, float repeatX, float repeatY) {
+      return createUVImage(img, repeatX, repeatY, false);
+    }
+    
+    public UVImage createUVImage(PImage img, boolean monoChrome) {
+      return createUVImage(img, 1., 1., monoChrome);
+    }
+    
+    public UVImage createUVImage(PImage img, float repeatX, float repeatY, boolean monoChrome) {
+      // Check each atlas for space.
+      for (int i = 0; i < atlases.length; i++) {
+        if (atlases[i] == null) {
+          atlases[i] = new DynamicTextureAtlas();
+        }
+        
+        
+        if (atlases[i].unlocked()) {
+          UVImage newImg = atlases[i].addNow(img, repeatX, repeatY, monoChrome);
+          // Successful allocation; we have created a new texture
+          if (newImg != null) {
+            newImg.atlasID = i;
+            active = i;
+            console.info("Created new texture on atlas "+i);
+            return newImg;
+          }
+          // Unsuccessful; the atlas is full, and has automatically been locked.
+          // Move on to the next atlas.
+          else {
+            continue;
+          }
       
-      public void image(UVImage img, float x, float y) {
-        image(img, x, y, img.width, img.height);
-      }
-    }
-    
-    
-    
-    
-    
-    
-    
-    
-    public void image(UVImage img, float x, float y, float w, float h) {
-      atlas.image(img, x, y, w, h);
-    }
-    
-    public void image(UVImage img, float x, float y) {
-      atlas.image(img, x, y);
-    }
-    
-    
-    int index = 0;
-    
-    UVImage createUVImage(PImage img) {
-      return createUVImage(img, false);
-    }
-    
-    UVImage createUVImage(PImage img, boolean monoChrome) {
-      float[] res = atlas.addNow(img, monoChrome);
-      
-      if (res != null) {
-        UVImage newImg = new UVImage(res);
-        newImg.width = img.width;
-        newImg.height = img.height;
-        return newImg;
-      }
-      // TODO: Error handling for when the atlas is full.
-      return null;
-    }
-    
-    void showStencilMap() {
-      loadPixels();
-      for (int y = 0; y < height; y++) {
-        for (int x = 0; x < width; x++) {
-          int atx = int((float(x)/width)*float(atlas.stencilAlloc[0].length));
-          int aty = int((float(y)/height)*float(atlas.stencilAlloc.length));
-          pixels[y*width+x] = (atlas.stencilAlloc[aty][atx]) == 0 ? color(0) : color(255);
         }
       }
-      updatePixels();
+      
+      // If we're at this point, it means we've run out of texture memory.
+      // We could perhaps try to optimise previous atlases at the cost of performance,
+      // but that's a TODO. For now let's just give up all hope.
+      throw new RuntimeException("Out of texture space.");
     }
+    
+    public void bind() {
+      currentBoundAtlas = -1;
+      this.shader(currentPG, "tex");
+    }
+    
+    public void update() {
+      for (int i = 0; i < atlases.length; i++) {
+        if (atlases[i] != null) {
+          // Each atlas will only update if necessary.
+          atlases[i].update();
+        }
+      }
+    }
+        
+        
+    
+    LargeImage createLargeImage(PImage img) {
+        IntBuffer data = IntBuffer.allocate(img.width*img.height);
+        int glTexID = -1;
+        
+        // Copy pimage data to the intbuffer.
+        
+        img.loadPixels();
+        data.rewind();
+        int l = img.width*img.height;
+        for (int i = 0; i < l; i++) {
+          int c = img.pixels[i];
+          int a = c >> 24 & 0xFF;
+          int r = c >> 16 & 0xFF;
+          int g = c >> 8 & 0xFF;
+          int b = c & 0xFF;
+          data.put(i, ( a << 24 |  b << 16 | g << 8 | r));
+        }
+        data.rewind();
+        
+        // Create the texture buffer and put data into gpu mem.
+        pgl = currentPG.beginPGL();
+        IntBuffer intBuffer = IntBuffer.allocate(1);
+        pgl.genTextures(1, intBuffer);
+        glTexID = intBuffer.get(0);
+        pgl.activeTexture(PGL.TEXTURE0);
+        pgl.bindTexture(PGL.TEXTURE_2D, glTexID);
+        pgl.texImage2D(PGL.TEXTURE_2D, 0, PGL.RGBA, img.width, img.height, 0, PGL.RGBA, PGL.UNSIGNED_BYTE, data);
+        
+        pgl.texParameteri(PGL.TEXTURE_2D, PGL.TEXTURE_MAG_FILTER, PGL.LINEAR);
+        pgl.texParameteri(PGL.TEXTURE_2D, PGL.TEXTURE_MIN_FILTER, PGL.LINEAR_MIPMAP_LINEAR);
+        
+        //pgl.generateMipmap(PGL.TEXTURE_2D);
+        currentPG.endPGL();
+        
+        // At this rate the LargeImage class is more like a data container than an object that does stuff.  
+        LargeImage largeimg = new LargeImage(glTexID);
+        
+        largeimg.shape = currentPG.createShape();
+        
+        largeimg.shape.beginShape(QUADS);
+        largeimg.shape.noStroke();
+        largeimg.shape.vertex(0, 0, largeimg.uvx1, largeimg.uvy1);
+        largeimg.shape.vertex(1, 0, largeimg.uvx2, largeimg.uvx1);
+        largeimg.shape.vertex(1, 1, largeimg.uvx2, largeimg.uvy2);
+        largeimg.shape.vertex(0, 1, largeimg.uvx1, largeimg.uvy2);
+        largeimg.shape.endShape();
+        
+        largeimg.width = img.width;
+        largeimg.height = img.height;
+        return largeimg;
+    }
+    
+    
+    Canvas stencilMapDisplay;
+    int active = 0;
+    public void showStencilMap(float xx, float yy, float ww, float hh) {
+      stencilMapDisplay.graphics.beginDraw();
+      stencilMapDisplay.graphics.loadPixels();
+      int w = stencilMapDisplay.graphics.width;
+      int h = stencilMapDisplay.graphics.height;
+      for (int y = 0; y < h; y++) {
+        for (int x = 0; x < w; x++) {
+          int atx = int((float(x)/float(w))*float(atlases[active].stencilAlloc[0].length));
+          int aty = int((float(y)/float(h))*float(atlases[active].stencilAlloc.length));
+          stencilMapDisplay.graphics.pixels[y*w+x] = (atlases[active].stencilAlloc[aty][atx]) == 0 ? color(0) : color(255);
+        }
+      }
+      stencilMapDisplay.graphics.updatePixels();
+      stencilMapDisplay.graphics.fill(127);
+      stencilMapDisplay.graphics.textSize(32);
+      stencilMapDisplay.graphics.textAlign(LEFT, TOP);
+      stencilMapDisplay.graphics.text(active, 0, 0);
+      stencilMapDisplay.graphics.endDraw();
+      stencilMapDisplay.display(xx, yy, ww, hh);
+    }
+    
+    // TODO: UVImage to PImage converter function.
+    // Maybe a LargeImage as well.
+    
   }
 
 
@@ -1934,34 +2209,7 @@ class Engine {
   
     
 
-  public class UVImage {
-    
-    public float uvxStart, uvyStart, uvxEnd, uvyEnd;
-    public float width = 0, height = 0;
-    private PShape shape;
-    
-    public UVImage(float[] uvs) {
-      uvxStart = uvs[0];
-      uvyStart = uvs[1];
-      uvxEnd   = uvs[2];
-      uvyEnd   = uvs[3];
-      
-      shape = createShape();
-      
-      shape.beginShape(QUADS);
-      //texture(grass);
-      shape.noStroke();
-      shape.vertex(0, 0, uvxStart, uvyStart);
-      shape.vertex(1, 0, uvxEnd, uvyStart);
-      shape.vertex(1, 1, uvxEnd, uvyEnd);
-      shape.vertex(0, 1, uvxStart, uvyEnd);
-      shape.endShape();
-    }
-    
-    public void display() {
-      shape(shape);
-    }
-  }
+  
   
 
 
@@ -4248,14 +4496,15 @@ class Engine {
     
     // Load in seperate thread.
     loadedEverything.set(false);
-    Thread t1 = new Thread(new Runnable() {
-      public void run() {
-          loadEverything();
-          loadedEverything.set(true);
-        }
-      }
-    );
-    t1.start();
+    //Thread t1 = new Thread(new Runnable() {
+    //  public void run() {
+    //    }
+    //  }
+    //);
+    //t1.start();
+    
+    loadEverything();
+    loadedEverything.set(true);
 
     //println("Running in seperate thread.");
     // Config file
@@ -4514,7 +4763,7 @@ class Engine {
       // TODO have some sort of fabric function instead of this mess.
       display.shader("fabric", "color", float((c>>16)&0xFF)/255., float((c>>8)&0xFF)/255., float((c)&0xFF)/255., 1., "intensity", 0.1);
       rect(x1-wi, y1, wi*2, hi);
-      display.defaultShader();
+      display.resetShader();
       ui.loadingIcon(x1-wi+64, y1+64);
 
       fill(255);
@@ -4574,7 +4823,7 @@ class Engine {
       // TODO have some sort of fabric function instead of this mess.
       display.shader("fabric", "color", float((c>>16)&0xFF)/255., float((c>>8)&0xFF)/255., float((c)&0xFF)/255., 1., "intensity", 0.1);
       rect(x1-wi, y1, wi*2, hi);
-      display.defaultShader();
+      display.resetShader();
       ui.loadingIcon(x1-wi+64, y1+64);
 
       fill(255);
@@ -4645,7 +4894,7 @@ class Engine {
       // TODO have some sort of fabric function instead of this mess.
       display.shader("fabric", "color", float((c>>16)&0xFF)/255., float((c>>8)&0xFF)/255., float((c)&0xFF)/255., 1., "intensity", 0.1);
       rect(x1-wi, y1, wi*2, hi);
-      display.defaultShader();
+      display.resetShader();
       
       display.imgCentre("error", x1-wi+64, y1+64);
       
@@ -5528,10 +5777,13 @@ class Engine {
     path = path.replace('\\', '/');
 
     // get extension
-    String ext = path.substring(path.lastIndexOf(".")+1);
+    // Note: since we have some extensions like "large.png",
+    // we search from the front instead of the back.
+    // Better not have any hidden files beginning with "."!
+    String ext = path.substring(path.indexOf(".")+1);
 
     // Get file name without the extension
-    String name = path.substring(path.lastIndexOf("/")+1, path.lastIndexOf("."));
+    String name = file.getIsolatedFilename(path);
 
     //println(name);
 
@@ -5543,12 +5795,39 @@ class Engine {
     if (ext.equals("png") || ext.equals("jpg") || ext.equals("gif") || ext.equals("bmp")) {
       // load image and add it to the systemImages hashmap.
       if (display.systemImages.get(name) == null) {
-        display.systemImages.put(name, app.loadImage(path));
+        
+        // We use our magic FastImage renderer.
+        PImage img = app.loadImage(path);
+        
+        UVImage uv = display.createUVImage(img);
+        if (uv == null) {
+          console.warn("Failed to allocate image to atlas");
+          return;
+        }
+        display.systemImages.put(name, uv);
         loadedContent.add(name);
       } else {
         console.warn("Image "+name+" already exists, skipping.");
       }
-    } else if (ext.equals("otf") || ext.equals("ttf")) {       // Load font.
+    } 
+    else if (ext.equals("large.png") || ext.equals("large.jpg") || ext.equals("large.gif") || ext.equals("large.bmp")) {
+      // load image and add it to the systemImages hashmap.
+      if (display.systemImages.get(name) == null) {
+        
+        // We use our magic FastImage renderer.
+        
+        LargeImage img = display.createLargeImage(app.loadImage(path));
+        if (img == null) {
+          console.warn("Failed to allocate image to atlas");
+          return;
+        }
+        display.systemImages.put(name, img);
+        loadedContent.add(name);
+      } else {
+        console.warn("Image "+name+" already exists, skipping.");
+      }
+    } 
+    else if (ext.equals("otf") || ext.equals("ttf")) {       // Load font.
       display.fonts.put(name, app.createFont(path, 32));
     } else if (ext.equals("vlw")) {
       display.fonts.put(name, app.loadFont(path));
@@ -5926,6 +6205,11 @@ class Engine {
     }
   }
   
+  // Slower but convenient
+  public String saveCacheImage(String originalPath, UVImage image) {
+    //TODO
+    return "ass";
+  }
 
 
   public String saveCacheImage(String originalPath, PImage image) {
@@ -6632,6 +6916,8 @@ class Engine {
       app.text(txt, 7, y+2);
       app.popMatrix();
     }
+    
+    //display.showStencilMap(0, 0, 256, 256);
 
     // Display console
     // TODO: this renders the console 4 times which is BAD.
@@ -6643,6 +6929,159 @@ class Engine {
     if (display != null) display.timeMode = display.IDLE_TIME;
   }
 }
+
+
+
+public abstract class FastImage {
+  public float width = 0, height = 0;
+  public float uvx1 = 0.;
+  public float uvy1 = 0.;
+  public float uvx2 = 1.;
+  public float uvy2 = 1.;
+  
+  public void setUV(float uvx1, float uvy1, float uvx2, float uvy2) {
+    this.uvx1 = uvx1;
+    this.uvy1 = uvy1;
+    this.uvx2 = uvx2;
+    this.uvy2 = uvy2;
+  }
+}
+
+
+
+
+
+
+
+// For images that are so large that they prolly don't fit in a texture atlas.
+// Slower, but doesn't take up more memory than necessary.
+// Needs to be in the same class that contains pgl.
+public class LargeImage extends FastImage {
+  public float width = 0, height = 0;
+  public int glTexID = -1;
+  public PShape shape;
+  
+  public LargeImage(int glTexID) {
+    this.glTexID = glTexID;
+  }
+  
+  public void finalize() {
+    // TODO: OpenGL function call to clear texture from gpu mem
+  }
+}
+
+
+
+
+
+
+
+
+// Image that stores texture data in a single texture atlas.
+// This class stores the location of the image in the UV atlas as UV coordinates.
+// Renders smaller images really quickly.
+public class UVImage extends FastImage {
+  public float startx, starty, endx, endy;
+  public int atlasID = 0;
+  
+  public int atlasUVx1 = 0;
+  public int atlasUVy1 = 0;
+  public int atlasUVx2 = 0;
+  public int atlasUVy2 = 0;
+  
+  //private boolean allocated = false;
+  
+  public UVImage(float[] uvs, int atlasID) {
+    this.atlasID = atlasID;
+    
+    startx = uvs[0];
+    starty = uvs[1];
+    endx   = uvs[2];
+    endy   = uvs[3];
+    
+  }
+  
+  public UVImage(float uv1, float uv2, float uv3, float uv4) {
+    startx = uv1;
+    starty = uv2;
+    endx   = uv3;
+    endy   = uv4;
+    
+  }
+  
+  //public void setUV(float uvx1, float uvy1, float uvx2, float uvy2) {
+  //  this.uvx1 = uvx1;
+  //  this.uvy1 = uvy1;
+  //  this.uvx2 = uvx2;
+  //  this.uvy2 = uvy2;
+  //}
+  
+  public void display() {
+    // We don't do shape anymore
+    //currentPG.shape(shape);
+  }
+  
+  // We need to unallocate texture when the object 
+  // is garbage collected.
+  public void finalize() {
+    // TODO: Neatly reimplement (somehow)
+    //destroyImage(this);
+    //println("Destroyed", startx, starty, endx, endy);
+  }
+}
+
+
+
+
+
+
+class Canvas {
+  public PGraphics graphics;
+  public PShape shape;
+  
+  public Canvas(int w, int h, String renderer) {
+    graphics = createGraphics(w, h, renderer);
+    shape = createShape();
+    shape.beginShape(QUADS);
+    shape.texture(graphics);
+    shape.noStroke();
+    shape.vertex(0, 0, 0, 0);
+    shape.vertex(1, 0, graphics.width, 0);
+    shape.vertex(1, 1, graphics.width, graphics.height);
+    shape.vertex(0, 1, 0, graphics.height);
+    shape.endShape();
+  }
+  
+  public Canvas(int w, int h) {
+    graphics = createGraphics(w, h, P2D);
+    shape = createShape();
+    shape.beginShape(QUADS);
+    shape.texture(graphics);
+    shape.noStroke();
+    shape.vertex(0, 0, 0, 0);
+    shape.vertex(1, 0, graphics.width, 0);
+    shape.vertex(1, 1, graphics.width, graphics.height);
+    shape.vertex(0, 1, 0, graphics.height);
+    shape.endShape();
+  }
+  
+  void display(float x, float y, float w, float h) {
+    pushMatrix();
+    translate(x, y);
+    scale(w, h);
+    shape(shape);
+    popMatrix();
+  }
+  
+  void display(float x, float y) {
+    display(x, y, graphics.width, graphics.height);
+  }
+}
+
+  
+  
+  
+  
 
 //*******************************************
 //****************SCREEN CODE****************
