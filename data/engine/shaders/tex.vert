@@ -11,7 +11,8 @@ varying vec4 texSamplePoint;
 
 void main() {
   gl_Position = transformMatrix * position;
-    
+
+
   vertColor = color;
   texSamplePoint = vec4(texCoord, 1.0, 1.0);
 }

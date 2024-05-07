@@ -118,6 +118,7 @@ class Engine {
   public ClipboardModule clipboard;
   public UIModule ui;
   public InputModule input;
+  public TextRendererModule text;
 
 
   
@@ -1179,6 +1180,7 @@ class Engine {
       String name = file.getIsolatedFilename(path);
       String ext  = file.getExt(path);
       
+      
       // If we're loading a vertex shader, we also have to load the corresponding 
       // fragment shader.
       if (ext.equals("vert")) {
@@ -1211,13 +1213,18 @@ class Engine {
   
     public void resetShader() {
       app.resetShader();
+      atlasShaderBound = false;
     }
     
     public void resetShader(PGraphics p) {
       p.resetShader();
+      atlasShaderBound = false;
     }
     
     public void shader(String shaderName, Object... uniforms) {
+      if (!shaderName.equals("tex")) {
+        atlasShaderBound = false;
+      }
       initShader(shaderName);
       app.shader(
         getShaderWithParams(shaderName, uniforms)
@@ -1225,6 +1232,9 @@ class Engine {
     }
     
     public void shader(String shaderName) {
+      if (!shaderName.equals("tex")) {
+        atlasShaderBound = false;
+      }
       initShader(shaderName);
       PShader sh = shaders.get(shaderName).shader;
       if (sh == null) {
@@ -1244,6 +1254,7 @@ class Engine {
     
     public void initShader(String name) {
       PShaderEntry sh = shaders.get(name);
+      if (sh == null) return;
       
       // Switch to the shader to force it to compile:
       if (!sh.compiled) {
@@ -1265,6 +1276,9 @@ class Engine {
     }
     
     public void shader(PGraphics framebuffer, String shaderName, Object... uniforms) {
+      if (!shaderName.equals("tex")) {
+        atlasShaderBound = false;
+      }
       initShader(shaderName);
       framebuffer.shader(
         getShaderWithParams(shaderName, uniforms)
@@ -1272,11 +1286,12 @@ class Engine {
     }
     
     public PShader getShaderWithParams(String shaderName, Object... uniforms) {
-      PShader sh = shaders.get(shaderName).shader;
-      if (sh == null) {
+      PShaderEntry shEntry = shaders.get(shaderName);
+      if (shEntry == null) {
         console.warnOnce("Shader "+shaderName+" not found!");
         return errShader;
       }
+      PShader sh = shEntry.shader;
       if (!shaders.get(shaderName).success) return errShader;
       int l = uniforms.length;
       
@@ -1553,6 +1568,12 @@ class Engine {
     }
     
     public void updateDelta() {
+      // Since updatedelta is the only displaymodule function called in the
+      // main engine function, we might as well reset uploadGPUOnce here even tho it
+      // has nothing to do with delta.
+      uploadGPUOnce = true;
+      
+      
       totalTimeMillis = thisFrameMillis-lastFrameMillis;
       lastFrameMillis = thisFrameMillis;
       thisFrameMillis = app.millis();
@@ -1588,8 +1609,13 @@ class Engine {
     private int currentBoundAtlas = 0;
     private PGraphics currentPG;
     
+    // This variable limits LargeImages uploading to the GPU to one LargeImage upload/frame.
+    private boolean uploadGPUOnce = true;
+    
+    private boolean atlasShaderBound = false;
+    
     // idk 8 seems enough for now.
-    DynamicTextureAtlas[] atlases = new DynamicTextureAtlas[8];
+    DynamicTextureAtlas[] atlases = new DynamicTextureAtlas[32];
     
     
     
@@ -1610,12 +1636,26 @@ public class DynamicTextureAtlas {
       private boolean locked = false;
       
       private boolean needsUpdating = false;
+      public boolean initialised = false;
       
       static final int TEX_WIDTH = 4096;
       static final int TEX_HEIGHT = 4096;
       
       public DynamicTextureAtlas() {
-        init();
+        texData = IntBuffer.allocate(TEX_WIDTH*TEX_HEIGHT);
+        stencilAlloc = new int[TEX_HEIGHT][(TEX_WIDTH/32)];  // ints are 32 bits wide.
+        
+        // Clear it out with black pixels
+        for (int i = 0; i < TEX_WIDTH*TEX_HEIGHT; i++) {
+          texData.put(i, 0xFF000000);
+        }
+        
+        // Clear allocation stencil buffer to no allocation anywhere.
+        for (int y = 0; y < stencilAlloc.length; y++) {
+          for (int x = 0; x < stencilAlloc[0].length; x++) {
+            stencilAlloc[y][x] = 0;
+          }
+        }
       }
       
       // Returns whether or not its locked, and checks the pixel fill just
@@ -1637,26 +1677,11 @@ public class DynamicTextureAtlas {
       }
       
     
-      void init() {
+      public void init() {
         pgl = currentPG.beginPGL();
         IntBuffer intBuffer = IntBuffer.allocate(1);
         pgl.genTextures(1, intBuffer);
         glTexID = intBuffer.get(0);
-      
-        texData = IntBuffer.allocate(TEX_WIDTH*TEX_HEIGHT);
-        stencilAlloc = new int[TEX_HEIGHT][(TEX_WIDTH/32)];  // ints are 32 bits wide.
-        
-        // Clear it out with black pixels
-        for (int i = 0; i < TEX_WIDTH*TEX_HEIGHT; i++) {
-          texData.put(i, 0xFF000000);
-        }
-        
-        // Clear allocation stencil buffer to no allocation anywhere.
-        for (int y = 0; y < stencilAlloc.length; y++) {
-          for (int x = 0; x < stencilAlloc[0].length; x++) {
-            stencilAlloc[y][x] = 0;
-          }
-        }
         
         // Put it into GPU memory
         texData.rewind();
@@ -1671,6 +1696,7 @@ public class DynamicTextureAtlas {
         pgl.texParameteri(PGL.TEXTURE_2D, PGL.TEXTURE_MIN_FILTER, PGL.LINEAR_MIPMAP_LINEAR);
         //println("texImage2D time: "+str((System.nanoTime()-before)/1000)+"us");
         currentPG.endPGL();
+        initialised = true;
       }
       
       // The atlas is dynamic so this means new textures can be added to it on the fly.
@@ -1693,16 +1719,16 @@ public class DynamicTextureAtlas {
         int endx = (startx+w)/32;
         int endy = starty+h;
         
+        // Definite nope.
+        if (endx > TEX_WIDTH/32 || endy > TEX_HEIGHT) {
+          return false;
+        }
+        
         // Create a line
         int line[] = new int[TEX_WIDTH/32];
         int l = startx+w;
         for (int i = startx; i < l; i++) {
           line[i/32] |= 1 << (i%32);
-        }
-        
-        // Definite nope.
-        if (endx > TEX_WIDTH/32 || endy > TEX_HEIGHT) {
-          return false;
         }
         
         startx /= 32;
@@ -1795,19 +1821,12 @@ public class DynamicTextureAtlas {
       //}
       
       // Returns 4 floats of the top-left and bottom-right uv coords  
-      public UVImage addNow(PImage img, float repeatX, float repeatY, boolean grayScale) {
-        int w = int((float)img.width*repeatX);
-        int h = int((float)img.height*repeatY);
+      public UVImage addNow(PImage img, float repeatX, float repeatY, boolean grayScale, int padding) {
+        int w = int((float)img.width*repeatX)+padding+padding;
+        int h = int((float)img.height*repeatY)+padding+padding;
         
         if (w == 0 || h == 0 || img.height-1 == 0 || img.width-1 == 0) {
-          UVImage newImg = new UVImage(0,0,0,0);
-          newImg.width = 0;
-          newImg.height = 0;
-          newImg.atlasUVx1 = 0;
-          newImg.atlasUVy1 = 0;
-          newImg.atlasUVx2 = 0;
-          newImg.atlasUVy2 = 0;
-          return newImg;
+          return createDummyUVImage();
         }
         
         // We need to find a space.
@@ -1844,17 +1863,23 @@ public class DynamicTextureAtlas {
         
         
         // Write the texture data in the space we just found.
+        
         int endx = pos[0]+w;
         int endy = pos[1]+h;
         img.loadPixels();
-        int imx = 0;
-        int imy = 0;
+        int imx = -padding;
+        int imy = -padding;
         texData.rewind();
+        
+        boolean repeats = repeatX > 1.01 || repeatY > 1.01;
+        
         for (int y = pos[1]; y < endy; y++) {
           for (int x = pos[0]; x < endx; x++) {
             // This weird pixel access sum basically gets the pixel at the x and y position, wrapping back round
             // every time the coords cross the width and height.
-            int c = img.pixels[(imy%(img.height-1))*img.width+(imx%(img.width-1))];
+            int c;
+            if (repeats) c = img.pixels[(max(imy, 0)%(img.height-1))*img.width+(max(imx, 0)%(img.width-1))];
+            else c = img.pixels[min(max(imy, 0), img.height-1)*img.width+(min(max(imx, 0), img.width-1))];
             int a = c >> 24 & 0xFF;
             int r = c >> 16 & 0xFF;
             int g = c >> 8 & 0xFF;
@@ -1874,7 +1899,7 @@ public class DynamicTextureAtlas {
             imx++;
           }
           imy++;
-          imx = 0;
+          imx = -padding;
         }
         texData.rewind();
         needsUpdating = true;
@@ -1884,10 +1909,10 @@ public class DynamicTextureAtlas {
         console.info("(increase) pixels used now: "+pixelsFill);
         
         UVImage newImg = new UVImage(
-          (float)pos[0]/float(TEX_WIDTH),
-          (float)pos[1]/float(TEX_HEIGHT),
-          (float)(pos[0]+img.width)/float(TEX_WIDTH),
-          (float)(pos[1]+img.height)/float(TEX_HEIGHT)
+          (float)(pos[0]+padding)/float(TEX_WIDTH),
+          (float)(pos[1]+padding)/float(TEX_HEIGHT),
+          (float)(pos[0]+img.width+padding)/float(TEX_WIDTH),
+          (float)(pos[1]+img.height+padding)/float(TEX_HEIGHT)
         );
         newImg.width = (float)img.width;
         newImg.height = (float)img.height;
@@ -1908,6 +1933,7 @@ public class DynamicTextureAtlas {
           pgl.bindTexture(PGL.TEXTURE_2D, glTexID);
           pgl.texImage2D(PGL.TEXTURE_2D, 0, PGL.RGBA, TEX_WIDTH, TEX_HEIGHT, 0, PGL.RGBA, PGL.UNSIGNED_BYTE, texData);
           
+          // TODO: Only generate mipmap if its dimensions are power of 2, e.g. 32x32, 64x64
           pgl.generateMipmap(PGL.TEXTURE_2D);
           currentPG.endPGL();
           needsUpdating = false;
@@ -1962,6 +1988,7 @@ public class DynamicTextureAtlas {
         
         currentPG.beginShape(QUADS);
         currentPG.noStroke();
+        currentPG.fill(255);
         currentPG.vertex(0, 0, img.startx+uvx1, img.starty+uvy1);
         currentPG.vertex(1, 0, img.endx+uvx2, img.starty+uvy1);
         currentPG.vertex(1, 1, img.endx+uvx2, img.endy+uvy2);
@@ -1969,6 +1996,21 @@ public class DynamicTextureAtlas {
         currentPG.endShape();
         
         currentPG.popMatrix();
+      }
+      
+      public float[] getUVs(UVImage img) {
+        
+        float uvx1 = (img.width*img.uvx1)/float(TEX_WIDTH);
+        float uvy1 = (img.height*img.uvy1)/float(TEX_HEIGHT);
+        float uvx2 = (img.width*(img.uvx2-1.))/float(TEX_WIDTH);
+        float uvy2 = (img.height*(img.uvy2-1.))/float(TEX_HEIGHT);
+        
+        float[] ret = new float[4];
+        ret[0] = img.startx+uvx1;
+        ret[1] = img.starty+uvy1;
+        ret[2] = img.endx+uvx2;
+        ret[3] = img.endy+uvy2;
+        return ret;
       }
     }
     
@@ -1980,16 +2022,62 @@ public class DynamicTextureAtlas {
       currentPG = pg;
     }
     
-    private void bindAtlas(int id) {
+    public void bindAtlas(int id) {
+      if (!atlasShaderBound) {
+        // On startup our tex shader might not be loaded in yet.
+        // Therefore don't render anything.
+        if (!shaders.containsKey("tex")) {
+          return;
+        }
+        this.shader(currentPG, "tex");
+        atlasShaderBound = true;
+        currentBoundAtlas = -1;
+      }
+      
+      // Because we can only do OpenGL operations on the main thread, atlas may still need to
+      // be initialised.
+      if (!atlases[id].initialised) {
+        atlases[id].init();
+      }
       if (currentBoundAtlas != id) {
+        currentPG.flush();
         atlases[id].bind();
         currentBoundAtlas = id;
       }
     }
     
+    public float[] getUVs(UVImage img) {
+      return atlases[img.atlasID].getUVs(img);
+    }
+    
+    public UVImage createDummyUVImage() {
+      UVImage newImg = new UVImage(0,0,0,0);
+      newImg.width = 0;
+      newImg.height = 0;
+      newImg.atlasUVx1 = 0;
+      newImg.atlasUVy1 = 0;
+      newImg.atlasUVx2 = 0;
+      newImg.atlasUVy2 = 0;
+      return newImg;
+    }
+    
     public void image(FastImage img, float x, float y, float w, float h) {
+      // Before anything, we must use our atlas shader.
+      if (!atlasShaderBound) {
+        // On startup our tex shader might not be loaded in yet.
+        // Therefore don't render anything.
+        if (!shaders.containsKey("tex")) {
+          return;
+        }
+        this.shader(currentPG, "tex");
+        atlasShaderBound = true;
+        currentBoundAtlas = -1;
+      }
+      
       if (img instanceof UVImage) {
+        
         UVImage uvimg = (UVImage)img;
+        
         bindAtlas(uvimg.atlasID);
         atlases[uvimg.atlasID].image(uvimg, x, y, w, h);
       }
@@ -1999,19 +2087,45 @@ public class DynamicTextureAtlas {
         // Set to -1 so that any uvImages know to re-bind the atlas upon beginning rendering.
         currentBoundAtlas = -1;
         
-        // Bind the texture
         pgl = currentPG.beginPGL();
+        // If image data is in GPU, we can just bind it and continue about our day.
+        if (largeimg.inGPU) {
+          // Bind the texture
+          pgl.activeTexture(PGL.TEXTURE0);
+          pgl.bindTexture(PGL.TEXTURE_2D, largeimg.glTexID);
+        }
+        // Otherwise, creation of the LargeImage hasn't put the GPU into GPU mem yet (because of multithreading issues)
+        // so we must generate the buffers and put em on the GPU.
+        else if (uploadGPUOnce) {
+          // Create the texture buffer and put data into gpu mem.
+          pgl = currentPG.beginPGL();
+          IntBuffer intBuffer = IntBuffer.allocate(1);
+          pgl.genTextures(1, intBuffer);
+          largeimg.glTexID = intBuffer.get(0);
+          pgl.activeTexture(PGL.TEXTURE0);
+          pgl.bindTexture(PGL.TEXTURE_2D, largeimg.glTexID);
+          pgl.texImage2D(PGL.TEXTURE_2D, 0, PGL.RGBA, (int)largeimg.width, (int)largeimg.height, 0, PGL.RGBA, PGL.UNSIGNED_BYTE, largeimg.texData);
+          largeimg.inGPU = true;
+          uploadGPUOnce = false;
+          
+          //pgl.texParameteri(PGL.TEXTURE_2D, PGL.TEXTURE_MAG_FILTER, PGL.LINEAR);
+          //pgl.texParameteri(PGL.TEXTURE_2D, PGL.TEXTURE_MIN_FILTER, PGL.LINEAR_MIPMAP_LINEAR);
+        }
+        else {
+          // uploadGPUOnce is false which means a LargeImage has taken our turn to upload our shiz into the GPU
+          // and we must wait for a chance next frame.
+          // For now, don't render anything.
+          return;
+        }
         pgl.texParameteri(PGL.TEXTURE_2D, PGL.TEXTURE_MAG_FILTER, PGL.NEAREST);
         pgl.texParameteri(PGL.TEXTURE_2D, PGL.TEXTURE_MIN_FILTER, PGL.NEAREST);
-        pgl.activeTexture(PGL.TEXTURE0);
-        pgl.bindTexture(PGL.TEXTURE_2D, largeimg.glTexID);
         currentPG.endPGL();
         
+
         currentPG.pushMatrix();
         currentPG.translate(x, y);
         currentPG.scale(w, h);
-        
-        
+      
         // TODO: optimise UV updating
         //println(shape.getVertexCount());
         largeimg.shape.beginTessellation();
@@ -2037,18 +2151,37 @@ public class DynamicTextureAtlas {
     
     
     public UVImage createUVImage(PImage img) {
-      return createUVImage(img, 1., 1., false);
+      return createUVImage(img, 1., 1., false, 0);
     }
     
     public UVImage createUVImage(PImage img, float repeatX, float repeatY) {
-      return createUVImage(img, repeatX, repeatY, false);
+      return createUVImage(img, repeatX, repeatY, false, 0);
     }
     
     public UVImage createUVImage(PImage img, boolean monoChrome) {
-      return createUVImage(img, 1., 1., monoChrome);
+      return createUVImage(img, 1., 1., monoChrome, 0);
     }
     
-    public UVImage createUVImage(PImage img, float repeatX, float repeatY, boolean monoChrome) {
+    public UVImage createUVImage(PImage img, boolean monoChrome, int padding) {
+      return createUVImage(img, 1., 1., monoChrome, padding);
+    }
+    
+    public UVImage createUVImage(PImage img, int padding) {
+      return createUVImage(img, 1., 1., false, padding);
+    }
+    
+    public UVImage createUVImage(PImage img, float repeatX, float repeatY, int padding) {
+      return createUVImage(img, repeatX, repeatY, false, padding);
+    }
+    
+    
+    public UVImage createUVImage(PImage img, float repeatX, float repeatY, boolean monoChrome, int padding) {
+      // If image is too big forget it.
+      if (img.width >= DynamicTextureAtlas.TEX_WIDTH-1 || img.height >= DynamicTextureAtlas.TEX_WIDTH-1) {
+        console.warn("Tried to load an image that was way too big ("+img.width+", "+img.height+")");
+        return createDummyUVImage();
+      }
+      
       // Check each atlas for space.
       for (int i = 0; i < atlases.length; i++) {
         if (atlases[i] == null) {
@@ -2057,7 +2190,7 @@ public class DynamicTextureAtlas {
         
         
         if (atlases[i].unlocked()) {
-          UVImage newImg = atlases[i].addNow(img, repeatX, repeatY, monoChrome);
+          UVImage newImg = atlases[i].addNow(img, repeatX, repeatY, monoChrome, padding);
           // Successful allocation; we have created a new texture
           if (newImg != null) {
             newImg.atlasID = i;
@@ -2082,7 +2215,6 @@ public class DynamicTextureAtlas {
     
     public void bind() {
       currentBoundAtlas = -1;
-      this.shader(currentPG, "tex");
     }
     
     public void update() {
@@ -2115,28 +2247,19 @@ public class DynamicTextureAtlas {
         }
         data.rewind();
         
-        // Create the texture buffer and put data into gpu mem.
-        pgl = currentPG.beginPGL();
-        IntBuffer intBuffer = IntBuffer.allocate(1);
-        pgl.genTextures(1, intBuffer);
-        glTexID = intBuffer.get(0);
-        pgl.activeTexture(PGL.TEXTURE0);
-        pgl.bindTexture(PGL.TEXTURE_2D, glTexID);
-        pgl.texImage2D(PGL.TEXTURE_2D, 0, PGL.RGBA, img.width, img.height, 0, PGL.RGBA, PGL.UNSIGNED_BYTE, data);
-        
-        pgl.texParameteri(PGL.TEXTURE_2D, PGL.TEXTURE_MAG_FILTER, PGL.LINEAR);
-        pgl.texParameteri(PGL.TEXTURE_2D, PGL.TEXTURE_MIN_FILTER, PGL.LINEAR_MIPMAP_LINEAR);
-        
-        //pgl.generateMipmap(PGL.TEXTURE_2D);
-        currentPG.endPGL();
-        
         // At this rate the LargeImage class is more like a data container than an object that does stuff.  
-        LargeImage largeimg = new LargeImage(glTexID);
+        // You may notice we haven't done any OpenGL operations to upload the texture to the GPU.
+        // That's becauses this method could very well be (and most definitely is) running in a seperate thread
+        // to the OpenGL thread which is baaaaaad. So we will upload it to the GPU later in the main thread.
+        // For now let's set up the LargeImage object, because that's something we're allowed to do in seperate threads
+        // at least.
+        LargeImage largeimg = new LargeImage(data);
         
         largeimg.shape = currentPG.createShape();
         
         largeimg.shape.beginShape(QUADS);
         largeimg.shape.noStroke();
+        largeimg.shape.fill(255);
         largeimg.shape.vertex(0, 0, largeimg.uvx1, largeimg.uvy1);
         largeimg.shape.vertex(1, 0, largeimg.uvx2, largeimg.uvx1);
         largeimg.shape.vertex(1, 1, largeimg.uvx2, largeimg.uvy2);
@@ -2695,6 +2818,528 @@ public class DynamicTextureAtlas {
 
 
   
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// This is pretty much copy+pasted from processing's core source code except with a few tweaks to
+// incoperate it into our FastImage renderer.
+// Because of that, it must be initialised after the display module.
+
+public class TextRendererModule {
+  public PFont textFont;
+  protected char[] textBuffer = new char[8 * 1024];
+  protected char[] textWidthBuffer = new char[8 * 1024];
+  
+  protected int textBreakCount;
+  protected int[] textBreakStart;
+  protected int[] textBreakStop;
+  
+  // The secret sauce for this class.
+  HashMap<PFont, UVImage[]> glyphsMap = new HashMap<PFont, UVImage[]>();
+  UVImage[] glyphs;
+  //UVImage[65536];
+  
+  /** The current text align (read-only) */
+  public int textAlign = LEFT;
+
+  /** The current vertical text alignment (read-only) */
+  public int textAlignY = BASELINE;
+
+  /** The current text mode (read-only) */
+  public int textMode = MODEL;
+
+  /** The current text size (read-only) */
+  public float textSize = 16;
+
+  /** The current text leading (read-only) */
+  public float textLeading;
+
+  /** Used internally to check whether still using the default font */
+  protected String defaultFontName;
+
+  static final protected String ERROR_TEXTFONT_NULL_PFONT =
+    "A null PFont was passed to textFont()";
+  
+  
+  public TextRendererModule() {
+    textSize = 12;
+    textLeading = 14;
+    textAlign = LEFT;
+    textMode = MODEL;
+  }
+  
+  public void setupGlyphs(PFont font) {
+    glyphs = new UVImage[65536];
+    
+    for (int i = 0; i < 1024; i++) {
+      PFont.Glyph g = font.getGlyph(char(i));
+      if (g != null && g.image != null) {
+        UVImage im = display.createUVImage(g.image, true, 2);
+        if (im != null) glyphs[i] = im;
+      }
+    }
+    glyphsMap.put(font, glyphs);
+    
+    //display.update();
+  }
+  
+  public void textLeading(float leading) {
+    textLeading = leading;
+  }
+  
+  // Just to keep code consistant and clean(-ish)
+  public void fill(color c) {
+    app.fill(c);
+  }
+  public void fill(float c) {
+    app.fill(c);
+  }
+  public void fill(color c, float a) {
+    app.fill(c, a);
+  }
+  public void fill(float c, float a) {
+    app.fill(c, a);
+  }
+  public void fill(float r, float g, float b) {
+    app.fill(r,g,b);
+  }
+  public void fill(float r, float g, float b, float a) {
+    app.fill(r,g,b,a);
+  }
+  
+  
+  public void text(String str, float x, float y) {
+      if (textFont == null) {
+        // TODO: Add warning
+        return;
+      }
+  
+      int length = str.length();
+      if (length > textBuffer.length) {
+        textBuffer = new char[length + 10];
+      }
+      str.getChars(0, length, textBuffer, 0);
+      text(textBuffer, 0, length, x, y);
+    }
+    
+    
+    
+    public void text(char[] chars, int start, int stop, float x, float y) {
+      // If multiple lines, sum the height of the additional lines
+      float high = 0; //-textAscent();
+      for (int i = start; i < stop; i++) {
+        if (chars[i] == '\n') {
+          high += textLeading;
+        }
+      }
+      if (textAlignY == CENTER) {
+        // for a single line, this adds half the textAscent to y
+        // for multiple lines, subtract half the additional height
+        //y += (textAscent() - textDescent() - high)/2;
+        y += (textAscent() - high)/2;
+      } else if (textAlignY == TOP) {
+        // for a single line, need to add textAscent to y
+        // for multiple lines, no different
+        y += textAscent();
+      } else if (textAlignY == BOTTOM) {
+        // for a single line, this is just offset by the descent
+        // for multiple lines, subtract leading for each line
+        y -= textDescent() + high;
+      //} else if (textAlignY == BASELINE) {
+        // do nothing
+      }
+  
+  //    int start = 0;
+      int index = 0;
+      while (index < stop) { //length) {
+        if (chars[index] == '\n') {
+          textLineAlignImpl(chars, start, index, x, y);
+          start = index + 1;
+          y += textLeading;
+        }
+        index++;
+      }
+      if (start < stop) {  //length) {
+        textLineAlignImpl(chars, start, index, x, y);
+      }
+    }
+  
+  
+  public void text(String str, float x, float y, float z) {
+      if (z != 0) translate(0, 0, z);  // slow!
+  
+      text(str, x, y);
+  //    textZ = z;
+  
+      if (z != 0) translate(0, 0, -z);  // inaccurate!
+    }
+  
+  
+    public void text(char[] chars, int start, int stop,
+                     float x, float y, float z) {
+      if (z != 0) translate(0, 0, z);  // slow!
+  
+      text(chars, start, stop, x, y);
+  //    textZ = z;
+  
+      if (z != 0) translate(0, 0, -z);  // inaccurate!
+    }
+  
+  
+  public void text(String str, float x1, float y1, float x2, float y2) {
+      if (textFont == null) {
+        
+      }
+      
+      // NOTE: Removed switch statement here.
+      x2 += x1;
+      y2 += y1;
+      
+      if (x2 < x1) {
+        float temp = x1; x1 = x2; x2 = temp;
+      }
+      if (y2 < y1) {
+        float temp = y1; y1 = y2; y2 = temp;
+      }
+  
+  //    float currentY = y1;
+      float boxWidth = x2 - x1;
+  
+  //    // ala illustrator, the text itself must fit inside the box
+  //    currentY += textAscent(); //ascent() * textSize;
+  //    // if the box is already too small, tell em to f off
+  //    if (currentY > y2) return;
+  
+  //    float spaceWidth = textWidth(' ');
+  
+      if (textBreakStart == null) {
+        textBreakStart = new int[20];
+        textBreakStop = new int[20];
+      }
+      textBreakCount = 0;
+  
+      int length = str.length();
+      if (length + 1 > textBuffer.length) {
+        textBuffer = new char[length + 1];
+      }
+      str.getChars(0, length, textBuffer, 0);
+      // add a fake newline to simplify calculations
+      textBuffer[length++] = '\n';
+  
+      int sentenceStart = 0;
+      for (int i = 0; i < length; i++) {
+        if (textBuffer[i] == '\n') {
+  //        currentY = textSentence(textBuffer, sentenceStart, i,
+  //                                lineX, boxWidth, currentY, y2, spaceWidth);
+          boolean legit =
+            textSentence(textBuffer, sentenceStart, i, boxWidth);
+          if (!legit) break;
+  //      if (Float.isNaN(currentY)) break;  // word too big (or error)
+  //      if (currentY > y2) break;  // past the box
+          sentenceStart = i + 1;
+        }
+      }
+  
+      // lineX is the position where the text starts, which is adjusted
+      // to left/center/right based on the current textAlign
+      float lineX = x1; //boxX1;
+      if (textAlign == CENTER) {
+        lineX = lineX + boxWidth/2f;
+      } else if (textAlign == RIGHT) {
+        lineX = x2; //boxX2;
+      }
+  
+      float boxHeight = y2 - y1;
+      //int lineFitCount = 1 + PApplet.floor((boxHeight - textAscent()) / textLeading);
+      // incorporate textAscent() for the top (baseline will be y1 + ascent)
+      // and textDescent() for the bottom, so that lower parts of letters aren't
+      // outside the box. [0151]
+      float topAndBottom = textAscent() + textDescent();
+      int lineFitCount = 1 + PApplet.floor((boxHeight - topAndBottom) / textLeading);
+      int lineCount = Math.min(textBreakCount, lineFitCount);
+  
+      if (textAlignY == CENTER) {
+        float lineHigh = textAscent() + textLeading * (lineCount - 1);
+        float y = y1 + textAscent() + (boxHeight - lineHigh) / 2;
+        for (int i = 0; i < lineCount; i++) {
+          textLineAlignImpl(textBuffer, textBreakStart[i], textBreakStop[i], lineX, y);
+          y += textLeading;
+        }
+  
+      } else if (textAlignY == BOTTOM) {
+        float y = y2 - textDescent() - textLeading * (lineCount - 1);
+        for (int i = 0; i < lineCount; i++) {
+          textLineAlignImpl(textBuffer, textBreakStart[i], textBreakStop[i], lineX, y);
+          y += textLeading;
+        }
+  
+      } else {  // TOP or BASELINE just go to the default
+        float y = y1 + textAscent();
+        for (int i = 0; i < lineCount; i++) {
+          textLineAlignImpl(textBuffer, textBreakStart[i], textBreakStop[i], lineX, y);
+          y += textLeading;
+        }
+      }
+    }
+    
+    
+    
+    protected void textLineAlignImpl(char[] buffer, int start, int stop,
+                                     float x, float y) {
+      if (textAlign == CENTER) {
+        x -= textWidthImpl(buffer, start, stop) / 2f;
+  
+      } else if (textAlign == RIGHT) {
+        x -= textWidthImpl(buffer, start, stop);
+      }
+  
+      textLineImpl(buffer, start, stop, x, y);
+    }
+  
+  
+    /**
+     * Implementation of actual drawing for a line of text.
+     */
+    protected void textLineImpl(char[] buffer, int start, int stop,
+                                float x, float y) {
+      for (int index = start; index < stop; index++) {
+        textCharImpl(buffer[index], x, y);
+  
+        // this doesn't account for kerning
+        x += this.textWidth(buffer[index]);
+      }
+  //    textX = x;
+  //    textY = y;
+  //    textZ = 0;  // this will get set by the caller if non-zero
+    }
+  
+  
+    protected void textCharImpl(char ch, float x, float y) { //, float z) {
+      PFont.Glyph glyph = textFont.getGlyph(ch);
+      UVImage glyphImage = glyphs[(int)ch];
+      if (glyph != null) {
+        if (textMode == MODEL) {
+          float floatSize = textFont.getSize();
+          float high = glyph.height / floatSize;
+          float wide = glyph.width / floatSize;
+          float leftExtent = glyph.leftExtent / floatSize;
+          float topExtent = glyph.topExtent  / floatSize;
+  
+          float x1 = x + leftExtent * textSize;
+          float y1 = y - topExtent * textSize;
+          float x2 = x1 + wide * textSize;
+          float y2 = y1 + high * textSize;
+  
+          textCharModelImpl(glyphImage,
+                            x1, y1, x2, y2);
+        }
+      } else if (ch != ' ' && ch != 127) {
+        println("No glyph found for the " + ch + " (\\u" + PApplet.hex(ch, 4) + ") character");
+      }
+    }
+  
+  
+    protected void textCharModelImpl(UVImage glyph,
+                                     float x1, float y1,
+                                     float x2, float y2) {
+      display.image(glyph, x1, y1, x2-x1, y2-y1);     
+    }
+  
+  
+  
+    protected void textSentenceBreak(int start, int stop) {
+      if (textBreakCount == textBreakStart.length) {
+        textBreakStart = PApplet.expand(textBreakStart);
+        textBreakStop = PApplet.expand(textBreakStop);
+      }
+      textBreakStart[textBreakCount] = start;
+      textBreakStop[textBreakCount] = stop;
+      textBreakCount++;
+    }
+  
+  
+    public void text(int num, float x, float y) {
+      text(String.valueOf(num), x, y);
+    }
+  
+  
+    public void text(int num, float x, float y, float z) {
+      text(String.valueOf(num), x, y, z);
+    }
+    
+    protected boolean textSentence(char[] buffer, int start, int stop,
+                                   float boxWidth) {
+      float runningX = 0;
+  
+      // Keep track of this separately from index, since we'll need to back up
+      // from index when breaking words that are too long to fit.
+      int lineStart = start;
+      int wordStart = start;
+      int index = start;
+      while (index <= stop) {
+        // boundary of a word or end of this sentence
+        if ((buffer[index] == ' ') || (index == stop)) {
+  //        System.out.println((index == stop) + " " + wordStart + " " + index);
+          float wordWidth = 0;
+          if (index > wordStart) {
+            // we have a non-empty word, measure it
+            wordWidth = textWidthImpl(buffer, wordStart, index);
+          }
+  
+          if (runningX + wordWidth >= boxWidth) {
+            if (runningX != 0) {
+              // Next word is too big, output the current line and advance
+              index = wordStart;
+              textSentenceBreak(lineStart, index);
+              // Eat whitespace before the first word on the next line.
+              while ((index < stop) && (buffer[index] == ' ')) {
+                index++;
+              }
+            } else {  // (runningX == 0)
+              // If this is the first word on the line, and its width is greater
+              // than the width of the text box, then break the word where at the
+              // max width, and send the rest of the word to the next line.
+              if (index - wordStart < 25) {
+                do {
+                  index--;
+                  if (index == wordStart) {
+                    // Not a single char will fit on this line. screw 'em.
+                    return false;
+                  }
+                  wordWidth = textWidthImpl(buffer, wordStart, index);
+                } while (wordWidth > boxWidth);
+              } else {
+                // This word is more than 25 characters long, might be faster to
+                // start from the beginning of the text rather than shaving from
+                // the end of it, which is super slow if it's 1000s of letters.
+                // https://github.com/processing/processing/issues/211
+                int lastIndex = index;
+                index = wordStart + 1;
+                // walk to the right while things fit
+  //              while ((wordWidth = textWidthImpl(buffer, wordStart, index)) < boxWidth) {
+                while (textWidthImpl(buffer, wordStart, index) < boxWidth) {
+                  index++;
+                  if (index > lastIndex) {  // Unreachable?
+                    break;
+                  }
+                }
+                index--;
+                if (index == wordStart) {
+                  return false;  // nothing fits
+                }
+              }
+  
+              //textLineImpl(buffer, lineStart, index, x, y);
+              textSentenceBreak(lineStart, index);
+            }
+            lineStart = index;
+            wordStart = index;
+            runningX = 0;
+  
+          } else if (index == stop) {
+            // last line in the block, time to unload
+            //textLineImpl(buffer, lineStart, index, x, y);
+            textSentenceBreak(lineStart, index);
+  //          y += textLeading;
+            index++;
+  
+          } else {  // this word will fit, just add it to the line
+            runningX += wordWidth;
+            wordStart = index ;  // move on to the next word including the space before the word
+            index++;
+          }
+        } else {  // not a space or the last character
+          index++;  // this is just another letter
+        }
+      }
+  //    return y;
+      return true;
+    }
+    
+    
+    protected float textWidthImpl(char[] buffer, int start, int stop) {
+      float wide = 0;
+      for (int i = start; i < stop; i++) {
+        // could add kerning here, but it just ain't implemented
+        wide += textFont.width(buffer[i]) * textSize;
+      }
+      return wide;
+    }
+    
+    protected void handleTextSize(float size) {
+      textSize = size;
+      textLeading = (this.textAscent() + this.textDescent()) * 1.275f;
+    }
+    
+    public void textSize(float size) {
+      handleTextSize(size);
+    }
+    
+    public float textAscent() {
+      return textFont.ascent() * textSize;
+    }
+    
+    public float textDescent() {
+      return textFont.descent() * textSize;
+    }
+    
+    protected void textFontImpl(PFont which, float size) {
+      UVImage[] g = glyphsMap.get(which);
+      if (g == null) {
+        console.bugWarnOnce("textFontImpl: text font hasn't been init'd yet, make sure to init it with setupGlyphs()");
+        return;
+      }
+      
+      glyphs = g;
+      textFont = which;
+      handleTextSize(size);
+    }
+    
+    public void textFont(PFont which, float size) {
+      textFontImpl(which, size);
+    }
+    
+    public void textAlign(int alignX, int alignY) {
+      textAlign = alignX;
+      textAlignY = alignY;
+    }
+    
+    public float textWidth(char c) {
+      textWidthBuffer[0] = c;
+      return textWidthImpl(textWidthBuffer, 0, 1);
+    }
+}
+
+
+
+
+
+
 
 
 
@@ -4481,6 +5126,7 @@ public class DynamicTextureAtlas {
     ui = new UIModule();
     sound = new AudioModule();
     clipboard = new ClipboardModule();
+    text = new TextRendererModule();
     
     power.putFPSSystemIntoGraceMode();
     
@@ -4489,6 +5135,9 @@ public class DynamicTextureAtlas {
     loadAsset(APPPATH+SOUND_PATH+"intro.wav");
     loadAsset(APPPATH+IMG_PATH+"logo.png");
     loadAllAssets(APPPATH+IMG_PATH+"loadingmorph/");
+    // Update so the GPU can use them.
+    display.update();
+    
     // Find out how many images there are in loadingmorph
     File f = new File(APPPATH+IMG_PATH+"loadingmorph/");
     display.loadingFramesLength = f.listFiles().length;
@@ -4496,15 +5145,15 @@ public class DynamicTextureAtlas {
     
     // Load in seperate thread.
     loadedEverything.set(false);
-    //Thread t1 = new Thread(new Runnable() {
-    //  public void run() {
-    //    }
-    //  }
-    //);
-    //t1.start();
+    Thread t1 = new Thread(new Runnable() {
+      public void run() {
+        loadEverything();
+        loadedEverything.set(true);
+      }
+    }
+    );
+    t1.start();
     
-    loadEverything();
-    loadedEverything.set(true);
 
     //println("Running in seperate thread.");
     // Config file
@@ -5013,8 +5662,8 @@ public class DynamicTextureAtlas {
       // Count the number of characters, add one.
       // That's how you deal with substirng.
       String arg = "";
-      if (command.length() > 17)
-        arg = command.substring(17);
+      if (command.length() > 16)
+        arg = command.substring(16);
 
       power.setForcedPowerMode(arg);
       if (arg.equals("HIGH") || arg.equals("NORMAL") || arg.equals("SLEEPY") || arg.equals("MINIMAL")) console.log("Forced power mode set to "+arg);
@@ -5414,6 +6063,8 @@ public class DynamicTextureAtlas {
     }
 
     public Console() {
+      // Here we use the legacy processing's text system instead of our FastImage text system
+      // so that even when the text module isn't initialised, it won't crash.
       this.consoleLine = new ConsoleLine[totalLines];
       this.generateConsole();
       
@@ -5458,6 +6109,7 @@ public class DynamicTextureAtlas {
     //}
 
     public void display(boolean doDisplay) {
+      if (display != null) display.resetShader();
       if (doDisplay) {
         //pushMatrix();
         //scale
@@ -5791,26 +6443,11 @@ public class DynamicTextureAtlas {
     if (loadedContent.contains(name)) {
       return;
     }
-    // if extension is image
-    if (ext.equals("png") || ext.equals("jpg") || ext.equals("gif") || ext.equals("bmp")) {
-      // load image and add it to the systemImages hashmap.
-      if (display.systemImages.get(name) == null) {
-        
-        // We use our magic FastImage renderer.
-        PImage img = app.loadImage(path);
-        
-        UVImage uv = display.createUVImage(img);
-        if (uv == null) {
-          console.warn("Failed to allocate image to atlas");
-          return;
-        }
-        display.systemImages.put(name, uv);
-        loadedContent.add(name);
-      } else {
-        console.warn("Image "+name+" already exists, skipping.");
-      }
-    } 
-    else if (ext.equals("large.png") || ext.equals("large.jpg") || ext.equals("large.gif") || ext.equals("large.bmp")) {
+    
+    // End extension
+    String eext = file.getExt(path);
+     
+    if (ext.equals("large.png") || ext.equals("large.jpg") || ext.equals("large.gif") || ext.equals("large.bmp")) {
       // load image and add it to the systemImages hashmap.
       if (display.systemImages.get(name) == null) {
         
@@ -5827,10 +6464,46 @@ public class DynamicTextureAtlas {
         console.warn("Image "+name+" already exists, skipping.");
       }
     } 
+    // if extension is image
+    else if (eext.equals("png") || eext.equals("jpg") || eext.equals("gif") || eext.equals("bmp")) {
+      // load image and add it to the systemImages hashmap.
+      if (display.systemImages.get(name) == null) {
+        
+        // We use our magic FastImage renderer.
+        PImage img = app.loadImage(path);
+        
+        UVImage uv = null;
+        if (ext.equals("bigpad.png") || ext.equals("bigpad.png.jpg") || ext.equals("bigpad.png.gif") || ext.equals("bigpad.png.bmp")) {
+          uv = display.createUVImage(img, 35);
+        }
+        else if (ext.equals("pad.png") || ext.equals("pad.jpg") || ext.equals("pad.gif") || ext.equals("pad.bmp")) {
+          uv = display.createUVImage(img, 8);
+        }
+        else if (ext.equals("repeat.png") || ext.equals("repeat.jpg") || ext.equals("repeat.gif") || ext.equals("repeat.bmp")) {
+          uv = display.createUVImage(img, 2.0, 2.0, 35);
+        }
+        else {
+          uv = display.createUVImage(img);
+        }
+        
+        if (uv == null) {
+          console.warn("Failed to allocate image to atlas");
+          return;
+        }
+        display.systemImages.put(name, uv);
+        loadedContent.add(name);
+      } else {
+        console.warn("Image "+name+" already exists, skipping.");
+      }
+    }
     else if (ext.equals("otf") || ext.equals("ttf")) {       // Load font.
-      display.fonts.put(name, app.createFont(path, 32));
+      PFont newFont = app.createFont(path, 32);
+      display.fonts.put(name, newFont);
+      text.setupGlyphs(newFont);
     } else if (ext.equals("vlw")) {
-      display.fonts.put(name, app.loadFont(path));
+      PFont newFont = app.loadFont(path);
+      display.fonts.put(name, newFont);
+      text.setupGlyphs(newFont);
     } else if (ext.equals("glsl") || ext.equals("vert")) {
       display.loadShader(path);
     } else if (ext.equals("frag")) {
@@ -6916,8 +7589,6 @@ public class DynamicTextureAtlas {
       app.text(txt, 7, y+2);
       app.popMatrix();
     }
-    
-    //display.showStencilMap(0, 0, 256, 256);
 
     // Display console
     // TODO: this renders the console 4 times which is BAD.
@@ -6925,6 +7596,9 @@ public class DynamicTextureAtlas {
     console.display(true);
     
     display.resetTimes();
+    
+    display.resetShader();
+    display.showStencilMap(0, 0, 256, 256);
     
     if (display != null) display.timeMode = display.IDLE_TIME;
   }
@@ -6953,20 +7627,22 @@ public abstract class FastImage {
 
 
 
-// For images that are so large that they prolly don't fit in a texture atlas.
-// Slower, but doesn't take up more memory than necessary.
-// Needs to be in the same class that contains pgl.
+// For images that are so large that they prolly don't fit in a texture atlas or would be inefficient otherwise.
+// Slower, but doesn't clobber up the atlases.
 public class LargeImage extends FastImage {
   public float width = 0, height = 0;
   public int glTexID = -1;
   public PShape shape;
+  public IntBuffer texData;
+  public boolean inGPU = false;
   
-  public LargeImage(int glTexID) {
-    this.glTexID = glTexID;
+  public LargeImage(IntBuffer texData) {
+    this.texData = texData;
   }
   
   public void finalize() {
     // TODO: OpenGL function call to clear texture from gpu mem
+    
   }
 }
 
@@ -7027,6 +7703,9 @@ public class UVImage extends FastImage {
     // TODO: Neatly reimplement (somehow)
     //destroyImage(this);
     //println("Destroyed", startx, starty, endx, endy);
+    if (timewayEngine != null && timewayEngine.display != null) {
+      timewayEngine.display.destroyImage(this);
+    }
   }
 }
 
@@ -7113,6 +7792,7 @@ public abstract class Screen {
   protected Engine.FilemanagerModule file;
   protected Engine.ClipboardModule clipboard;
   protected Engine.UIModule ui;
+  protected Engine.TextRendererModule text;
   
   protected float screenx = 0;
   protected float screeny = 0;
@@ -7142,6 +7822,7 @@ public abstract class Screen {
     this.sound = engine.sound;
     this.file = engine.file;
     this.clipboard = engine.clipboard;
+    this.text = engine.text;
     
     this.WIDTH = engine.display.WIDTH;
     this.HEIGHT = engine.display.HEIGHT;

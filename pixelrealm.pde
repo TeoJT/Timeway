@@ -801,11 +801,11 @@ public class PixelRealm extends Screen {
         this.y = y;
         y += 20;
         
-        app.fill(255);
-        app.textFont(engine.DEFAULT_FONT, 20);
-        app.textAlign(LEFT, CENTER);
+        text.fill(255);
+        text.textFont(engine.DEFAULT_FONT, 20);
+        text.textAlign(LEFT, CENTER);
         
-        app.text(label, x, y);
+        text.text(label, x, y);
       }
     }
     
@@ -844,14 +844,14 @@ public class PixelRealm extends Screen {
       }
       
       protected void showVal(float y) {
-        app.fill(255);
-        app.textFont(engine.DEFAULT_FONT, 26);
-        app.textAlign(RIGHT, CENTER);
+        text.fill(255);
+        text.textFont(engine.DEFAULT_FONT, 26);
+        text.textAlign(RIGHT, CENTER);
         
         String disp = nf(valFloat, 0, 2);
         if (valFloat == max && maxLabel != null) disp = maxLabel;
         if (valFloat == min && minLabel != null) disp = minLabel;
-        app.text(disp, x+CONTROL_X-12, y);
+        text.text(disp, x+CONTROL_X-12, y);
       }
       
       protected void renderSlider(float y) {
@@ -893,14 +893,14 @@ public class PixelRealm extends Screen {
       
       @Override
       protected void showVal(float y) {
-        app.fill(255);
-        app.textFont(engine.DEFAULT_FONT, 26);
-        app.textAlign(RIGHT, CENTER);
+        text.fill(255);
+        text.textFont(engine.DEFAULT_FONT, 26);
+        text.textAlign(RIGHT, CENTER);
         
         String disp = str((int)round(valFloat));
         if (valFloat == max && maxLabel != null) disp = maxLabel;
         if (valFloat == min && minLabel != null) disp = minLabel;
-        app.text(disp, x+CONTROL_X-12, y);
+        text.text(disp, x+CONTROL_X-12, y);
       }
       
       @Override
@@ -1414,6 +1414,7 @@ public class PixelRealm extends Screen {
           pshapeChunk = createShape();
           pshapeChunk.beginShape(QUADS);
           pshapeChunk.textureMode(NORMAL);
+          pshapeChunk.fill(255, 255);
           // TODO: add code ready for custom tile textures.
           //pshapeChunk.texture(img_grass.get());
           
@@ -1657,10 +1658,12 @@ public class PixelRealm extends Screen {
         readjustSize();
         
         if (versionCompatibility == 1) {
+          display.bindAtlas(((UVImage)img.getRandom(randSeed)).atlasID);
           displayQuad((UVImage)img.getRandom(randSeed), x1, y1, z1, x2, y1+hi, z2);
         }
         if (versionCompatibility == 2) {
           useFadeShader();
+          display.bindAtlas(((UVImage)img.get(imgIndex)).atlasID);
           displayQuad((UVImage)img.get(imgIndex), x1, y1, z1, x2, y1+hi, z2);
         }
       }
@@ -1943,10 +1946,10 @@ public class PixelRealm extends Screen {
         scene.pushMatrix();
         scene.translate(x, y-hi-20, z);
         scene.rotateY(d);
-        scene.textFont(engine.DEFAULT_FONT, 16);
-        scene.textAlign(CENTER, CENTER);
-        scene.fill(255);
-        scene.text(filename, 0, 0, 0);
+        text.textFont(engine.DEFAULT_FONT, 24);
+        text.textAlign(CENTER, CENTER);
+        text.fill(255);
+        text.text(filename, 0, 0, 0);
         scene.popMatrix();
         if (lights) scene.lights();
         display.recordLogicTime();
@@ -2037,6 +2040,7 @@ public class PixelRealm extends Screen {
               float x2 = x - sin_d;
               float z2 = z - cos_d;
   
+              display.bindAtlas(((UVImage)img.get()).atlasID);
               displayQuad((UVImage)this.img.get(), x1, y1, z1, x2, y1+hi, z2);
             }
           }
@@ -2295,11 +2299,10 @@ public class PixelRealm extends Screen {
           scene.pushMatrix();
           scene.translate(x, y-hi, z);
           scene.rotateY(d);
-          scene.textSize(24);
-          scene.textFont(engine.DEFAULT_FONT);
-          scene.textAlign(CENTER, CENTER);
-          scene.fill(255);
-          scene.text(filename, 0, 0, 0);
+          text.textFont(engine.DEFAULT_FONT, 48);
+          text.textAlign(CENTER, CENTER);
+          text.fill(255);
+          text.text(filename, 0, 0, 0);
           scene.popMatrix();
           if (lights) scene.lights();
           
@@ -2497,6 +2500,7 @@ public class PixelRealm extends Screen {
           float x2 = x - sin_d;
           float z2 = z - cos_d;
   
+          display.bindAtlas(((UVImage)img.get()).atlasID);
           displayQuad((UVImage)this.img.get(), x1, y1, z1, x2, y1+hi, z2);
   
           // Reset tint
@@ -2527,11 +2531,11 @@ public class PixelRealm extends Screen {
           if (dist > terrain.FADE_DIST_OBJECTS) {
             float fade = calculateFade(dist, terrain.FADE_DIST_OBJECTS);
             if (fade > 1) {
-              scene.tint(tint, fade);
+              scene.fill(tint, fade);
             } else {
               dontRender = true;
             }
-          } else scene.tint(tint, 255);
+          } else scene.fill(tint, 255);
         }
         else if (versionCompatibility == 2) {
           float x = playerX-this.x;
@@ -2554,7 +2558,7 @@ public class PixelRealm extends Screen {
           scene.pushMatrix();
   
   
-          scene.beginShape();
+          scene.beginShape(QUADS);
           if (!dontRender) {
             scene.textureMode(NORMAL);
             scene.textureWrap(REPEAT);
@@ -3465,12 +3469,11 @@ public class PixelRealm extends Screen {
       }
     }
     
-    public Object getRealmFile(Object defaultFile, String... paths) {
+    public Object getRealmFile(Object defaultFile, int padding, float repeat, String... paths) {
       for (String path : paths) {
         if (file.exists(path)) {
           // Really botch'd fix here.
           // Check if the name starts with .pixelrealm-sky and if so load the largeImage.
-          console.log((file.getFilename(path).substring(0, REALM_SKY.length())));
           if ((file.getFilename(path).substring(0, REALM_SKY.length())).equals(REALM_SKY) 
           && (file.getExt(path).equals("png") || file.getExt(path).equals("gif"))) {
             return display.createLargeImage(loadImage(path));
@@ -3478,7 +3481,7 @@ public class PixelRealm extends Screen {
           // Default: UVImage (small)
           else if (file.getExt(path).equals("png") || file.getExt(path).equals("gif")) {
             incrementMemUsage(file.getImageUncompressedSize(path));
-            return display.createUVImage(loadImage(path));
+            return display.createUVImage(loadImage(path), repeat, repeat, padding);
           }
           // Sounds
           else if (file.getExt(path).equals("wav"))
@@ -3504,6 +3507,15 @@ public class PixelRealm extends Screen {
       LargeImage DEFAULT_SKY = REALM_SKY_DEFAULT;
       String DEFAULT_BGM = REALM_BGM_DEFAULT;
       
+      int GRASS_PADDING = 25;
+      int PROBJECT_PADDING = 5;
+      float GRASS_REPEAT = 1.;
+      
+      // Pretty much all 1.x realms had a repeat of 2, I don't
+      // think it's worth the extra hassle to check the actual grass repeat.
+      if (versionCompatibility == 1) {
+        GRASS_REPEAT = 2.;
+      }
       
       // Classic backwards compatibility for old realms
       // that had a field as the default realm.
@@ -3515,8 +3527,9 @@ public class PixelRealm extends Screen {
       }
       
       
+      
       // TODO: read any image format (png, gif, etc)
-      img_grass = new RealmTexture((UVImage)getRealmFile(DEFAULT_GRASS, dir+REALM_GRASS+".png"));
+      img_grass = new RealmTexture((UVImage)getRealmFile(DEFAULT_GRASS, GRASS_PADDING, GRASS_REPEAT, dir+REALM_GRASS+".png"));
       
       /// here we search for the terrain objects textures from the dir.
       ArrayList<FastImage> imgs = new ArrayList<FastImage>();
@@ -3530,12 +3543,12 @@ public class PixelRealm extends Screen {
         
         // Get either a sky called sky-1 or just sky
         int i = 1;
-        LargeImage sky = (LargeImage)getRealmFile(DEFAULT_SKY, dir+REALM_SKY+".png", dir+REALM_SKY+"-1.png");
+        LargeImage sky = (LargeImage)getRealmFile(DEFAULT_SKY, 0, 0, dir+REALM_SKY+".png", dir+REALM_SKY+"-1.png");
         imgs.add(sky);
         
         // If we find a sky, keep looking for sky-2, sky-3 etc
         while (sky != DEFAULT_SKY && i <= 9) {
-          sky = (LargeImage)getRealmFile(DEFAULT_SKY, dir+REALM_SKY+"-"+str(i+1)+".png");
+          sky = (LargeImage)getRealmFile(DEFAULT_SKY, 0, 0, dir+REALM_SKY+"-"+str(i+1)+".png");
           if (sky != DEFAULT_SKY) {
             //if (sky.width != 1500)
             //  console.warn("Width of "+REALM_SKY+" is "+str(sky.width)+"px, should be 1500px for best visual results!");
@@ -3551,14 +3564,14 @@ public class PixelRealm extends Screen {
       imgs = new ArrayList<FastImage>();
   
       // Try to find the first terrain object texture, it will return default if not found
-      UVImage terrainobj = (UVImage)getRealmFile(DEFAULT_TREE, dir+REALM_TREE_LEGACY+"-1.png", dir+REALM_TREE+"-1.png", dir+REALM_TREE+".png");
+      UVImage terrainobj = (UVImage)getRealmFile(DEFAULT_TREE, PROBJECT_PADDING, GRASS_REPEAT, dir+REALM_TREE_LEGACY+"-1.png", dir+REALM_TREE+"-1.png", dir+REALM_TREE+".png");
       imgs.add(terrainobj);
   
       int i = 1;
       // Run this loop only if the terrain_objects files exist and only for how many pixelrealm-terrain_objects
       // there are in the folder.
       while (terrainobj != DEFAULT_TREE && i <= 9) {
-        terrainobj = (UVImage)getRealmFile(DEFAULT_TREE, dir+REALM_TREE_LEGACY+"-"+str(i+1)+".png", dir+REALM_TREE+"-"+str(i+1)+".png");
+        terrainobj = (UVImage)getRealmFile(DEFAULT_TREE, PROBJECT_PADDING, GRASS_REPEAT, dir+REALM_TREE_LEGACY+"-"+str(i+1)+".png", dir+REALM_TREE+"-"+str(i+1)+".png");
         if (terrainobj != DEFAULT_TREE) {
           imgs.add(terrainobj);
         }
@@ -3876,6 +3889,7 @@ public class PixelRealm extends Screen {
     
     
     public void renderTerrain() {
+      display.bindAtlas(((UVImage)img_grass.get()).atlasID);
       if (version.equals("1.0") || version.equals("1.1")) {
         renderTerrainV1();
       }
@@ -3911,6 +3925,10 @@ public class PixelRealm extends Screen {
       
       scene.hint(ENABLE_DEPTH_TEST);
       display.recordLogicTime();
+      UVImage uvimg = (UVImage)img_grass.get();
+      display.bindAtlas(uvimg.atlasID);
+      uvimg.setUV(0, 0, terrain.getGroundRepeat(), terrain.getGroundRepeat());
+      float[] uvs = display.getUVs(uvimg);
   
       for (float tilez = chunkz-tt.getRenderDistance()-1; tilez < chunkz+tt.getRenderDistance(); tilez += 1.) {
         //                                                        random bug fix over here.
@@ -3921,9 +3939,9 @@ public class PixelRealm extends Screen {
           boolean dontRender = false;
           if (dist > tt.FADE_DIST_GROUND) {
             float fade = calculateFade(dist, tt.FADE_DIST_GROUND);
-            if (fade > 1) scene.tint(255, fade);
+            if (fade > 1) scene.fill(255, fade);
             else dontRender = true;
-          } else scene.noTint();
+          } else scene.fill(255, 255);
   
           if (!dontRender) {
             float noisePosition = engine.noise(tilex, tilez);
@@ -3945,13 +3963,16 @@ public class PixelRealm extends Screen {
             PVector v3 = calcTile(tilex, tilez);          // Right, bottom
             PVector v4 = calcTile(tilex-1., tilez);          // Left, bottom
             
-            //UVImage uv = img_grass.get();
             
             display.recordRendererTime();
-            scene.vertex(v1.x, v1.y, v1.z, 0, 0);                                    
-            scene.vertex(v2.x, v2.y, v2.z, tt.getGroundRepeat(), 0);  
-            scene.vertex(v3.x, v3.y, v3.z,tt.getGroundRepeat(), tt.getGroundRepeat());  
-            scene.vertex(v4.x, v4.y, v4.z, 0, tt.getGroundRepeat());       
+            scene.vertex(v1.x, v1.y, v1.z, uvs[0], uvs[1]);                                    
+            scene.vertex(v2.x, v2.y, v2.z, uvs[2], uvs[1]);  
+            scene.vertex(v3.x, v3.y, v3.z, uvs[2], uvs[3]);  
+            scene.vertex(v4.x, v4.y, v4.z, uvs[0], uvs[3]);     
+            //scene.vertex(v1.x, v1.y, v1.z, uv.startx, uv.starty);                                    
+            //scene.vertex(v2.x, v2.y, v2.z, uv.endx*tt.getGroundRepeat(), uv.starty);  
+            //scene.vertex(v3.x, v3.y, v3.z, uv.endx*tt.getGroundRepeat(), uv.endy*tt.getGroundRepeat());  
+            //scene.vertex(v4.x, v4.y, v4.z, uv.startx, uv.endy*tt.getGroundRepeat());     
   
   
             scene.endShape();
@@ -4051,8 +4072,9 @@ public class PixelRealm extends Screen {
         chunkz++;
       }
       
-      if (terrain.hasWater)
-        renderWater();
+      if (terrain.hasWater){
+        //renderWater();
+      }
       
       
       scene.popMatrix();
@@ -4122,7 +4144,6 @@ public class PixelRealm extends Screen {
       // Clear canvas (we need to do that because opengl is big stoopid)
       // TODO: benchmark; scene.clear or scene.background()?
       scene.background(0);
-      scene.noTint();
       scene.noStroke();
       
       float sky_fov = 0.25;
@@ -4139,11 +4160,11 @@ public class PixelRealm extends Screen {
       
       // Top part
       sky.setUV(skyViewportLeft, 0., skyViewportRight, 1.0);
-      display.image(sky, 0, 0, scene.width, img_sky.get().height);
+      display.image(sky, 0, 0, scene.width, sky.height);
       
       // Bottom part that just stretches til it reaches the bottom of the screen, for sky textures that aren't scaled properly.
       sky.setUV(skyViewportLeft, 0.9999, skyViewportRight, 1.0);
-      display.image(sky, 0, img_sky.get().height, scene.width, height);
+      display.image(sky, 0, sky.height, scene.width, height-sky.height);
       
       display.recordLogicTime();
     }
@@ -4384,12 +4405,12 @@ public class PixelRealm extends Screen {
       
       // Sorry not sorry for putting this in "effects".
       if (currRealm.collectedCoins > 0 && currRealm.collectedCoins < 100) {
-        scene.textFont(engine.DEFAULT_FONT, 16);
+        text.textFont(engine.DEFAULT_FONT, 16);
         float y = 8.-coinCounterBounce*6.;
         display.image((UVImage)IMG_COIN.get(), 10, y, 16, 17);
-        scene.textAlign(LEFT, TOP);
-        scene.fill(255);
-        scene.text("x "+str(collectedCoins), 30, y);
+        text.textAlign(LEFT, TOP);
+        text.fill(255);
+        text.text("x "+str(collectedCoins), 30, y);
         
         coinCounterBounce *= pow(0.85, display.getDelta());
       }
@@ -4702,7 +4723,7 @@ public class PixelRealm extends Screen {
     fill(255);
     textFont(engine.DEFAULT_FONT, 30);
     textAlign(LEFT, CENTER);
-    text("Mem: "+(used/1024)+" kb / "+(MAX_MEM_USAGE/1024)+" kb", 105, myUpperBarWeight+45);
+    //text("Mem: "+(used/1024)+" kb / "+(MAX_MEM_USAGE/1024)+" kb", 105, myUpperBarWeight+45);
     display.recordLogicTime();
   }
   
@@ -4734,16 +4755,17 @@ public class PixelRealm extends Screen {
     // Now begin all the drawing!
     display.recordRendererTime();
     scene.beginDraw();
-    display.resetShader(scene);
     display.usePGraphics(scene);
+    //display.resetShader(scene);
     display.recordLogicTime();
+    scene.fill(255);
     currRealm.renderSky();
     
     display.recordRendererTime();
     // Make us see really really farrrrrrr
     float zNear = 10.;
     if (movementPaused) zNear = 120.;
-    scene.perspective(PI/3.0, (float)scene.width/scene.height, zNear, 10000.);
+    scene.perspective(PI/3.0, (float)scene.width/scene.height, zNear, 50000.);
     scene.pushMatrix();
     display.recordLogicTime();
 
@@ -4762,8 +4784,8 @@ public class PixelRealm extends Screen {
     }
 
     // From this point on we use our cool FastImage rendering system.
-    display.bind();
     currRealm.renderTerrain();
+    scene.fill(255, 255);
     currRealm.renderPRObjects(); 
     display.resetShader(scene);
     
@@ -4781,7 +4803,7 @@ public class PixelRealm extends Screen {
     display.usePGraphics(g);
     float wi = scene.width*DISPLAY_SCALE;
     float hi = this.height;
-    image(scene, (WIDTH/2)-wi/2, (HEIGHT/2)-hi/2, wi, hi);
+    sceneCanvas.display((WIDTH/2)-wi/2, (HEIGHT/2)-hi/2, wi, hi);
     display.recordLogicTime();
     
     
@@ -4867,8 +4889,9 @@ public class PixelRealm extends Screen {
     else {
       app.fill(0);
     }
-    app.textFont(engine.DEFAULT_FONT, 36);
-    app.text(currRealm.stateDirectory, 10, 10);
+    
+    text.textFont(engine.DEFAULT_FONT, 36);
+    text.text(currRealm.stateDirectory, 10, 10);
     
     
     if (loading > 0 || sound.loadingMusic()) {
@@ -4878,6 +4901,10 @@ public class PixelRealm extends Screen {
       // it doesn't need to be accurate.
       // It's simply an approximate timeout timer for the loading icon to disappear.
       loading -= (int)display.getDelta();
+      if (loading <= 0) {
+        display.update();
+        System.gc();
+      }
     }
     display.recordLogicTime();
   }
@@ -5205,9 +5232,9 @@ class WorldLegacy extends Screen {
       prevHeight=hillHeight; 
       prevWaveHeight=wave;
       app.fill(0);
-      app.textFont(engine.DEFAULT_FONT, 40);
-      app.textAlign(LEFT, TOP);
-      app.text("Press backspace to go back", 10, myUpperBarWeight+5);
+      text.textFont(engine.DEFAULT_FONT, 40);
+      text.textAlign(LEFT, TOP);
+      text.text("Press backspace to go back", 10, myUpperBarWeight+5);
     } 
     if (input.keyDownOnce(BACKSPACE)) previousScreen();
   }

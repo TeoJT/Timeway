@@ -208,7 +208,7 @@ public class PixelRealmWithUI extends PixelRealm {
       fill(255);
       textFont(engine.DEFAULT_FONT, 32);
       textAlign(CENTER, TOP);
-      text(title, getXmid(), getY()+50.);
+      //text(title, getXmid(), getY()+50.);
     }
   }
   
