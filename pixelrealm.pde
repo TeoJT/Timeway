@@ -57,6 +57,10 @@ public class PixelRealm extends Screen {
     "Timeway$PixelRealm$PixelRealmState$SinesinesineTerrain"
   };
     
+  protected final static int MODE_TEX = 0;
+  protected final static int MODE_COLOR_TEX = 1;
+  protected final static int MODE_FOG_UNLIT = 2;
+  protected final static int MODE_PORTAL    = 3;
   
   
   // Tool constants
@@ -79,6 +83,7 @@ public class PixelRealm extends Screen {
   private UVImage REALM_GRASS_DEFAULT;
   private LargeImage REALM_SKY_DEFAULT;
   private UVImage REALM_TREE_DEFAULT;
+  private UVImage REALM_WATER_DEFAULT;
   
   
   // --- Cache (sort of) ---
@@ -178,6 +183,7 @@ public class PixelRealm extends Screen {
     REALM_SKY_DEFAULT = (LargeImage)display.systemImages.get("pixelrealm-sky");
     REALM_TREE_DEFAULT = (UVImage)display.systemImages.get("pixelrealm-terrain_object");
     REALM_GRASS_DEFAULT = (UVImage)display.systemImages.get("pixelrealm-grass");
+    REALM_WATER_DEFAULT = (UVImage)display.systemImages.get("water");
     
     REALM_SKY_DEFAULT_LEGACY = (LargeImage)display.systemImages.get("pixelrealm-sky-legacy");
     REALM_TREE_DEFAULT_LEGACY = (UVImage)display.systemImages.get("pixelrealm-terrain_object-legacy");
@@ -709,6 +715,7 @@ public class PixelRealm extends Screen {
     public RealmTexture img_grass = new RealmTexture(REALM_GRASS_DEFAULT);
     public RealmTexture img_tree  = new RealmTexture(REALM_TREE_DEFAULT);
     public RealmTexture img_sky   = new RealmTexture(REALM_SKY_DEFAULT);
+    public RealmTexture img_water = new RealmTexture(REALM_WATER_DEFAULT);
     protected TerrainAttributes terrain;
     private DirectoryPortal exitPortal = null;
     private String musicPath = engine.APPPATH+REALM_BGM_DEFAULT;
@@ -1594,33 +1601,35 @@ public class PixelRealm extends Screen {
       public TerrainPRObject() {
         super();
         this.img = img_tree;
+        genGeo();
         // Small hitbox
         this.hitboxWi = wi*0.25;
         readjustSize();
       }
       
-      public TerrainPRObject(float x, float y, float z, float size, String id) {
-        super(x, y, z);
+      private void setupSelf(float x, float y, float z, float size, String id) {
         this.img = img_tree;
         this.size = size;
         readjustSize();
         if (legacy_autogenStuff != null)
           legacy_autogenStuff.add(id);
         randSeed = x+y+z;
-        
+        genGeo();
+      }
+      
+      public TerrainPRObject(float x, float y, float z, float size, String id) {
+        super(x, y, z);
+        setupSelf(x,y,z,size,id);
         // Small hitbox
         this.hitboxWi = wi*0.25;
       }
       
       public TerrainPRObject(float x, float y, float z, float size) {
         super(x, y, z);
-        this.img = img_tree;
-        this.size = size;
-        readjustSize();
-        randSeed = x+y+z;
-        
         // Our RealmImage class allows us to go as high as we want :)
         imgIndex = int(random(0, 9));
+        setupSelf(x,y,z,size,"");
+        
         
         // Small hitbox
         this.hitboxWi = wi*0.25;
@@ -1642,29 +1651,16 @@ public class PixelRealm extends Screen {
         if (img == null)
           return;
           
-          
-        float y1 = y-hi;
-        // There's no y2 huehue.
-
-        // Half width
-        float hwi = wi/2;
-        float sin_d = cache_flatSinDirection*(hwi);
-        float cos_d = cache_flatCosDirection*(hwi);
-        float x1 = x + sin_d;
-        float z1 = z + cos_d;
-        float x2 = x - sin_d;
-        float z2 = z - cos_d;
-        
         readjustSize();
         
         if (versionCompatibility == 1) {
           display.bindAtlas(((UVImage)img.getRandom(randSeed)).atlasID);
-          displayQuad((UVImage)img.getRandom(randSeed), x1, y1, z1, x2, y1+hi, z2);
+          displayQuad(x, y, z, wi, hi);
         }
         if (versionCompatibility == 2) {
           useFadeShader();
           display.bindAtlas(((UVImage)img.get(imgIndex)).atlasID);
-          displayQuad((UVImage)img.get(imgIndex), x1, y1, z1, x2, y1+hi, z2);
+          displayQuad(x, y, z, wi, hi);
         }
       }
       
@@ -1788,7 +1784,11 @@ public class PixelRealm extends Screen {
         setSize(size-max((amount*amount), 0.001));
       }
       
-      public void addRequestToQueue(final String path) {
+      public void addRequestToQueue(String path) {
+        addRequestToQueue(path, 1.0);
+      }
+      
+      public void addRequestToQueue(final String path, final float repeatx) {
         this.beginLoadFlag.set(false);
         loadQueue.add(this.beginLoadFlag);
         final boolean isImg = this instanceof ImageFileObject;
@@ -1836,9 +1836,10 @@ public class PixelRealm extends Screen {
                   }
                 }
                 );
-                UVImage uvim = display.createUVImage(im);
+                UVImage uvim = display.createUVImage(im, repeatx, 1.0);
                 if (uvim != null) {
                   img = new RealmTexture(uvim);
+                  genGeo();
                 }
                 else {
                   console.warn("Failed to allocate uvImage");
@@ -2028,20 +2029,9 @@ public class PixelRealm extends Screen {
               //setSize(1.);
               this.wi = img.width*size;
               this.hi = img.height*size;
-              float y1 = y-hi;
-              // There's no y2 huehue.
-  
-              // Half width
-              float hwi = wi/2;
-              float sin_d = sin(rot)*(hwi);
-              float cos_d = cos(rot)*(hwi);
-              float x1 = x + sin_d;
-              float z1 = z + cos_d;
-              float x2 = x - sin_d;
-              float z2 = z - cos_d;
   
               display.bindAtlas(((UVImage)img.get()).atlasID);
-              displayQuad((UVImage)this.img.get(), x1, y1, z1, x2, y1+hi, z2);
+              displayQuad(x, y, z, wi, hi, rot);
             }
           }
         }
@@ -2216,9 +2206,32 @@ public class PixelRealm extends Screen {
         setupSelf();
       }
       
+      // Replaced with only the starting coords of the image.
+      @Override
+      public void genGeo() {
+        if (img == null) {
+          console.bugWarn("createGeo: img must NOT be null before calling genGeo()");
+          return;
+        }
+        mygeo = createShape();
+        mygeo.beginShape(QUADS);
+        UVImage im = (UVImage)img.get();
+        mygeo.fill(255);
+        mygeo.attrib("vertexFrame", 0.0, 0.0);
+        mygeo.vertex(-0.5, 0, 0, im.startx, im.endy);           // Bottom left
+        mygeo.attrib("vertexFrame", 1.0, 0.0);
+        mygeo.vertex(0.5, 0, 0, im.startx, im.endy);    // Bottom right
+        mygeo.attrib("vertexFrame", 1.0, 1.0);
+        mygeo.vertex(0.5, -1, 0, im.startx, im.endy); // Top right
+        mygeo.attrib("vertexFrame", 0.0, 1.0);
+        mygeo.vertex(-0.5, -1, 0, im.startx, im.endy);  // Top left
+        mygeo.endShape();
+      }
+      
       private void setupSelf()
       {
         this.img = new RealmTexture(display.systemImages.get("white")); 
+        genGeo();
         
         requestRealmSky(dir);
         
@@ -2238,10 +2251,10 @@ public class PixelRealm extends Screen {
         
         // If not null there exists some image of that file.
         if (sky != null) {
-          addRequestToQueue(sky);
+          addRequestToQueue(sky, 1.25);
         }
         else if (sky1 != null) {
-          addRequestToQueue(sky1);
+          addRequestToQueue(sky1, 1.25);
         }
         else {
           // No img sky found, get default sky
@@ -2278,19 +2291,25 @@ public class PixelRealm extends Screen {
           display.recordRendererTime();
           
           usingFadeShader = false;
-          //display.shader(scene, "portal_plus", "u_time", display.getTimeSeconds(), "u_dir", -direction/(PI*2));
+          
+          //scene.flush();
+          
+          display.setShaderMode(MODE_PORTAL);
+          float d_one = ((PI-direction)/(TWO_PI));
+          display.getShaderWithParams("tex", "u_time", display.getTimeSeconds(), "u_dir", (d_one-floor(d_one))*(1500./4096.) );
+          //display.shader(scene, "portal_plus_plus", "u_time", display.getTimeSeconds(), "u_dir", -direction/(PI*2));
           
           //display.shader(scene, "portal_plus", "u_resolution", (float)scene.width, (float)scene.height, "u_time", display.getTimeSeconds(), "u_dir", -direction/(PI*2));
           displayBillboard();
+          //scene.flush();
           if (versionCompatibility == 2) {
             useFadeShader();
           }
           else if (versionCompatibility == 1) {
-            //display.resetShader(scene);
+            display.setShaderMode(MODE_COLOR_TEX);
           }
           
   
-          scene.noTint();
   
           // Display text over the portal showing the directory.
           float d = direction-PI;
@@ -2322,11 +2341,22 @@ public class PixelRealm extends Screen {
       public PRCoin(float x, float y, float z) {
         super(x,y,z);
         this.img = IMG_COIN;
+        genGeo();
         setSize(0.25);
         this.hitboxWi = wi;
       }
       
       public void display() {
+        UVImage im = (UVImage)img.get();
+        
+        // TODO: This has a TERRIBLE impact on performance.
+        // We need to find a more efficient way to do this.
+        //mygeo.beginTessellation();
+        //mygeo.setTextureUV(0, im.startx, im.endy); 
+        //mygeo.setTextureUV(1, im.endx, im.endy);
+        //mygeo.setTextureUV(2, im.endx, im.starty);
+        //mygeo.setTextureUV(3, im.startx, im.starty);
+        //mygeo.endTessellation();
         super.display();
       }
       
@@ -2355,6 +2385,7 @@ public class PixelRealm extends Screen {
       public boolean visible = true;         // Used for manual turning on/off visibility
       public color tint = color(255);
       protected ItemSlot<PRObject> myOrderingNode = null;
+      protected PShape mygeo = null;
       
   
       public PRObject() {
@@ -2366,6 +2397,27 @@ public class PixelRealm extends Screen {
         this.x = x;
         this.y = y;
         this.z = z;
+      }
+      
+      
+      public void genGeo() {
+        if (img == null) {
+          console.bugWarn("createGeo: img must NOT be null before calling genGeo()");
+          return;
+        }
+        mygeo = createShape();
+        mygeo.beginShape(QUADS);
+        UVImage im = (UVImage)img.get();
+        mygeo.fill(255);
+        mygeo.attrib("vertexFrame", 0.0, 0.0);
+        mygeo.vertex(-0.5, 0, 0, im.startx, im.endy);           // Bottom left
+        mygeo.attrib("vertexFrame", 1.0, 0.0);
+        mygeo.vertex(0.5, 0, 0, im.endx, im.endy);    // Bottom right
+        mygeo.attrib("vertexFrame", 1.0, 1.0);
+        mygeo.vertex(0.5, -1, 0, im.endx, im.starty); // Top right
+        mygeo.attrib("vertexFrame", 0.0, 1.0);
+        mygeo.vertex(-0.5, -1, 0, im.startx, im.starty);  // Top left
+        mygeo.endShape();
       }
   
       public void calculateVal() {
@@ -2488,27 +2540,38 @@ public class PixelRealm extends Screen {
           if (img == null)
             return;
   
-          float y1 = y-hi;
+          //float y1 = y-hi;
           // There's no y2 huehue.
   
           // Half width
-          float hwi = wi/2;
-          float sin_d = cache_flatSinDirection*(hwi);
-          float cos_d = cache_flatCosDirection*(hwi);
-          float x1 = x + sin_d;
-          float z1 = z + cos_d;
-          float x2 = x - sin_d;
-          float z2 = z - cos_d;
-  
+          //float hwi = wi/2;
+          //float sin_d = cache_flatSinDirection*(hwi);
+          //float cos_d = cache_flatCosDirection*(hwi);
+          //float x1 = x + sin_d;
+          //float z1 = z + cos_d;
+          //float x2 = x - sin_d;
+          //float z2 = z - cos_d;
+          
+          //float w = img.width*size;
+          if (lights) scene.noLights();
+          
           display.bindAtlas(((UVImage)img.get()).atlasID);
-          displayQuad((UVImage)this.img.get(), x1, y1, z1, x2, y1+hi, z2);
+          displayQuad(x, y, z, wi, hi);
   
           // Reset tint
           this.tint = color(255);
         }
       }
+      
+      protected void displayQuad(float x, float y, float z, float wi, float hi) {
+        displayQuad(x,y,z,wi,hi,direction-PI);
+      }
   
-      protected void displayQuad(UVImage im, float x1, float y1, float z1, float x2, float y2, float z2) {
+      protected void displayQuad(float x, float y, float z, float wi, float hi, float dir) {
+        if (mygeo == null) {
+          //console.bugWarnOnce("displayQuad: You need to call genGeo() first!");
+          return;
+        }
         //boolean selected = lineLine(x1,z1,x2,z2,beamX1,beamZ1,beamX2,beamZ2);
         //color selectedColor = color(255);
         //if (hovering()) {
@@ -2538,9 +2601,9 @@ public class PixelRealm extends Screen {
           } else scene.fill(tint, 255);
         }
         else if (versionCompatibility == 2) {
-          float x = playerX-this.x;
-          float z = playerZ-this.z;
-          if (x*x+z*z > terrain.FADE_DIST_OBJECTS) {
+          float px = playerX-this.x;
+          float pz = playerZ-this.z;
+          if (px*px+pz*pz > terrain.FADE_DIST_OBJECTS) {
             dontRender = true;
           }
         }
@@ -2558,20 +2621,19 @@ public class PixelRealm extends Screen {
           scene.pushMatrix();
   
   
-          scene.beginShape(QUADS);
           if (!dontRender) {
             scene.textureMode(NORMAL);
             scene.textureWrap(REPEAT);
-            //scene.texture(im);
           }
-          scene.vertex(x1, y1, z1, im.startx, im.starty);           // Bottom left
-          scene.vertex(x2, y1, z2, im.endx, im.starty);    // Bottom right
-          scene.vertex(x2, y2, z2, im.endx, im.endy); // Top right
-          scene.vertex(x1, y2, z1, im.startx, im.endy);  // Top left
-          if (useFinder) scene.vertex(x1, y1, z1, 0, 0);  // Extra vertex to render a complete square if finder is enabled.
+          
+          scene.translate(x, y, z);
+          scene.rotateY(dir);
+          scene.scale(wi, hi);
+          scene.shape(mygeo);
+          
+          //if (useFinder) scene.vertex(x1, y1, z1, 0, 0);  // Extra vertex to render a complete square if finder is enabled.
           // Not necessary if just rendering the quad without the line.
-          scene.noTint();
-          scene.endShape();
+          
   
           scene.popMatrix();
         }
@@ -3903,6 +3965,8 @@ public class PixelRealm extends Screen {
     }
     
     public void renderTerrainV1() {
+      display.setShaderMode(MODE_COLOR_TEX);
+      
       // Terrain should always be Sinesinesine
       if (!(terrain instanceof SinesinesineTerrain)) {
         console.bugWarn("renderTerrainV1: Terrain type should be sinesinesine for legacy terrain.");
@@ -4007,8 +4071,6 @@ public class PixelRealm extends Screen {
         }
       }
       
-      //renderWaterTest();
-      
       display.recordRendererTime();
       scene.noTint();
       scene.colorMode(RGB, 255);
@@ -4021,6 +4083,8 @@ public class PixelRealm extends Screen {
     private void useFadeShader() {
       if (!usingFadeShader) {
         display.recordRendererTime();
+        display.setShaderMode(MODE_FOG_UNLIT);
+        display.getShaderWithParams("tex", "fadeStart", terrain.BEGIN_FADE, "fadeLength", terrain.FADE_LENGTH);
         //display.shader(scene, "unlit_fog", "fadeStart", terrain.BEGIN_FADE, "fadeLength", terrain.FADE_LENGTH);
         display.recordLogicTime();
         usingFadeShader = true;
@@ -4073,7 +4137,7 @@ public class PixelRealm extends Screen {
       }
       
       if (terrain.hasWater){
-        //renderWater();
+        renderWater();
       }
       
       
@@ -4090,7 +4154,6 @@ public class PixelRealm extends Screen {
       scene.textureWrap(REPEAT);
       
       
-      // TODO: Water
       
       //(UVImage)display.systemImages.get("water");
       
@@ -4111,6 +4174,15 @@ public class PixelRealm extends Screen {
       
       float xstart = tilex;
       float ttt = display.getTime()*0.002;
+      ttt = ttt-floor(ttt);
+      
+      float tttt = display.getTime()*0.05;
+      
+      UVImage wateruv = (UVImage)img_water.get();
+      display.bindAtlas(wateruv.atlasID);
+      wateruv.setUV(ttt, ttt, ttt+1.0, ttt+1.0);
+      float[] uvs = display.getUVs(wateruv);
+      
       
       for (int y = 0; y < irenderDist*2; y++) {
         tilex = xstart;
@@ -4122,13 +4194,12 @@ public class PixelRealm extends Screen {
           float xx2 = min(max(tilex*waterSize+waterSize, -limitX), limitX+fff);
           float zz2 = min(max(tilez*waterSize+waterSize, -limitZ), limitZ+fff);
           
-                    
-          scene.vertex(xx1,           terrain.waterLevel, zz1, ttt, ttt);                                    
-          scene.vertex(xx2,           terrain.waterLevel, zz1, ttt+1., ttt);  
-          scene.vertex(xx2,           terrain.waterLevel, zz2, ttt+1., ttt+1.);  
-          scene.vertex(xx1,           terrain.waterLevel, zz2, ttt, ttt+1.);  
-          
-          
+          float sl = 0.05;
+          float bobb = 15.0;
+          scene.vertex(xx1,           terrain.waterLevel+sin(xx1*zz1*sl+tttt)*bobb, zz1, uvs[0], uvs[1]);                                    
+          scene.vertex(xx2,           terrain.waterLevel+sin(xx2*zz1*sl+tttt)*bobb, zz1, uvs[2], uvs[1]);  
+          scene.vertex(xx2,           terrain.waterLevel+sin(xx2*zz2*sl+tttt)*bobb, zz2, uvs[2], uvs[3]);  
+          scene.vertex(xx1,           terrain.waterLevel+sin(xx1*zz2*sl+tttt)*bobb, zz2, uvs[0], uvs[3]);   
         }
         tilez += 1.0;
       }
@@ -4359,9 +4430,11 @@ public class PixelRealm extends Screen {
     
     float closestDist = 0;
     public void renderPRObjects() {
+      scene.hint(DISABLE_DEPTH_MASK);
       for (PRObject o : ordering) {
         o.display();
       }
+      scene.hint(ENABLE_DEPTH_MASK);
     }
     
     // That "effect" is just the portal glow.
@@ -4370,22 +4443,28 @@ public class PixelRealm extends Screen {
       display.recordRendererTime();
       if (isUnderwater) {
         sound.setSoundVolume("underwater", 1.0);
-        scene.beginShape();
-        scene.textureMode(NORMAL);
-        scene.textureWrap(REPEAT);
-        //scene.texture(display.systemImages.get("water"));
-        scene.tint(255, 210);
         
         
-        float ttt = 0.5; //display.getTime()*0.001;
         
         float uvx = 0.0;
         float uvy = 0.0;
+        float ttt = 0.5; //display.getTime()*0.001;
+        UVImage wateruv = (UVImage)img_water.get();
+        display.bindAtlas(wateruv.atlasID);
+        wateruv.setUV(ttt, ttt, ttt+uvx, ttt+uvy);
+        float[] uvs = display.getUVs(wateruv);
         
-        scene.vertex(0, 0, ttt, ttt);
-        scene.vertex(scene.width, 0, uvx+ttt, ttt);
-        scene.vertex(scene.width, scene.height, uvx+ttt, uvy+ttt);
-        scene.vertex(0, scene.height, ttt, uvy+ttt);
+        scene.beginShape();
+        scene.textureMode(NORMAL);
+        scene.textureWrap(REPEAT);
+        scene.fill(255, 210);
+        
+        
+        
+        scene.vertex(0, 0, uvs[0], uvs[1]);
+        scene.vertex(scene.width, 0, uvs[2], uvs[1]);
+        scene.vertex(scene.width, scene.height, uvs[2], uvs[3]);
+        scene.vertex(0, scene.height, uvs[0], uvs[3]);
         
         scene.endShape();
       }
@@ -4759,6 +4838,7 @@ public class PixelRealm extends Screen {
     //display.resetShader(scene);
     display.recordLogicTime();
     scene.fill(255);
+    display.setShaderMode(MODE_TEX);
     currRealm.renderSky();
     
     display.recordRendererTime();
@@ -4785,8 +4865,10 @@ public class PixelRealm extends Screen {
 
     // From this point on we use our cool FastImage rendering system.
     currRealm.renderTerrain();
+    scene.flush();
     scene.fill(255, 255);
     currRealm.renderPRObjects(); 
+    display.setShaderMode(MODE_TEX);
     display.resetShader(scene);
     
     // Pop the camera.
@@ -4800,6 +4882,7 @@ public class PixelRealm extends Screen {
     
     display.recordRendererTime();
     scene.endDraw();
+    resetShader();
     display.usePGraphics(g);
     float wi = scene.width*DISPLAY_SCALE;
     float hi = this.height;

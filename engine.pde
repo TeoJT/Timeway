@@ -1020,6 +1020,8 @@ class Engine {
     public int LOGIC_TIME  = 2;
     public int IDLE_TIME   = 3;
     
+    private final String UNIFIED_SHADER = "tex";
+    
     public int timeMode = LOGIC_TIME;
     
     class PShaderEntry {
@@ -1222,7 +1224,7 @@ class Engine {
     }
     
     public void shader(String shaderName, Object... uniforms) {
-      if (!shaderName.equals("tex")) {
+      if (!shaderName.equals(UNIFIED_SHADER)) {
         atlasShaderBound = false;
       }
       initShader(shaderName);
@@ -1232,7 +1234,7 @@ class Engine {
     }
     
     public void shader(String shaderName) {
-      if (!shaderName.equals("tex")) {
+      if (!shaderName.equals(UNIFIED_SHADER)) {
         atlasShaderBound = false;
       }
       initShader(shaderName);
@@ -1276,13 +1278,23 @@ class Engine {
     }
     
     public void shader(PGraphics framebuffer, String shaderName, Object... uniforms) {
-      if (!shaderName.equals("tex")) {
+      if (!shaderName.equals(UNIFIED_SHADER)) {
         atlasShaderBound = false;
       }
       initShader(shaderName);
       framebuffer.shader(
         getShaderWithParams(shaderName, uniforms)
       );
+    }
+    
+    public void setShaderMode(int mode) {
+      PShaderEntry shEntry = shaders.get(UNIFIED_SHADER);
+      if (shEntry == null) {
+        console.warnOnce("Shader "+UNIFIED_SHADER+" not found!");
+        return;
+      }
+      PShader sh = shEntry.shader;
+      sh.set("mode", mode);
     }
     
     public PShader getShaderWithParams(String shaderName, Object... uniforms) {
@@ -1488,6 +1500,7 @@ class Engine {
       if (image == null) {
         img(errorImg, x-errorImg.width/2, y-errorImg.height/2, errorImg.width, errorImg.height);
       } else {
+        
         img(image, x-image.width/2, y-image.height/2, image.width, image.height);
       }
     }
@@ -2026,10 +2039,10 @@ public class DynamicTextureAtlas {
       if (!atlasShaderBound) {
         // On startup our tex shader might not be loaded in yet.
         // Therefore don't render anything.
-        if (!shaders.containsKey("tex")) {
+        if (!shaders.containsKey(UNIFIED_SHADER)) {
           return;
         }
-        this.shader(currentPG, "tex");
+        this.shader(currentPG, UNIFIED_SHADER);
         atlasShaderBound = true;
         currentBoundAtlas = -1;
       }
@@ -2066,10 +2079,10 @@ public class DynamicTextureAtlas {
       if (!atlasShaderBound) {
         // On startup our tex shader might not be loaded in yet.
         // Therefore don't render anything.
-        if (!shaders.containsKey("tex")) {
+        if (!shaders.containsKey(UNIFIED_SHADER)) {
           return;
         }
-        this.shader(currentPG, "tex");
+        this.shader(currentPG, UNIFIED_SHADER);
         atlasShaderBound = true;
         currentBoundAtlas = -1;
       }
@@ -7598,7 +7611,7 @@ public class TextRendererModule {
     display.resetTimes();
     
     display.resetShader();
-    display.showStencilMap(0, 0, 256, 256);
+    //display.showStencilMap(0, 0, 256, 256);
     
     if (display != null) display.timeMode = display.IDLE_TIME;
   }
