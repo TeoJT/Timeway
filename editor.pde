@@ -419,7 +419,6 @@ public class Editor extends Screen {
         // We must also remember to remove the image from the engine when we leave
         // this screen otherwise we'll technically create a memory leak.
         public String imageName;
-        public PImage myImg;
 
         public ImagePlaceable() {
             super();
@@ -437,34 +436,19 @@ public class Editor extends Screen {
             
             // I feel so bad using systemImages because it was only ever intended
             // for images loaded by the engine only >.<
-            LargeImage uv = display.createLargeImage(i);
-            if (uv == null) {
-              console.warn("Failed to allocate image to atlas");
-              return;
-            }
-            display.systemImages.put(name, uv);
+            display.systemImages.put(name, i);
             imagesInEntry.add(name);
-            myImg = i;
         }
         
         public void setImage(PImage img, String imgName) {
           this.imageName = imgName;
-          myImg = img;
-          
-          
-          UVImage uv = display.createUVImage(img);
-          if (uv == null) {
-            console.warn("Failed to allocate image to atlas");
-            return;
-          }
-          
-          display.systemImages.put(imgName, uv);
+          display.systemImages.put(imgName, img);
           //app.image(img,0,0);
           imagesInEntry.add(imgName);
         }
         
         public PImage getImage() {
-          return myImg;
+          return display.systemImages.get(this.imageName);
         }
         
         public void display() {
@@ -634,7 +618,8 @@ public class Editor extends Screen {
     private void saveImagePlaceable(Placeable p, JSONArray array) {
         // First, we need the png image data.
         ImagePlaceable imgPlaceable = (ImagePlaceable)p;
-        if (imgPlaceable.myImg == null) {
+        PImage image = display.systemImages.get(imgPlaceable.sprite.imgName);
+        if (image == null) {
           console.bugWarn("Trying to save image placeable, and image doesn't exist in memory?? Possible bug??");
           return;
         }
@@ -642,7 +627,7 @@ public class Editor extends Screen {
         // No multithreading please!
         // And no shrinking please!
         engine.setCachingShrink(0,0);
-        String cachePath = engine.saveCacheImage(entryPath+"_"+str(numImages++), imgPlaceable.myImg);
+        String cachePath = engine.saveCacheImage(entryPath+"_"+str(numImages++), image);
         
         byte[] cacheBytes = loadBytes(cachePath);
         
@@ -1025,7 +1010,7 @@ public class Editor extends Screen {
         if (!ui.miniMenuShown() && !cameraMode) 
           display.clip(0, 0, WIDTH, myUpperBarWeight);
         super.upperBar();
-        display.resetShader();
+        display.defaultShader();
         
         if (showGUI)
           runGUI();
@@ -1040,7 +1025,7 @@ public class Editor extends Screen {
       if (upperBarDrop == CAMERA_OFF_ANIMATION) myLowerBarWeight = LOWER_BAR_WEIGHT+(LOWER_BAR_EXPAND * (upperbarExpand));
       
       super.lowerBar();
-      display.resetShader();
+      display.defaultShader();
     }
     
     public float insertedXpos = 10;

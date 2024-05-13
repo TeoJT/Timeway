@@ -278,7 +278,7 @@ public final class SpriteSystemPlaceholder {
                 return lock;
             }
             public void setImg(String name) {
-                FastImage im = engine.display.getImg(name);
+                PImage im = engine.display.getImg(name);
                 imgName = name;
                 if (wi == 0) { 
                 wi = (int)im.width;
@@ -288,7 +288,7 @@ public final class SpriteSystemPlaceholder {
                 hi = (int)im.height;
                 defhi = hi;
                 }
-                aspect = im.height/im.width;
+                aspect = float(im.height)/float(im.width);
             }
 
             public void move(float x, float y) {

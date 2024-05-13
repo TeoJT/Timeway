@@ -76,16 +76,8 @@ public class Startup extends Screen {
             
             // Only executes once
             if (!nextScreen) {
-              display.update();
               nextScreen = true;
               String dir = engine.DEFAULT_DIR;
-              
-              // Prolly shouldn't be here but idk where else to put it so deal with it.
-              
-              //for (PFont f : display.fonts.values()) {
-              //  console.log("Setup glyphs");
-              //  text.setupGlyphs(f);
-              //}
               
               // Setting this to true will tell the engine to give a quick fps test to the first
               // screen we go into so that we can smoothly go into a suitable framerate.

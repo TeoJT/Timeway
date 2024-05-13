@@ -2,7 +2,7 @@ public class PixelRealmWithUI extends PixelRealm {
   
   private final String TEMPLATE_METADATA_FILENAME = "realmtemplate.json";
   
-  private UVImage IMG_BORDER_TILE;
+  private PImage IMG_BORDER_TILE;
   
   
   private String musicInfo = "";
@@ -42,6 +42,13 @@ public class PixelRealmWithUI extends PixelRealm {
     "Let's learn how to organise things.",
     "Press <tab>, then select \"Grabber\"."
   };
+  // For when there's no realm templates
+  private String[] dm_tutorial_2_alt_2 = {
+    "Well done.",
+    "Your files look a bit scattered and messy...",
+    "Let's learn how to organise things.",
+    "Press <tab>, then select \"Grabber\"."
+  };
   private String[] dm_tutorial_3 = {
     "Now press the 'o' key to pick up some items."
   };
@@ -74,7 +81,7 @@ public class PixelRealmWithUI extends PixelRealm {
     super(engine, dir);
     // Ugh. whatever.
     
-    IMG_BORDER_TILE = (UVImage)display.systemImages.get("menuborder");
+    IMG_BORDER_TILE = display.systemImages.get("menuborder");
 
     gui = new SpriteSystemPlaceholder(engine, engine.APPPATH+engine.PATH_SPRITES_ATTRIB+"gui/pixelrealm/");
     gui.suppressSpriteWarning = true;
@@ -148,8 +155,8 @@ public class PixelRealmWithUI extends PixelRealm {
         cache_backWi = (float)wi;
         cache_backHi = (float)hi;
         
-        cache_tilesWi = wi/(int)IMG_BORDER_TILE.width;
-        cache_tilesHi = hi/(int)IMG_BORDER_TILE.height;
+        cache_tilesWi = wi/IMG_BORDER_TILE.width;
+        cache_tilesHi = hi/IMG_BORDER_TILE.height;
         
         cached = true;
       }
@@ -159,20 +166,20 @@ public class PixelRealmWithUI extends PixelRealm {
       // Horizontal
       float x = cache_backX;
       float y = cache_backY;
-      float bottomOffset = (cache_tilesHi*IMG_BORDER_TILE.height);
+      float bottomOffset = float(cache_tilesHi*IMG_BORDER_TILE.height);
       for (int ix = 0; ix < cache_tilesWi; ix++) {
-        display.image(IMG_BORDER_TILE, x, y);
-        display.image(IMG_BORDER_TILE, x, y+bottomOffset);
+        image(IMG_BORDER_TILE, x, y);
+        image(IMG_BORDER_TILE, x, y+bottomOffset);
         x += IMG_BORDER_TILE.width;
       }
       
       // Vertical
       x = cache_backX;
       y = cache_backY;
-      float sideOffset = (cache_tilesWi*IMG_BORDER_TILE.width);
+      float sideOffset = float(cache_tilesWi*IMG_BORDER_TILE.width);
       for (int iy = 0; iy < cache_tilesHi+1; iy++) {
-        display.image(IMG_BORDER_TILE, x, y);
-        display.image(IMG_BORDER_TILE, x+sideOffset, y);
+        image(IMG_BORDER_TILE, x, y);
+        image(IMG_BORDER_TILE, x+sideOffset, y);
         y += IMG_BORDER_TILE.height;
       }
       
@@ -208,7 +215,7 @@ public class PixelRealmWithUI extends PixelRealm {
       fill(255);
       textFont(engine.DEFAULT_FONT, 32);
       textAlign(CENTER, TOP);
-      //text(title, getXmid(), getY()+50.);
+      text(title, getXmid(), getY()+50.);
     }
   }
   
@@ -572,6 +579,8 @@ public class PixelRealmWithUI extends PixelRealm {
           templates.add(file.directorify(f.getAbsolutePath()));
         }
       }
+        
+
     }
     
     private void preview(int index) {
@@ -873,6 +882,7 @@ public class PixelRealmWithUI extends PixelRealm {
   
   protected void promptNewRealm() {
     if (gui == null) return;
+    if (!file.exists(engine.APPPATH+engine.TEMPLATES_PATH)) return;
     menu = new NewRealmMenu();
     menuShown = true;
   }
@@ -923,7 +933,7 @@ public class PixelRealmWithUI extends PixelRealm {
         }
   
         if (p.item != null && p.item.img != null) 
-          display.image(p.item.img.get(), x, y, 64, 64);
+          image(p.item.img.get(), x, y, 64, 64);
         invx += 70;
       }
       display.recordLogicTime();
@@ -1163,8 +1173,21 @@ public class PixelRealmWithUI extends PixelRealm {
                 tutorialStage = 2;
               }
             };
+            
+            
+            Runnable r_alt = new Runnable() {
+              public void run() {
+                promptNewRealm();
+                tutorialStage = 3;
+              }
+            };
             tutorialStage = 0;
-            menu = new DialogMenu("", "back_welcome", dm_tutorial_1, r);
+            if (!file.exists(engine.APPPATH+engine.TEMPLATES_PATH)) {
+              menu = new DialogMenu("", "back_welcome", dm_tutorial_2_alt_2, r_alt);
+            }
+            else {
+              menu = new DialogMenu("", "back_welcome", dm_tutorial_1, r);
+            }
           }
         }
       }
