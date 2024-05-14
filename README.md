@@ -7,6 +7,8 @@ Originally, this branch was going to implement a new rendering system called the
 - Consumes a massive amount of memory
 - Complicates other things (some files needed to be named with the extension repeat.png large.png pad.png to avoid artefacts)
 - Takes way too long to implement
+
+
 And, to top it all off, there were no performance benefits with this new system in place that I could notice.
 Kinda sucks, because I came so far with this code. But I think it's better to cut our losses than to continue with this... unfortunate mess.
 
