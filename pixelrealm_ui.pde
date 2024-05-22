@@ -81,7 +81,7 @@ public class PixelRealmWithUI extends PixelRealm {
     super(engine, dir);
     // Ugh. whatever.
     
-    IMG_BORDER_TILE = display.systemImages.get("menuborder");
+    IMG_BORDER_TILE = display.systemImages.get("menuborder").pimage;
 
     gui = new SpriteSystemPlaceholder(engine, engine.APPPATH+engine.PATH_SPRITES_ATTRIB+"gui/pixelrealm/");
     gui.suppressSpriteWarning = true;

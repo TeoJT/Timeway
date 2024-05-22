@@ -162,13 +162,16 @@ public class Editor extends Screen {
     public String entryDir;
     public color selectedColor = color(255, 255, 255);
     public float selectedFontSize = 20;
-    public float xview = 0;
-    public float yview = 0;
     public TextPlaceable entryNameText;
     public boolean cameraMode = false;
     public boolean autoScaleDown = false;
     public boolean changesMade = false;
     public int upperBarDrop = INITIALISE_DROP_ANIMATION;
+    // X goes unused for now but could be useful later.
+    public float extentX = 0.;
+    public float extentY = 0.;
+    public float scrollLimitY = 0.;
+    
     public static final int INITIALISE_DROP_ANIMATION = 0;
     public static final int CAMERA_ON_ANIMATION = 1;
     public static final int CAMERA_OFF_ANIMATION = 2;
@@ -249,7 +252,7 @@ public class Editor extends Screen {
           
         if (editingPlaceable != null && editingPlaceable instanceof ImagePlaceable) {
           ImagePlaceable im = (ImagePlaceable)editingPlaceable;
-          file.selectOutput("Save image...", im.getImage());
+          //file.selectOutput("Save image...", im.getImage());
         }
           
       }};
@@ -290,6 +293,7 @@ public class Editor extends Screen {
         
         
         protected boolean placeableSelected() {
+          if (input.mouseY() < myUpperBarWeight) return false;
           return (sprite.mouseWithinHitbox() && placeables.selectedSprite == sprite && input.primaryDown && !input.mouseMoved);
         }
 
@@ -306,6 +310,7 @@ public class Editor extends Screen {
         }
 
         public void update() {
+            sprite.offmove(0, input.scrollOffset);
             display();
             placeables.placeable(sprite);
         }
@@ -324,6 +329,7 @@ public class Editor extends Screen {
             super();
             sprite.allowResizing = false;
             fontStyle = display.getFont(DEFAULT_FONT);
+            selectedFontSize = this.fontSize;
         }
 
         private boolean editing() {
@@ -339,6 +345,7 @@ public class Editor extends Screen {
                     count++;
                 }
             }
+            newlines = count;
             return count;
         }
 
@@ -374,8 +381,14 @@ public class Editor extends Screen {
             }
             app.text(displayText, sprite.xpos, sprite.ypos-app.textDescent()+EXPAND_HITBOX/2+10);
         }
+        
+        public void updateDimensions() {
+          placeables.hackSpriteDimensions(sprite, int(app.textWidth(text)), int((app.textAscent()+app.textDescent()+lineSpacing)*(countNewlines(text)+1) + EXPAND_HITBOX));
+        }
 
         public void update() {
+          
+            //fontSize = (float)sprite.getWidth()/40.;
             app.textFont(fontStyle, fontSize);
             app.textLeading(fontSize+lineSpacing);
 
@@ -383,8 +396,11 @@ public class Editor extends Screen {
             // For width we simply check the textWidth with the handy function.
             // For text height we account for the ascent/descent thing, expand hitbox to make it slightly larger
             // and times it by the number of newlines.
-            placeables.hackSpriteDimensions(sprite, int(app.textWidth(text)), int((app.textAscent()+app.textDescent()+lineSpacing)*(countNewlines(text)+1) + EXPAND_HITBOX));
-
+            
+            if (sprite.isSelected()) {
+              updateDimensions();
+            }
+            
             if (editing()) {
                 input.addNewlineWhenEnterPressed = true;
                 // Oh my god if this bug fix doesn't work I'm gonna lose it
@@ -398,6 +414,7 @@ public class Editor extends Screen {
                 engine.allowShowCommandPrompt = false;
                 editingPlaceable = this;
                 input.keyboardMessage = text;
+                selectedFontSize = this.fontSize;
             }
                 // Mini menu for text
             if (placeableSelectedSecondary()) {
@@ -425,7 +442,7 @@ public class Editor extends Screen {
             sprite.allowResizing = true;
         }
         
-        public ImagePlaceable(PImage i) {
+        public ImagePlaceable(PImage img) {
             super();
             sprite.allowResizing = true;
             
@@ -436,18 +453,19 @@ public class Editor extends Screen {
             
             // I feel so bad using systemImages because it was only ever intended
             // for images loaded by the engine only >.<
-            display.systemImages.put(name, i);
+            LargeImage largeimg = display.createLargeImage(img);
+            display.systemImages.put(name, new DImage(largeimg, img));
             imagesInEntry.add(name);
         }
         
-        public void setImage(PImage img, String imgName) {
+        public void setImage(DImage img, String imgName) {
           this.imageName = imgName;
           display.systemImages.put(imgName, img);
           //app.image(img,0,0);
           imagesInEntry.add(imgName);
         }
         
-        public PImage getImage() {
+        public DImage getImage() {
           return display.systemImages.get(this.imageName);
         }
         
@@ -455,6 +473,7 @@ public class Editor extends Screen {
                                       }
         
         public void update() {
+            sprite.offmove(0, input.scrollOffset);
             if (placeableSelectedSecondary()) {
               editingPlaceable = this;
               imageOptions();
@@ -478,6 +497,7 @@ public class Editor extends Screen {
         runGUI();
         
         placeables = new SpriteSystemPlaceholder(engine);
+        placeables.allowSelectOffContentPane = false;
         imagesInEntry = new ArrayList<String>();
         placeableset = new HashSet<Placeable>();
         
@@ -508,6 +528,7 @@ public class Editor extends Screen {
         gui.interactable = false;
         
         autoScaleDown = engine.settings.getBoolean("autoScaleDown");
+        input.scrollOffset = 0.;
 
         myLowerBarColor   = 0xFF4c4945;
         myUpperBarColor   = myLowerBarColor;
@@ -602,10 +623,11 @@ public class Editor extends Screen {
     private void saveTextPlaceable(Placeable p, JSONArray array) {
         TextPlaceable t = (TextPlaceable)p;
         JSONObject obj = new JSONObject();
+        t.sprite.offmove(0,0);
         obj.setString("ID", t.sprite.name);
         obj.setInt("type", TYPE_TEXT);
-        obj.setInt("x", int(t.sprite.xpos));
-        obj.setInt("y", int(t.sprite.ypos));
+        obj.setInt("x", int(t.sprite.getX()));
+        obj.setInt("y", int(t.sprite.getY()));
         obj.setFloat("size", t.fontSize);
         obj.setString("text", t.text);
         obj.setInt("color", t.textColor);
@@ -618,7 +640,7 @@ public class Editor extends Screen {
     private void saveImagePlaceable(Placeable p, JSONArray array) {
         // First, we need the png image data.
         ImagePlaceable imgPlaceable = (ImagePlaceable)p;
-        PImage image = display.systemImages.get(imgPlaceable.sprite.imgName);
+        DImage image = display.systemImages.get(imgPlaceable.sprite.imgName);
         if (image == null) {
           console.bugWarn("Trying to save image placeable, and image doesn't exist in memory?? Possible bug??");
           return;
@@ -627,18 +649,23 @@ public class Editor extends Screen {
         // No multithreading please!
         // And no shrinking please!
         engine.setCachingShrink(0,0);
-        String cachePath = engine.saveCacheImage(entryPath+"_"+str(numImages++), image);
+        
+        
+        String cachePath = engine.saveCacheImage(entryPath+"_"+str(numImages++), image.pimage);
         
         byte[] cacheBytes = loadBytes(cachePath);
         
+        // NullPointerException
         String encodedPng = new String(Base64.getEncoder().encode(cacheBytes));
         //println(encodedPng);
+        
+        imgPlaceable.sprite.offmove(0,0);
         
         JSONObject obj = new JSONObject();
         obj.setString("ID", imgPlaceable.sprite.name);
         obj.setInt("type", TYPE_IMAGE);
-        obj.setInt("x", int(imgPlaceable.sprite.xpos));
-        obj.setInt("y", int(imgPlaceable.sprite.ypos));
+        obj.setInt("x", int(imgPlaceable.sprite.getX()));
+        obj.setInt("y", int(imgPlaceable.sprite.getY()));
         obj.setInt("wi", int(imgPlaceable.sprite.wi));
         obj.setInt("hi", int(imgPlaceable.sprite.hi));
         obj.setString("imgName", imgPlaceable.sprite.imgName);
@@ -656,18 +683,19 @@ public class Editor extends Screen {
         if (!f.exists() || f.length() <= 2) {
           // If it doesn't exist or is blank, create a new placeable for the name of the entry
             entryNameText = new TextPlaceable();
-            entryNameText.sprite.xpos = 20;
-            entryNameText.sprite.ypos = UPPER_BAR_DROP_WEIGHT + 80;
+            entryNameText.sprite.move(20., UPPER_BAR_DROP_WEIGHT + 80);
             entryNameText.fontSize = 60.;
             entryNameText.textColor = color(255);
             entryNameText.text = entryName;
             entryNameText.sprite.name = RENAMEABLE_NAME;
+            entryNameText.updateDimensions();
             
             // Create date
             TextPlaceable date = new TextPlaceable();
             String d = engine.appendZeros(day(), 2)+"/"+engine.appendZeros(month(), 2)+"/"+year()+"\n"+engine.appendZeros(hour(), 2)+":"+engine.appendZeros(minute(), 2)+":"+engine.appendZeros(second(), 2);
             date.sprite.move(WIDTH-app.textWidth(d)*2., 250);
             date.text = d;
+            date.updateDimensions();
             
             // New entry, new default template, ofc we want to save changes!
             changesMade = true;
@@ -702,19 +730,20 @@ public class Editor extends Screen {
     }
     private TextPlaceable readTextPlaceable(int i) {
         TextPlaceable t = new TextPlaceable();
-        t.sprite.xpos = (float)engine.getJSONArrayInt(i, "x", (int)WIDTH/2);
-        t.sprite.ypos = (float)engine.getJSONArrayInt(i, "y", (int)HEIGHT/2);
+        t.sprite.setX((float)engine.getJSONArrayInt(i, "x", (int)WIDTH/2));
+        t.sprite.setY((float)engine.getJSONArrayInt(i, "y", (int)HEIGHT/2));
         t.sprite.name = engine.getJSONArrayString(i, "ID", "");
         t.text = engine.getJSONArrayString(i, "text", "");
         t.fontSize = engine.getJSONArrayFloat(i, "size", 12.);
         t.textColor = engine.getJSONArrayInt(i, "color", color(255, 255, 255));
+        t.updateDimensions();
         placeableset.add(t);
         return t;
     }
     private ImagePlaceable readImagePlaceable(final int i) {
         ImagePlaceable im = new ImagePlaceable();
-        im.sprite.xpos = (float)engine.getJSONArrayInt(i, "x", (int)WIDTH/2);
-        im.sprite.ypos = (float)engine.getJSONArrayInt(i, "y", (int)HEIGHT/2);
+        im.sprite.setX((float)engine.getJSONArrayInt(i, "x", (int)WIDTH/2));
+        im.sprite.setY((float)engine.getJSONArrayInt(i, "y", (int)HEIGHT/2));
         im.sprite.wi   = engine.getJSONArrayInt(i, "wi", 512);
         im.sprite.hi   = engine.getJSONArrayInt(i, "hi", 512);
         String imageName = engine.getJSONArrayString(i, "imgName", "");
@@ -745,8 +774,10 @@ public class Editor extends Screen {
             }
           }
         };
+        PImage img = engine.tryLoadImageCache(this.entryPath+"_"+str(i), loadFromEntry);
+        LargeImage largeimg = display.createLargeImage(img);
         
-        im.setImage(engine.tryLoadImageCache(this.entryPath+"_"+str(i), loadFromEntry), imageName);
+        im.setImage(new DImage(largeimg, img), imageName);
         
         
         placeableset.add(im);
@@ -1052,25 +1083,25 @@ public class Editor extends Screen {
             // no text to begin with.
             if (editingPlaceable instanceof TextPlaceable) {
               TextPlaceable editingTextPlaceable = (TextPlaceable)editingPlaceable;
-              float xpos = editingPlaceable.sprite.xpos;
-              float ypos = editingPlaceable.sprite.ypos;
+              float x = editingPlaceable.sprite.xpos;
+              float y = editingPlaceable.sprite.ypos;
               int hi = editingPlaceable.sprite.hi;
               
               if (editingTextPlaceable.text.length() == 0) {
                   placeableset.remove(editingPlaceable);
-                  imagePlaceable.sprite.xpos = xpos;
-                  imagePlaceable.sprite.ypos = ypos;
+                  imagePlaceable.sprite.setX(x);
+                  imagePlaceable.sprite.setY(y-input.scrollOffset);
               }
               else {
-                  imagePlaceable.sprite.xpos = xpos;
-                  imagePlaceable.sprite.ypos = ypos+hi;
+                  imagePlaceable.sprite.setX(x);
+                  imagePlaceable.sprite.setY(y+hi);
               }
             }
           }
           else {
             // If no text is being edited then place the image in the default location.
-            imagePlaceable.sprite.xpos = insertedXpos;
-            imagePlaceable.sprite.ypos = insertedYpos;
+            imagePlaceable.sprite.setX(insertedXpos);
+            imagePlaceable.sprite.setY(insertedYpos);
             insertedXpos += 20;
             insertedYpos += 20;
           }
@@ -1097,10 +1128,11 @@ public class Editor extends Screen {
         TextPlaceable editingTextPlaceable = new TextPlaceable();
         editingTextPlaceable.textColor = selectedColor;
         placeables.selectedSprite = editingTextPlaceable.sprite;
-        editingTextPlaceable.sprite.xpos = x;
-        editingTextPlaceable.sprite.ypos = y;
+        editingTextPlaceable.sprite.setX(x);
+        editingTextPlaceable.sprite.setY(y-input.scrollOffset);
         editingPlaceable = editingTextPlaceable;
         input.keyboardMessage = initText;
+        editingTextPlaceable.updateDimensions();
         engine.allowShowCommandPrompt = false;
     }
     
@@ -1213,10 +1245,24 @@ public class Editor extends Screen {
         
         placeables.updateSpriteSystem();
 
+        input.processScroll(0., scrollLimitY);
+        extentX = 0;
+        extentY = 0;
         // Run all placeable objects
         for (Placeable p : placeableset) {
             p.update();
+            
+            // Don't care I can tidy things up later.
+            // Update extentX and extentY
+            float newx = (p.sprite.defxpos+p.sprite.getWidth());
+            if (newx > extentX) extentX = newx;
+            float newy = (p.sprite.defypos+p.sprite.getHeight());
+            if (newy > extentY) extentY = newy;
         }
+        
+        // Update max scroll.
+        final float PADDING = 150.;
+        scrollLimitY = max(extentY+PADDING-HEIGHT+myLowerBarWeight, 0);
 
         // Check back to see if something's been clicked.
         if (clickedThing) {

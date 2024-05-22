@@ -174,13 +174,13 @@ public class PixelRealm extends Screen {
     // --- Load default assets ---
     // TODO (eventually): load screen's assets, not everything from the loading screen (even tho that would be a minor optimisation)
     // (get rid of the . at the start cus hidden files are no good)
-    REALM_SKY_DEFAULT = display.systemImages.get("pixelrealm-sky");
-    REALM_TREE_DEFAULT = display.systemImages.get("pixelrealm-terrain_object");
-    REALM_GRASS_DEFAULT = display.systemImages.get("pixelrealm-grass");
+    REALM_SKY_DEFAULT = display.systemImages.get("pixelrealm-sky").pimage;
+    REALM_TREE_DEFAULT = display.systemImages.get("pixelrealm-terrain_object").pimage;
+    REALM_GRASS_DEFAULT = display.systemImages.get("pixelrealm-grass").pimage;
     
-    REALM_SKY_DEFAULT_LEGACY = display.systemImages.get("pixelrealm-sky-legacy");
-    REALM_TREE_DEFAULT_LEGACY = display.systemImages.get("pixelrealm-terrain_object-legacy");
-    REALM_GRASS_DEFAULT_LEGACY = display.systemImages.get("pixelrealm-grass-legacy");
+    REALM_SKY_DEFAULT_LEGACY = display.systemImages.get("pixelrealm-sky-legacy").pimage;
+    REALM_TREE_DEFAULT_LEGACY = display.systemImages.get("pixelrealm-terrain_object-legacy").pimage;
+    REALM_GRASS_DEFAULT_LEGACY = display.systemImages.get("pixelrealm-grass-legacy").pimage;
   
     String[] COINS = { "coin_0", "coin_1", "coin_2", "coin_3", "coin_4", "coin_5"};;
     IMG_COIN = new RealmTexture(COINS);
@@ -249,7 +249,7 @@ public class PixelRealm extends Screen {
     public void set(PImage img) {
       if (img == null) {
         console.bugWarn("set: passing a null image");
-        singleImg = display.systemImages.get("white");
+        singleImg = display.systemImages.get("white").pimage;
         width = singleImg.width;
         height = singleImg.height;
         return;
@@ -265,7 +265,7 @@ public class PixelRealm extends Screen {
     public void set(PImage[] imgs) {
       if (imgs.length == 0) {
         console.bugWarn("set PImage[]: passing an empty list");
-        singleImg = display.systemImages.get("white");
+        singleImg = display.systemImages.get("white").pimage;
         width = singleImg.width;
         height = singleImg.height;
         return;
@@ -291,7 +291,7 @@ public class PixelRealm extends Screen {
     public void set(ArrayList<PImage> imgs) {
       if (imgs.size() == 0) {
         console.bugWarn("set ArrayList: passing an empty list");
-        singleImg = display.systemImages.get("white");
+        singleImg = display.systemImages.get("white").pimage;
         return;
       }
       else if (imgs.size() == 1) {
@@ -315,11 +315,11 @@ public class PixelRealm extends Screen {
     public void set(String[] imgs) {
       if (imgs.length == 0) {
         console.bugWarn("set String[]: passing an empty list");
-        singleImg = display.systemImages.get("white");
+        singleImg = display.systemImages.get("white").pimage;
         return;
       }
       else if (imgs.length == 1) {
-        singleImg = display.systemImages.get(imgs[0]);
+        singleImg = display.systemImages.get(imgs[0]).pimage;
         width = singleImg.width;
         height = singleImg.height;
         return;
@@ -328,7 +328,7 @@ public class PixelRealm extends Screen {
       aniImg = new PImage[imgs.length];
       int i = 0;
       for (String s : imgs) {
-        aniImg[i++] = display.systemImages.get(s);
+        aniImg[i++] = display.systemImages.get(s).pimage;
       }
       width = aniImg[0].width;
       height = aniImg[0].height;
@@ -336,7 +336,7 @@ public class PixelRealm extends Screen {
     
     
     public RealmTexture(String imgName) {
-      singleImg = display.systemImages.get(imgName);
+      singleImg = display.systemImages.get(imgName).pimage;
     }
     
     public PImage get(int index) {
@@ -2198,7 +2198,7 @@ public class PixelRealm extends Screen {
       
       private void setupSelf()
       {
-        this.img = new RealmTexture(display.systemImages.get("white")); 
+        this.img = new RealmTexture(display.systemImages.get("white").pimage); 
         
         requestRealmSky(dir);
         
@@ -2226,7 +2226,7 @@ public class PixelRealm extends Screen {
         else {
           // No img sky found, get default sky
           //this.img = new RealmTexture(REALM_SKY_DEFAULT_LEGACY);
-          this.img = new RealmTexture(display.systemImages.get("white"));
+          this.img = new RealmTexture(display.systemImages.get("white").pimage);
         }
       }
       
@@ -2866,7 +2866,7 @@ public class PixelRealm extends Screen {
         switch (type) {
         case FILE_TYPE_UNKNOWN:
           fileobject = new UnknownTypeFileObject(path);
-          fileobject.img = new RealmTexture(engine.display.systemImages.get(file.typeToIco(type)));
+          fileobject.img = new RealmTexture(engine.display.systemImages.get(file.typeToIco(type)).pimage);
           fileobject.setSize(0.5);
           // NOTE: Put back hitbox size in case it becomes important later
           break;
@@ -2881,7 +2881,7 @@ public class PixelRealm extends Screen {
           break;
         default:
           fileobject = new UnknownTypeFileObject(path);
-          fileobject.img = new RealmTexture(display.systemImages.get(file.typeToIco(type)));
+          fileobject.img = new RealmTexture(display.systemImages.get(file.typeToIco(type)).pimage);
           fileobject.setSize(0.5);
           // NOTE: Put back hitbox size in case it becomes important later
           break;
@@ -4037,7 +4037,7 @@ public class PixelRealm extends Screen {
       scene.beginShape(QUAD);
       scene.textureMode(NORMAL);
       scene.textureWrap(REPEAT);
-      scene.texture(display.systemImages.get("water"));
+      scene.texture(display.systemImages.get("water").pimage);
       
       
       float terrainchunkWiHi = terrain.getGroundSize()*float(CHUNK_SIZE);
@@ -4323,7 +4323,7 @@ public class PixelRealm extends Screen {
         scene.beginShape();
         scene.textureMode(NORMAL);
         scene.textureWrap(REPEAT);
-        scene.texture(display.systemImages.get("water"));
+        scene.texture(display.systemImages.get("water").pimage);
         scene.tint(255, 210);
         
         
@@ -5016,7 +5016,7 @@ public class PixelRealm extends Screen {
   void setupLegacyPortal() {legacy_portal = createGraphics(128, 128+96, P2D); ((PGraphicsOpenGL)legacy_portal).textureSampling(2); legacy_portal.hint(DISABLE_OPENGL_ERRORS);for (int i = 0; i < portPartNum; i++) {portPartX[i] = -999;}}
   public void evolvingGatewayRenderPortal() {     legacy_portal.beginDraw(); legacy_portal.background(color(0, 0, 255), 0); legacy_portal.blendMode(ADD);     float w = 48, h = 48;     int n = 1;     switch (engine.power.getPowerMode()) {     case HIGH:       n = 1;       break;     case NORMAL:       n = 2;       break;     case SLEEPY:       n = 4;       break;     case MINIMAL:       n = 1;       break;     }      for (int j = 0; j < n; j++) {       if (int(random(0, 2)) == 0) {         int i = 0;
 boolean finding = true;         while (finding) {           if (int(portPartX[i]) == -999) {             finding = false;             portPartVX[i] = random(-0.5, 0.5);             portPartVY[i] = random(-0.2, 0.2);              portPartX[i] = legacy_portal.width/2;             portPartY[i] = random(h, legacy_portal.height-60);              portPartTick[i] = 255;
-  }            i++;           if (i >= portPartNum) {             finding = false;           }         }       }               for (int i = 0; i < portPartNum; i++) {         if (int(portPartX[i]) != -999) {           portPartVX[i] *= 0.99;           portPartVY[i] *= 0.99;            portPartX[i] += portPartVX[i];           portPartY[i] += portPartVY[i];              portPartTick[i] -= 2;            if (portPartTick[i] <= 0) {             portPartX[i] = -999;           }    }       }     }      for (int i = 0; i < portPartNum; i++) {       if (int(portPartX[i]) != -999) {         legacy_portal.tint(color(128, 128, 255), portPartTick[i]);            legacy_portal.image(display.systemImages.get("glow"), portPartX[i]-(w/2), portPartY[i]+(h/2), w, h);       }     }      legacy_portal.blendMode(NORMAL);     legacy_portal.endDraw();   }
+  }            i++;           if (i >= portPartNum) {             finding = false;           }         }       }               for (int i = 0; i < portPartNum; i++) {         if (int(portPartX[i]) != -999) {           portPartVX[i] *= 0.99;           portPartVY[i] *= 0.99;            portPartX[i] += portPartVX[i];           portPartY[i] += portPartVY[i];              portPartTick[i] -= 2;            if (portPartTick[i] <= 0) {             portPartX[i] = -999;           }    }       }     }      for (int i = 0; i < portPartNum; i++) {       if (int(portPartX[i]) != -999) {         legacy_portal.tint(color(128, 128, 255), portPartTick[i]);            legacy_portal.image(display.systemImages.get("glow").pimage, portPartX[i]-(w/2), portPartY[i]+(h/2), w, h);       }     }      legacy_portal.blendMode(NORMAL);     legacy_portal.endDraw();   }
 }
 
 

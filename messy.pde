@@ -31,6 +31,7 @@ public final class SpriteSystemPlaceholder {
         public boolean showAllWireframes = false;
         public boolean suppressSpriteWarning = false;
         public boolean repositionSpritesToScale = true;
+        public boolean allowSelectOffContentPane = true;
 
         public String PATH_SPRITES_ATTRIB;
         public String APPPATH; 
@@ -278,7 +279,7 @@ public final class SpriteSystemPlaceholder {
                 return lock;
             }
             public void setImg(String name) {
-                PImage im = engine.display.getImg(name);
+                DImage im = engine.display.getImg(name);
                 imgName = name;
                 if (wi == 0) { 
                 wi = (int)im.width;
@@ -288,7 +289,7 @@ public final class SpriteSystemPlaceholder {
                 hi = (int)im.height;
                 defhi = hi;
                 }
-                aspect = float(im.height)/float(im.width);
+                aspect = (im.height)/(im.width);
             }
 
             public void move(float x, float y) {
@@ -559,11 +560,15 @@ public final class SpriteSystemPlaceholder {
             }
             
             public boolean mouseWithinHitbox() {
-                return mouseWithinSprite() || mouseWithinSquare();
+              return mouseWithinSprite() || mouseWithinSquare();
             }
 
             public boolean clickedOn() {
                 return (mouseWithinHitbox() && repositionDrag.clicked());
+            }
+            
+            public boolean isSelected() {
+              return this.equals(selectedSprite);
             }
             
             // The sprite class ripped from Sketchiepad likes to sh*t out
@@ -598,7 +603,13 @@ public final class SpriteSystemPlaceholder {
             }
 
             public void dragReposition() {
-                boolean dragging = mouseWithinSprite() && !mouseWithinSquare();
+                boolean dragging = mouseWithinSprite();
+                
+                // Bug fix where small area is non-selectable.
+                if (allowResizing) {
+                  dragging &= !mouseWithinSquare();
+                }
+                
                 if (mode == VERTEX) {
                 //dragging = mouseWithinSprite();
                 }
@@ -929,7 +940,7 @@ public final class SpriteSystemPlaceholder {
         }
 
         private void renderSprite(Sprite s) {
-            if (s.equals(selectedSprite) || (showAllWireframes && keyPressAllowed)) {
+            if (s.isSelected() || (showAllWireframes && keyPressAllowed)) {
                 engine.wireframe = true;
             }
             //draw.autoImg(s.getImg(), s.getX(), s.getY()+s.getHeight()*s.getBop(), s.getWidth(), s.getHeight()-int((float)s.getHeight()*s.getBop()));
@@ -948,6 +959,16 @@ public final class SpriteSystemPlaceholder {
               //draw.autoImgRotate(s);
               break;
             }
+            
+            if (s.isSelected()) {
+              if (!s.isLocked()) {
+                  if (s.allowResizing) {
+                      s.resizeSquare();
+                  }
+                  s.dragReposition();
+              }
+            }
+            
             engine.wireframe = false;
             s.poke(app.frameCount);
         }
@@ -1058,11 +1079,13 @@ public final class SpriteSystemPlaceholder {
             Sprite s = getSprite(identifier);
             hackSpriteDimensions(s, w, h);
         }
-
+        
         private void runSpriteInteraction() {
             
             // Replace true with false to disable sprite interaction.
-            if (interactable) {
+          
+            if (!interactable) return;
+              
             if (selectedSprite != null) {
                 if (!selectedSprite.beingUsed(app.frameCount)) {
                 selectedSprite = null;
@@ -1072,18 +1095,13 @@ public final class SpriteSystemPlaceholder {
             boolean hoveringOverAtLeast1Sprite = false;
             boolean clickedSprite = false;
             
+            
             for (int i = 0; i < spritesStack.size(); i++) {
                 Sprite s = spritesStack.peek(i);
-                if (s.equals(selectedSprite)) {
-                if (s.mouseWithinHitbox()) {
-                    hoveringOverAtLeast1Sprite = true;
-                }
-                if (!s.isLocked()) {
-                    if (s.allowResizing) {
-                        s.resizeSquare();
-                    }
-                    s.dragReposition();
-                }
+                if (s.isSelected()) {
+                  if (s.mouseWithinHitbox()) {
+                      hoveringOverAtLeast1Sprite = true;
+                  }
                 }
                 else if (s.mouseWithinHitbox()) {
                 hoveringOverAtLeast1Sprite = true;
@@ -1093,38 +1111,49 @@ public final class SpriteSystemPlaceholder {
                 }
                 }
             }
+            
+            
+            // Don't bother with selecting logic if it's outside of the clicking content zone.
+            if (!allowSelectOffContentPane) {
+              float mousey = engine.input.mouseY();
+              float upper = engine.currScreen.myUpperBarWeight;
+              float lower = engine.display.HEIGHT-engine.currScreen.myLowerBarWeight;
+              // If mouse is within upperbar or lowerbar zone, don't bother
+              // checking for selecting sprites.
+              if (mousey < upper || mousey > lower) return;
+            }
+            
+            
             //Sort through the sprites and select the front-most sprite (sprite with the biggest zpos)
             if (clickedSprite && selectedSprites.size() > 0) {
                 boolean performSearch = true;
                 if (selectedSprite != null) {
-                if (selectedSprite.mouseWithinHitbox()) {
-                    performSearch = false;
-                }
-                
-                if (selectedSprite.isDragging()) {
-                    performSearch = false;
-                }
+                  if (selectedSprite.mouseWithinHitbox()) {
+                      performSearch = false;
+                  }
+                  
+                  if (selectedSprite.isDragging()) {
+                      performSearch = false;
+                  }
                 }
                 
                 if (performSearch) {
-                int highest = selectedSprites.top().getOrder();
-                Sprite highestSelected = selectedSprites.top();
-                for (int i = 0; i < selectedSprites.size(); i++) {
-                    Sprite s = selectedSprites.peek(i);
-                    if (s.getOrder() > highest) {
-                        highest = s.getOrder();
-                        highestSelected = s;
-                    }
-                }
-                selectedSprite = highestSelected;
-                selectedSprites.empty();
+                  int highest = selectedSprites.top().getOrder();
+                  Sprite highestSelected = selectedSprites.top();
+                  for (int i = 0; i < selectedSprites.size(); i++) {
+                      Sprite s = selectedSprites.peek(i);
+                      if (s.getOrder() > highest) {
+                          highest = s.getOrder();
+                          highestSelected = s;
+                      }
+                  }
+                  selectedSprite = highestSelected;
+                  selectedSprites.empty();
                 }
             }
             
             if (!hoveringOverAtLeast1Sprite && generalClick.clicked()) {
                 selectedSprite = null;
-            }
-            
             }
         }
         

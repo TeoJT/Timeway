@@ -32,15 +32,17 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.ShortBuffer;
 import java.nio.FloatBuffer;
+import java.nio.IntBuffer;
 import java.nio.file.Paths;
-
-
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.nio.file.*;
+import java.awt.Desktop;
+import java.nio.file.attribute.*;
 import java.util.ArrayList;
 import java.util.List;
-
 import com.sun.jna.Native;
 import com.sun.jna.Structure;
-
 // Timeway's engine code.
 // TODO: add documentation lmao.
 
@@ -49,7 +51,7 @@ class Engine {
   // Info and versioning
   public final String NAME        = "Timeway";
   public final String AUTHOR      = "Teo Taylor";
-  public final String VERSION     = "0.1.1";
+  public final String VERSION     = "0.1.2";
   public final String VERSION_DESCRIPTION = 
     "- Added terrain customisation\n"+
     "- Fixed a buncha bugs.";
@@ -991,7 +993,7 @@ class Engine {
     private float displayScale = 2.0;
     public PImage errorImg;
     public PShader errShader;
-    private HashMap<String, PImage> systemImages = new HashMap<String, PImage>();;
+    private HashMap<String, DImage> systemImages = new HashMap<String, DImage>();;
     public HashMap<String, PFont> fonts = new HashMap<String, PFont>();;
     private HashMap<String, PShaderEntry> shaders = new HashMap<String, PShaderEntry>();;
     public  float WIDTH = 0, HEIGHT = 0;
@@ -1018,6 +1020,11 @@ class Engine {
     public int IDLE_TIME   = 3;
     
     public int timeMode = LOGIC_TIME;
+    
+    private PGL pgl;
+    
+    // This variable limits LargeImages uploading to the GPU to one LargeImage upload/frame.
+    private boolean uploadGPUOnce = true;
     
     class PShaderEntry {
       public PShaderEntry(PShader s, String p) {
@@ -1170,19 +1177,38 @@ class Engine {
         return;
       }
       String name = file.getIsolatedFilename(path);
+      String ext  = file.getExt(path);
+      
+      
+      // If we're loading a vertex shader, we also have to load the corresponding 
+      // fragment shader.
+      if (ext.equals("vert")) {
+        String fragPath = file.getDir(path)+"/"+name+".frag";
+        if (file.exists(fragPath)) {
+          PShader s = app.loadShader(fragPath, path);
+          PShaderEntry shaderentry = new PShaderEntry(s, path);
+          shaders.put(name, shaderentry);
+          return;
+        }
+        else {
+          // File not found, continue to the normal fragment-only code.
+          console.warn("loadShader: corresponding "+name+" fragment shader file not found.");
+        }
+      }
       
       PShader s = app.loadShader(path);
       PShaderEntry shaderentry = new PShaderEntry(s, path);
-      
       shaders.put(name, shaderentry);
     }
   
-    public PImage getImg(String name) {
+    public DImage getImg(String name) {
       if (systemImages.get(name) != null) {
         return systemImages.get(name);
       } else {
         console.warnOnce("Image "+name+" doesn't exist.");
-        return errorImg;
+        
+        // TODO: Make it actually return something.
+        return null;
       }
     }
   
@@ -1203,6 +1229,111 @@ class Engine {
       for (PShaderEntry s : sh.values()) {
         this.loadShader(s.filepath);
       }
+    }
+    
+    public void largeImg(LargeImage largeimg, float x, float y, float w, float h) {
+      largeImg(g, largeimg, x, y, w, h);
+    }
+    
+    public void largeImg(PGraphics currentPG, LargeImage img, float x, float y, float w, float h) {
+      pgl = currentPG.beginPGL();
+      
+      
+      // If image data is in GPU, we can just bind it and continue about our day.
+      if (img.inGPU) {
+        // Bind the texture
+        pgl.activeTexture(PGL.TEXTURE0);
+        pgl.bindTexture(PGL.TEXTURE_2D, img.glTexID);
+      }
+      // Otherwise, creation of the LargeImage hasn't put the GPU into GPU mem yet (because of multithreading issues)
+      // so we must generate the buffers and put em on the GPU.
+      else if (uploadGPUOnce) {
+        // Create the texture buffer and put data into gpu mem.
+        pgl = currentPG.beginPGL();
+        IntBuffer intBuffer = IntBuffer.allocate(1);
+        pgl.genTextures(1, intBuffer);
+        img.glTexID = intBuffer.get(0);
+        pgl.activeTexture(PGL.TEXTURE0);
+        pgl.bindTexture(PGL.TEXTURE_2D, img.glTexID);
+        pgl.texImage2D(PGL.TEXTURE_2D, 0, PGL.RGBA, (int)img.width, (int)img.height, 0, PGL.RGBA, PGL.UNSIGNED_BYTE, img.texData);
+        img.inGPU = true;
+        uploadGPUOnce = false;
+        
+        //pgl.texParameteri(PGL.TEXTURE_2D, PGL.TEXTURE_MAG_FILTER, PGL.LINEAR);
+        //pgl.texParameteri(PGL.TEXTURE_2D, PGL.TEXTURE_MIN_FILTER, PGL.LINEAR_MIPMAP_LINEAR);
+      }
+      else {
+        // uploadGPUOnce is false which means a LargeImage has taken our turn to upload our shiz into the GPU
+        // and we must wait for a chance next frame.
+        // For now, don't render anything.
+        return;
+      }
+      
+      pgl.texParameteri(PGL.TEXTURE_2D, PGL.TEXTURE_MAG_FILTER, PGL.LINEAR);
+      pgl.texParameteri(PGL.TEXTURE_2D, PGL.TEXTURE_MIN_FILTER, PGL.NEAREST);
+      
+      //currentPG.translate(x, y);
+      //currentPG.scale(w, h);
+      //img.display();
+      
+      display.shader(currentPG, "largeimg");
+      currentPG.beginShape(QUADS);
+      currentPG.vertex(x, y, 0, 0);
+      currentPG.vertex(x+w, y, 1, 0);
+      currentPG.vertex(x+w, y+h, 1, 1);
+      currentPG.vertex(x, y+h, 0, 1);
+      currentPG.endShape();
+      
+      currentPG.flush();
+      
+      currentPG.endPGL();
+      
+      // TODO: Figure out a way to not have to switch shaders so much.
+      currentPG.resetShader();
+    }
+    
+    
+    
+    LargeImage createLargeImage(PImage img) {
+        IntBuffer data = IntBuffer.allocate(img.width*img.height);
+        
+        // Copy pimage data to the intbuffer.
+        data.rewind();
+        int l = img.width*img.height;
+        img.loadPixels();
+        for (int i = 0; i < l; i++) {
+          int c = img.pixels[i];
+          int a = c >> 24 & 0xFF;
+          int r = c >> 16 & 0xFF;
+          int g = c >> 8 & 0xFF;
+          int b = c & 0xFF;
+          data.put(i, ( a << 24 |  b << 16 | g << 8 | r));
+        }
+        data.rewind();
+        
+        // At this rate the LargeImage class is more like a data container than an object that does stuff.  
+        // You may notice we haven't done any OpenGL operations to upload the texture to the GPU.
+        // That's becauses this method could very well be (and most definitely is) running in a seperate thread
+        // to the OpenGL thread which is baaaaaad. So we will upload it to the GPU later in the main thread.
+        // For now let's set up the LargeImage object, because that's something we're allowed to do in seperate threads
+        // at least.
+        LargeImage largeimg = new LargeImage(data);
+        
+        // Lets skip creating a shape for now cus who's gonna use it.
+        //largeimg.shape = currentPG.createShape();
+        
+        //largeimg.shape.beginShape(QUADS);
+        //largeimg.shape.noStroke();
+        //largeimg.shape.fill(255);
+        //largeimg.shape.vertex(0, 0, largeimg.uvx1, largeimg.uvy1);
+        //largeimg.shape.vertex(1, 0, largeimg.uvx2, largeimg.uvx1);
+        //largeimg.shape.vertex(1, 1, largeimg.uvx2, largeimg.uvy2);
+        //largeimg.shape.vertex(0, 1, largeimg.uvx1, largeimg.uvy2);
+        //largeimg.shape.endShape();
+        
+        largeimg.width = img.width;
+        largeimg.height = img.height;
+        return largeimg;
     }
     
     public void initShader(String name) {
@@ -1298,18 +1429,9 @@ class Engine {
       return sh;
     }
     
-    public void img(PImage image, float x, float y, float w, float h) {
-      if (wireframe) {
-        recordRendererTime();
-        app.stroke(sin(selectBorderTime)*127+127, 100);
-        selectBorderTime += 0.1*getDelta();
-        app.strokeWeight(3);
-        app.noFill();
-        app.rect(x, y, w, h);
-        app.noStroke();
-      } else {
-        app.noStroke();
-      }
+    public void img(DImage image, float x, float y, float w, float h) {
+      
+      
       if (image == null) {
         app.image(errorImg, x, y, w, h);
         recordLogicTime();
@@ -1319,42 +1441,40 @@ class Engine {
       if (image.width == -1 || image.height == -1) {
         app.image(errorImg, x, y, w, h);
         recordLogicTime();
-        console.warnOnce("Corrupted image.");
-        return;
-      }
-      // If image is loaded render.
-      if (image.width > 0 && image.height > 0) {app.image(image, x, y, w, h);
-        
-        return;
-      } else {
-        app.noStroke();
-        return;
-      }
-    }
-  
-    public void imgOld(PImage image, float x, float y, float w, float h) {
-      if (wireframe) {
-        app.stroke(sin(app.frameCount*0.1)*127+127, 100);
-        app.strokeWeight(3);
-        app.noFill();
-        app.rect(x, y, w, h);
-        app.noStroke();
-      } else {
-        app.noStroke();
-      }
-      if (image == null) {
-        app.image(errorImg, x, y, w, h);
-        console.warnOnce("Image listed as 'loaded' but image doesn't seem to exist.");
-        return;
-      }
-      if (image.width == -1 || image.height == -1) {
-        app.image(errorImg, x, y, w, h);
         console.warnOnce("Corrupted image.");
         return;
       }
       // If image is loaded render.
       if (image.width > 0 && image.height > 0) {
-        img(image, x, y, w, h);
+        if (image.mode == 1) {
+          app.image(image.pimage, x, y, w, h);
+        }
+        else if (image.mode == 2) {
+          largeImg(image.largeImage, x, y, w, h);
+        }
+        
+        // Annnnd a wireframe
+        if (wireframe) {
+          recordRendererTime();
+          app.stroke(sin(selectBorderTime)*127+127, 100);
+          selectBorderTime += 0.1*getDelta();
+          app.strokeWeight(3);
+          app.noFill();
+          
+          app.beginShape(QUADS);
+          app.vertex(x, y);
+          app.vertex(x+w, y);
+          app.vertex(x+w, y+h);
+          app.vertex(x, y+h);
+          app.endShape();
+          
+          app.noStroke();
+        } else {
+          app.noStroke();
+        }
+        
+        
+        
         return;
       } else {
         app.noStroke();
@@ -1374,7 +1494,7 @@ class Engine {
     }
   
     public void img(String name, float x, float y) {
-      PImage image = systemImages.get(name);
+      DImage image = systemImages.get(name);
       if (image != null) {
         img(systemImages.get(name), x, y, image.width, image.height);
       } else {
@@ -1387,18 +1507,18 @@ class Engine {
   
   
     public void imgCentre(String name, float x, float y, float w, float h) {
-      PImage image = systemImages.get(name);
+      DImage image = systemImages.get(name);
       if (image == null) {
-        img(errorImg, x-errorImg.width/2, y-errorImg.height/2, w, h);
+        //img(errorImg, x-errorImg.width/2, y-errorImg.height/2, w, h);
       } else {
         img(image, x-w/2, y-h/2, w, h);
       }
     }
   
     public void imgCentre(String name, float x, float y) {
-      PImage image = systemImages.get(name);
+      DImage image = systemImages.get(name);
       if (image == null) {
-        img(errorImg, x-errorImg.width/2, y-errorImg.height/2, errorImg.width, errorImg.height);
+        //img(errorImg, x-errorImg.width/2, y-errorImg.height/2, errorImg.width, errorImg.height);
       } else {
         img(image, x-image.width/2, y-image.height/2, image.width, image.height);
       }
@@ -1480,6 +1600,12 @@ class Engine {
     }
     
     public void updateDelta() {
+      // Since updatedelta is the only displaymodule function called in the
+      // main engine function, we might as well reset uploadGPUOnce here even tho it
+      // has nothing to do with delta.
+      uploadGPUOnce = true;
+      
+      
       totalTimeMillis = thisFrameMillis-lastFrameMillis;
       lastFrameMillis = thisFrameMillis;
       thisFrameMillis = app.millis();
@@ -4306,8 +4432,8 @@ class Engine {
       // Count the number of characters, add one.
       // That's how you deal with substirng.
       String arg = "";
-      if (command.length() > 17)
-        arg = command.substring(17);
+      if (command.length() > 16)
+        arg = command.substring(16);
 
       power.setForcedPowerMode(arg);
       if (arg.equals("HIGH") || arg.equals("NORMAL") || arg.equals("SLEEPY") || arg.equals("MINIMAL")) console.log("Forced power mode set to "+arg);
@@ -5085,7 +5211,7 @@ class Engine {
     if (ext.equals("png") || ext.equals("jpg") || ext.equals("gif") || ext.equals("bmp")) {
       // load image and add it to the systemImages hashmap.
       if (display.systemImages.get(name) == null) {
-        display.systemImages.put(name, app.loadImage(path));
+        display.systemImages.put(name, new DImage(app.loadImage(path)));
         loadedContent.add(name);
       } else {
         console.warn("Image "+name+" already exists, skipping.");
@@ -5094,8 +5220,10 @@ class Engine {
       display.fonts.put(name, app.createFont(path, 32));
     } else if (ext.equals("vlw")) {
       display.fonts.put(name, app.loadFont(path));
-    } else if (ext.equals("glsl")) {
+    } else if (ext.equals("glsl") || ext.equals("vert")) {
       display.loadShader(path);
+    } else if (ext.equals("frag")) {
+      // Don't load anything since .vert also loads corresponding .frag
     } else if (ext.equals("wav") || ext.equals("ogg") || ext.equals("mp3")) {
       sound.sounds.put(name, new SoundFile(app, path));
     } else {
@@ -5667,6 +5795,7 @@ class Engine {
     
     private float cache_mouseX = 0.0;
     private float cache_mouseY = 0.0;
+    public  float scrollOffset = 0.0;
     
     public int keys[]     = new int[1024];
     
@@ -5886,6 +6015,56 @@ class Engine {
     public float mouseY() {
       return cache_mouseY;
     }
+    
+    
+    // TODO: This is old code. Need I say more?
+    // It's also broken af.
+    public void processScroll(float top, float bottom) {
+      final float ELASTIC_MAX = 100.;
+      
+      if (scroll != 0.0) {
+        power.setAwake();
+      }
+      else {
+        power.setSleepy();
+      }
+      
+      int n = 1;
+      switch (power.getPowerMode()) {
+            case HIGH:
+            n = 1;
+            break;
+            case NORMAL:
+            n = 2;
+            break;
+            case SLEEPY:
+            n = 4;
+            break;
+            case MINIMAL:
+            n = 1;
+            break;
+      }
+      
+      // Sorry not sorry
+      for (int i = 0; i < n; i++) {
+        if (scrollOffset > top) {
+            scrollOffset -= (scrollOffset-top)*0.1;
+            if (input.scroll < 0.0) scrollOffset += input.scroll;
+            else scrollOffset += input.scroll*(max(0.0, ((ELASTIC_MAX+top)-scrollOffset)/ELASTIC_MAX));
+        }
+        else if (-scrollOffset > bottom) {
+            // TODO: Actually get some pen and paper and make the elastic band edge work.
+            // This is just a placeholder so that it's usable.
+            scrollOffset = -bottom;
+          
+            //scrollOffset += (bottom-scrollOffset)*0.1;
+            //if (engine.scroll > 0.0) scrollOffset += engine.scroll;
+            //else scrollOffset += engine.scroll*(max(0.0, ((-scrollOffset)-(ELASTIC_MAX+bottom))/ELASTIC_MAX));
+        }
+        else scrollOffset += input.scroll;
+      }
+    }
+      
     
     public void clickEventAction() {
       // We don't want to trigger a click if the normal clicking system receives a click.
@@ -6352,6 +6531,61 @@ public abstract class Screen {
     }
   }
 }
+
+
+
+public class DImage {
+  public float width = 0;
+  public float height = 0;
+  public int mode = 0;
+  public PImage pimage;         // 1
+  public LargeImage largeImage; // 2
+  
+  private void setDimensions(float w, float h) {
+    this.width = w;
+    this.height = h;
+  }
+  
+  public DImage(PImage pimage) {
+    setDimensions(pimage.width, pimage.height);
+    this.pimage = pimage;
+    mode = 1;
+  }
+  public DImage(LargeImage largeImage, PImage p) {
+    setDimensions(largeImage.width, largeImage.height);
+    this.pimage = p;
+    this.largeImage = largeImage;
+    mode = 2;
+  }
+}
+
+
+
+public class LargeImage {
+  public float width = 0, height = 0;
+  public int glTexID = -1;
+  public PShape shape;
+  public IntBuffer texData;
+  public boolean inGPU = false;
+  
+  public LargeImage(IntBuffer texData) {
+    super();
+    this.texData = texData;
+  }
+  
+  public void finalize() {
+    // TODO: OpenGL function call to clear texture from gpu mem
+    
+  }
+}
+
+
+
+
+
+
+
+
 
 public enum PowerMode {
     HIGH, 

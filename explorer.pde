@@ -8,9 +8,8 @@ public class Explorer extends Screen {
   
   //DisplayableFile backButtonDisplayable = null;
   SpriteSystemPlaceholder gui;
-  private float scrollOffset = 0.0;
-  private float scrollBottom = 0.0;
   private int numTimewayEntries;
+  public  float scrollBottom = 0.0;
   
   public Explorer(Engine engine) {
         super(engine);
@@ -54,7 +53,7 @@ public class Explorer extends Screen {
       float textHeight = app.textAscent() + app.textDescent();
       float x = 50;
       float wi = TEXT_SIZE + 20;
-      float y = 150 + i*TEXT_SIZE+scrollOffset;
+      float y = 150 + i*TEXT_SIZE+input.scrollOffset;
       
       // Sorry not sorry
       try {
@@ -66,7 +65,7 @@ public class Explorer extends Screen {
             // if mouse is hovering over text and left click is pressed, go to this directory/open the file
             if (input.primaryClick) {
               if (file.currentFiles[i].isDirectory())
-                scrollOffset = 0.;
+                input.scrollOffset = 0.;
                 
               file.open(file.currentFiles[i]);
             }
@@ -92,53 +91,6 @@ public class Explorer extends Screen {
     
     scrollBottom = max(0, (file.currentFiles.length*TEXT_SIZE-HEIGHT+BOTTOM_SCROLL_EXTEND));
   }
-  
-  private void processScroll(float top, float bottom) {
-    final float ELASTIC_MAX = 100.;
-    
-    if (input.scroll != 0.0) {
-      engine.power.setAwake();
-    }
-    else {
-      engine.power.setSleepy();
-    }
-    
-    int n = 1;
-    switch (engine.power.getPowerMode()) {
-          case HIGH:
-          n = 1;
-          break;
-          case NORMAL:
-          n = 2;
-          break;
-          case SLEEPY:
-          n = 4;
-          break;
-          case MINIMAL:
-          n = 1;
-          break;
-    }
-    
-    // Sorry not sorry
-    for (int i = 0; i < n; i++) {
-      if (scrollOffset > top) {
-          scrollOffset -= (scrollOffset-top)*0.1;
-          if (input.scroll < 0.0) scrollOffset += input.scroll;
-          else scrollOffset += input.scroll*(max(0.0, ((ELASTIC_MAX+top)-scrollOffset)/ELASTIC_MAX));
-      }
-      else if (-scrollOffset > bottom) {
-          // TODO: Actually get some pen and paper and make the elastic band edge work.
-          // This is just a placeholder so that it's usable.
-          scrollOffset = -bottom;
-        
-          //scrollOffset += (bottom-scrollOffset)*0.1;
-          //if (engine.scroll > 0.0) scrollOffset += engine.scroll;
-          //else scrollOffset += engine.scroll*(max(0.0, ((-scrollOffset)-(ELASTIC_MAX+bottom))/ELASTIC_MAX));
-      }
-      else scrollOffset += input.scroll;
-    }
-  }
-  
   
   // THIS IS COPIED from the editor tab.
   // TODO: make this use one script from the engine or something.
@@ -265,7 +217,7 @@ public class Explorer extends Screen {
         ui.loadingIcon(WIDTH/2, HEIGHT/2);
       }
       else {
-        processScroll(0., scrollBottom+1.0);
+        input.processScroll(0., scrollBottom+1.0);
         renderDir();
       }
       
