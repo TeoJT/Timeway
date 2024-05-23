@@ -521,10 +521,6 @@ public class Editor extends Screen {
           this.entryName = entryPath.substring(lindex+1, entryPath.lastIndexOf('.'));
         }
 
-        // textPlaceable = new TextPlaceable();
-        // textPlaceable.sprite.xpos = app.width/2;
-        // textPlaceable.sprite.ypos = app.height/2;
-        // textPlaceable.text = "[ amogus ]";
         gui.interactable = false;
         
         autoScaleDown = engine.settings.getBoolean("autoScaleDown");
@@ -537,56 +533,6 @@ public class Editor extends Screen {
 
         readEntryJSONInSeperateThread();
     }
-
-    // Honestly just commenting it out so the code isn't as bloated.
-
-    // public void saveEntry() {
-    //     // Dummy save name just for testing.
-    //     engine.beginSaveEntry(entryPath);
-
-    //     int len = placeableset.size();
-    //     int i = 0;
-    //     for (Placeable p : placeableset) {
-    //         if (p instanceof TextPlaceable) {
-    //             TextPlaceable t = (TextPlaceable)p;
-    //             engine.save.createStringProperty("ID", t.sprite.name);
-    //             engine.save.createIntProperty("type", TYPE_TEXT);
-    //             engine.save.createIntProperty("x", int(t.sprite.xpos));
-    //             engine.save.createIntProperty("y", int(t.sprite.ypos));
-    //             engine.save.createStringProperty("text", t.text);
-
-    //             if (i == len-1) {
-    //                 engine.save.endProperties();
-    //             }
-    //             else {
-    //                 engine.save.nextElement();
-    //             }
-    //         }
-    //         i++;
-    //     }
-    //     engine.save.closeAndSave();
-    // }
-
-    // public void readEntry() {
-    //     engine.beginReadEntry(entryPath);
-
-    //     int len = engine.read.getElementCount();
-    //     for (int i = 0; i < len; i++) {
-    //         engine.read.selectElement(i);
-    //         int type = engine.read.getIntProperty("type");
-    //         console.log("type:"+type);
-    //         console.log("ID:"+engine.read.getStringProperty("ID"));
-    //         if (type == TYPE_TEXT) {
-    //             TextPlaceable t = new TextPlaceable();
-    //             t.sprite.xpos = (float)engine.read.getIntProperty("x");
-    //             t.sprite.ypos = (float)engine.read.getIntProperty("y");
-    //             t.text = engine.read.getStringProperty("text");
-    //             placeableset.add(t);
-
-    //             console.log("Created text at x:"+t.sprite.xpos+" y:"+t.sprite.ypos+" text:"+t.text);
-    //         }
-    //     }
-    // }
 
     //*****************************************************************
     //***********************PLACEABLE TYPES***************************
@@ -1261,7 +1207,7 @@ public class Editor extends Screen {
         }
         
         // Update max scroll.
-        final float PADDING = 150.;
+        final float PADDING = 350.;
         scrollLimitY = max(extentY+PADDING-HEIGHT+myLowerBarWeight, 0);
 
         // Check back to see if something's been clicked.

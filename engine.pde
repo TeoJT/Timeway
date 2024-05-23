@@ -1235,10 +1235,12 @@ class Engine {
       largeImg(g, largeimg, x, y, w, h);
     }
     
-    public void largeImg(PGraphics currentPG, LargeImage img, float x, float y, float w, float h) {
+    public void bind(LargeImage img) {
+      bind(g, img);
+    }
+    
+    public void bind(PGraphics currentPG, LargeImage img) {
       pgl = currentPG.beginPGL();
-      
-      
       // If image data is in GPU, we can just bind it and continue about our day.
       if (img.inGPU) {
         // Bind the texture
@@ -1271,10 +1273,12 @@ class Engine {
       
       pgl.texParameteri(PGL.TEXTURE_2D, PGL.TEXTURE_MAG_FILTER, PGL.LINEAR);
       pgl.texParameteri(PGL.TEXTURE_2D, PGL.TEXTURE_MIN_FILTER, PGL.NEAREST);
+      currentPG.endPGL();
+    }
+    
+    public void largeImg(PGraphics currentPG, LargeImage img, float x, float y, float w, float h) {
       
-      //currentPG.translate(x, y);
-      //currentPG.scale(w, h);
-      //img.display();
+      bind(currentPG, img);
       
       display.shader(currentPG, "largeimg");
       currentPG.beginShape(QUADS);
@@ -1286,7 +1290,6 @@ class Engine {
       
       currentPG.flush();
       
-      currentPG.endPGL();
       
       // TODO: Figure out a way to not have to switch shaders so much.
       currentPG.resetShader();
