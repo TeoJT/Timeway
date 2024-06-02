@@ -155,6 +155,7 @@ public class PixelRealm extends Screen {
   
   
   
+  
   // --- Pixel realm state ---
   protected PixelRealmState currRealm = null;
   private PixelRealmState[] quickWarpRealms = new PixelRealmState[10];
@@ -1903,7 +1904,7 @@ public class PixelRealm extends Screen {
       public void addRequestToQueue(final String path) {
         this.beginLoadFlag.set(false);
         loadQueue.add(this.beginLoadFlag);
-        final boolean isImg = this instanceof ImageFileObject;
+        final boolean isImg = this instanceof ImageFileObject || this instanceof EntryFileObject;
         final FileObject me = this;
         
         Thread t1 = new Thread(new Runnable() {
@@ -1930,26 +1931,34 @@ public class PixelRealm extends Screen {
             }
             else {
               incrementMemUsage(size);
-              if (file.getExt(path).equals("gif")) {
+              String ext = file.getExt(path);
+              
+              if (ext.equals("gif")) {
                 Gif newGif = new Gif(app, path);
                 newGif.loop();
                 img = new RealmTexture();
                 img.setLarge(newGif);
               }
+              
               // TODO: idk error check here
               else {
+                PImage im = display.systemImages.get("white").pimage;
                 // TODO: this is NOT thread-safe here!
-                PImage im = engine.tryLoadImageCache(path, new Runnable() {
-                  public void run() {
-                    if (isImg)
-                      ((ImageFileObject)me).cacheFlag = true;
-                    engine.setOriginalImage(loadImage(path));
-                  }
+                if (ext.equals(engine.ENTRY_EXTENSION)) {
+                  // TODO
                 }
-                );
+                else {
+                  im = engine.tryLoadImageCache(path, new Runnable() {
+                    public void run() {
+                      engine.setOriginalImage(loadImage(path));
+                    }
+                  }
+                  );
+                }
+                if (isImg)
+                  ((ImageFileObject)me).cacheFlag = true;
                 img = new RealmTexture();
                 img.setLarge(im);
-                console.log(img.getD().mode);
               }
             }
             
@@ -2060,6 +2069,62 @@ public class PixelRealm extends Screen {
         display.recordLogicTime();
   
         displayBillboard();
+      }
+    }
+    
+    class EntryFileObject extends ImageFileObject {
+      private Editor renderedEntry = null;
+      private PGraphics mycanvas = null;
+      
+      public EntryFileObject(float x, float y, float z, String dir) {
+        super(x, y, z, dir);
+      }
+  
+      public EntryFileObject(String dir) {
+        super(dir);
+      }
+      
+      public void load(JSONObject json) {
+        this.x = json.getFloat("x", this.x);
+        this.z = json.getFloat("z", this.z);
+        this.size = json.getFloat("scale", 1.)*BACKWARD_COMPAT_SCALE;
+  
+        float yy = onSurface(this.x, this.z);
+        this.y = json.getFloat("y", yy);
+  
+        // If the object is below the ground, reset its position.
+        if (y > yy+5.) this.y = yy;
+        this.rot = json.getFloat("rot", random(-PI, PI));
+        
+        mycanvas = createGraphics(480, 270, P2D);
+        renderedEntry = new Editor(engine, dir, mycanvas);
+      }
+      
+      public void run() {
+        super.run();
+        
+        if (!loadFlag) {
+          if (renderedEntry != null && mycanvas != null && renderedEntry.isLoaded()) {
+            
+            display.uploadAllAtOnce(true);
+            scene.endDraw();
+            display.setPGraphics(mycanvas);
+            mycanvas.beginDraw();
+            mycanvas.background(renderedEntry.BACKGROUND_COLOR);
+            input.scrollOffset = -200.;
+            renderedEntry.renderPlaceables();
+            mycanvas.endDraw();
+            display.setPGraphics(g);
+            scene.beginDraw();
+            img = new RealmTexture();
+            img.setLarge(mycanvas);
+            display.uploadAllAtOnce(false);
+            
+            // Don't care about these two anymore
+            //mycanvas = null;
+            //renderedEntry = null;
+          }
+        }
       }
     }
   
@@ -2389,10 +2454,6 @@ public class PixelRealm extends Screen {
           usingFadeShader = false;
           display.shader(scene, "portal_plus", "u_time", display.getTimeSeconds(), "u_dir", -direction/(PI*2));
           
-          
-          if (this.img.getD().mode != 2) {
-            console.bugWarn("PORTAL img.mode is "+this.img.getD().mode);
-          }
           
           displayBillboard();
           if (versionCompatibility == 2) {
@@ -3019,6 +3080,9 @@ public class PixelRealm extends Screen {
           break;
         case FILE_TYPE_IMAGE:
           fileobject = new ImageFileObject(path);
+          break;
+        case FILE_TYPE_TIMEWAYENTRY:
+          fileobject = new EntryFileObject(path);
           break;
         case FILE_TYPE_SHORTCUT:
           fileobject = new ShortcutPortal(path);

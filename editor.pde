@@ -167,6 +167,9 @@ public class Editor extends Screen {
     public boolean autoScaleDown = false;
     public boolean changesMade = false;
     public int upperBarDrop = INITIALISE_DROP_ANIMATION;
+    public PGraphics canvas;
+    public float canvasScale;
+    
     // X goes unused for now but could be useful later.
     public float extentX = 0.;
     public float extentY = 0.;
@@ -252,7 +255,7 @@ public class Editor extends Screen {
           
         if (editingPlaceable != null && editingPlaceable instanceof ImagePlaceable) {
           ImagePlaceable im = (ImagePlaceable)editingPlaceable;
-          //file.selectOutput("Save image...", im.getImage());
+          file.selectOutput("Save image...", im.getImage().pimage);
         }
           
       }};
@@ -305,8 +308,8 @@ public class Editor extends Screen {
         // Just a placeholder display for the base class.
         // You shouldn't use super.display() for inherited classes.
         public void display() {
-            app.fill(255, 0, 0);
-            app.rect(sprite.xpos, sprite.ypos, sprite.wi, sprite.hi);
+            canvas.fill(255, 0, 0);
+            canvas.rect(sprite.xpos, sprite.ypos, sprite.wi, sprite.hi);
         }
 
         public void update() {
@@ -351,23 +354,12 @@ public class Editor extends Screen {
 
         int testy = 0;
         public void display() {
-            app.fill(textColor);
-            app.textAlign(LEFT, TOP);
-            app.textFont(fontStyle, fontSize);
-            app.textLeading(fontSize+lineSpacing);
-
-            //sprite.move(xview, yview);
-
-            // move the text from top to bottom on the screen just for fun
-            
-            // Update 25/09/23:
-            // WOW that is old code
-            //if (placeables.selectedSprite != sprite) {
-            //    //sprite.offmove(0, 100);
-            //}
-            //else {
-            //    testy = 0;
-            //}
+            canvas.pushMatrix();
+            canvas.scale(canvasScale);
+            canvas.fill(textColor);
+            canvas.textAlign(LEFT, TOP);
+            canvas.textFont(fontStyle, fontSize);
+            canvas.textLeading(fontSize+lineSpacing);
 
             String displayText = "";
             if (editing()) {
@@ -379,7 +371,8 @@ public class Editor extends Screen {
               else {
                   displayText = text;
             }
-            app.text(displayText, sprite.xpos, sprite.ypos-app.textDescent()+EXPAND_HITBOX/2+10);
+            canvas.text(displayText, sprite.xpos, sprite.ypos-canvas.textDescent()+EXPAND_HITBOX/2+10);
+            canvas.popMatrix();
         }
         
         public void updateDimensions() {
@@ -481,50 +474,65 @@ public class Editor extends Screen {
             if (placeableSelected()) {
                 editingPlaceable = this;
             }
+            
+            canvas.pushMatrix();
+            canvas.scale(canvasScale);
             placeables.sprite(sprite.getName(), imageName);
+            canvas.popMatrix();
         }
     }
     
     //**************************************************************************************
     //**********************************EDITOR SCREEN CODE**********************************
-    //**************************************************************************************
-    public Editor(Engine engine, String entryPath) {
+    //**************************************************************************************    
+    public Editor(Engine engine, String entryPath, PGraphics c) {
         super(engine);
-        gui = new SpriteSystemPlaceholder(engine, engine.APPPATH+engine.PATH_SPRITES_ATTRIB+"gui/editor/");
-        gui.repositionSpritesToScale();
+        this.entryPath = entryPath;
+        if (c == null) {
+          gui = new SpriteSystemPlaceholder(engine, engine.APPPATH+engine.PATH_SPRITES_ATTRIB+"gui/editor/");
+          gui.repositionSpritesToScale();
+          gui.interactable = false;
+          
+          // Bug fix: run once so that text element in GUI being at pos 0,0 isn't shown.
+          runGUI();
+          
+          camera = new DCapture(engine);
         
-        // Bug fix: run once so that text element in GUI being at pos 0,0 isn't shown.
-        runGUI();
+          // Because of the really annoying delay thing, we wanna create a canvas that uses the cpu to draw the frame instead
+          // of the P2D renderer struggling to draw things. In the future, we can implement this into the engine so that it can
+          // be used in other places and not just for the camera.
+          int SIZE_DIVIDER = 2;
+          cameraDisplay = createGraphics(int(WIDTH)/SIZE_DIVIDER, int(HEIGHT)/SIZE_DIVIDER);
+        }
         
         placeables = new SpriteSystemPlaceholder(engine);
         placeables.allowSelectOffContentPane = false;
         imagesInEntry = new ArrayList<String>();
         placeableset = new HashSet<Placeable>();
         
-        this.entryPath = entryPath;
-        camera = new DCapture(engine);
-        
-        // Because of the really annoying delay thing, we wanna create a canvas that uses the cpu to draw the frame instead
-        // of the P2D renderer struggling to draw things. In the future, we can implement this into the engine so that it can
-        // be used in other places and not just for the camera.
-        int SIZE_DIVIDER = 2;
-        cameraDisplay = createGraphics(int(WIDTH)/SIZE_DIVIDER, int(HEIGHT)/SIZE_DIVIDER);
-
         // Get the path without the file name
         int lindex = entryPath.lastIndexOf('/');
         if (lindex == -1) {
           lindex = entryPath.lastIndexOf('\\');
-          if (lindex == -1) console.warn("Could not find entry's dir, possible bug?");
+          if (lindex == -1) console.bugWarn("Could not find entry's dir, possible bug?");
         }
         if (lindex != -1) {
           this.entryDir = entryPath.substring(0, lindex+1);
           this.entryName = entryPath.substring(lindex+1, entryPath.lastIndexOf('.'));
         }
 
-        gui.interactable = false;
-        
-        autoScaleDown = engine.settings.getBoolean("autoScaleDown");
+        autoScaleDown = settings.getBoolean("autoScaleDown");
         input.scrollOffset = 0.;
+        
+        if (c != null) {
+          canvas = c;
+          canvasScale = canvas.width/(WIDTH);
+          input.scrollOffset = -200.;
+        }
+        else {
+          canvas = g;
+          canvasScale = canvas.width/(WIDTH*display.getScale());
+        }
 
         myLowerBarColor   = 0xFF4c4945;
         myUpperBarColor   = myLowerBarColor;
@@ -532,6 +540,10 @@ public class Editor extends Screen {
         //myBackgroundColor = color(255,0,0);
 
         readEntryJSONInSeperateThread();
+    }
+    
+    public Editor(Engine e, String entryPath) {
+      this(e, entryPath, null);
     }
 
     //*****************************************************************
@@ -740,6 +752,10 @@ public class Editor extends Screen {
           }
       });
       t.start();
+    }
+    
+    public boolean isLoaded() {
+      return !loading;
     }
     
     protected boolean customCommands(String command) {
@@ -1082,6 +1098,29 @@ public class Editor extends Screen {
         engine.allowShowCommandPrompt = false;
     }
     
+    private void renderPlaceables() {
+        placeables.updateSpriteSystem();
+
+        input.processScroll(0., scrollLimitY);
+        extentX = 0;
+        extentY = 0;
+        // Run all placeable objects
+        for (Placeable p : placeableset) {
+            p.update();
+            
+            // Don't care I can tidy things up later.
+            // Update extentX and extentY
+            float newx = (p.sprite.defxpos+p.sprite.getWidth());
+            if (newx > extentX) extentX = newx;
+            float newy = (p.sprite.defypos+p.sprite.getHeight());
+            if (newy > extentY) extentY = newy;
+        }
+        
+        // Update max scroll.
+        final float PADDING = 350.;
+        scrollLimitY = max(extentY+PADDING-HEIGHT+myLowerBarWeight, 0);
+    }
+    
     private void renderEditor() {
       //yview += engine.scroll;
         // In order to know if we clicked on an object or a blank area,
@@ -1189,26 +1228,7 @@ public class Editor extends Screen {
           }
         }
         
-        placeables.updateSpriteSystem();
-
-        input.processScroll(0., scrollLimitY);
-        extentX = 0;
-        extentY = 0;
-        // Run all placeable objects
-        for (Placeable p : placeableset) {
-            p.update();
-            
-            // Don't care I can tidy things up later.
-            // Update extentX and extentY
-            float newx = (p.sprite.defxpos+p.sprite.getWidth());
-            if (newx > extentX) extentX = newx;
-            float newy = (p.sprite.defypos+p.sprite.getHeight());
-            if (newy > extentY) extentY = newy;
-        }
-        
-        // Update max scroll.
-        final float PADDING = 350.;
-        scrollLimitY = max(extentY+PADDING-HEIGHT+myLowerBarWeight, 0);
+        renderPlaceables();
 
         // Check back to see if something's been clicked.
         if (clickedThing) {

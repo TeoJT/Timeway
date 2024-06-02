@@ -135,16 +135,11 @@ void draw() {
       if (sketch_showCrashScreen || sketch_FORCE_CRASH_SCREEN) {
         
         try {
+          // Run Timeway.
           timewayEngine.engine();
         }
         catch (java.lang.OutOfMemoryError outofmem) {
-          sketch_openErrorLog(
-          "Sorry! Timeway has run out of memory! D:\n"+
-          "Either: \n"+
-          "You loaded a massive number of files from a folder\n"+
-          "or\n"+
-          "The OutOfMemoryError protection system failed. This could be a bug."
-          );
+          sketch_openErrorLog("Timeway has run out of memory.");
           exit();
         }
         catch (Exception e) {
@@ -154,10 +149,10 @@ void draw() {
           exit();
         }
       }
-      // Let it gracefully crash
+      
+      // Run Timeway.
       else timewayEngine.engine();
   }
-  
 }
 
 

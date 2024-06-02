@@ -64,8 +64,6 @@ class Engine {
   // a, b, and c can go well over 10, 100, it can be any positive integer.
 
   // Paths
-  public final String ENTRIES_PATH        = "data/legacyentry/";
-  public final String ENTRY_DEFAULT_NAME  = "entry";
   public final String CONSOLE_FONT        = "data/engine/font/SourceCodePro-Regular.ttf";
   public final String IMG_PATH            = "data/engine/img/";
   public final String FONT_PATH           = "data/engine/font/";
@@ -76,7 +74,6 @@ class Engine {
   public final String KEYBIND_PATH        = "data/keybindings.json";
   public final String STATS_FILE          = "data/stats.json";
   public final String PATH_SPRITES_ATTRIB = "data/engine/spritedata/";
-  public final String DAILY_ENTRY         = "data/daily_entry.timewayentry";
   public final String GLITCHED_REALM      = "data/engine/default/glitched_realm/";
   public final String CACHE_INFO          = "data/cache/cache_info.json";
   public final String CACHE_PATH          = "data/cache/";
@@ -316,7 +313,7 @@ class Engine {
         defaultSettings.putIfAbsent("scrollSensitivity", 20.0);
         defaultSettings.putIfAbsent("dynamicFramerate", true);
         defaultSettings.putIfAbsent("lowBatteryPercent", 50.0);
-        defaultSettings.putIfAbsent("autoScaleDown", true);
+        defaultSettings.putIfAbsent("autoScaleDown", false);
         defaultSettings.putIfAbsent("defaultSystemFont", "Typewriter");
         defaultSettings.putIfAbsent("homeDirectory", System.getProperty("user.home").replace('\\', '/'));
         defaultSettings.putIfAbsent("forcePowerMode", "NONE");
@@ -1004,6 +1001,8 @@ class Engine {
     private float time = 0.;
     private float selectBorderTime = 0.;
     public boolean showCPUBenchmarks = false;
+    private PGraphics currentPG;
+    private boolean allAtOnce = false;
     
     public final float BASE_FRAMERATE = 60.;
     private float delta = 0.;
@@ -1114,6 +1113,7 @@ class Engine {
     
         generateErrorImg();
         generateErrorShader();
+        currentPG = g;
         
         resetTimes();
     }
@@ -1239,6 +1239,10 @@ class Engine {
       bind(g, img);
     }
     
+    public void uploadAllAtOnce(boolean tf) {
+      allAtOnce = tf;
+    }
+    
     public void bind(PGraphics currentPG, LargeImage img) {
       pgl = currentPG.beginPGL();
       // If image data is in GPU, we can just bind it and continue about our day.
@@ -1249,7 +1253,7 @@ class Engine {
       }
       // Otherwise, creation of the LargeImage hasn't put the GPU into GPU mem yet (because of multithreading issues)
       // so we must generate the buffers and put em on the GPU.
-      else if (uploadGPUOnce) {
+      else if (uploadGPUOnce || allAtOnce) {
         // Create the texture buffer and put data into gpu mem.
         pgl = currentPG.beginPGL();
         IntBuffer intBuffer = IntBuffer.allocate(1);
@@ -1432,6 +1436,10 @@ class Engine {
       return sh;
     }
     
+    public void setPGraphics(PGraphics p) {
+      currentPG = p;
+    }
+    
     public void img(DImage image, float x, float y, float w, float h) {
       
       
@@ -1453,7 +1461,7 @@ class Engine {
           app.image(image.pimage, x, y, w, h);
         }
         else if (image.mode == 2) {
-          largeImg(image.largeImage, x, y, w, h);
+          largeImg(currentPG, image.largeImage, x, y, w, h);
         }
         
         // Annnnd a wireframe
@@ -3863,6 +3871,9 @@ class Engine {
       String ext = getExt(path);
       if (ext.equals("png")) {
         return getPNGUncompressedSize(path);
+      }
+      else if (ext.equals(engine.ENTRY_EXTENSION)) {
+        return 0;
       }
       else if (ext.equals("jpg") || ext.equals("jpeg")) {
         return getJPEGUncompressedSize(path);
