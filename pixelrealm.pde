@@ -415,10 +415,13 @@ public class PixelRealm extends Screen {
         height = singleImg.height;
         return singleImg.pimage;
       }
-      else {
+      else if (aniImg != null) {
         width = aniImg[0].width;
         height = aniImg[0].height;
         return aniImg[index%aniImg.length].pimage;
+      }
+      else {
+        return display.systemImages.get("white").pimage;
       }
     }
     
@@ -1945,20 +1948,29 @@ public class PixelRealm extends Screen {
                 PImage im = display.systemImages.get("white").pimage;
                 // TODO: this is NOT thread-safe here!
                 if (ext.equals(engine.ENTRY_EXTENSION)) {
-                  // TODO
+                  im = engine.tryLoadImageCache(path, new Runnable() {
+                    public void run() {
+                      ((EntryFileObject)me).loadFromSource();
+                    }
+                  }
+                  );
+                  if (im != null) {
+                    img = new RealmTexture();
+                    img.setLarge(im);
+                  }
                 }
                 else {
                   im = engine.tryLoadImageCache(path, new Runnable() {
                     public void run() {
                       engine.setOriginalImage(loadImage(path));
+                      if (isImg)
+                        ((ImageFileObject)me).cacheFlag = true;
                     }
                   }
                   );
+                  img = new RealmTexture();
+                  img.setLarge(im);
                 }
-                if (isImg)
-                  ((ImageFileObject)me).cacheFlag = true;
-                img = new RealmTexture();
-                img.setLarge(im);
               }
             }
             
@@ -2075,37 +2087,77 @@ public class PixelRealm extends Screen {
     class EntryFileObject extends ImageFileObject {
       private Editor renderedEntry = null;
       private PGraphics mycanvas = null;
+      private boolean loadFromSource = false;
       
       public EntryFileObject(float x, float y, float z, String dir) {
         super(x, y, z, dir);
+        setup();
       }
   
       public EntryFileObject(String dir) {
         super(dir);
+        setup();
+      }
+      
+      public EntryFileObject(String dir, boolean newFile) {
+        super(dir);
+        setup();
+        if (newFile) {
+          loadFlag = true;
+          
+          display.uploadAllAtOnce(true);
+          scene.endDraw();
+          display.setPGraphics(mycanvas);
+          mycanvas.beginDraw();
+          mycanvas.background(0xFF0f0f0e);
+          mycanvas.endDraw();
+          display.setPGraphics(g);
+          scene.beginDraw();
+          img = new RealmTexture();
+          img.setLarge(mycanvas);
+          display.uploadAllAtOnce(false);
+          setSize(0.5);
+        }
+      }
+      
+      private void setup() {
+        allowTexFlipping = true;
+        mycanvas = createGraphics(480, 270, P2D);
       }
       
       public void load(JSONObject json) {
-        this.x = json.getFloat("x", this.x);
-        this.z = json.getFloat("z", this.z);
-        this.size = json.getFloat("scale", 1.)*BACKWARD_COMPAT_SCALE;
+        super.load(json);
+        //this.x = json.getFloat("x", this.x);
+        //this.z = json.getFloat("z", this.z);
+        //this.size = json.getFloat("scale", 1.)*BACKWARD_COMPAT_SCALE;
   
-        float yy = onSurface(this.x, this.z);
-        this.y = json.getFloat("y", yy);
+        //float yy = onSurface(this.x, this.z);
+        //this.y = json.getFloat("y", yy);
   
-        // If the object is below the ground, reset its position.
-        if (y > yy+5.) this.y = yy;
-        this.rot = json.getFloat("rot", random(-PI, PI));
+        //// If the object is below the ground, reset its position.
+        //if (y > yy+5.) this.y = yy;
+        //this.rot = json.getFloat("rot", random(-PI, PI));
         
-        mycanvas = createGraphics(480, 270, P2D);
+      }
+      
+      public void loadFromSource() {
         renderedEntry = new Editor(engine, dir, mycanvas);
+        loadFromSource = true;
+      }
+      
+      public void display() {
+        super.display();
       }
       
       public void run() {
         super.run();
         
-        if (!loadFlag) {
+        if (loadFromSource) {
+          // Wait until the entry has been loaded in the seperate thread.
           if (renderedEntry != null && mycanvas != null && renderedEntry.isLoaded()) {
-            
+            // Now this is the cringy bit: stop rendering to the main scene (bad for opengl performance
+            // but this is a load so it doesn't matter that much), quickly render our entry, then go back
+            // to rendering to the main scene. Remember this all runs on the main thread.
             display.uploadAllAtOnce(true);
             scene.endDraw();
             display.setPGraphics(mycanvas);
@@ -2119,10 +2171,13 @@ public class PixelRealm extends Screen {
             img = new RealmTexture();
             img.setLarge(mycanvas);
             display.uploadAllAtOnce(false);
+            setSize(0.5);
             
             // Don't care about these two anymore
-            //mycanvas = null;
-            //renderedEntry = null;
+            mycanvas = null;
+            renderedEntry = null;
+            loadFromSource = false;
+            engine.saveCacheImage(this.dir, img.get());
           }
         }
       }
@@ -2134,6 +2189,7 @@ public class PixelRealm extends Screen {
   
       public boolean loadFlag = false;
       public boolean cacheFlag = false;
+      public boolean allowTexFlipping = false;
       
   
   
@@ -2187,7 +2243,7 @@ public class PixelRealm extends Screen {
                   engine.setCachingShrink(MAX_CACHE_SIZE, 0);
                   //this.img = engine.experimentalScaleDown(img);
                   engine.saveCacheImage(this.dir, img.get());
-                  cacheFlag = true;
+                  cacheFlag = false;
                 }
   
                 // Set load flag to true
@@ -2200,15 +2256,28 @@ public class PixelRealm extends Screen {
               this.hi = img.height*size;
               float y1 = y-hi;
               // There's no y2 huehue.
-  
+              
+              
               // Half width
               float hwi = wi/2;
+              
+              // TODO: cache and optimise
               float sin_d = sin(rot)*(hwi);
               float cos_d = cos(rot)*(hwi);
               float x1 = x + sin_d;
               float z1 = z + cos_d;
               float x2 = x - sin_d;
               float z2 = z - cos_d;
+              
+              if (allowTexFlipping) {
+                float sin_dd = sin(rot+HALF_PI)*(hwi);
+                float cos_dd = cos(rot+HALF_PI)*(hwi);
+                float dx1 = playerX - (x + sin_dd);
+                float dz1 = playerZ - (z + cos_dd);
+                float dx2 = playerX - (x - sin_dd);
+                float dz2 = playerZ - (z - cos_dd);
+                flippedTexture = (abs(dx1*dx1+dz1*dz1) > abs(dx2*dx2+dz2*dz2));
+              }
                
               display.shader(scene, "largeimg");
               displayQuad(this.img.getD(), x1, y1, z1, x2, y1+hi, z2);
@@ -2312,7 +2381,7 @@ public class PixelRealm extends Screen {
             }
             // Check shortcut exists.
             if (!file.exists(shortcutDir)) {
-              console.warn("Shortcut to "+file.getFilename(this.filename)+" doesn't exist!");
+              //console.warn("Shortcut to "+file.getFilename(this.filename)+" doesn't exist!");
               return;
             }
             // If at this point we should have the shortcut dir.
@@ -2350,6 +2419,12 @@ public class PixelRealm extends Screen {
         if (touchingPlayer() && portalCoolDown < 1.) {
           if (!usePortalAllowed) {
             console.log("You can't go here just yet!");
+            bumpBack();
+            return;
+          }
+          
+          if (!file.exists(this.shortcutDir)) {
+            console.log("Shortcut to "+this.shortcutDir+" doesn't exist!");
             bumpBack();
             return;
           }
@@ -2530,6 +2605,7 @@ public class PixelRealm extends Screen {
       public boolean visible = true;         // Used for manual turning on/off visibility
       public color tint = color(255);
       protected ItemSlot<PRObject> myOrderingNode = null;
+      protected boolean flippedTexture = false;
       
   
       public PRObject() {
@@ -2746,10 +2822,18 @@ public class PixelRealm extends Screen {
               scene.texture(im.pimage);
             }
           }
-          scene.vertex(x1, y1, z1, 0, 0);           // Bottom left
-          scene.vertex(x2, y1, z2, 0.995, 0);    // Bottom right
-          scene.vertex(x2, y2, z2, 0.995, 0.995); // Top right
-          scene.vertex(x1, y2, z1, 0, 0.995);  // Top left
+          
+          float r1 = 0.;
+          float r2 = 0.999;
+          if (flippedTexture) {
+            r1 = 0.999;
+            r2 = 0.;
+          }
+          
+          scene.vertex(x1, y1, z1, r1, 0);           // Bottom left
+          scene.vertex(x2, y1, z2, r2, 0);    // Bottom right
+          scene.vertex(x2, y2, z2, r2, 0.999); // Top right
+          scene.vertex(x1, y2, z1, r1, 0.999);  // Top left
           if (useFinder) scene.vertex(x1, y1, z1, 0, 0);  // Extra vertex to render a complete square if finder is enabled.
           // Not necessary if just rendering the quad without the line.
           scene.noTint();
@@ -2804,24 +2888,24 @@ public class PixelRealm extends Screen {
     }
     
     // Similar to plantDown but guarentees than the object in question will not be levitating on a sloped surface.
-    private float plantDown(float x, float z) {
-      if (terrain == null) {
-        //console.bugWarn("onSurface() needs the terrain to be loaded before it's called!");
-        return 0.;
-      }
-      if (outOfBounds(x,z)) {
-        return 999999;
-      }
-      float tilex = floor(x/terrain.groundSize)+1.;
-      float tilez = floor(z/terrain.groundSize)+1.;
+    //private float plantDown(float x, float z) {
+    //  if (terrain == null) {
+    //    //console.bugWarn("onSurface() needs the terrain to be loaded before it's called!");
+    //    return 0.;
+    //  }
+    //  if (outOfBounds(x,z)) {
+    //    return 999999;
+    //  }
+    //  float tilex = floor(x/terrain.groundSize)+1.;
+    //  float tilez = floor(z/terrain.groundSize)+1.;
       
-      float lowest = -999999; // Very high in the sky, we want the lowest in the ground.
-      lowest = max(calcTileY(tilex-1., tilez-1.), lowest);          // Left, top
-      lowest = max(calcTileY(tilex, tilez-1.), lowest);          // Right, top
-      lowest = max(calcTileY(tilex, tilez), lowest);          // Right, bottom
-      lowest = max(calcTileY(tilex-1., tilez), lowest);          // Left, bottom
-      return lowest;
-    }
+    //  float lowest = -999999; // Very high in the sky, we want the lowest in the ground.
+    //  lowest = max(calcTileY(tilex-1., tilez-1.), lowest);          // Left, top
+    //  lowest = max(calcTileY(tilex, tilez-1.), lowest);          // Right, top
+    //  lowest = max(calcTileY(tilex, tilez), lowest);          // Right, bottom
+    //  lowest = max(calcTileY(tilex-1., tilez), lowest);          // Left, bottom
+    //  return lowest;
+    //}
     
     
   
@@ -2855,9 +2939,9 @@ public class PixelRealm extends Screen {
     }
     
     
-    private float calcTileY(float x, float z) {
-      return calcTileY(x, z, false);
-    }
+    //private float calcTileY(float x, float z) {
+    //  return calcTileY(x, z, false);
+    //}
     
     int glowingchunk = 0;
     int glowingtilex = 0;
@@ -3082,7 +3166,7 @@ public class PixelRealm extends Screen {
           fileobject = new ImageFileObject(path);
           break;
         case FILE_TYPE_TIMEWAYENTRY:
-          fileobject = new EntryFileObject(path);
+          fileobject = new EntryFileObject(path, true);
           break;
         case FILE_TYPE_SHORTCUT:
           fileobject = new ShortcutPortal(path);
@@ -4791,6 +4875,8 @@ public class PixelRealm extends Screen {
     if (currentTool == TOOL_GRABBER) {
       currRealm.updateHoldingItem(globalHoldingObjectSlot);
     }
+    
+    System.gc();
   }
   
   
@@ -4873,8 +4959,10 @@ public class PixelRealm extends Screen {
   
   public void displayMemUsageBar() {
     display.recordRendererTime();
-    int used = memUsage.get();
-    float percentage = (float)used/(float)MAX_MEM_USAGE;
+    long used = (Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory());
+    //float percentage = (float)used/(float)MAX_MEM_USAGE;
+    long total = Runtime.getRuntime().totalMemory();
+    float percentage = (float)used/(float)total;
     noStroke();
     fill(0, 0, 0, 127);
     rect(100, myUpperBarWeight+20, (WIDTH-200.), 50);
@@ -4889,7 +4977,7 @@ public class PixelRealm extends Screen {
     fill(255);
     textFont(engine.DEFAULT_FONT, 30);
     textAlign(LEFT, CENTER);
-    text("Mem: "+(used/1024)+" kb / "+(MAX_MEM_USAGE/1024)+" kb", 105, myUpperBarWeight+45);
+    text("Mem: "+(used/1024)+" kb / "+(total/1024)+" kb", 105, myUpperBarWeight+45);
     display.recordLogicTime();
   }
   
@@ -5126,13 +5214,6 @@ public class PixelRealm extends Screen {
               o.setSize(1.);
         }}}
       }
-      return true;
-    }
-    else if (command.equals("/memusage")) {
-      showMemUsage = !showMemUsage;
-      sharedResources.set("show_mem_bar", showMemUsage);
-      if (showMemUsage) console.log("Memory usage bar shown.");
-      else console.log("Memory usage bar hidden.");
       return true;
     }
     else if (engine.commandEquals(command, "/tp")) {

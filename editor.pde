@@ -147,28 +147,28 @@ class DCapture extends Capture implements java.beans.PropertyChangeListener {
 }
 
 public class Editor extends Screen {
-    public boolean showGUI = false;
-    public float upperbarExpand = 0;
-    public SpriteSystemPlaceholder gui;
-    public SpriteSystemPlaceholder placeables;
-    public HashSet<Placeable> placeableset;
-    public ArrayList<String> imagesInEntry;  // This is so that we can know what to remove when we exit this screen.
-    public TextPlaceable textPlaceable;
-    public Placeable editingPlaceable = null;
-    public DCapture camera;
-    public PGraphics cameraDisplay;
-    public String entryName;
-    public String entryPath;
-    public String entryDir;
-    public color selectedColor = color(255, 255, 255);
-    public float selectedFontSize = 20;
-    public TextPlaceable entryNameText;
-    public boolean cameraMode = false;
-    public boolean autoScaleDown = false;
-    public boolean changesMade = false;
-    public int upperBarDrop = INITIALISE_DROP_ANIMATION;
-    public PGraphics canvas;
-    public float canvasScale;
+    private boolean showGUI = false;
+    private float upperbarExpand = 0;
+    private SpriteSystemPlaceholder gui;
+    private SpriteSystemPlaceholder placeables;
+    private HashSet<Placeable> placeableset;
+    private ArrayList<String> imagesInEntry;  // This is so that we can know what to remove when we exit this screen.
+    private Placeable editingPlaceable = null;
+    private DCapture camera;
+    private PGraphics cameraDisplay;
+    private String entryName;
+    private String entryPath;
+    private String entryDir;
+    private color selectedColor = color(255, 255, 255);
+    private float selectedFontSize = 20;
+    private TextPlaceable entryNameText;
+    private boolean cameraMode = false;
+    private boolean autoScaleDown = false;
+    private boolean changesMade = false;
+    private int upperBarDrop = INITIALISE_DROP_ANIMATION;
+    private PGraphics canvas;
+    private float canvasScale;
+    private JSONArray loadedJsonArray;
     
     // X goes unused for now but could be useful later.
     public float extentX = 0.;
@@ -631,6 +631,71 @@ public class Editor extends Screen {
         
         array.append(obj);
     }
+    
+    
+    // Util json ancient functions moved from Engine
+    public int getJSONArrayInt(int index, String property, int defaultValue) {
+      if (loadedJsonArray == null) {
+        console.bugWarn("Cannot get property, entry not opened.");
+        return defaultValue;
+      }
+      if (index > loadedJsonArray.size()) {
+        console.bugWarn("No more elements.");
+        return defaultValue;
+      }
+  
+      int result = 0;
+      try {
+        result = loadedJsonArray.getJSONObject(index).getInt(property);
+      }
+      catch (Exception e) {
+        return defaultValue;
+      }
+  
+      return result;
+    }
+  
+    public String getJSONArrayString(int index, String property, String defaultValue) {
+      if (loadedJsonArray == null) {
+        console.bugWarn("Cannot get property, entry not opened.");
+        return defaultValue;
+      }
+      if (index > loadedJsonArray.size()) {
+        console.bugWarn("No more elements.");
+        return defaultValue;
+      }
+  
+      String result = "";
+      try {
+        result = loadedJsonArray.getJSONObject(index).getString(property);
+      }
+      catch (Exception e) {
+        return defaultValue;
+      }
+  
+      return result;
+    }
+  
+    public float getJSONArrayFloat(int index, String property, float defaultValue) {
+      if (loadedJsonArray == null) {
+        console.warn("Cannot get property, entry not opened.");
+        return defaultValue;
+      }
+      if (index > loadedJsonArray.size()) {
+        console.warn("No more elements.");
+        return defaultValue;
+      }
+  
+      float result = 0;
+      try {
+        result = loadedJsonArray.getJSONObject(index).getFloat(property);
+      }
+      catch (Exception e) {
+        return defaultValue;
+      }
+  
+      return result;
+    }
 
     //*****************************************************************
     //**************************SAVE PAGE******************************
@@ -661,11 +726,24 @@ public class Editor extends Screen {
             loading = false;
             return;
         }
-        if (!engine.openJSONArray(entryPath)) {
-            return;
+        
+        // Open json array
+        // (This function used to be in the engine code and was ancient)
+        try {
+          loadedJsonArray = app.loadJSONArray(entryPath);
         }
-        for (int i = 0; i < engine.loadedJsonArray.size(); i++) {
-            int type = engine.getJSONArrayInt(i, "type", 0);
+        catch (RuntimeException e) {
+          console.warn("Failed to open JSON file, there was an error: "+e.getMessage());
+          return;
+        }
+        // If the file doesn't exist
+        if (loadedJsonArray == null) {
+          console.warn("What. The file doesn't exist.");
+          return;
+        }
+        
+        for (int i = 0; i < loadedJsonArray.size(); i++) {
+            int type = getJSONArrayInt(i, "type", 0);
 
             switch (type) {
                 case TYPE_UNKNOWN:
@@ -688,23 +766,23 @@ public class Editor extends Screen {
     }
     private TextPlaceable readTextPlaceable(int i) {
         TextPlaceable t = new TextPlaceable();
-        t.sprite.setX((float)engine.getJSONArrayInt(i, "x", (int)WIDTH/2));
-        t.sprite.setY((float)engine.getJSONArrayInt(i, "y", (int)HEIGHT/2));
-        t.sprite.name = engine.getJSONArrayString(i, "ID", "");
-        t.text = engine.getJSONArrayString(i, "text", "");
-        t.fontSize = engine.getJSONArrayFloat(i, "size", 12.);
-        t.textColor = engine.getJSONArrayInt(i, "color", color(255, 255, 255));
+        t.sprite.setX((float)getJSONArrayInt(i, "x", (int)WIDTH/2));
+        t.sprite.setY((float)getJSONArrayInt(i, "y", (int)HEIGHT/2));
+        t.sprite.name = getJSONArrayString(i, "ID", "");
+        t.text = getJSONArrayString(i, "text", "");
+        t.fontSize = getJSONArrayFloat(i, "size", 12.);
+        t.textColor = getJSONArrayInt(i, "color", color(255, 255, 255));
         t.updateDimensions();
         placeableset.add(t);
         return t;
     }
     private ImagePlaceable readImagePlaceable(final int i) {
         ImagePlaceable im = new ImagePlaceable();
-        im.sprite.setX((float)engine.getJSONArrayInt(i, "x", (int)WIDTH/2));
-        im.sprite.setY((float)engine.getJSONArrayInt(i, "y", (int)HEIGHT/2));
-        im.sprite.wi   = engine.getJSONArrayInt(i, "wi", 512);
-        im.sprite.hi   = engine.getJSONArrayInt(i, "hi", 512);
-        String imageName = engine.getJSONArrayString(i, "imgName", "");
+        im.sprite.setX((float)getJSONArrayInt(i, "x", (int)WIDTH/2));
+        im.sprite.setY((float)getJSONArrayInt(i, "y", (int)HEIGHT/2));
+        im.sprite.wi   = getJSONArrayInt(i, "wi", 512);
+        im.sprite.hi   = getJSONArrayInt(i, "hi", 512);
+        String imageName = getJSONArrayString(i, "imgName", "");
         
         // If there's cache, don't bother decoding the base64 string.
         // Otherwise, read the base64 string, generate cache, read from that cache.
@@ -712,7 +790,7 @@ public class Editor extends Screen {
         Runnable loadFromEntry = new Runnable() {
           public void run() {
             // Decode the string of base64
-            String encoded   = engine.getJSONArrayString(i, "png", "");
+            String encoded   = getJSONArrayString(i, "png", "");
             
             // Png image data in json is missing
             if (encoded.length() == 0) {

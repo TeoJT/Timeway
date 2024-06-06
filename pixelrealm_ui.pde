@@ -464,8 +464,8 @@ public class PixelRealmWithUI extends PixelRealm {
 
       Runnable r = new Runnable() {
         public void run() {
-          if (input.keyboardMessage.length() <= 1) {
-            console.log("Please enter a valid folder name!");
+          if (input.keyboardMessage.length() == 0) {
+            menuShown = false;
             return;
           }
           String folderpath = currRealm.stateDirectory+input.keyboardMessage;
@@ -495,8 +495,8 @@ public class PixelRealmWithUI extends PixelRealm {
 
       Runnable r = new Runnable() {
         public void run() {
-          if (input.keyboardMessage.length() <= 1) {
-            console.log("Please enter a valid folder name!");
+          if (input.keyboardMessage.length() == 0) {
+            menuShown = false;
             return;
           }
           
@@ -969,6 +969,8 @@ public class PixelRealmWithUI extends PixelRealm {
       }
       else {
         if (menu != null) menu.close();
+        engine.inputPromptShown = false;
+        tmp = false;
       }
       
       // If we're editing a folder/entry name, pressing tab should make the menu disappear

@@ -134,9 +134,6 @@ class Engine {
   // Settings & config
   public boolean devMode = false;
 
-  // Save & load
-  public JSONArray loadedJsonArray;
-
   // Other / doesn't fit into any categories.
   public boolean wireframe;
   public SpriteSystemPlaceholder spriteSystemPlaceholder;
@@ -1003,6 +1000,10 @@ class Engine {
     public boolean showCPUBenchmarks = false;
     private PGraphics currentPG;
     private boolean allAtOnce = false;
+    private LargeImage white;
+    private int[] clearList = new int[4096];
+    private int clearListIndex = 0;
+    public boolean showMemUsage = false;
     
     public final float BASE_FRAMERATE = 60.;
     private float delta = 0.;
@@ -1244,6 +1245,10 @@ class Engine {
     }
     
     public void bind(PGraphics currentPG, LargeImage img) {
+      if (img == null) {
+        return;
+      }
+      
       pgl = currentPG.beginPGL();
       // If image data is in GPU, we can just bind it and continue about our day.
       if (img.inGPU) {
@@ -1271,8 +1276,15 @@ class Engine {
       else {
         // uploadGPUOnce is false which means a LargeImage has taken our turn to upload our shiz into the GPU
         // and we must wait for a chance next frame.
-        // For now, don't render anything.
-        return;
+        // For now, just render white
+        if (white == null && systemImages.get("white") != null) {
+          white = createLargeImage(systemImages.get("white").pimage);
+        }
+        
+        if (white != null) {
+          pgl.activeTexture(PGL.TEXTURE0);
+          pgl.bindTexture(PGL.TEXTURE_2D, white.glTexID);
+        }
       }
       
       pgl.texParameteri(PGL.TEXTURE_2D, PGL.TEXTURE_MAG_FILTER, PGL.LINEAR);
@@ -1341,6 +1353,14 @@ class Engine {
         largeimg.width = img.width;
         largeimg.height = img.height;
         return largeimg;
+    }
+    
+    public void destroyImage(LargeImage im) {
+      // We have a potential memory leak here :(
+      if (clearListIndex+1 > clearList.length-1) return;
+      
+      // Add it to the list so it will be cleared by the main thread.
+      clearList[clearListIndex++] = im.glTexID;
     }
     
     public void initShader(String name) {
@@ -1549,6 +1569,36 @@ class Engine {
     public float getLiveFPS() {
       float timeframe = 1000/BASE_FRAMERATE;
       return (timeframe/float(thisFrameMillis-lastFrameMillis))*BASE_FRAMERATE;
+    }
+    
+    public void displayMemUsageBar() {
+      pushMatrix();
+      scale(getScale());
+      display.recordRendererTime();
+      long used = (Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory());
+      //float percentage = (float)used/(float)MAX_MEM_USAGE;
+      long total = Runtime.getRuntime().totalMemory();
+      float percentage = (float)used/(float)total;
+      noStroke();
+      
+      float y = 0;
+      
+      fill(0, 0, 0, 127);
+      rect(100, y+20, (WIDTH-200.), 50);
+      
+      if (percentage > 0.8) 
+        fill(255, 140, 20); // Low mem
+      else 
+        fill(50, 50, 255);  // Normal
+        
+        
+      rect(100, y+20, (WIDTH-200.)*percentage, 50);
+      fill(255);
+      textFont(DEFAULT_FONT, 30);
+      textAlign(LEFT, CENTER);
+      text("Mem: "+(used/1024)+" kb / "+(total/1024)+" kb", 105, y+45);
+      display.recordLogicTime();
+      popMatrix();
     }
     
     public void displayScreens() {
@@ -3996,10 +4046,12 @@ class Engine {
 
       if (input.enterOnce) {
         inputPromptShown = false;
-        if (input.keyboardMessage.length() <= 0) return;
+        //if (input.keyboardMessage.length() <= 0) return;
         // Remove enter character at end
-        int ll = max(input.keyboardMessage.length()-1, 0);   // Don't allow it to go lower than 0
-        if (input.keyboardMessage.charAt(ll) == '\n') input.keyboardMessage = input.keyboardMessage.substring(0, ll);
+        if (input.keyboardMessage.length() > 0) {
+          int ll = max(input.keyboardMessage.length()-1, 0);   // Don't allow it to go lower than 0
+          if (input.keyboardMessage.charAt(ll) == '\n') input.keyboardMessage = input.keyboardMessage.substring(0, ll);
+        }
         doWhenPromptSubmitted.run();
         lastInput = input.keyboardMessage;
       }
@@ -4532,36 +4584,11 @@ class Engine {
       display.reloadShaders();
       console.log("Shaders reloaded.");
     }
-    //else if (commandEquals(command, "/thread")) {
-      
-    //  String arg = "";
-    //  if (command.length() > 8)
-    //    arg = command.substring(8);
-      
-    //  Thread[] threads = new Thread[Thread.activeCount()];
-    //  Thread.enumerate(threads);
-    //  for (Thread thread : threads) {
-    //    if (!thread.isAlive()) continue;
-    //      if (thread.getName().equals(arg)) {
-    //        console.log(arg+"   M A X     P R I O R I T Y");
-    //        thread.setPriority(Thread.MAX_PRIORITY);
-    //        //console.log("K I L L E D   "+arg);
-    //        //try {
-    //        //  thread.stop();
-    //        //}
-    //        //catch (RuntimeException e) {
-    //        //  console.warn("Killing "+arg+" failed");
-    //        //}
-    //      }
-    //      else {
-    //        thread.setPriority(Thread.MIN_PRIORITY);
-    //        console.log(thread.getName() + " " + thread.getPriority());
-    //      }
-    //  }
-      
-    //}
-    
-    
+    else if (commandEquals(command, "/memusage")) {
+      display.showMemUsage = !display.showMemUsage;
+      if (display.showMemUsage) console.log("Memory usage bar shown.");
+      else console.log("Memory usage bar hidden.");
+    }
     // No commands
     else if (command.length() <= 1) {
       // If empty, do nothing and close the prompt.
@@ -5050,156 +5077,6 @@ class Engine {
     }
   }
 
-  // Return true if successfully opened
-  // false if failed
-  public boolean openJSONArray(String path) {
-    try {
-      loadedJsonArray = app.loadJSONArray(path);
-    }
-    catch (RuntimeException e) {
-      console.warn("Failed to open JSON file, there was an error: "+e.getMessage());
-      return false;
-    }
-
-    // If the file doesn't exist
-    if (loadedJsonArray == null) {
-      console.warn("What. The file doesn't exist.");
-      return false;
-    }
-
-    return true;
-  }
-
-  JSONObject loadedJsonObject = null;
-
-  // Return true if successfully opened
-  // false if failed
-  public boolean openJSONObject(String path) {
-    try {
-      loadedJsonObject = app.loadJSONObject(path);
-    }
-    catch (RuntimeException e) {
-      console.warn("Failed to open JSON file, there was an error: "+e.getMessage());
-      return false;
-    }
-
-    // If the file doesn't exist
-    if (loadedJsonObject == null) {
-      console.warn("What. The file doesn't exist.");
-      return false;
-    }
-
-    return true;
-  }
-
-
-  public int getJSONInt(String property, int defaultValue) {
-    if (loadedJsonObject == null) {
-      console.bugWarn("Cannot get property, entry not opened.");
-      return defaultValue;
-    }
-    if (loadedJsonObject.isNull(property))
-      return defaultValue;
-    else
-      return loadedJsonObject.getInt(property);
-  }
-
-  public String getJSONString(String property, String defaultValue) {
-    if (loadedJsonObject == null) {
-      console.bugWarn("Cannot get property, entry not opened.");
-      return defaultValue;
-    }
-    if (loadedJsonObject.isNull(property))
-      return defaultValue;
-    else
-      return loadedJsonObject.getString(property);
-  }
-
-  public float getJSONFloat(String property, float defaultValue) {
-    if (loadedJsonObject == null) {
-      console.bugWarn("Cannot get property, entry not opened.");
-      return defaultValue;
-    }
-    if (loadedJsonObject.isNull(property))
-      return defaultValue;
-    else
-      return loadedJsonObject.getFloat(property);
-  }
-
-  public boolean getJSONBoolean(String property, boolean defaultValue) {
-    if (loadedJsonObject == null) {
-      console.bugWarn("Cannot get property, entry not opened.");
-      return defaultValue;
-    }
-    if (loadedJsonObject.isNull(property))
-      return defaultValue;
-    else
-      return loadedJsonObject.getBoolean(property);
-  }
-
-  public int getJSONArrayInt(int index, String property, int defaultValue) {
-    if (loadedJsonArray == null) {
-      console.bugWarn("Cannot get property, entry not opened.");
-      return defaultValue;
-    }
-    if (index > loadedJsonArray.size()) {
-      console.bugWarn("No more elements.");
-      return defaultValue;
-    }
-
-    int result = 0;
-    try {
-      result = loadedJsonArray.getJSONObject(index).getInt(property);
-    }
-    catch (Exception e) {
-      return defaultValue;
-    }
-
-    return result;
-  }
-
-  public String getJSONArrayString(int index, String property, String defaultValue) {
-    if (loadedJsonArray == null) {
-      console.bugWarn("Cannot get property, entry not opened.");
-      return defaultValue;
-    }
-    if (index > loadedJsonArray.size()) {
-      console.bugWarn("No more elements.");
-      return defaultValue;
-    }
-
-    String result = "";
-    try {
-      result = loadedJsonArray.getJSONObject(index).getString(property);
-    }
-    catch (Exception e) {
-      return defaultValue;
-    }
-
-    return result;
-  }
-
-  public float getJSONArrayFloat(int index, String property, float defaultValue) {
-    if (loadedJsonArray == null) {
-      console.warn("Cannot get property, entry not opened.");
-      return defaultValue;
-    }
-    if (index > loadedJsonArray.size()) {
-      console.warn("No more elements.");
-      return defaultValue;
-    }
-
-    float result = 0;
-    try {
-      result = loadedJsonArray.getJSONObject(index).getFloat(property);
-    }
-    catch (Exception e) {
-      return defaultValue;
-    }
-
-    return result;
-  }
-
 
   //*******************************************
   //****************ENGINE CODE****************
@@ -5558,7 +5435,7 @@ class Engine {
 
     // At this point we *should* have an image in cachedImage
     if (originalImage == null) {
-      console.bugWarn("tryLoadImageCache: Your runnable must store your loaded image using setOriginalImage(PImage image)");
+      //console.bugWarn("tryLoadImageCache: Your runnable must store your loaded image using setOriginalImage(PImage image)");
       return null;
     }
 
@@ -5609,7 +5486,7 @@ class Engine {
   }
   
 
-
+  // TODO: Put this in a seperate thread, because hoo lordy.
   public String saveCacheImage(String originalPath, PImage image) {
     console.info("saveCacheImage: "+originalPath);
     if (image instanceof Gif) {
@@ -6317,6 +6194,10 @@ class Engine {
     
     ui.displayMiniMenu();
     
+    if (display.showMemUsage) {
+      display.displayMemUsageBar();
+    }
+    
     
     
     // If Timeway is updating, a little notice and progress
@@ -6588,8 +6469,9 @@ public class LargeImage {
   }
   
   public void finalize() {
-    // TODO: OpenGL function call to clear texture from gpu mem
-    
+    if (timewayEngine != null && timewayEngine.display != null) {
+      timewayEngine.display.destroyImage(this);
+    }
   }
 }
 
