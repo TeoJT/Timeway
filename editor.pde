@@ -800,7 +800,7 @@ public class Editor extends Screen {
             else {
               byte[] decodedBytes = Base64.getDecoder().decode(encoded.getBytes());
               
-              PImage img = engine.saveCacheImageBytes(entryPath+"_"+str(i), decodedBytes);
+              PImage img = engine.saveCacheImageBytes(entryPath+"_"+str(i), decodedBytes, "png");
               
               // An error occured, data may have been tampered with/corrupted.
               if (img == null) 

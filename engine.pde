@@ -86,6 +86,7 @@ class Engine {
   public static final float   KEY_HOLD_TIME       = 30.; // 30 frames
   public static final int     POWER_CHECK_INTERVAL = 5000;
   public static final String  CACHE_COMPATIBILITY_VERSION = "0.3";
+  public static final String  CACHE_FILE_TYPE = "bmp";
   public static final boolean CACHE_MUSIC = true;
   
 
@@ -1001,11 +1002,12 @@ class Engine {
     private PGraphics currentPG;
     private boolean allAtOnce = false;
     private LargeImage white;
-    private int[] clearList = new int[4096];
+    private IntBuffer clearList;
     private int clearListIndex = 0;
     public boolean showMemUsage = false;
     
     public final float BASE_FRAMERATE = 60.;
+    public final int CLEARLIST_SIZE = 4096;
     private float delta = 0.;
     
     private boolean showFPS = false;
@@ -1111,6 +1113,8 @@ class Engine {
         WIDTH = width/displayScale;
         HEIGHT = height/displayScale;
         console.info("init: width/height set to "+str(WIDTH)+", "+str(HEIGHT));
+        
+        clearList = IntBuffer.allocate(CLEARLIST_SIZE);
     
         generateErrorImg();
         generateErrorShader();
@@ -1260,7 +1264,6 @@ class Engine {
       // so we must generate the buffers and put em on the GPU.
       else if (uploadGPUOnce || allAtOnce) {
         // Create the texture buffer and put data into gpu mem.
-        pgl = currentPG.beginPGL();
         IntBuffer intBuffer = IntBuffer.allocate(1);
         pgl.genTextures(1, intBuffer);
         img.glTexID = intBuffer.get(0);
@@ -1287,7 +1290,7 @@ class Engine {
         }
       }
       
-      pgl.texParameteri(PGL.TEXTURE_2D, PGL.TEXTURE_MAG_FILTER, PGL.LINEAR);
+      pgl.texParameteri(PGL.TEXTURE_2D, PGL.TEXTURE_MAG_FILTER, PGL.NEAREST);
       pgl.texParameteri(PGL.TEXTURE_2D, PGL.TEXTURE_MIN_FILTER, PGL.NEAREST);
       currentPG.endPGL();
     }
@@ -1357,10 +1360,11 @@ class Engine {
     
     public void destroyImage(LargeImage im) {
       // We have a potential memory leak here :(
-      if (clearListIndex+1 > clearList.length-1) return;
+      if (clearListIndex+1 > CLEARLIST_SIZE-1) return;
       
       // Add it to the list so it will be cleared by the main thread.
-      clearList[clearListIndex++] = im.glTexID;
+      clearList.put(clearListIndex++, im.glTexID);
+      clearList.rewind();
     }
     
     public void initShader(String name) {
@@ -1660,11 +1664,20 @@ class Engine {
       app.clip(x*s, y*s, wi*s, hi*s);
     }
     
-    public void updateDelta() {
-      // Since updatedelta is the only displaymodule function called in the
-      // main engine function, we might as well reset uploadGPUOnce here even tho it
-      // has nothing to do with delta.
+    public void update() {
+      // Reset so that a new texture can be uploaded to gpu
       uploadGPUOnce = true;
+      
+      if (clearListIndex > 0) {
+        pgl = app.beginPGL();
+        clearList.rewind();
+        pgl.deleteTextures(clearListIndex, clearList);
+        clearList.rewind();
+        app.endPGL();
+        clearListIndex = 0;
+      }
+      
+      
       
       
       totalTimeMillis = thisFrameMillis-lastFrameMillis;
@@ -5320,6 +5333,7 @@ class Engine {
     }
   }
   
+  
   // IMPORTANT NOTE: This function does NOT load in a seperate thread, so you should do that yourself
   // when using this!
   public SoundFile tryLoadSoundCache(String originalPath, Runnable readOriginalOperation) {
@@ -5413,6 +5427,7 @@ class Engine {
             console.info("tryLoadImageCache: No modifications");
 
             // Perform a checksum which determines if the image can properly be loaded.
+            println(1);
             int checksum = calculateChecksum(loadedImage);
             // Return -1 by default if for some reason the checksum is abscent because checksums shouldn't be negative
             if (checksum == cachedItem.getInt("checksum", -1)) {
@@ -5497,7 +5512,7 @@ class Engine {
 
     JSONObject properties = new JSONObject();
 
-    String cachePath = generateCachePath("png");
+    String cachePath = generateCachePath(CACHE_FILE_TYPE);
 
     final String savePath = cachePath;
     final int resizeByX = cacheShrinkX;
@@ -5538,12 +5553,12 @@ class Engine {
   }
 
 
-  public PImage saveCacheImageBytes(String originalPath, byte[] bytes) {
+  public PImage saveCacheImageBytes(String originalPath, byte[] bytes, String type) {
     openCacheInfo();
 
     JSONObject properties = new JSONObject();
 
-    String cachePath = generateCachePath("png");
+    String cachePath = generateCachePath(type);
 
     // Save it as a png.
     saveBytes(cachePath, bytes);
@@ -5551,6 +5566,7 @@ class Engine {
     PImage img = loadImage(cachePath);
 
     properties.setString("actual", cachePath);
+            println(3);
     properties.setInt("checksum", calculateChecksum(img));
     properties.setString("lastModified", "");
     properties.setInt("size", 0);
@@ -5585,6 +5601,11 @@ class Engine {
     Float val = noiseCache.get(k);
     if (val == null) {
       float newval = app.noise(x, y);
+      
+      if (noiseCache.size() > 50000) {
+        // Just to be memory-safe.
+        noiseCache.clear();
+      }
       
       noiseCache.put(k, newval);
       return newval;
@@ -6176,7 +6197,6 @@ class Engine {
     processCaching();
 
 
-
     if (display != null) display.recordRendererTime();
     // This should be run at all times because apparently (for some stupid reason)
     // it uses way more performance NOT to call background();
@@ -6227,7 +6247,7 @@ class Engine {
 
     counter += display.getDelta();
     // Update times so we can calculate live fps.
-    display.updateDelta();
+    display.update();
     if (display.showCPUBenchmarks) display.showBenchmarks();
     
     if (display.showFPS()) {

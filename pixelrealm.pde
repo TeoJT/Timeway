@@ -24,7 +24,7 @@ public class PixelRealm extends Screen {
   final static float  PSHAPE_SIZE_FACTOR = 100.;
   final static int    MAX_CACHE_SIZE = 512;
   final static float  BACKWARD_COMPAT_SCALE = 256./(float)MAX_CACHE_SIZE;
-  final static int    MAX_MEM_USAGE = 1024*1024*1024;   // 1GB
+  final static int    MAX_MEM_USAGE = 1024*1024*1024;   // 1GB 
   final static int    DISPLAY_SCALE = 4;
   final static int    FOLDER_SIZE_LIMIT = 500;  // If a folder has over this number of files, moving is restricted to prevent any potentially dangerous data moves.
   final static float  MIN_PORTAL_LIGHT_THRESHOLD = 19600.;   // 140 ^ 2
@@ -91,6 +91,9 @@ public class PixelRealm extends Screen {
   private boolean realmCaching = false;
   private boolean usingFadeShader = false;
   private RealmTexture IMG_COIN;
+  private int drawnEntries = 0;
+  private int entriesTotal = 0;
+  private int timeInRealm  = 0;
   
   
   // --- Legacy backward-compatibility stuff & easter eggs ---
@@ -125,6 +128,7 @@ public class PixelRealm extends Screen {
   protected boolean usePortalAllowed = true;
   protected boolean modifyTerrain = false;
   protected int nodeSound = 0;
+  private boolean drawEntryOnce = true;
       
   
   
@@ -1905,6 +1909,10 @@ public class PixelRealm extends Screen {
       }
       
       public void addRequestToQueue(final String path) {
+        addRequestToQueue(path, -1);
+      }
+      
+      public void addRequestToQueue(final String path, final int shrink) {
         this.beginLoadFlag.set(false);
         loadQueue.add(this.beginLoadFlag);
         final boolean isImg = this instanceof ImageFileObject || this instanceof EntryFileObject;
@@ -1962,7 +1970,11 @@ public class PixelRealm extends Screen {
                 else {
                   im = engine.tryLoadImageCache(path, new Runnable() {
                     public void run() {
-                      engine.setOriginalImage(loadImage(path));
+                      PImage im = loadImage(path);
+                      if (shrink != -1) {
+                        engine.scaleDown(im, shrink);
+                      }
+                      engine.setOriginalImage(im);
                       if (isImg)
                         ((ImageFileObject)me).cacheFlag = true;
                     }
@@ -2127,20 +2139,10 @@ public class PixelRealm extends Screen {
       
       public void load(JSONObject json) {
         super.load(json);
-        //this.x = json.getFloat("x", this.x);
-        //this.z = json.getFloat("z", this.z);
-        //this.size = json.getFloat("scale", 1.)*BACKWARD_COMPAT_SCALE;
-  
-        //float yy = onSurface(this.x, this.z);
-        //this.y = json.getFloat("y", yy);
-  
-        //// If the object is below the ground, reset its position.
-        //if (y > yy+5.) this.y = yy;
-        //this.rot = json.getFloat("rot", random(-PI, PI));
-        
       }
       
       public void loadFromSource() {
+        entriesTotal++;
         renderedEntry = new Editor(engine, dir, mycanvas);
         loadFromSource = true;
       }
@@ -2152,7 +2154,7 @@ public class PixelRealm extends Screen {
       public void run() {
         super.run();
         
-        if (loadFromSource) {
+        if (loadFromSource && drawEntryOnce) {
           // Wait until the entry has been loaded in the seperate thread.
           if (renderedEntry != null && mycanvas != null && renderedEntry.isLoaded()) {
             // Now this is the cringy bit: stop rendering to the main scene (bad for opengl performance
@@ -2177,7 +2179,9 @@ public class PixelRealm extends Screen {
             mycanvas = null;
             renderedEntry = null;
             loadFromSource = false;
+            drawEntryOnce = false;
             engine.saveCacheImage(this.dir, img.get());
+            drawnEntries++;
           }
         }
       }
@@ -2300,7 +2304,7 @@ public class PixelRealm extends Screen {
         // Depends on our image format:
         if (file.getExt(this.filename).equals("gif") && showExperimentalGifs) cacheFlag = false;
           
-        addRequestToQueue(dir);
+        addRequestToQueue(dir, MAX_CACHE_SIZE);
       }
   
       public JSONObject save() {
@@ -3199,6 +3203,10 @@ public class PixelRealm extends Screen {
           if (f != null) f.destroy();
         }
       }
+      
+      entriesTotal = 0;
+      drawnEntries = 0;
+      timeInRealm  = 0;
       
       String dir = this.stateDirectory;
       file.openDir(dir);
@@ -4572,6 +4580,11 @@ public class PixelRealm extends Screen {
       //  holdingObject.destroy();
       //  holdingObject = null;
       //}
+      
+      // Reset to true for EntryFileObjects so that they don't all draw at the same
+      // time clobbering up the fps.
+      drawEntryOnce = true;
+      
       for (PRObject o : ordering) {
         o.run();
         o.calculateVal();
@@ -4803,6 +4816,13 @@ public class PixelRealm extends Screen {
     }
     if (!file.exists(to)) {
       console.bugWarn("gotoRealm: "+to+" doesn't exist!");
+      bumpBack();
+      return;
+    }
+    
+    // idc
+    if (drawnEntries < entriesTotal && (timeInRealm < 180)) {
+      console.log("Please wait until all entries have loaded! ("+drawnEntries+"/"+entriesTotal+")");
       bumpBack();
       return;
     }
@@ -5082,6 +5102,8 @@ public class PixelRealm extends Screen {
         }
       }
     }
+    
+    timeInRealm++;
   }
   
   
