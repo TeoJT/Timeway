@@ -527,7 +527,6 @@ public class Editor extends Screen {
         if (c != null) {
           canvas = c;
           canvasScale = canvas.width/(WIDTH);
-          input.scrollOffset = -200.;
         }
         else {
           canvas = g;
@@ -1459,12 +1458,20 @@ public class Editor extends Screen {
     }
     
     public void endScreenAnimation() {
+      free();
+      engine.allowShowCommandPrompt = true;
+    }
+    
+    public void finalize() {
+      free();
+    }
+    
+    public void free() {
        // Clear the images from systemimages to clear up used images.
        for (String s : imagesInEntry) {
          display.systemImages.remove(s);
        }
-       
-       engine.allowShowCommandPrompt = true;
+       imagesInEntry.clear();
     }
 
     

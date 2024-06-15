@@ -86,7 +86,7 @@ class Engine {
   public static final float   KEY_HOLD_TIME       = 30.; // 30 frames
   public static final int     POWER_CHECK_INTERVAL = 5000;
   public static final String  CACHE_COMPATIBILITY_VERSION = "0.3";
-  public static final String  CACHE_FILE_TYPE = "bmp";
+  public static final String  CACHE_FILE_TYPE = "png";
   public static final boolean CACHE_MUSIC = true;
   
 
@@ -1411,7 +1411,7 @@ class Engine {
           if (i+1 < l) {
             if (!(uniforms[i+1] instanceof Float)) {
               console.bugWarn("Invalid arguments ("+shaderName+"), uniform name needs to be followed by value.1");
-              println((uniforms[i+1]));
+              //println((uniforms[i+1]));
               return sh;
             }
           } else {
@@ -5427,7 +5427,6 @@ class Engine {
             console.info("tryLoadImageCache: No modifications");
 
             // Perform a checksum which determines if the image can properly be loaded.
-            println(1);
             int checksum = calculateChecksum(loadedImage);
             // Return -1 by default if for some reason the checksum is abscent because checksums shouldn't be negative
             if (checksum == cachedItem.getInt("checksum", -1)) {
@@ -5566,7 +5565,6 @@ class Engine {
     PImage img = loadImage(cachePath);
 
     properties.setString("actual", cachePath);
-            println(3);
     properties.setInt("checksum", calculateChecksum(img));
     properties.setString("lastModified", "");
     properties.setInt("size", 0);

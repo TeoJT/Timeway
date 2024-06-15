@@ -112,6 +112,7 @@ public class PixelRealm extends Screen {
   private float runAcceleration = 0.;
   private float bob = 0.0;
   private float jumpTimeout = 0;
+  private float coyoteJump = 0.;
   private boolean showExperimentalGifs = false;
   private boolean finderEnabled = false;   // Maybe this could be part of Pixel Realm state?
   protected boolean launchWhenPlaced = false; 
@@ -223,21 +224,6 @@ public class PixelRealm extends Screen {
   public PixelRealm(Engine engine) {
     this(engine, engine.DEFAULT_DIR);
   }
-  
-  
-  // --- R E S E T ---
-  public void reset() {
-    runAcceleration = 0.;
-    bob = 0.0;
-    jumpTimeout = 0;
-    showExperimentalGifs = false;
-    currentTool = TOOL_NORMAL;
-    finderEnabled = false;   // Maybe this could be part of Pixel Realm state?
-    launchWhenPlaced = false; 
-    //legacy_portalEasteregg = false;
-  }
-  
-  
   
   
   // Classes we need
@@ -824,6 +810,7 @@ public class PixelRealm extends Screen {
     // --- Player state --- 
     // (1000, 0, 1000) is our default position (and it's imporant for shortcuts)
     public float playerX = 1000.0, playerY = 0., playerZ = 1000.0;
+    public float prevPlayerX = 1000.0, prevPlayerY = 0., prevPlayerZ = 1000.0;
     public float xvel = 0., yvel = 0., zvel = 0.;
     public float direction = PApplet.PI;
     
@@ -1208,9 +1195,9 @@ public class PixelRealm extends Screen {
         customNodes.add(hillHeightSlider = new CustomSlider("Height", 0., 800., hillHeight, 2));
         customNodes.add(hillFrequencySlider = new CustomSlider("Frequency", 0.0, 3.0, hillFrequency, 1));
         
-        customNodes.add(groundSizeSlider = new CustomSlider("Tile size", 50., 2000., getGroundSize(), 4));
-        customNodes.add(renderDistSlider = new CustomSliderInt("Render dist", 1, 20, (int)getRenderDistance(), 3));
-        customNodes.add(chunkLimitSlider = new CustomSliderInt("Chunk limit", 1, 200, 200, 4));
+        customNodes.add(groundSizeSlider = new CustomSlider("Tile size", 20., 1000., getGroundSize(), 4));
+        customNodes.add(renderDistSlider = new CustomSliderInt("Render dist", 1, 15, (int)getRenderDistance(), 3));
+        customNodes.add(chunkLimitSlider = new CustomSliderInt("Chunk limit", 1, 50, 50, 4));
         customNodes.add(waterLevelSlider = new CustomSlider("Water level", -300, 300, -waterLevel, 3));
         waterLevelSlider.setWhenMin("No water");
         chunkLimitSlider.setWhenMax("Unlimited");
@@ -1369,16 +1356,15 @@ public class PixelRealm extends Screen {
         customNodes.add(hillFrequencySlider = new CustomSlider("Hill frequency", 0., 400., MOUNTAIN_FREQUENCY, 2));
         customNodes.add(treeSlider = new CustomSlider("Tree frequency", 0., 1.0, TREE_FREQUENCY, 4));
         treeSlider.setWhenMin("No trees");
-        customNodes.add(octaveSlider = new CustomSliderInt("Noise Octave", 1, 8, OCTAVE, 4));
+        customNodes.add(octaveSlider = new CustomSliderInt("Noise Octave", 1, 4, OCTAVE, 4));
         
         
-        customNodes.add(groundSizeSlider = new CustomSlider("Tile size", 50., 2000., getGroundSize(), 4));
+        customNodes.add(groundSizeSlider = new CustomSlider("Tile size", 20., 1000., getGroundSize(), 4));
         customNodes.add(renderDistSlider = new CustomSliderInt("Render dist", 1, 15, (int)getRenderDistance(), 3));
-        customNodes.add(chunkLimitSlider = new CustomSliderInt("Chunk limit", 1, 200, 200, 4));
+        customNodes.add(chunkLimitSlider = new CustomSliderInt("Chunk limit", 1, 50, 50, 4));
         customNodes.add(waterLevelSlider = new CustomSlider("Water level", -800, 2000, -waterLevel, 3));
         waterLevelSlider.setWhenMin("No water");
         chunkLimitSlider.setWhenMax("Unlimited");
-        
       }
       
       @Override
@@ -2634,14 +2620,25 @@ public class PixelRealm extends Screen {
       }
   
       public boolean touchingPlayer() {
-        float sw = hitboxWi*0.5;
         float spw = PLAYER_WIDTH*0.5;
-        return (playerX-spw < (x+sw)
-          && (playerX+spw > (x-sw)) 
-          && ((playerZ-spw) < (z+sw)) 
-          && ((playerZ+spw) > (z-sw)) 
+        float sw = (hitboxWi*0.5)+spw;
+        boolean left =   lineLine(prevPlayerX,prevPlayerZ,playerX,playerZ,    x-sw,z-sw,   x-sw,z+sw);
+        boolean right =  lineLine(prevPlayerX,prevPlayerZ,playerX,playerZ,    x+sw,z-sw,   x+sw,z+sw);
+        boolean top =    lineLine(prevPlayerX,prevPlayerZ,playerX,playerZ,    x-sw,z-sw,   x+sw,z-sw);
+        boolean bottom = lineLine(prevPlayerX,prevPlayerZ,playerX,playerZ,    x-sw,z+sw,   x+sw,z+sw);
+        
+        boolean midFrameCollision = left || right || top || bottom;
+        
+        boolean onFrameCollision = false;
+          //(playerX-spw < (x+sw)
+          //&& (playerX+spw > (x-sw)) 
+          //&& ((playerZ-spw) < (z+sw)) 
+          //&& ((playerZ+spw) > (z-sw)));
+          
+        
+        return (midFrameCollision || onFrameCollision)
           && (playerY-PLAYER_HEIGHT < (y)) 
-          && (playerY > (y-hi)));
+          && (playerY > (y-hi));
       }
       
       public JSONObject save() {
@@ -3575,7 +3572,7 @@ public class PixelRealm extends Screen {
       
       jsonFile.setBoolean("coins", coins);
       
-      console.log("Saved realm");
+      //console.log("Saved realm");
       
       return true;
     }
@@ -3613,7 +3610,7 @@ public class PixelRealm extends Screen {
       jsonFile.setJSONArray("chunks", chunksArray);
       
       // And we're done already!
-      console.log("Saved realm");
+      //console.log("Saved realm");
       
       return true;
     }
@@ -3644,9 +3641,7 @@ public class PixelRealm extends Screen {
       // (or some strange place)
       // then just reset to normal position.
       if (emergePortal == null) {
-        playerX = 1000.;
-        playerY = 0.;
-        playerZ = 1000.;
+        tp(1000., 0., 1000.);
         direction = PI;
         return;
       }
@@ -3723,26 +3718,22 @@ public class PixelRealm extends Screen {
         switch (chosenDir) {
           // +x
         case 0:
-          playerX = emergePortal.x+FROM_DIST;
-          playerZ = emergePortal.z;
+          tp(emergePortal.x+FROM_DIST, emergePortal.y, emergePortal.z);
           direction = HALF_PI + additionalDir;
           break;
           // +z
         case 1:
-          playerX = emergePortal.x;
-          playerZ = emergePortal.z+FROM_DIST;
+          tp(emergePortal.x, emergePortal.y, emergePortal.z+FROM_DIST);
           direction = 0. + additionalDir;
           break;
           // -x
         case 2:
-          playerX = emergePortal.x-FROM_DIST;
-          playerZ = emergePortal.z;
+          tp(emergePortal.x-FROM_DIST, emergePortal.y, emergePortal.z);
           direction = -HALF_PI + additionalDir;
           break;
           // -z
         case 3:
-          playerX = emergePortal.x;
-          playerZ = emergePortal.z-FROM_DIST;
+          tp(emergePortal.x, emergePortal.y, emergePortal.z-FROM_DIST);
           direction = PI + additionalDir;
           break;
         }
@@ -3887,6 +3878,10 @@ public class PixelRealm extends Screen {
       primaryAction = input.keyActionOnce("primaryAction");
       secondaryAction = input.keyActionOnce("secondaryAction");
       
+      prevPlayerX = playerX;
+      prevPlayerY = playerY;
+      prevPlayerZ = playerZ;
+      
       if (!movementPaused) {
         
       isWalking = false;
@@ -3906,7 +3901,7 @@ public class PixelRealm extends Screen {
       boolean splash = (!wasInWater && isInWater);
   
       // :3
-      if (input.keyAction("jump") && onGround()) speed *= 3;
+      if (input.keyAction("jump") && (onGround() || coyoteJump > 0.)) speed *= 3;
   
       float sin_d = sin(direction);
       float cos_d = cos(direction);
@@ -4052,7 +4047,8 @@ public class PixelRealm extends Screen {
               sound.pauseSound("swimming");
             }
             
-            if (onGround() && jumpTimeout < 1.) {
+            if ((onGround() || coyoteJump > 0.) && jumpTimeout < 1.) {
+              coyoteJump = 0.;
               yvel = jumpStrength;
               playerY -= 10;
               if (isInWater) {
@@ -4073,11 +4069,13 @@ public class PixelRealm extends Screen {
           }
   
           if (jumpTimeout > 0) jumpTimeout -= display.getDelta();
+          if (coyoteJump > 0) coyoteJump -= display.getDelta();
           playerY -= yvel*display.getDelta();
           
           if (onGround()) {
             playerY = onSurface(playerX, playerZ);
             yvel = 0.;
+            coyoteJump = 9.;
             //console.log(playerY-prevYPos);
           }
           else if (splash) {
@@ -4100,6 +4098,9 @@ public class PixelRealm extends Screen {
             playerX = 1000.;
             playerY = 0.;
             playerZ = 1000.;
+            prevPlayerX = playerX;
+            prevPlayerY = playerY;
+            prevPlayerZ = playerZ;
             yvel = 0.;
           }
           
@@ -4627,6 +4628,15 @@ public class PixelRealm extends Screen {
       }
     }
     
+    public void tp(float x, float y, float z) {
+      playerX = x;
+      playerY = y;
+      playerZ = z;
+      prevPlayerX = x;
+      prevPlayerY = y;
+      prevPlayerZ = z;
+    }
+    
     // That "effect" is just the portal glow.
     public void renderEffects() {
       float FADE = 0.9;
@@ -4795,7 +4805,7 @@ public class PixelRealm extends Screen {
   }
   
   protected void bumpBack() {
-    portalCoolDown = 30.;
+    portalCoolDown = 10.;
     sound.playSound("nope");
     portalLight = 10;
     currRealm.playerY -= 10.;
@@ -4839,7 +4849,7 @@ public class PixelRealm extends Screen {
     }
     
     portalLight = 255.;
-    portalCoolDown = 30.;
+    portalCoolDown = 10.;
     
     
     // Update inventory for moving realms (move files)
@@ -4869,9 +4879,7 @@ public class PixelRealm extends Screen {
           if (fro.length() > 0)
             currRealm.emergeFromPortal(fro);
           else {
-            currRealm.playerX = 1000.;
-            currRealm.playerY = 0.;
-            currRealm.playerZ = 1000.;
+            currRealm.tp(1000., 0., 1000.);
             currRealm.direction = PApplet.PI;
           }
           switchToRealm(currRealm);
@@ -4916,7 +4924,7 @@ public class PixelRealm extends Screen {
     currRealm.saveRealmJson();
     
     sound.streamMusicWithFade(r.musicPath);
-    portalCoolDown = 30.;
+    portalCoolDown = 10.;
     currRealm = r;
     currRealm.refreshFiles();
     // so that our currently holding item doesn't disappear when we go into the next realm.
@@ -5246,9 +5254,7 @@ public class PixelRealm extends Screen {
         if (i >= xyz.length) break;
         xyz[i++] = int(arg);
       }
-      currRealm.playerX = xyz[0];
-      currRealm.playerY = xyz[1];
-      currRealm.playerZ = xyz[2];
+      currRealm.tp(xyz[0], xyz[1], xyz[2]);
       currRealm.direction = xyz[3];
       
       console.log("Teleported to ("+str(currRealm.playerX)+", "+str(currRealm.playerY)+", "+str(currRealm.playerZ)+").");
