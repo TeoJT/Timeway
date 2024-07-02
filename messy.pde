@@ -280,6 +280,11 @@ public final class SpriteSystemPlaceholder {
             }
             public void setImg(String name) {
                 DImage im = engine.display.getImg(name);
+                if (im == null) {
+                  engine.console.warn("sprite setImg(): "+name+" doesn't exist");
+                  imgName = "white";
+                  return;
+                }
                 imgName = name;
                 if (wi == 0) { 
                 wi = (int)im.width;

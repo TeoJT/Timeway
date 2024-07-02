@@ -1,32 +1,174 @@
 import java.util.Base64;
 import de.humatic.dsj.DSCapture;
+import processing.video.Capture;
 import java.awt.image.BufferedImage;
 import java.util.concurrent.atomic.AtomicInteger;
 
 class CameraException extends RuntimeException {};
 
-abstract class Capture {
+abstract class EditorCapture {
+  public int width, height;
+  protected Engine engine;
+  
+  public AtomicBoolean ready = new AtomicBoolean(false);
+  public AtomicBoolean error = new AtomicBoolean(false);
+  public AtomicInteger errorCode = new AtomicInteger(0);
+  public int selectedCamera = 0;
+  
   public abstract void setup();
   public abstract void turnOffCamera();
   public abstract void switchNextCamera();
   public abstract PImage updateImage();
 }
 
-class DCapture extends Capture implements java.beans.PropertyChangeListener {
+class PCapture extends EditorCapture {
+  
+  private String[] cameraDevices = null;
+  private Capture capture = null;
+  private PImage currCapture = null;
+  
+  public PCapture(Engine e) {
+    ready.set(false);
+    error.set(false);
+    engine = e;
+    currCapture = engine.display.systemImages.get("white").pimage;
+  }
+  
+  
+  public void setup() {
+    ready.set(false);
+    error.set(false);
+    
+    try {
+      cameraDevices = Capture.list();
+      
+      if (cameraDevices.length <= 0) {
+          error.set(true);
+          errorCode.set(Editor.ERR_NO_CAMERA_DEVICES);
+          return;
+      }
+      
+      if (cameraDevices == null) {
+        //engine.console.log("Unable to get cameras, but I'll try to start default camera anyway...");
+        
+        //boolean failed = false;
+        //try {
+        //  capture = new Capture(engine.app);
+          
+        //  if (capture == null) {
+        //    failed = true;
+        //  }
+        //}
+        //catch (Exception e) {
+        //  failed = true;
+        //}
+        
+        //if (failed) {
+        //  engine.console.warn("I tried. Unable to start default camera.");
+        //  error.set(true);
+        //  errorCode.set(Editor.ERR_UNKNOWN);
+        //  return;
+        //}
+        //// At this point it has been successful so spoof
+        //// camera device
+        //cameraDevices = new String[1];
+        //cameraDevices[0] = "Unknown device";
+        
+        // TODO: at least try the default camera
+        error.set(true);
+        errorCode.set(Editor.ERR_UNKNOWN);
+        return;
+      }
+    }
+    catch (Exception e) {
+      error.set(true);
+      errorCode.set(Editor.ERR_UNKNOWN);
+      return;
+    }
+    
+    selectedCamera = (int)engine.sharedResources.get("lastusedcamera", 0);
+    activateCamera();
+    
+    ready.set(true);
+  }
+  
+  // Activate currently selected camera, switching to next camera if it doesn't work
+  private void activateCamera() {
+    boolean success = false;
+    int originalSelection = selectedCamera;
+    
+    while (!success) {
+      try {
+        // Activate the next camera in the list.
+        // Some cameras may not work. Skip them if they don't work. If none of them work, throw an error.
+        capture = new Capture(engine.app, cameraDevices[selectedCamera]);
+        success = true;
+      }
+      catch (DSJException e) {
+        success = false; // Keep trying
+        // Increase index by 1, reset to 0 if we're at end of list.
+        selectedCamera = ((selectedCamera+1)%(cameraDevices.length));
+        
+        // If we're back where we started, then there's been a problem :(
+        if (originalSelection == selectedCamera) {
+          error.set(true);
+          errorCode.set(Editor.ERR_FAILED_TO_SWITCH);
+          return;
+        }
+      }
+    }
+    
+    capture.start();
+    capture.read();
+    
+    width = capture.width;
+    height = capture.height;
+  }
+  
+  
+  public PImage updateImage() {
+    if (capture == null) {
+      engine.console.bugWarnOnce("No capture available.");
+      return engine.display.systemImages.get("white").pimage;
+    }
+    if (capture.available()) {
+      capture.read();
+      currCapture = capture;
+    }
+    return currCapture;
+  }
+  
+  public void switchNextCamera() {
+    // Only run if a camera isn't currently being setup.
+    if (ready.compareAndSet(true, false)) {
+      if (cameraDevices == null) return;
+      if (cameraDevices.length == 0) return;
+      
+      // Turn off last used camera.
+      turnOffCamera();
+      
+      // Increase index by 1, reset to 0 if we're at end of list.
+      selectedCamera = ((selectedCamera+1)%(cameraDevices.length));
+      activateCamera();
+      
+      ready.set(true);
+    }
+  }
+  
+  public void turnOffCamera() {
+    if (capture != null) capture.stop();
+  }
+  
+  
+}
+
+class DCapture extends EditorCapture implements java.beans.PropertyChangeListener {
   private DSCapture capture;
-  public int width, height;
-  public AtomicBoolean ready = new AtomicBoolean(false);
-  
-  public AtomicBoolean error = new AtomicBoolean(false);
-  public AtomicInteger errorCode = new AtomicInteger(0);
-  
   public final int DEVICE_NONE = -1;
   public final int DEVICE_CAMERA     = 0;
   public final int DEVICE_MICROPHONE = 1;
   
-  private Engine engine;
   public ArrayList<DSFilterInfo> cameraDevices;
-  public int selectedCamera = 0;
  
   public DCapture(Engine e) {
     ready.set(false);
@@ -154,7 +296,8 @@ public class Editor extends Screen {
     private HashSet<Placeable> placeableset;
     private ArrayList<String> imagesInEntry;  // This is so that we can know what to remove when we exit this screen.
     private Placeable editingPlaceable = null;
-    private DCapture camera;
+    private EditorCapture camera;
+    private PImage prevCapture;
     private PGraphics cameraDisplay;
     private String entryName;
     private String entryPath;
@@ -496,7 +639,13 @@ public class Editor extends Screen {
           // Bug fix: run once so that text element in GUI being at pos 0,0 isn't shown.
           runGUI();
           
-          camera = new DCapture(engine);
+          if (platform == WINDOWS) {
+            camera = new DCapture(engine);
+          }
+          else {
+            camera = new PCapture(engine);
+          }
+          
         
           // Because of the really annoying delay thing, we wanna create a canvas that uses the cpu to draw the frame instead
           // of the P2D renderer struggling to draw things. In the future, we can implement this into the engine so that it can
@@ -980,7 +1129,17 @@ public class Editor extends Screen {
           
           if (!camera.error.get() && camera.ready.get()) {
             if (ui.button("snap", "snap_button_128", "")) {
-              insertImage(camera.updateImage());
+              PImage pic = prevCapture;
+              //PImage newpic = app.createImage(pic.width, pic.height, RGB);
+              
+              // For some reason we need to do this to prevent a VERY annoying bug.
+              //pic.loadPixels();
+              //newpic.loadPixels();
+              //for (int i = 0; i < pic.pixels.length; i++) {
+              //  newpic.pixels[i] = pic.pixels[i];
+              //}
+              //newpic.updatePixels();
+              insertImage(pic);
               
               // Rest of the stuff is just for cosmetic effects :sparkle_emoji:
               takePhoto = true;
@@ -1385,14 +1544,23 @@ public class Editor extends Screen {
         }
       }
       else {
-        PImage pic = camera.updateImage();
-        if (pic != null && pic.width > 0 && pic.height > 0) {
+        prevCapture = camera.updateImage();
+        
+        
+        if (prevCapture != null && prevCapture.width > 0 && prevCapture.height > 0) {
+        
+          float aspect = float(prevCapture.height)/float(prevCapture.width);
           
-          float aspect = float(pic.height)/float(pic.width);
-          cameraDisplay.beginDraw();
-          cameraDisplay.image(pic, 0, 0, float(cameraDisplay.width), float(cameraDisplay.width)*aspect);
-          cameraDisplay.endDraw();
-          app.image(cameraDisplay, 0, 0, WIDTH, HEIGHT);
+          // Ugly but dont care its a quick fix
+          if (camera instanceof PCapture) {
+            app.image(prevCapture, 0, 0, WIDTH, WIDTH*aspect);
+          }
+          else if (camera instanceof DCapture) {
+            cameraDisplay.beginDraw();
+            cameraDisplay.image(prevCapture, 0, 0, float(cameraDisplay.width), float(cameraDisplay.width)*aspect);
+            cameraDisplay.endDraw();
+            app.image(cameraDisplay, 0, 0, WIDTH, HEIGHT);
+          }
           if (takePhoto) {
             app.blendMode(ADD);
             app.noStroke();
@@ -1405,6 +1573,7 @@ public class Editor extends Screen {
               this.endCamera();
             }
           }
+          
         }
         //engine.timestamp("start image");
         //app.beginShape();

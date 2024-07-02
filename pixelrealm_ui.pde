@@ -283,7 +283,7 @@ public class PixelRealmWithUI extends PixelRealm {
       
       if (!enterToContinue) return;
       textSize(18);
-      text("(Enter/return to contunue)",  getXmid(), getYbottom()-70);
+      text("(Enter/return to continue)",  getXmid(), getYbottom()-70);
       
       if (input.enterOnce) {
         sound.playSound("menu_select");
