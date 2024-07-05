@@ -40,6 +40,7 @@ public class PixelRealm extends Screen {
   final static float UNDERWATER_SPEED_MULTIPLIER = 0.4;
   final static float SNEAK_SPEED = 1.5;
   final static float TURN_SPEED = 0.05;
+  final static float MEDIUM_TURN_SPEED = 0.03;
   final static float SLOW_TURN_SPEED = 0.01;
   final static float TERMINAL_VEL = 30.;
   final static float GRAVITY = 0.4;
@@ -2629,14 +2630,7 @@ public class PixelRealm extends Screen {
         
         boolean midFrameCollision = left || right || top || bottom;
         
-        boolean onFrameCollision = false;
-          //(playerX-spw < (x+sw)
-          //&& (playerX+spw > (x-sw)) 
-          //&& ((playerZ-spw) < (z+sw)) 
-          //&& ((playerZ+spw) > (z-sw)));
-          
-        
-        return (midFrameCollision || onFrameCollision)
+        return (midFrameCollision)
           && (playerY-PLAYER_HEIGHT < (y)) 
           && (playerY > (y-hi));
       }
@@ -3974,6 +3968,9 @@ public class PixelRealm extends Screen {
             if (input.keyAction("lookRight")) rot = -TURN_SPEED*display.getDelta();
             if (input.keyAction("lookLeft")) rot =  TURN_SPEED*display.getDelta();
           }
+          
+          if (input.keyAction("lookRightTouch")) rot = -MEDIUM_TURN_SPEED*display.getDelta();
+          if (input.keyAction("lookLeftTouch")) rot =  MEDIUM_TURN_SPEED*display.getDelta();
   
   
           // If holding item and we're in reposition mode, move the object instead of the player.
