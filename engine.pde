@@ -51,7 +51,7 @@ class Engine {
   // Info and versioning
   public final String NAME        = "Timeway";
   public final String AUTHOR      = "Teo Taylor";
-  public final String VERSION     = "0.1.2";
+  public final String VERSION     = "0.1.2-alpha";
   public final String VERSION_DESCRIPTION = 
     "- Added terrain customisation\n"+
     "- Fixed a buncha bugs.";
@@ -321,6 +321,7 @@ class Engine {
         defaultSettings.putIfAbsent("waitForGStreamerStartup", true);
         defaultSettings.putIfAbsent("enableExperimentalGifs", false);
         defaultSettings.putIfAbsent("cache_miss_no_music", true);
+        defaultSettings.putIfAbsent("touch_controls", false);
     
         defaultKeybindings = new HashMap<String, Character>();
         defaultKeybindings.putIfAbsent("CONFIG_VERSION", char(1));
@@ -330,6 +331,8 @@ class Engine {
         defaultKeybindings.putIfAbsent("moveRight", 'd');
         defaultKeybindings.putIfAbsent("lookLeft", 'q');
         defaultKeybindings.putIfAbsent("lookRight", 'e');
+        defaultKeybindings.putIfAbsent("lookLeftTouch", char(253));
+        defaultKeybindings.putIfAbsent("lookRightTouch", char(254));
         defaultKeybindings.putIfAbsent("menu", '\t');
         defaultKeybindings.putIfAbsent("menuSelect", '\t');
         defaultKeybindings.putIfAbsent("jump", ' ');
@@ -2108,6 +2111,15 @@ class Engine {
       this.spriteSystemClickable = true;
       this.guiFade = 255.;
     }
+    
+    public boolean buttonHover(String name) {
+      if (this.currentSpritePlaceholderSystem == null) {
+        console.bugWarn("You forgot to call useSpriteSystem()!");
+        return false;
+      }
+      
+      return (currentSpritePlaceholderSystem.buttonHover(name) && !currentSpritePlaceholderSystem.interactable && spriteSystemClickable);
+    }
   
     public boolean button(String name, String texture, String displayText) {
   
@@ -2118,7 +2130,7 @@ class Engine {
   
       // This doesn't change at all.
       // I just wanna keep it in case it comes in useful later on.
-      boolean guiClickable = true;
+      //boolean guiClickable = true;
   
       // Don't want our messy code to spam the console lol.
       currentSpritePlaceholderSystem.suppressSpriteWarning = true;
@@ -2133,7 +2145,7 @@ class Engine {
       // - Must not be in a minimenu
       // - Must not be in gui move sprite / edit mode.
       // - also the guiClickable thing.
-      if (currentSpritePlaceholderSystem.buttonHover(name) && guiClickable && !currentSpritePlaceholderSystem.interactable && spriteSystemClickable) {
+      if (buttonHover(name)) {
         // Slight gray to indicate hover
         app.tint(230, guiFade);
         app.fill(230, guiFade);
@@ -5680,6 +5692,8 @@ class Engine {
     public boolean secondaryClick = false;
     public boolean primaryDown = false;
     public boolean secondaryDown = false;
+    public boolean primaryReleased = false;
+    public boolean secondaryReleased = false;
     public boolean keyOnce = false;
     public boolean keyDown = false;
     
@@ -5707,7 +5721,8 @@ class Engine {
     private float cache_mouseY = 0.0;
     public  float scrollOffset = 0.0;
     
-    public int keys[]     = new int[1024];
+    public int keys[]       = new int[1024];
+    private int robotKeys[] = new int[1024];
     
     // Down
     public boolean backspaceDown = false;
@@ -5753,6 +5768,8 @@ class Engine {
       // this will not be updated at all hence remaining false.
       primaryClick = false;
       secondaryClick = false;
+      primaryReleased = false;
+      secondaryReleased = false;
       
       normalClickTimeout -= display.getDelta();
   
@@ -5779,6 +5796,8 @@ class Engine {
       }
       else if (!app.mousePressed && click) {
         click = false;
+        primaryReleased = (app.mouseButton != RIGHT);
+        secondaryReleased = (app.mouseButton == RIGHT);
         
         if (clickStartX != mouseX() || clickStartY != mouseY()) {
           mouseMoved = true;
@@ -5793,6 +5812,13 @@ class Engine {
         if (keys[i] > 0) {
           keys[i]++;
         }
+        if (robotKeys[i] > 0) {
+          robotKeys[i]++;
+          if (robotKeys[i] > 4) {
+            keys[i] = 0;
+            robotKeys[i] = 0;
+          }
+        }
       }
       
       // Special keys oneshots
@@ -5801,6 +5827,7 @@ class Engine {
       if (ctrlDown) ctrlDownCounter++; else ctrlDownCounter = 0;
       if (altDown) altDownCounter++; else altDownCounter = 0;
       if (enterDown) enterDownCounter++; else enterDownCounter = 0;
+      
       
       backspaceOnce = (backspaceDownCounter == 1);
       shiftOnce = (shiftDownCounter == 1);
@@ -5896,6 +5923,13 @@ class Engine {
       else 
         // Otherwise just tell us if the key is down or not
         return keyDown(k);
+    }
+    
+    public void setAction(String keybindName) {
+      char k = settings.getKeybinding(keybindName);
+      int val = int(Character.toLowerCase(k));
+      keys[val] = 1;
+      robotKeys[val] = 1;
     }
   
     public boolean keyActionOnce(String keybindName) {

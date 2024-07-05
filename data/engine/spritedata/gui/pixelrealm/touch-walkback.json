@@ -1,0 +1,17 @@
+{
+  "h": 519,
+  "vy0": 816,
+  "vx1": 135,
+  "vy2": 944,
+  "vx0": 7,
+  "vy1": 816,
+  "mode": "SINGLE",
+  "vx3": 7,
+  "vx2": 135,
+  "vy3": 944,
+  "w": 519,
+  "name": "touch-walkback",
+  "x": 7,
+  "y": 816,
+  "locked": false
+}

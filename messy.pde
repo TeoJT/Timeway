@@ -942,6 +942,16 @@ public final class SpriteSystemPlaceholder {
         private void renderSprite(Sprite s) {
             if (s.isSelected() || (showAllWireframes && keyPressAllowed)) {
                 engine.wireframe = true;
+                if (engine.input.ctrlDown && engine.input.altDown && engine.input.shiftDown) {
+                  if (engine.input.keyDownOnce('d')) {
+                    s.mode = DOUBLE;
+                    engine.console.log("Sprite mode set to DOUBLE");
+                  }
+                  else if (engine.input.keyDownOnce('s')) {
+                    s.mode = SINGLE;
+                    engine.console.log("Sprite mode set to SINGLE");
+                  }
+                }
             }
             //draw.autoImg(s.getImg(), s.getX(), s.getY()+s.getHeight()*s.getBop(), s.getWidth(), s.getHeight()-int((float)s.getHeight()*s.getBop()));
             
