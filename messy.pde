@@ -280,6 +280,11 @@ public final class SpriteSystemPlaceholder {
             }
             public void setImg(String name) {
                 DImage im = engine.display.getImg(name);
+                if (im == null) {
+                  engine.console.warn("sprite setImg(): "+name+" doesn't exist");
+                  imgName = "white";
+                  return;
+                }
                 imgName = name;
                 if (wi == 0) { 
                 wi = (int)im.width;
@@ -942,16 +947,6 @@ public final class SpriteSystemPlaceholder {
         private void renderSprite(Sprite s) {
             if (s.isSelected() || (showAllWireframes && keyPressAllowed)) {
                 engine.wireframe = true;
-                if (engine.input.ctrlDown && engine.input.altDown && engine.input.shiftDown) {
-                  if (engine.input.keyDownOnce('d')) {
-                    s.mode = DOUBLE;
-                    engine.console.log("Sprite mode set to DOUBLE");
-                  }
-                  else if (engine.input.keyDownOnce('s')) {
-                    s.mode = SINGLE;
-                    engine.console.log("Sprite mode set to SINGLE");
-                  }
-                }
             }
             //draw.autoImg(s.getImg(), s.getX(), s.getY()+s.getHeight()*s.getBop(), s.getWidth(), s.getHeight()-int((float)s.getHeight()*s.getBop()));
             
