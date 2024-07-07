@@ -297,7 +297,6 @@ public class Editor extends Screen {
     private ArrayList<String> imagesInEntry;  // This is so that we can know what to remove when we exit this screen.
     private Placeable editingPlaceable = null;
     private EditorCapture camera;
-    private PImage prevCapture;
     private PGraphics cameraDisplay;
     private String entryName;
     private String entryPath;
@@ -314,9 +313,11 @@ public class Editor extends Screen {
     private JSONArray loadedJsonArray;
     
     // X goes unused for now but could be useful later.
-    public float extentX = 0.;
-    public float extentY = 0.;
-    public float scrollLimitY = 0.;
+    private float extentX = 0.;
+    private float extentY = 0.;
+    private float scrollLimitY = 0.;
+    private float prevMouseY = 0.;
+    private float scrollVelocity = 0.;
     
     public static final int INITIALISE_DROP_ANIMATION = 0;
     public static final int CAMERA_ON_ANIMATION = 1;
@@ -645,7 +646,6 @@ public class Editor extends Screen {
           else {
             camera = new PCapture(engine);
           }
-          
         
           // Because of the really annoying delay thing, we wanna create a canvas that uses the cpu to draw the frame instead
           // of the P2D renderer struggling to draw things. In the future, we can implement this into the engine so that it can
@@ -763,7 +763,6 @@ public class Editor extends Screen {
         
         // NullPointerException
         String encodedPng = new String(Base64.getEncoder().encode(cacheBytes));
-        //println(encodedPng);
         
         imgPlaceable.sprite.offmove(0,0);
         
@@ -1119,6 +1118,19 @@ public class Editor extends Screen {
             sound.playSound("select_any");
             this.beginCamera();
           }
+          
+          
+          //************COPY BUTTON************
+          if (ui.button("copy", "copy_button_128", "Copy")) {
+            sound.playSound("select_any");
+            this.copy();
+          }
+          
+          //************PASTE BUTTON************
+          if (ui.button("paste", "paste_button_128", "Paste")) {
+            sound.playSound("select_any");
+            this.paste();
+          }
         }
         else {
           
@@ -1129,17 +1141,8 @@ public class Editor extends Screen {
           
           if (!camera.error.get() && camera.ready.get()) {
             if (ui.button("snap", "snap_button_128", "")) {
-              PImage pic = prevCapture;
-              //PImage newpic = app.createImage(pic.width, pic.height, RGB);
-              
-              // For some reason we need to do this to prevent a VERY annoying bug.
-              //pic.loadPixels();
-              //newpic.loadPixels();
-              //for (int i = 0; i < pic.pixels.length; i++) {
-              //  newpic.pixels[i] = pic.pixels[i];
-              //}
-              //newpic.updatePixels();
-              insertImage(pic);
+              sound.playSound("select_snap");
+              insertImage(camera.updateImage());
               
               // Rest of the stuff is just for cosmetic effects :sparkle_emoji:
               takePhoto = true;
@@ -1357,6 +1360,54 @@ public class Editor extends Screen {
         scrollLimitY = max(extentY+PADDING-HEIGHT+myLowerBarWeight, 0);
     }
     
+    private void copy() {
+      if (editingPlaceable != null) {
+        if (editingPlaceable instanceof TextPlaceable) {
+          TextPlaceable t = (TextPlaceable)editingPlaceable;
+          boolean success = clipboard.copyString(t.text);
+          if (success)
+            console.log("Copied!");
+        }
+        else console.log("Copying of element not supported yet, sorry!");
+      }
+    }
+    
+    private void paste() {
+      if (clipboard.isImage()) {
+        PImage pastedImage = clipboard.getImage();
+        if (pastedImage == null) console.log("Can't paste image from clipboard!");
+        else insertImage(pastedImage);
+      }
+      else if (clipboard.isString()) {
+        String pastedString = clipboard.getText();
+        
+        if (editingPlaceable != null) {
+          // If we're currently editing text, append it
+          if (editingPlaceable instanceof TextPlaceable) {
+            input.keyboardMessage += pastedString;
+          }
+          else if (editingPlaceable instanceof ImagePlaceable) {
+            // Place it just underneath the image.
+            float imx = editingPlaceable.sprite.xpos;
+            float imy = editingPlaceable.sprite.ypos;
+            int imhi = editingPlaceable.sprite.hi;
+            insertText(pastedString, imx, imy+imhi);
+          }
+        }
+        // No text or image being edited, just plonk it whereever.
+        else {
+          insertedXpos += 20;
+          insertedYpos += 20;
+          insertText(pastedString, insertedXpos, insertedYpos);
+        }
+      }
+      else console.log("Can't paste item from clipboard!");
+    }
+    
+    
+    boolean scrolling = false;
+    boolean prevReset = false;
+    
     private void renderEditor() {
       //yview += engine.scroll;
         // In order to know if we clicked on an object or a blank area,
@@ -1366,10 +1417,28 @@ public class Editor extends Screen {
         // 2 Update all objects which will check if any of them have been clicked.
         // 3 If there's been a click from step 1 then check if any object has been clicked.
         boolean clickedThing = false;
-        if (input.primaryClick) {
+        boolean mouseInUpperbar = engine.mouseY() < myUpperBarWeight;
+        
+        
+        if (!input.primaryDown) {
+          prevMouseY = input.mouseY();
+          prevReset =  true;
+        }
+      // Reset prevInput for one more frame
+        else if (prevReset) {
+          prevMouseY = input.mouseY();
+          prevReset =  false;
+        }
+        
+        if (input.primaryClick && !mouseInUpperbar) {
+          scrolling = true;
+        }
+        
+        if (input.primaryReleased) {
             if (!input.mouseMoved) {
                 clickedThing = true;
             }
+            scrolling = false;
         }
 
         // The part of the code that actually deselects an element when clicking in
@@ -1378,7 +1447,6 @@ public class Editor extends Screen {
         // 1. If the minimenu is open
         // 2. GUI element is clicked (we just check the mouse is in the upper bar
         // to check that condition)
-        boolean mouseInUpperbar = engine.mouseY() < myUpperBarWeight;
         if (input.primaryClick) {
             if(!ui.miniMenuShown() && !mouseInUpperbar) {
 
@@ -1411,53 +1479,16 @@ public class Editor extends Screen {
         }
         
         if (input.ctrlDown && input.keyDownOnce('c')) { // Ctrl+c
-          if (editingPlaceable != null) {
-            if (editingPlaceable instanceof TextPlaceable) {
-              TextPlaceable t = (TextPlaceable)editingPlaceable;
-              boolean success = clipboard.copyString(t.text);
-              if (success)
-                console.log("Copied!");
-            }
-            else console.log("Copying of element not supported yet, sorry!");
-          }
+          this.copy();
         }
         
         if (input.ctrlDown && input.keyDownOnce('v')) // Ctrl+v
         {
-            
-            if (clipboard.isImage()) {
-              PImage pastedImage = clipboard.getImage();
-              if (pastedImage == null) console.log("Can't paste image from clipboard!");
-              else insertImage(pastedImage);
-            }
-            else if (clipboard.isString()) {
-              String pastedString = clipboard.getText();
-              
-              if (editingPlaceable != null) {
-                // If we're currently editing text, append it
-                if (editingPlaceable instanceof TextPlaceable) {
-                  input.keyboardMessage += pastedString;
-                }
-                else if (editingPlaceable instanceof ImagePlaceable) {
-                  // Place it just underneath the image.
-                  float imx = editingPlaceable.sprite.xpos;
-                  float imy = editingPlaceable.sprite.ypos;
-                  int imhi = editingPlaceable.sprite.hi;
-                  insertText(pastedString, imx, imy+imhi);
-                }
-              }
-              // No text or image being edited, just plonk it whereever.
-              else {
-                insertedXpos += 20;
-                insertedYpos += 20;
-                insertText(pastedString, insertedXpos, insertedYpos);
-              }
-            }
-            else console.log("Can't paste item from clipboard!");
+          this.paste();
         }
         
         
-        if (input.keyDownOnce(DELETE)) {
+        if (input.keyDownOnce(char(127))) {
           if (editingPlaceable != null) {
             placeableset.remove(editingPlaceable);
             changesMade = true;
@@ -1466,19 +1497,31 @@ public class Editor extends Screen {
         
         renderPlaceables();
 
-        // Check back to see if something's been clicked.
-        if (clickedThing) {
-
-            // Create new text if a blank area has been clicked.
-            // Clicking in a blank area will create new text
-            // however, there's some exceptions to that rule
-            // and the following conditions need to be met:
-            // 1. There's no minimenu open
-            // 2. There's no gui element being interacted with
-            if (editingPlaceable == null && !ui.miniMenuShown() && !mouseInUpperbar) {
-                insertText("", engine.mouseX(), engine.mouseY()-20);
-            }
+        
+        // Create new text if a blank area has been clicked.
+        // Clicking in a blank area will create new text
+        // however, there's some exceptions to that rule
+        // and the following conditions need to be met:
+        // 1. There's no minimenu open
+        // 2. There's no gui element being interacted with
+        // Oh also scroll if we're dragging instead.
+        if (editingPlaceable == null && !ui.miniMenuShown()) {
+          // Check back to see if something's been clicked.
+          if (clickedThing) {
+            insertText("", engine.mouseX(), engine.mouseY()-20);
+          }
+          
+          if (scrolling) {
+            power.setAwake();
+            scrollVelocity = (input.mouseY()-prevMouseY);
+          }
+          else {
+            scrollVelocity *= PApplet.pow(0.92, display.getDelta());
+          }
         }
+        prevMouseY = input.mouseY();
+        input.scrollOffset += scrollVelocity;
+        
 
         
         // Power stuff
@@ -1544,23 +1587,14 @@ public class Editor extends Screen {
         }
       }
       else {
-        prevCapture = camera.updateImage();
-        
-        
-        if (prevCapture != null && prevCapture.width > 0 && prevCapture.height > 0) {
-        
-          float aspect = float(prevCapture.height)/float(prevCapture.width);
+        PImage pic = camera.updateImage();
+        if (pic != null && pic.width > 0 && pic.height > 0) {
           
-          // Ugly but dont care its a quick fix
-          if (camera instanceof PCapture) {
-            app.image(prevCapture, 0, 0, WIDTH, WIDTH*aspect);
-          }
-          else if (camera instanceof DCapture) {
-            cameraDisplay.beginDraw();
-            cameraDisplay.image(prevCapture, 0, 0, float(cameraDisplay.width), float(cameraDisplay.width)*aspect);
-            cameraDisplay.endDraw();
-            app.image(cameraDisplay, 0, 0, WIDTH, HEIGHT);
-          }
+          float aspect = float(pic.height)/float(pic.width);
+          cameraDisplay.beginDraw();
+          cameraDisplay.image(pic, 0, 0, float(cameraDisplay.width), float(cameraDisplay.width)*aspect);
+          cameraDisplay.endDraw();
+          app.image(cameraDisplay, 0, 0, WIDTH, HEIGHT);
           if (takePhoto) {
             app.blendMode(ADD);
             app.noStroke();
@@ -1573,7 +1607,6 @@ public class Editor extends Screen {
               this.endCamera();
             }
           }
-          
         }
         //engine.timestamp("start image");
         //app.beginShape();
