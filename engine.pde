@@ -74,7 +74,7 @@ class Engine {
   public final String KEYBIND_PATH        = "data/keybindings.json";
   public final String STATS_FILE          = "data/stats.json";
   public final String PATH_SPRITES_ATTRIB = "data/engine/spritedata/";
-  public final String GLITCHED_REALM      = "data/engine/default/glitched_realm/";
+  public final String GLITCHED_REALM      = "data/engine/default/glitched_realm/";  // TODO: Remove glitched realm
   public final String CACHE_INFO          = "data/cache/cache_info.json";
   public final String CACHE_PATH          = "data/cache/";
   public final String WINDOWS_CMD         = "data/engine/shell/mywindowscommand.bat";

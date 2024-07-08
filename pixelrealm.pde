@@ -120,8 +120,6 @@ public class PixelRealm extends Screen {
   protected int     currentTool = TOOL_NORMAL;
   private boolean isWalking = false;
   public boolean movementPaused = false;
-  private float lastPlacedPosX = 0;
-  private float lastPlacedPosZ = 0;
   private AtomicBoolean refreshRealm = new AtomicBoolean(false);
   protected float portalLight = 255.;
   protected boolean isInWater = false;
@@ -814,6 +812,11 @@ public class PixelRealm extends Screen {
     public float prevPlayerX = 1000.0, prevPlayerY = 0., prevPlayerZ = 1000.0;
     public float xvel = 0., yvel = 0., zvel = 0.;
     public float direction = PApplet.PI;
+    
+    private float lastPlacedPosX = 0;
+    private float lastPlacedPosZ = 0;
+    private float exitPortalX = 0;
+    private float exitPortalZ = 0;
     
     // Whenever we switch realms, we need to make sure this is being updated with the global
     // state!
@@ -1531,8 +1534,13 @@ public class PixelRealm extends Screen {
           // TODO: add code ready for custom tile textures.
           pshapeChunk.texture(img_grass.get());
           
-          for (int y = 0; y < CHUNK_SIZE; y++) {
-            for (int x = 0; x < CHUNK_SIZE; x++) {
+          // Bug fix: extra logic cus the edge tile in the minux direction is visible but has no
+          // collision and it's very annoying.
+          int stx = (chunkX == -terrain.chunkLimitX) ? 1 : 0;
+          int sty = (chunkY == -terrain.chunkLimitZ) ? 1 : 0;
+          
+          for (int y = sty; y < CHUNK_SIZE; y++) {
+            for (int x = stx; x < CHUNK_SIZE; x++) {
                 PVector[] v = new PVector[4];
                 
                 v[0] = tiles[y][x];
@@ -1828,12 +1836,8 @@ public class PixelRealm extends Screen {
       // Without coords provided, the x,y,z positions will be random
       public FileObject(String dir) {
         super();
-        this.x = lastPlacedPosX+random(-500, 500);
-        this.z = lastPlacedPosZ+random(-500, 500);
         // Y-value will be automatically adjusted later.
         //this.y = onSurface(this.x, this.z);
-        lastPlacedPosX = this.x;
-        lastPlacedPosZ = this.z;
         setFileNameAndIcon(dir);
       }
   
@@ -1862,6 +1866,43 @@ public class PixelRealm extends Screen {
       public void load(JSONObject json) {
         // We expect the engine to have already loaded a JSON object.
         // Every 3d object has x y z position.
+        
+        // Prepare random (but close by to player) positioning if file previously did not exist
+        // in realm.
+        this.x = lastPlacedPosX+random(-500, 500);
+        this.z = lastPlacedPosZ+random(-500, 500);
+        if (json.isNull("x") || json.isNull("z")) {
+          // Update last placed pos, but while we're here, we can
+          // check to see if this fileObject happens to be the exitportal.
+          // If so its position should be the exitportal position that was 
+          // randomly allocated
+          lastPlacedPosX = this.x;
+          lastPlacedPosZ = this.z;
+          
+          // Expensive operation so let's do it here.
+          // Check if object is within bounds. 
+          // (if you're wondering, objects are loaded AFTER chunks are loaded)
+          // If not, reposition to somewhere that hopefully is within bounds.
+          // TODO: split it through multiple frames if we have loads of files
+          // to avoid stutter.
+          int count = 0;
+          while (outOfBounds(this.x, this.z)) {
+            this.x = random(-10000, 10000);
+            this.z = random(-10000, 10000);
+            count++;
+            if (count > 1000) {
+              console.warn("Couldn't relocate item cus we ain't smart enough.");
+              break;
+            }
+          }
+          surface();
+          
+          if (this == exitPortal) {
+            this.x = exitPortalX;
+            this.z = exitPortalZ;
+          }
+        }
+        
         this.x = json.getFloat("x", this.x);
         this.z = json.getFloat("z", this.z);
         this.size = json.getFloat("scale", 1.)*BACKWARD_COMPAT_SCALE;
@@ -1957,11 +1998,11 @@ public class PixelRealm extends Screen {
                 else {
                   im = engine.tryLoadImageCache(path, new Runnable() {
                     public void run() {
-                      PImage im = loadImage(path);
+                      PImage im2 = loadImage(path);
                       if (shrink != -1) {
-                        engine.scaleDown(im, shrink);
+                        engine.scaleDown(im2, shrink);
                       }
-                      engine.setOriginalImage(im);
+                      engine.setOriginalImage(im2);
                       if (isImg)
                         ((ImageFileObject)me).cacheFlag = true;
                     }
@@ -1969,6 +2010,7 @@ public class PixelRealm extends Screen {
                   );
                   img = new RealmTexture();
                   img.setLarge(im);
+                  
                 }
               }
             }
@@ -3210,6 +3252,11 @@ public class PixelRealm extends Screen {
           files.add(o);
           if (file.currentFiles[i].filename.equals("[Prev dir]") && o instanceof DirectoryPortal) {
             exitPortal = (DirectoryPortal)o;
+            // Create random position just in case it's a new realm.
+            lastPlacedPosX = app.random(-2000, 2000);
+            lastPlacedPosZ = app.random(-2000, 2000);
+            exitPortalX = lastPlacedPosX;
+            exitPortalZ = lastPlacedPosZ;
           }
         }
       }
@@ -3314,6 +3361,7 @@ public class PixelRealm extends Screen {
         }
         // Unknown version.
         else {
+          // TODO: never experienced this before but this will prolly break.
           console.log("Incompatible turf file, backing up old and creating new turf.");
           file.backupMove(dir+REALM_TURF);
           saveRealmJson();
@@ -3333,6 +3381,18 @@ public class PixelRealm extends Screen {
           t.setGroundSize(150.);
           terrain = t;
         }
+        
+        // None of the objects are loaded from file but we still need to
+        // call load() since this contains code to init the objects.
+        // We need a blank jsonobject to make each fileobject think it hasn't
+        // existed in the realm before.
+        JSONObject emptyJSON = new JSONObject();
+        for (FileObject o : files) {
+          if (o != null) {
+            o.load(emptyJSON);
+          }
+        }
+        
         //saveRealmJson();
       }
       
@@ -3472,7 +3532,7 @@ public class PixelRealm extends Screen {
           JSONObject probjjson = objects3d.getJSONObject(i);
           
           // Each object is uniquely identified by its filename/folder name.
-          String name = probjjson.getString("filename", engine.APPPATH+engine.GLITCHED_REALM);
+          String name = probjjson.getString("filename", "[null]");
           
           // If the name begins with a "." then it is an abstract object (file that can appear multiple times in one realm)
           // For now we just have terrain objects (aka trees)
@@ -3498,6 +3558,13 @@ public class PixelRealm extends Screen {
         //catch (RuntimeException e) {
         //  console.bugWarn(e.getMessage());
         //}
+      }
+      
+      // For any remaiining items (still in the hashmap because they  are new files that were not
+      // in the json file), call the load function to init them.
+      JSONObject emptyJSON = new JSONObject();
+      for (FileObject o : namesToObjects.values()) {
+        o.load(emptyJSON);
       }
       
       // Bye bye Evolving Gateway coins :(
@@ -5288,8 +5355,10 @@ public class PixelRealm extends Screen {
       return true;
     }
     else if (engine.commandEquals(command, "/puthere")) {
+      int successfulRelocations = 0;
       for (PixelRealmState.PRObject p : currRealm.files) {
         int count = 0;
+        boolean moved = false;
         while (currRealm.outOfBounds(p.x, p.z)) {
           p.x = random(-10000, 10000);
           p.z = random(-10000, 10000);
@@ -5298,9 +5367,14 @@ public class PixelRealm extends Screen {
             console.warn("Couldn't relocate item cus we ain't smart enough.");
             break;
           }
+          moved = true;
         }
+        if (moved)
+          successfulRelocations++;
+          
         p.surface();
       }
+      console.log("Relocated "+successfulRelocations+" items.");
       return true;
     }
     else return false;

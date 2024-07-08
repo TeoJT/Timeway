@@ -609,7 +609,9 @@ public class PixelRealmWithUI extends PixelRealm {
           console.warn("There's a problem with this "+TEMPLATE_METADATA_FILENAME+"!");
         }
       }
-
+      
+      // Need to clear terrain objects when we load a new realm otherwise we end up with wayyyy too much
+      // in our face.
       currRealm.chunks.clear();
       currRealm.ordering = new LinkedList();
       currRealm.legacy_autogenStuff = new HashSet<String>();
@@ -617,6 +619,15 @@ public class PixelRealmWithUI extends PixelRealm {
 
       // Load terrain
       currRealm.loadRealmTerrain(path);
+      
+      // clearing ordering also clears our fileobjects.
+      // We need to re-add them back.
+      // And, while we're at it, let's put them level with the ground.
+      for (PixelRealmState.FileObject o : currRealm.files) {
+        currRealm.ordering.add(o);
+        o.surface();
+      }
+      
       //for (PixelRealmState.PRObject p : currRealm.ordering) {
       //  p.surface();
       //  if (p instanceof PixelRealmState.TerrainPRObject) {
