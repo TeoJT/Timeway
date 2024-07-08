@@ -2,7 +2,7 @@ public class Updater extends Screen {
   String updateName = "";
   String headerText = "An update is available!";
   String displayMessage = "This update contains the following additions, changes, and/or fixes:\n";
-  String footerMessage = "Downloading and installing will run in the background as Timeway runs, so please leave Timeway running until the update completes. Don't worry, none of your personal data will be modified.";
+  String footerMessage = "Downloading and installing will run in the background as "+Engine.APP_NAME+" runs, so please leave Timeway running until the update completes. Don't worry, none of your personal data will be modified.";
   String patchNotes = "";
   boolean startedMusic = false;
   JSONObject updateInfo;

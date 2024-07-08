@@ -16,7 +16,7 @@ public class PixelRealmWithUI extends PixelRealm {
 
 
   private String[] dm_welcome = {
-    "Welcome to Timeway.",
+    "Welcome to "+Engine.APP_NAME+".",
     "Your folders are realms.",
     "Your computer is a universe.",
     "But first, let me show you the ropes.",
@@ -61,7 +61,7 @@ public class PixelRealmWithUI extends PixelRealm {
     "Remember, all the items you see in your realms are files on your computer.",
     "Portals resemble folders. Walk into them to go to enter the folder, or \"realm\".",
     "You should be able to figure out the rest yourself, it's not too complicated.",
-    "Timeway is an ongoing project. There may be bugs and missing features.",
+    Engine.APP_NAME+" is an ongoing project. There may be bugs and missing features.",
     "But there are many more things to come.",
     "In the meantime, I hope you enjoy this demo."
   };
@@ -479,6 +479,7 @@ public class PixelRealmWithUI extends PixelRealm {
           }
           String folderpath = currRealm.stateDirectory+input.keyboardMessage;
           if (!file.exists(folderpath)) {
+            issueRefresherCommand(REFRESHER_PAUSE);
             new File(folderpath).mkdirs();
           } else {
             sound.playSound("nope");
@@ -517,6 +518,7 @@ public class PixelRealmWithUI extends PixelRealm {
 
           // Create a new empty file so that we can hold it and place it down, editor will handle the rest.
           try {
+            issueRefresherCommand(REFRESHER_PAUSE);
             FileWriter emptyFile = new FileWriter(path);
             emptyFile.write("");
             emptyFile.close();
@@ -710,7 +712,8 @@ public class PixelRealmWithUI extends PixelRealm {
 
           movefiles.add(src);
         }
-
+        
+        issueRefresherCommand(REFRESHER_PAUSE);
         if (!conflict) {
           for (String src : movefiles) {
             if (!file.copy(src, dest+file.getFilename(src))) {

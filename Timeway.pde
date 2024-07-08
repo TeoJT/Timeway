@@ -38,7 +38,7 @@ void settings() {
     PJOGL.setIcon("data/engine/img/icon.png");
   }
   catch (Exception e) {
-    JOptionPane.showMessageDialog(null,"A fatal error has occurred: \n"+e.getMessage()+"\n"+e.getStackTrace(),"Timeway",1);
+    JOptionPane.showMessageDialog(null,"A fatal error has occurred: \n"+e.getMessage()+"\n"+e.getStackTrace(),Engine.APP_NAME,1);
   }
 }
 
@@ -67,7 +67,7 @@ protected PSurface initSurface() {
         }
       }
     }
-    s.setTitle("Timeway");
+    s.setTitle(Engine.APP_NAME);
     s.setResizable(true);
     return s;
 }
@@ -101,8 +101,8 @@ void sketch_openErrorLog(Exception e) {
   String sStackTrace = sw.toString();
   
   String errMsg = 
-  "Sorry! Timeway crashed :(\n"+
-  "Please provide Neo_2222 with this error log, thanks <3\n\n\n"+
+  "Sorry! "+Engine.APP_NAME+" crashed :(\n"+
+  "Please provide Teo Taylor with this error log, thanks <3\n\n\n"+
   e.getClass().toString()+"\nMessage: \""+
   e.getMessage()+"\"\nStack trace:\n"+
   sStackTrace;
@@ -139,7 +139,7 @@ void draw() {
           timewayEngine.engine();
         }
         catch (java.lang.OutOfMemoryError outofmem) {
-          sketch_openErrorLog("Timeway has run out of memory.");
+          sketch_openErrorLog(Engine.APP_NAME+" has run out of memory.");
           exit();
         }
         catch (Exception e) {

@@ -43,16 +43,17 @@ import java.util.ArrayList;
 import java.util.List;
 import com.sun.jna.Native;
 import com.sun.jna.Structure;
+
 // Timeway's engine code.
 // TODO: add documentation lmao.
 
 class Engine {
   //*****************CONSTANTS SETTINGS**************************
   // Info and versioning
-  public final String NAME        = "Timeway";
-  public final String AUTHOR      = "Teo Taylor";
-  public final String VERSION     = "0.1.2-alpha";
-  public final String VERSION_DESCRIPTION = 
+  public static final String APP_NAME        = "Timeway";
+  public static final String AUTHOR      = "Teo Taylor";
+  public static final String VERSION     = "0.1.2-alpha";
+  public static final String VERSION_DESCRIPTION = 
     "- Added terrain customisation\n"+
     "- Fixed a buncha bugs.";
   // ***************************
@@ -305,6 +306,7 @@ class Engine {
       public final int LEFT_CLICK = 1;
       public final int RIGHT_CLICK = 2;
       
+      // BIG TODO: we really need to isolate this into seperate screen objects rather than the engine.
       public void loadDefaultSettings() {
         defaultSettings = new HashMap<String, Object>();
         defaultSettings.putIfAbsent("fullscreen", false);
@@ -3266,6 +3268,26 @@ class Engine {
     }
     
     
+    public String getLastModified(String path) {
+      Path file = Paths.get(path);
+  
+      if (!file.toFile().exists()) {
+        return null;
+      }
+  
+      BasicFileAttributes attr;
+      try {
+        attr = Files.readAttributes(file, BasicFileAttributes.class);
+      }
+      catch (IOException e) {
+        console.warn("Couldn't get date modified time: "+e.getMessage());
+        return null;
+      }
+  
+      return attr.lastModifiedTime().toString();
+    }
+    
+    
   
     // TODO: change this so that you can modify the default dir.
     // TODO: Make it follow the UNIX file system with compatibility with windows.
@@ -4281,7 +4303,7 @@ class Engine {
       textFont(DEFAULT_FONT, 30);
       text("Downloading...", x1-wi+128, y1+10, wi*2-128, hi);
       textSize(20);
-      text("You can continue using Timeway while updating.", x1-wi+128, y1+50, wi*2-128, hi);
+      text("You can continue using "+Engine.APP_NAME+" while updating.", x1-wi+128, y1+50, wi*2-128, hi);
       // Process bar
       fill(0, 127);
       rect(x1-wi+128+10, y1+hi-15, (float(downloadPercent)/100.)*((wi*2)-128-30), 3);
@@ -4341,7 +4363,7 @@ class Engine {
       textFont(DEFAULT_FONT, 30);
       text("Extracting...", x1-wi+128, y1+10, wi*2-128, hi);
       textSize(20);
-      text("Timeway will restart in the new version shortly.", x1-wi+128, y1+50, wi*2-128, hi);
+      text(Engine.APP_NAME+" will restart in the new version shortly.", x1-wi+128, y1+50, wi*2-128, hi);
       
       downloadPercent = completionPercent.get();
       // Process bar
@@ -4375,14 +4397,14 @@ class Engine {
           if (f.exists()) {
             updatePhase = 0;
             //Process p = Runtime.getRuntime().exec(newVersion);
-            String cmd = "start \"Timeway\" /d \""+file.getDir(newVersion).replaceAll("/", "\\\\")+"\" \""+file.getFilename(newVersion)+"\"";
+            String cmd = "start \""+APP_NAME+"\" /d \""+file.getDir(newVersion).replaceAll("/", "\\\\")+"\" \""+file.getFilename(newVersion)+"\"";
             console.log(cmd);
             runOSCommand(cmd);
             delay(500);
             exit();
           }
           else {
-            console.warn("New version of Timeway could not be found, please close Timeway and open new version manually.");
+            console.warn("New version of "+APP_NAME+" could not be found, please close "+APP_NAME+" and open new version manually.");
             console.log("The new version should be somewhere in "+newVersion);
             updatePhase = 0;
           }
@@ -4422,7 +4444,8 @@ class Engine {
   public String getExeFilename() {
     switch (platform) {
       case WINDOWS:
-      return "Timeway.exe";
+      // TODO: Smarter finding filename?
+      return Engine.APP_NAME+".exe";
       case LINUX:
       console.bugWarn("getExeFilename(): Not implemented for Linux");
       break;
@@ -4439,7 +4462,7 @@ class Engine {
     // TODO: make restart work while in Processing (dev mode)
     switch (platform) {
       case WINDOWS:
-      cmd = "start \"Timeway\" /d \""+file.getMyDir().replaceAll("/", "\\\\")+"\" \""+getExeFilename()+"\"";
+      cmd = "start \""+APP_NAME+"\" /d \""+file.getMyDir().replaceAll("/", "\\\\")+"\" \""+getExeFilename()+"\"";
       break;
       case LINUX:
       console.bugWarn("restart(): Not implemented for Linux");
@@ -4565,7 +4588,7 @@ class Engine {
       throw new RuntimeException("/throwexception command");
     }
     else if (commandEquals(command, "/restart")) {
-      console.log("Restarting Timeway...");
+      console.log("Restarting "+APP_NAME+"...");
       restart();
     }
     else if (commandEquals(command, "/backgroundmusic") || commandEquals(command, "/backmusic")) {
@@ -4729,12 +4752,12 @@ class Engine {
       boolean update = true;
       try {
         update &= updateInfo.getString("type", "").equals("update");
-        update &= !updateInfo.getString("version", "").equals(this.VERSION);
+        update &= !updateInfo.getString("version", "").equals(VERSION);
         JSONArray compatibleVersion = updateInfo.getJSONArray("compatible-versions");
 
         boolean compatible = false;
         for (int i = 0; i < compatibleVersion.size(); i++) {
-          compatible |= compatibleVersion.getString(i).equals(this.VERSION);
+          compatible |= compatibleVersion.getString(i).equals(VERSION);
         }
         compatible |= updateInfo.getBoolean("update-if-incompatible", false);
         compatible |= updateInfo.getBoolean("update-if-uncompatible", false);    // Oops I made a typo at one point
@@ -5214,24 +5237,6 @@ class Engine {
     return false;
   }
 
-  public String getLastModified(String path) {
-    Path file = Paths.get(path);
-
-    if (!file.toFile().exists()) {
-      return null;
-    }
-
-    BasicFileAttributes attr;
-    try {
-      attr = Files.readAttributes(file, BasicFileAttributes.class);
-    }
-    catch (IOException e) {
-      console.warn("Couldn't get date modified time: "+e.getMessage());
-      return null;
-    }
-
-    return attr.lastModifiedTime().toString();
-  }
 
   public int calculateChecksum(PImage image) {
     // To prevent a really bad bug from happening, only actually calculate the checksum if the image is bigger than say,
@@ -5367,7 +5372,7 @@ class Engine {
         if (actualPath.length() > 0) {
       File f = new File(originalPath);
       String lastModified = "[null]";        // Test below automatically fails if there's no file found.
-      if (f.exists()) lastModified = getLastModified(originalPath);
+      if (f.exists()) lastModified = file.getLastModified(originalPath);
       
         // Check if the sound has been modified at all since last time before we load the original.
         if (cachedItem.getString("lastModified", "").equals(lastModified)) {
@@ -5433,7 +5438,7 @@ class Engine {
 
           File f = new File(originalPath);
           String lastModified = "[null]";
-          if (f.exists()) lastModified = getLastModified(originalPath);
+          if (f.exists()) lastModified = file.getLastModified(originalPath);
 
           if (cachedItem.getString("lastModified", "").equals(lastModified)) {
             console.info("tryLoadImageCache: No modifications");
@@ -5547,7 +5552,7 @@ class Engine {
     
     File f = new File(originalPath);
     if (f.exists()) {
-      properties.setString("lastModified", getLastModified(originalPath));
+      properties.setString("lastModified", file.getLastModified(originalPath));
       properties.setInt("size", image.width*image.height*4);
     }
     else {
@@ -6407,6 +6412,10 @@ public abstract class Screen {
     engine.transition = 1.0;
     engine.transitionDirection = RIGHT;   // Right by default, you can change it to left or anything else
     // right after calling startScreenTransition().
+  }
+  
+  protected boolean focused() {
+    return (engine.currScreen == this);
   }
 
   protected void endScreenAnimation() {
