@@ -3169,7 +3169,7 @@ class Engine {
     void selectOutput(String promptMessage) {
       if (true) {
         fileSelectSuccess = false;
-        app.selectOutput(promptMessage, "outputFileSelected");
+        selectOutputSketch(promptMessage, "outputFileSelected");
         selectingFile = true;
       }
       // TODO: Pixelrealm file chooser.
@@ -3436,7 +3436,7 @@ class Engine {
   
     public boolean atRootDir(String dirName) {
       // This will heavily depend on what os we're on.
-      if (platform == WINDOWS) {
+      if (isWindows()) {
   
         // for windows, let's do a dirty way of checking for 3 characters
         // such as C:/
@@ -4224,15 +4224,14 @@ class Engine {
   }
   
   public void runOSCommand(String cmd) {
-    switch (platform) {
-      case WINDOWS:
+    if (isWindows()) {
         String[] cmds = new String[1];
         cmds[0] = cmd;
         app.saveStrings(APPPATH+WINDOWS_CMD, cmds);
         delay(100);
         file.open(APPPATH+WINDOWS_CMD);
-      break;
-      default:
+    }
+    else {
       console.bugWarn("runOSCommand: support for os not implemented!");
     }
   }
@@ -4256,16 +4255,14 @@ class Engine {
       // java 8 package.
       int fileSize = 1;
       String plat = "";
-      switch (platform) {
-      case WINDOWS:
+      if (isWindows()) {
         plat = "windows-download-size";
-        break;
-      case LINUX:
+      }
+      else if (isLinux()) {
         plat = "linux-download-size";
-        break;
-      case MACOS:
+      }
+      else if (isMacOS()) {
         plat = "macos-download-size";
-        break;
       }
 
       // Get size
@@ -4380,16 +4377,14 @@ class Engine {
         delay(1000);
         if (updateError.length() == 0) {
           String exeloc = "";
-          switch (platform) {
-            case WINDOWS:
+          if (isWindows()) {
               exeloc = updateInfo.getString("windows-executable-location", "");
-              break;
-            case LINUX:
+          }
+          else if (isLinux()) {
               exeloc = updateInfo.getString("linux-executable-location", "");
-              break;
-            case MACOS:
+          }
+          else if (isMacOS()) {
               exeloc = updateInfo.getString("macos-executable-location", "");
-              break;
           }
           // TODO: move files from old version
           String newVersion = file.getMyDir()+exeloc;
@@ -4442,16 +4437,15 @@ class Engine {
   }
   
   public String getExeFilename() {
-    switch (platform) {
-      case WINDOWS:
+    if (isWindows()) {
       // TODO: Smarter finding filename?
       return Engine.APP_NAME+".exe";
-      case LINUX:
+    }
+    else if (isLinux()) {
       console.bugWarn("getExeFilename(): Not implemented for Linux");
-      break;
-      case MACOS:
+    }
+    else if (isMacOS()) {
       console.bugWarn("getExeFilename(): Not implemented for MacOS");
-      break;
     }
     return "";
   }
@@ -4460,14 +4454,14 @@ class Engine {
     String cmd = "";
     
     // TODO: make restart work while in Processing (dev mode)
-    switch (platform) {
-      case WINDOWS:
+    if (isWindows()) {
       cmd = "start \""+APP_NAME+"\" /d \""+file.getMyDir().replaceAll("/", "\\\\")+"\" \""+getExeFilename()+"\"";
-      break;
-      case LINUX:
+    }
+    else if (isLinux()) {
       console.bugWarn("restart(): Not implemented for Linux");
       return;
-      case MACOS:
+    }
+    else if (isMacOS()) {
       console.bugWarn("restart(): Not implemented for MacOS");
       return;
     }
@@ -4766,16 +4760,14 @@ class Engine {
 
         // Check if there's a release available for the platform Timeway is running on.
         String downloadURL = "";
-        switch (platform) {
-        case WINDOWS:
+        if (isWindows()) {
           downloadURL = updateInfo.getString("windows-download", "[none]");
-          break;
-        case LINUX:
+        }
+        else if (isLinux()) {
           downloadURL = updateInfo.getString("linux-download", "[none]");
-          break;
-        case MACOS:
+        }
+        else if (isMacOS()) {
           downloadURL = updateInfo.getString("macos-download", "[none]");
-          break;
         }
         update &= !(downloadURL.equals("[none]") || downloadURL.equals("null"));
 

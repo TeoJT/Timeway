@@ -4,8 +4,6 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.io.StringWriter;
 import java.io.PrintWriter;
-import com.jogamp.newt.opengl.GLWindow;
-
 
 /**
 *********** Timeway ************
@@ -26,7 +24,7 @@ final boolean sketch_FORCE_CRASH_SCREEN = false;
 void settings() {
   try {
     // TODO... we're disabling graphics acceleration?!
-    if (platform == LINUX)
+    if (isLinux())
       System.setProperty("jogl.disable.openglcore", "true");
     size(displayWidth, displayHeight, P2D);
     //size(750, 1200, P2D);
@@ -35,42 +33,17 @@ void settings() {
     
     // Ugly, I know. But we're at the lowest level point in the program, so ain't
     // much we can do.
-    PJOGL.setIcon("data/engine/img/icon.png");
+    final String iconLocation = "data/engine/img/icon.png";
+    File f = new File(sketchPath()+"/"+iconLocation);
+    if (f.exists()) {
+      setDesktopIcon(iconLocation);
+    }
   }
   catch (Exception e) {
     JOptionPane.showMessageDialog(null,"A fatal error has occurred: \n"+e.getMessage()+"\n"+e.getStackTrace(),Engine.APP_NAME,1);
   }
 }
 
-@Override
-protected PSurface initSurface() {
-    PSurface s = super.initSurface();
-    
-    // Windows is annoying with maximised screens
-    // So let's do this hack to make the screen maximised.
-    boolean maximise = true;
-    
-    if (maximise) {
-      if (platform == WINDOWS) {
-        try {
-          // Set maximised.
-          Object o = surface.getNative();
-          if (o instanceof GLWindow) {
-            GLWindow window = (GLWindow)o;
-            window.setMaximized(true, true);
-          }
-        }
-        catch (Exception e) {
-          sketch_openErrorLog(
-              "Maximise error. This is a bug."
-              );
-        }
-      }
-    }
-    s.setTitle(Engine.APP_NAME);
-    s.setResizable(true);
-    return s;
-}
 
 void sketch_openErrorLog(String mssg) {
   

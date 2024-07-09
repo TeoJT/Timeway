@@ -85,6 +85,10 @@ public class PixelRealmWithUI extends PixelRealm {
     IMG_BORDER_TILE = display.systemImages.get("menuborder").pimage;
 
     touchControlsEnabled = settings.getBoolean("touch_controls");
+    // Obviously needed on phones, regardless of settings.
+    if (isAndroid()) {
+      touchControlsEnabled = true;
+    }
 
     gui = new SpriteSystemPlaceholder(engine, engine.APPPATH+engine.PATH_SPRITES_ATTRIB+"gui/pixelrealm/");
     gui.suppressSpriteWarning = true;
@@ -1322,7 +1326,12 @@ public class PixelRealmWithUI extends PixelRealm {
       }
       else console.log("No arg provided!");
       return true;
-    } else return false;
+    } 
+    else if (engine.commandEquals(command, "/realmtemplate") || engine.commandEquals(command, "/realmtemplates") || engine.commandEquals(command, "/templates") || engine.commandEquals(command, "/template")) {
+      promptNewRealm();
+      return true;
+    }
+    else return false;
   }
 
 

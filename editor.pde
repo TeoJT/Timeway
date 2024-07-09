@@ -640,7 +640,7 @@ public class Editor extends Screen {
           // Bug fix: run once so that text element in GUI being at pos 0,0 isn't shown.
           runGUI();
           
-          if (platform == WINDOWS) {
+          if (isWindows()) {
             camera = new DCapture(engine);
           }
           else {
