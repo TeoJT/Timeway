@@ -1,0 +1,11 @@
+engine/img/explorer/create_shortcut_128.png
+engine/img/explorer/cross.png
+engine/img/explorer/doc_128.png
+engine/img/explorer/folder_128.png
+engine/img/explorer/image_128.png
+engine/img/explorer/media_128.png
+engine/img/explorer/new_entry_128.png
+engine/img/explorer/new_folder_128.png
+engine/img/explorer/timeway_entry_64.png
+engine/img/explorer/unknown_128.png
+engine/img/explorer/world_128.png

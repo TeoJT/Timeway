@@ -1,7 +1,5 @@
 import java.util.concurrent.atomic.AtomicBoolean;
-import javax.sound.midi.*;
 import java.io.BufferedInputStream;
-import processing.sound.*;
 import java.nio.file.attribute.*;
 import java.nio.file.*;
 import java.util.ListIterator;
@@ -67,7 +65,7 @@ public class PixelRealm extends Screen {
   public final static String REALM_TREE  = ".pixelrealm-tree";
   public final static String REALM_BGM   = ".pixelrealm-bgm";
   public final static String REALM_TURF  = ".pixelrealm-turf.json";
-  public final static String REALM_BGM_DEFAULT = "data/engine/music/pixelrealm_default_bgm.wav";
+  public final static String REALM_BGM_DEFAULT = "engine/music/pixelrealm_default_bgm.wav";
   
   // Defaults (Loaded on constructor)
   private PImage REALM_GRASS_DEFAULT;
@@ -99,7 +97,7 @@ public class PixelRealm extends Screen {
   public PImage REALM_GRASS_DEFAULT_LEGACY;
   public PImage REALM_SKY_DEFAULT_LEGACY;
   public PImage REALM_TREE_DEFAULT_LEGACY;
-  public final static String REALM_BGM_DEFAULT_LEGACY = "data/engine/music/pixelrealm_default_bgm_legacy.wav";
+  public final static String REALM_BGM_DEFAULT_LEGACY = "engine/music/pixelrealm_default_bgm_legacy.wav";
   
   // --- Global state and working variables (doesn't require per-realm states) ---
   private PGraphics scene;
@@ -2064,10 +2062,10 @@ public class PixelRealm extends Screen {
               String ext = file.getExt(path);
               
               if (ext.equals("gif")) {
-                Gif newGif = new Gif(app, path);
-                newGif.loop();
-                img = new RealmTexture();
-                img.setLarge(newGif);
+                //Gif newGif = new Gif(app, path);
+                //newGif.loop();
+                //img = new RealmTexture();
+                //img.setLarge(newGif);
               }
               
               // TODO: idk error check here
@@ -3365,25 +3363,28 @@ public class PixelRealm extends Screen {
       // Create pocket folder if it doesn't exist to prevent Timeway from sh*tting itself
       if (!file.exists(engine.APPPATH+engine.POCKET_PATH)) new File(engine.APPPATH+engine.POCKET_PATH).mkdir();
       
-      File[] pocketFolder = (new File(engine.APPPATH+engine.POCKET_PATH)).listFiles();
-      for (File f : pocketFolder) {
-        String path = f.getAbsolutePath();
-        
-        // Create actual file object
-        FileObject fileObject = createPRObject(path);
-        fileObject.load(somejson);
-        
-        // Create pocket item
-        PocketItem p = new PocketItem(f.getName(), fileObject, false);
-        p.syncd = true;
-        
-        // Add it to za lists
-        pocketItemNames.add(f.getName());
-        pocketObjects.add(fileObject);
-        globalHoldingObjectSlot = pockets.add(p);
-        
-        // Yeet it into the void so we can't see it.
-        throwItIntoTheVoid(fileObject);
+      // For now, we can't put stuff into our pockets in android mode.
+      if (!isAndroid()) {
+        File[] pocketFolder = (new File(engine.APPPATH+engine.POCKET_PATH)).listFiles();
+        for (File f : pocketFolder) {
+          String path = f.getAbsolutePath();
+          
+          // Create actual file object
+          FileObject fileObject = createPRObject(path);
+          fileObject.load(somejson);
+          
+          // Create pocket item
+          PocketItem p = new PocketItem(f.getName(), fileObject, false);
+          p.syncd = true;
+          
+          // Add it to za lists
+          pocketItemNames.add(f.getName());
+          pocketObjects.add(fileObject);
+          globalHoldingObjectSlot = pockets.add(p);
+          
+          // Yeet it into the void so we can't see it.
+          throwItIntoTheVoid(fileObject);
+        }
       }
       
       updateHoldingItem(globalHoldingObjectSlot);
@@ -3396,6 +3397,9 @@ public class PixelRealm extends Screen {
       && file.anyImageFile(stateDirectory+REALM_TREE) == null
       && file.anyImageFile(stateDirectory+REALM_TREE_LEGACY+"-1") == null
       && file.anyImageFile(stateDirectory+REALM_TREE+"-1") == null
+      
+      // TODO: unhidden files.
+      
       && file.anyMusicFile(stateDirectory+REALM_BGM) == null
       && file.exists(stateDirectory+REALM_TURF) == false;
     }
@@ -3408,20 +3412,25 @@ public class PixelRealm extends Screen {
       // Find out if the directory has a turf file.
       JSONObject jsonFile = null;
       
+      String realm_turf = REALM_TURF;
+      if (isAndroid() || !file.exists(dir+REALM_TURF)) {
+        realm_turf = file.unhide(REALM_TURF);
+      }
       
-      if (file.exists(dir+REALM_TURF)) {
+      if (file.exists(dir+realm_turf)) {
         try {
-          jsonFile = app.loadJSONObject(dir+REALM_TURF);
+          jsonFile = app.loadJSONObject(dir+realm_turf);
         }
         catch (RuntimeException e) {
           console.warn("There's an error in the folder's turf file (exception). Will now act as if the turf is new.");
-          file.backupMove(dir+REALM_TURF);
+          // TODO: Don't do that for template realms.
+          file.backupMove(dir+realm_turf);
           //saveRealmJson();
           return;
         }
         if (jsonFile == null) {
           console.warn("There's an error in the folder's turf file (null). Will now act as if the turf is new.");
-          file.backupMove(dir+REALM_TURF);
+          file.backupMove(dir+realm_turf);
           //saveRealmJson();
           return;
         }
@@ -3455,7 +3464,7 @@ public class PixelRealm extends Screen {
         else {
           // TODO: never experienced this before but this will prolly break.
           console.log("Incompatible turf file, backing up old and creating new turf.");
-          file.backupMove(dir+REALM_TURF);
+          file.backupMove(dir+realm_turf);
           issueRefresherCommand(REFRESHER_PAUSE);
           saveRealmJson();
         }
@@ -3901,8 +3910,19 @@ public class PixelRealm extends Screen {
             incrementMemUsage(file.getImageUncompressedSize(path));
             return loadImage(path);
           }
-          else if (file.getExt(path).equals("wav"))
-            return new SoundFile(engine.app, stateDirectory+path);
+          //else if (file.getExt(path).equals("wav"))
+          //  return new SoundFile(engine.app, stateDirectory+path);
+        }
+        
+        // Alt version without the hidden file.
+        String unhidden = file.unhide(path);
+        if (file.exists(unhidden)) {
+          if (file.getExt(unhidden).equals("png") || file.getExt(unhidden).equals("gif")) {
+            incrementMemUsage(file.getImageUncompressedSize(unhidden));
+            return loadImage(unhidden);
+          }
+          //else if (file.getExt(path).equals("wav"))
+          //  return new SoundFile(engine.app, stateDirectory+path);
         }
       }
       return defaultFile;
@@ -3943,7 +3963,7 @@ public class PixelRealm extends Screen {
   
       if (file.exists(DEFAULT_SKY+".gif")) {
         img_sky = new RealmTexture();
-        img_sky.setLarge(((Gif)getRealmFile(DEFAULT_SKY, dir+REALM_SKY+".gif")).getPImages());
+        //img_sky.setLarge(((Gif)getRealmFile(DEFAULT_SKY, dir+REALM_SKY+".gif")).getPImages());
         //if (img_sky.get().width != 1500)
         //  console.warn("Width of "+REALM_SKY+" is "+str(img_sky.get().width)+"px, should be 1500px for best visual results!");
       }
@@ -4007,6 +4027,12 @@ public class PixelRealm extends Screen {
         if (file.exists(dir+REALM_BGM+ext)) {
           found = true;
           musicPath = dir+REALM_BGM+ext;
+        }
+        
+        // One for the unhidden files too since android is a thing we're supporting now (it's a long story)
+        if (file.exists(file.unhide(dir+REALM_BGM+ext))) {
+          found = true;
+          musicPath = file.unhide(dir+REALM_BGM+ext);
         }
       }
   
@@ -5024,7 +5050,7 @@ public class PixelRealm extends Screen {
       bumpBack();
       return;
     }
-    if (file.directorify(to).equals(file.directorify(engine.APPPATH+engine.CACHE_PATH))) {
+    if (file.directorify(to).equals(file.directorify(engine.CACHE_PATH))) {
       prompt("Nice try", "You can't go into "+Engine.APP_NAME+"'s cache directory. Doing so would cause a paradox.", 20);
       bumpBack();
       return;

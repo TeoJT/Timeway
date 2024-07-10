@@ -1,0 +1,3 @@
+engine/img/pixelrealm/default-legacy/pixelrealm-grass-legacy.png
+engine/img/pixelrealm/default-legacy/pixelrealm-sky-legacy.png
+engine/img/pixelrealm/default-legacy/pixelrealm-terrain_object-legacy.png

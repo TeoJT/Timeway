@@ -1,0 +1,4 @@
+engine/spritedata/gui/benchmark/
+engine/spritedata/gui/editor/
+engine/spritedata/gui/explorer/
+engine/spritedata/gui/pixelrealm/

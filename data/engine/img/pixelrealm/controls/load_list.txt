@@ -1,0 +1,9 @@
+engine/img/pixelrealm/controls/touch_a.png
+engine/img/pixelrealm/controls/touch_b.png
+engine/img/pixelrealm/controls/touch_forward.png
+engine/img/pixelrealm/controls/touch_home.png
+engine/img/pixelrealm/controls/touch_jump.png
+engine/img/pixelrealm/controls/touch_left.png
+engine/img/pixelrealm/controls/touch_menu.png
+engine/img/pixelrealm/controls/touch_prevrealm.png
+engine/img/pixelrealm/controls/touch_right.png

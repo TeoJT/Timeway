@@ -1,0 +1,5 @@
+engine/img/pixelrealm/world/nightsky0.png
+engine/img/pixelrealm/world/nightsky1.png
+engine/img/pixelrealm/world/nightsky2.png
+engine/img/pixelrealm/world/nightsky3.png
+engine/img/pixelrealm/world/nightsky4.png

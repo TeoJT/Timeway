@@ -1,0 +1,4 @@
+engine/img/pixelrealm/default/pixelrealm-grass.png
+engine/img/pixelrealm/default/pixelrealm-sky.png
+engine/img/pixelrealm/default/pixelrealm-terrain_object.png
+engine/img/pixelrealm/default/water.png

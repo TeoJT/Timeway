@@ -1,0 +1,15 @@
+engine/spritedata/gui/editor/back.json
+engine/spritedata/gui/editor/bigger_font.json
+engine/spritedata/gui/editor/camera.json
+engine/spritedata/gui/editor/camera_back.json
+engine/spritedata/gui/editor/camera_flip.json
+engine/spritedata/gui/editor/copy.json
+engine/spritedata/gui/editor/fonts.json
+engine/spritedata/gui/editor/font_color.json
+engine/spritedata/gui/editor/font_size.json
+engine/spritedata/gui/editor/line_1.json
+engine/spritedata/gui/editor/line_2.json
+engine/spritedata/gui/editor/line_3.json
+engine/spritedata/gui/editor/paste.json
+engine/spritedata/gui/editor/smaller_font.json
+engine/spritedata/gui/editor/snap.json

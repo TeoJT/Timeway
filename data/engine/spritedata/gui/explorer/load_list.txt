@@ -1,0 +1,4 @@
+engine/spritedata/gui/explorer/cross.json
+engine/spritedata/gui/explorer/new_entry.json
+engine/spritedata/gui/explorer/new_folder.json
+engine/spritedata/gui/explorer/world.json

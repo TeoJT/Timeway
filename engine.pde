@@ -6,14 +6,6 @@ import java.io.FileNotFoundException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.io.FileOutputStream;
-import java.awt.event.MouseWheelEvent;
-import java.awt.event.MouseWheelListener;
-import java.awt.datatransfer.Clipboard;
-import java.awt.datatransfer.Transferable;
-import java.awt.datatransfer.DataFlavor;
-import java.awt.datatransfer.UnsupportedFlavorException;
-import java.awt.Toolkit;
-import processing.video.Movie;
 import org.freedesktop.gstreamer.*;
 import java.util.TreeSet;
 import java.io.InputStream;
@@ -22,11 +14,6 @@ import java.net.URL;
 import java.util.zip.*;
 import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
-import java.awt.datatransfer.StringSelection;
-import java.awt.Toolkit;
-import java.awt.datatransfer.Clipboard;
-import gifAnimation.*;
-import javax.sound.sampled.*;
 import java.io.ByteArrayInputStream;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -37,12 +24,15 @@ import java.nio.file.Paths;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.nio.file.*;
-import java.awt.Desktop;
 import java.nio.file.attribute.*;
 import java.util.ArrayList;
 import java.util.List;
 import com.sun.jna.Native;
 import com.sun.jna.Structure;
+import processing.video.Movie;
+import processing.sound.*;
+import gifAnimation.*;
+//import cassette.audiofiles.*;
 
 // Timeway's engine code.
 // TODO: add documentation lmao.
@@ -65,22 +55,23 @@ class Engine {
   // a, b, and c can go well over 10, 100, it can be any positive integer.
 
   // Paths
-  public final String CONSOLE_FONT        = "data/engine/font/SourceCodePro-Regular.ttf";
-  public final String IMG_PATH            = "data/engine/img/";
-  public final String FONT_PATH           = "data/engine/font/";
-  public final String DEFAULT_FONT_PATH   = "data/engine/font/Typewriter.vlw";
-  public final String SHADER_PATH         = "data/engine/shaders/";
-  public final String SOUND_PATH          = "data/engine/sounds/";
-  public final String CONFIG_PATH         = "data/config.json";
-  public final String KEYBIND_PATH        = "data/keybindings.json";
-  public final String STATS_FILE          = "data/stats.json";
-  public final String PATH_SPRITES_ATTRIB = "data/engine/spritedata/";
-  public final String GLITCHED_REALM      = "data/engine/default/glitched_realm/";  // TODO: Remove glitched realm
-  public final String CACHE_INFO          = "data/cache/cache_info.json";
-  public final String CACHE_PATH          = "data/cache/";
-  public final String WINDOWS_CMD         = "data/engine/shell/mywindowscommand.bat";
-  public final String POCKET_PATH         = "data/pocket/";
-  public final String TEMPLATES_PATH      = "data/engine/realmtemplates/";
+  public final String CONSOLE_FONT        = "engine/font/SourceCodePro-Regular.ttf";
+  public final String IMG_PATH            = "engine/img/";
+  public final String FONT_PATH           = "engine/font/";
+  public final String DEFAULT_FONT_PATH   = "engine/font/Typewriter.vlw";
+  public final String SHADER_PATH         = "engine/shaders/";
+  public final String SOUND_PATH          = "engine/sounds/";
+  public final String CONFIG_PATH         = "config.json";
+  public final String KEYBIND_PATH        = "keybindings.json";
+  public final String STATS_FILE          = "stats.json";
+  public final String PATH_SPRITES_ATTRIB = "engine/spritedata/";
+  public final String GLITCHED_REALM      = "engine/default/glitched_realm/";  // TODO: Remove glitched realm
+  public final String CACHE_INFO          = "cache_info.json";
+  public       String CACHE_PATH          = "cache/";
+  public final String WINDOWS_CMD         = "engine/shell/mywindowscommand.bat";
+  public final String POCKET_PATH         = "pocket/";
+  public final String TEMPLATES_PATH      = "engine/realmtemplates/";
+  public final String EVERYTHING_TXT_PATH = "engine/everything.txt";
   public       String DEFAULT_UPDATE_PATH = "";  // Set up by setup()
 
   // Static constants
@@ -105,7 +96,7 @@ class Engine {
   //**************ENGINE SETUP CODE AND VARIABLES****************
   // Core stuff
   public PApplet app;
-  public String APPPATH = sketchPath().replace('\\', '/')+"/";
+  public String APPPATH = sketchPath().replace('\\', '/')+"/data/";
   
   // Modules
   public Console console;
@@ -241,8 +232,17 @@ class Engine {
       
       public SettingsModule() {
         loadDefaultSettings();
-        settings = loadConfig(APPPATH+CONFIG_PATH, defaultSettings);
-        keybindings = loadConfig(APPPATH+KEYBIND_PATH, defaultKeybindings);
+        if (!isAndroid()) {
+          // Normal you expect it.
+          settings = loadConfig(APPPATH+CONFIG_PATH, defaultSettings);
+          keybindings = loadConfig(APPPATH+KEYBIND_PATH, defaultKeybindings);
+        }
+        else {
+          // However, in android, we're not allowed to write to the usual place.
+          // Android gives you a specific variable dir to write to, so we must use that instead.
+          settings = loadConfig(getAndroidWriteableDir()+CONFIG_PATH, defaultSettings);
+          keybindings = loadConfig(getAndroidWriteableDir()+KEYBIND_PATH, defaultKeybindings);
+        }
       }
       
       public char getKeybinding(String keybindName) {
@@ -315,7 +315,12 @@ class Engine {
         defaultSettings.putIfAbsent("lowBatteryPercent", 50.0);
         defaultSettings.putIfAbsent("autoScaleDown", false);
         defaultSettings.putIfAbsent("defaultSystemFont", "Typewriter");
-        defaultSettings.putIfAbsent("homeDirectory", System.getProperty("user.home").replace('\\', '/'));
+        if (isAndroid()) {
+          defaultSettings.putIfAbsent("homeDirectory", "/storage/emulated/0/");
+        }
+        else {
+          defaultSettings.putIfAbsent("homeDirectory", System.getProperty("user.home").replace('\\', '/'));
+        }
         defaultSettings.putIfAbsent("forcePowerMode", "NONE");
         defaultSettings.putIfAbsent("volumeNormal", 1.0);
         defaultSettings.putIfAbsent("volumeQuiet", 0.0);
@@ -1182,6 +1187,7 @@ class Engine {
     }
     
     public void loadShader(String path) {
+      // Ignore the warning in android cus we can't check if our files exist.
       if (!file.exists(path)) {
         console.bugWarn("loadShader: "+path+" doesn't exist.");
         return;
@@ -1194,6 +1200,7 @@ class Engine {
       // fragment shader.
       if (ext.equals("vert")) {
         String fragPath = file.getDir(path)+"/"+name+".frag";
+        // Again can't check if file exists on android, so just trust that it's there.
         if (file.exists(fragPath)) {
           PShader s = app.loadShader(fragPath, path);
           PShaderEntry shaderentry = new PShaderEntry(s, path);
@@ -2220,10 +2227,9 @@ class Engine {
 
 
 
-
   public class AudioModule {
-    private Music streamMusic;
-    private Music streamMusicFadeTo;
+    private Music streamerMusic;
+    private Music streamerMusicFadeTo;
     
     private float musicFadeOut = 1.;
     public final float MUSIC_FADE_SPEED = 0.95;
@@ -2242,9 +2248,11 @@ class Engine {
     public final String MUSIC_CACHE_FILE = "music_cache.json";
     public final int MAX_MUSIC_CACHE_SIZE_KB = 1024*256;  // 256 MB
     public final String[] FORCE_CACHE_MUSIC = {
-      "data/engine/music/pixelrealm_default_bgm.wav",
-      "data/engine/music/pixelrealm_default_bgm_legacy.wav"
+      "engine/music/pixelrealm_default_bgm.wav",
+      "engine/music/pixelrealm_default_bgm_legacy.wav"
     };
+    // For when porting to other platforms which don't support gstreamer (*ahem* android *ahem*) 
+    public boolean DISABLE_GSTREAMER = false;
     
     
     // So that we can use both SoundFile and Movie types without complicated code
@@ -2331,7 +2339,8 @@ class Engine {
         else {
           //console.log("Stream music mode");
           mode = STREAM;
-          streamMusic = new Movie(app, path);
+          if (!DISABLE_GSTREAMER)
+            streamMusic = new Movie(app, path);
         }
       }
       
@@ -2339,50 +2348,50 @@ class Engine {
         if (mode == CACHED) {
           if (!cachedMusic.isPlaying()) cachedMusic.play(); 
         } 
-        else if (mode == STREAM) streamMusic.play();
+        else if (mode == STREAM && !DISABLE_GSTREAMER) streamMusic.play();
       }
       
       public void stop() {
-        if (mode == CACHED) cachedMusic.stop(); else if (mode == STREAM) streamMusic.stop();
+        if (mode == CACHED) cachedMusic.stop(); else if (mode == STREAM && !DISABLE_GSTREAMER) streamMusic.stop();
       }
       
       public boolean available() {
         if (mode == CACHED)
           return true;
-        else if (mode == STREAM) return streamMusic.available();
+        else if (mode == STREAM && !DISABLE_GSTREAMER) return streamMusic.available();
         return true;
       }
       
       public void read() {
-        if (mode == STREAM) streamMusic.read();
+        if (mode == STREAM && !DISABLE_GSTREAMER) streamMusic.read();
       }
       
       public void volume(float vol) {
         volume = vol;
-        if (mode == STREAM) streamMusic.volume(vol);
+        if (mode == STREAM && !DISABLE_GSTREAMER) streamMusic.volume(vol);
       }
       
       public float duration() {
-        if (mode == CACHED) return cachedMusic.duration(); else if (mode == STREAM) return streamMusic.duration();
+        if (mode == CACHED) return cachedMusic.duration(); else if (mode == STREAM && !DISABLE_GSTREAMER) return streamMusic.duration();
         return 0.;
       }
       
       public float time() {
-        if (mode == CACHED) return cachedMusic.position(); else if (mode == STREAM) return streamMusic.time();
+        if (mode == CACHED) return cachedMusic.position(); else if (mode == STREAM && !DISABLE_GSTREAMER) return streamMusic.time();
         return 0.;
       }
       
       public void jump(float pos) {
-        if (mode == CACHED) cachedMusic.jump(pos); else if (mode == STREAM) streamMusic.jump(pos);
+        if (mode == CACHED) cachedMusic.jump(pos); else if (mode == STREAM && !DISABLE_GSTREAMER) streamMusic.jump(pos);
       }
       
       public boolean isPlaying() {
-        if (mode == CACHED) return cachedMusic.isPlaying(); else if (mode == STREAM) return streamMusic.isPlaying();
+        if (mode == CACHED) return cachedMusic.isPlaying(); else if (mode == STREAM && !DISABLE_GSTREAMER) return streamMusic.isPlaying();
         return true;
       }
       
       public void setReady() {
-        if (mode == STREAM) streamMusic.playbin.setState(org.freedesktop.gstreamer.State.READY); 
+        //if (mode == STREAM) streamMusic.playbin.setState(org.freedesktop.gstreamer.State.READY); 
       }
       
       public void playbinSetVolume(float vol) {
@@ -2390,7 +2399,7 @@ class Engine {
         if (mode == CACHED) {
           cachedMusic.amp(vol);
         }
-        else if (mode == STREAM) {
+        else if (mode == STREAM && !DISABLE_GSTREAMER) {
           streamMusic.playbin.setVolume(vol*masterVolume);
           streamMusic.playbin.getState();
         }
@@ -2400,22 +2409,24 @@ class Engine {
       public void switchMode() {
         if (!loadingMusic() && mode != STREAM) {
           
-          streamMusic = new Movie(app, originalPath);
+          if (!DISABLE_GSTREAMER) {
+            streamMusic = new Movie(app, originalPath);
           
-          // Transfer cachedMusic properties over to streammusic
-          if (streamMusic != null) {
-            streamMusic.volume(this.volume);
-            
-            // If cachedmusic exists then cachedmusic.isplaying = streammusic.isplaying
-            // Otherwise mode must be NONE so we just kickstart the streamMusic.
-            if (cachedMusic != null) {
-              if (cachedMusic.isPlaying())
-                streamMusic.play();
-              streamMusic.jump(cachedMusic.position());
+            // Transfer cachedMusic properties over to streammusic
+            if (streamMusic != null) {
+              streamMusic.volume(this.volume);
+              
+              // If cachedmusic exists then cachedmusic.isplaying = streammusic.isplaying
+              // Otherwise mode must be NONE so we just kickstart the streamMusic.
+              if (cachedMusic != null) {
+                if (cachedMusic.isPlaying())
+                  streamMusic.play();
+                streamMusic.jump(cachedMusic.position());
+              }
+              else streamMusic.play();
+              
+              if (mode == CACHED) cachedMusic.stop();
             }
-            else streamMusic.play();
-            
-            if (mode == CACHED) cachedMusic.stop();
           }
           
           mode = STREAM;
@@ -2424,6 +2435,11 @@ class Engine {
     }
     
     public AudioModule() {
+      // For now.
+      if (isAndroid()) {
+        DISABLE_GSTREAMER = true;
+      }
+      
       sounds = new HashMap<String, SoundFile>();
       cachedMusicMap = new HashMap<String, SoundFile>();
       VOLUME_NORMAL = settings.getFloat("volumeNormal");
@@ -2460,34 +2476,36 @@ class Engine {
       public int priority = 0;
     }
     
+    @SuppressWarnings("unused")
     public void saveAsWav(SoundFile s, int sampleRate, String path) {
-      AudioSample a = (AudioSample)s;
+      //AudioSample a = (AudioSample)s;
       
-      // Only allow a maximum of a minute of audio data to be loaded
-      int size = min(a.frames()*a.channels(), 60*a.channels()*sampleRate);
-      float[] data = new float[size];
-      a.read(data);
+      //// Only allow a maximum of a minute of audio data to be loaded
+      //int size = min(a.frames()*a.channels(), 60*a.channels()*sampleRate);
+      //float[] data = new float[size];
+      //a.read(data);
       
-      int bitDepth = 16;
-      int numChannels = a.channels();
+      //int bitDepth = 16;
+      //int numChannels = a.channels();
 
-      AudioFormat audioFormat = new AudioFormat(sampleRate, bitDepth, numChannels, true, false);
-      byte[] audioData = floatArrayToByteArray(data, bitDepth);
+      //AudioFormat audioFormat = new AudioFormat(sampleRate, bitDepth, numChannels, true, false);
+      //byte[] audioData = floatArrayToByteArray(data, bitDepth);
       
-      try {
-          ByteArrayInputStream byteArrayInputStream = new ByteArrayInputStream(audioData);
-          AudioInputStream audioInputStream = new AudioInputStream(byteArrayInputStream, audioFormat, data.length / numChannels);
-          AudioSystem.write(audioInputStream, AudioFileFormat.Type.WAVE, new File(path));
-      } catch (IOException e) {
-          e.printStackTrace();
-      }
+      //try {
+      //    ByteArrayInputStream byteArrayInputStream = new ByteArrayInputStream(audioData);
+      //    AudioInputStream audioInputStream = new AudioInputStream(byteArrayInputStream, audioFormat, data.length / numChannels);
+      //    AudioSystem.write(audioInputStream, AudioFileFormat.Type.WAVE, new File(path));
+      //} catch (IOException e) {
+      //    e.printStackTrace();
+      //}
       
-      updateMusicCache(path);
+      //updateMusicCache(path);
       
-      // TODO: User may close application midway while creating wav which might end up
-      // in Timeway not loading.
+      //// TODO: User may close application midway while creating wav which might end up
+      //// in Timeway not loading.
     }
 
+    @SuppressWarnings("unused")
     private byte[] floatArrayToByteArray(float[] floatArray, int bitDepth) {
         ByteBuffer byteBuffer = ByteBuffer.allocate(floatArray.length * (bitDepth / 8));
         ByteOrder order = ByteOrder.LITTLE_ENDIAN;
@@ -2527,7 +2545,7 @@ class Engine {
       if (CACHE_MUSIC && cacheTime < MAX_CACHE_TIME) {
         
         boolean cacheLoaded = true;
-        String cacheFilePath = APPPATH+CACHE_PATH+MUSIC_CACHE_FILE;
+        String cacheFilePath = CACHE_PATH+MUSIC_CACHE_FILE;
         JSONArray jsonarray = null;
         File f = new File(cacheFilePath);
         if (f.exists()) {
@@ -2698,7 +2716,7 @@ class Engine {
     // to run this in a seperate thread otherwise you're going to experience stalling BIIIIIG time.
     public void loadMusicCache() {
       if (CACHE_MUSIC) {
-        String cacheFilePath = APPPATH+CACHE_PATH+MUSIC_CACHE_FILE;
+        String cacheFilePath = CACHE_PATH+MUSIC_CACHE_FILE;
         File f = new File(cacheFilePath);
         if (f.exists()) {
           JSONArray jsonarray;
@@ -2886,7 +2904,7 @@ class Engine {
     private float masterVolume = 1.;
     public void setMasterVolume(float vol) {
       masterVolume = vol;
-      Sound.volume(vol);
+      //Sound.volume(vol);
     }
   
   
@@ -2913,9 +2931,11 @@ class Engine {
         musicReady.set(false);
         Thread t1 = new Thread(new Runnable() {
           public void run() {
-            Movie loadGstreamer = new Movie(app, path);
-            loadGstreamer.play();
-            loadGstreamer.stop();
+            if (!DISABLE_GSTREAMER) {
+              Movie loadGstreamer = new Movie(app, path);
+              loadGstreamer.play();
+              loadGstreamer.stop();
+            }
     
             musicReady.set(true);
           }
@@ -2930,10 +2950,10 @@ class Engine {
         //if ((loadingMusic() && !CACHE_MUSIC) == false) {
           Thread t1 = new Thread(new Runnable() {
           public void run() {
-            streamMusic = loadNewMusic(path);
+            streamerMusic = loadNewMusic(path);
     
-            if (streamMusic != null)
-              streamMusic.play();
+            if (streamerMusic != null)
+              streamerMusic.play();
             }
           }
           );
@@ -2971,13 +2991,13 @@ class Engine {
     }
   
     public void stopMusic() {
-      if (streamMusic != null) {
-        streamMusic.stop();
-        streamMusic = null;
+      if (streamerMusic != null) {
+        streamerMusic.stop();
+        streamerMusic = null;
       }
-      if (streamMusicFadeTo != null) {
-        streamMusicFadeTo.stop();
-        streamMusicFadeTo = null;
+      if (streamerMusicFadeTo != null) {
+        streamerMusicFadeTo.stop();
+        streamerMusicFadeTo = null;
       }
     }
   
@@ -2990,22 +3010,22 @@ class Engine {
   
       // Temporary fix
       if (musicFadeOut < 1.) {
-        if (streamMusicFadeTo != null) {
-          streamMusicFadeTo.stop();
+        if (streamerMusicFadeTo != null) {
+          streamerMusicFadeTo.stop();
         }
       }
   
       // If no music is currently playing, don't bother fading out the music, just
       // start the music as normal.
-      if (streamMusic == null || isLoading()) {
+      if (streamerMusic == null || isLoading()) {
         streamMusic(path);
         return;
       }
       
-      streamMusicFadeTo = loadNewMusic(path);
-      if (streamMusicFadeTo != null) {
-        streamMusicFadeTo.volume(0.);
-        streamMusicFadeTo.setReady();
+      streamerMusicFadeTo = loadNewMusic(path);
+      if (streamerMusicFadeTo != null) {
+        streamerMusicFadeTo.volume(0.);
+        streamerMusicFadeTo.setReady();
       }
       musicFadeOut = 0.99;
     }
@@ -3013,9 +3033,9 @@ class Engine {
     // TODO: Doesn't work totally.
     public void fadeAndStopMusic() {
       if (musicFadeOut < 1.) {
-        if (streamMusicFadeTo != null) {
-          streamMusicFadeTo.stop();
-          streamMusicFadeTo = null;
+        if (streamerMusicFadeTo != null) {
+          streamerMusicFadeTo.stop();
+          streamerMusicFadeTo = null;
         }
         return;
       }
@@ -3027,8 +3047,8 @@ class Engine {
       // Once gstreamer has loaded up, begin playing the music we actually want to play.
       if (reloadMusic && !loadingMusic()) {
         if (CACHE_MUSIC) {
-          if (streamMusic != null) streamMusic.switchMode();
-          if (streamMusicFadeTo != null) streamMusicFadeTo.switchMode();
+          if (streamerMusic != null) streamerMusic.switchMode();
+          if (streamerMusicFadeTo != null) streamerMusicFadeTo.switchMode();
           // We no longer need the cached music map. Just to be safe, don't null it
           // in case of nullpointerexception, but create a new one to clear the cache
           // stored in it
@@ -3050,47 +3070,47 @@ class Engine {
         if (musicFadeOut > 0.005 && !useNewLibraryVersion) {
           // Fade the old music out
           float vol = musicFadeOut *= PApplet.pow(MUSIC_FADE_SPEED, display.getDelta());
-          if (streamMusic != null)
-            streamMusic.playbinSetVolume(vol);
+          if (streamerMusic != null)
+            streamerMusic.playbinSetVolume(vol);
 
 
           // Fade the new music in.
-          if (streamMusicFadeTo != null) {
-            streamMusicFadeTo.play();
-            streamMusicFadeTo.volume((1.-vol)*masterVolume);
+          if (streamerMusicFadeTo != null) {
+            streamerMusicFadeTo.play();
+            streamerMusicFadeTo.volume((1.-vol)*masterVolume);
           } 
           
           
           //else 
           //  console.bugWarnOnce("streamMusicFadeTo shouldn't be null here.");
         } else {
-          if (streamMusic != null)
-            streamMusic.stop();
-          if (streamMusicFadeTo != null) streamMusic = streamMusicFadeTo;
-          if (useNewLibraryVersion) streamMusic.play();
+          if (streamerMusic != null)
+            streamerMusic.stop();
+          if (streamerMusicFadeTo != null) streamerMusic = streamerMusicFadeTo;
+          if (useNewLibraryVersion) streamerMusic.play();
           musicFadeOut = 1.;
         }
       }
 
 
 
-      if (streamMusic != null) {
+      if (streamerMusic != null) {
         // Don't wanna change the volume on cached music
         if (!loadingMusic())
-          streamMusic.volume(masterVolume);
+          streamerMusic.volume(masterVolume);
           
-        if (streamMusic.available() == true) {
-          streamMusic.read();
+        if (streamerMusic.available() == true) {
+          streamerMusic.read();
         }
         float error = 0.1;
 
         // PERFORMANCE ISSUE: streamMusic.time()
         
         // If the music has finished playing, jump to beginning to play again.
-        if (streamMusic.time() >= streamMusic.duration()-error) {
-          streamMusic.jump(0.);
-          if (!streamMusic.isPlaying()) {
-            streamMusic.play();
+        if (streamerMusic.time() >= streamerMusic.duration()-error) {
+          streamerMusic.jump(0.);
+          if (!streamerMusic.isPlaying()) {
+            streamerMusic.play();
           }
         }
       }
@@ -3145,13 +3165,28 @@ class Engine {
         File f = new File(DEFAULT_DIR);
         if (!f.exists()) {
           console.warn("homeDirectory "+DEFAULT_DIR+" doesn't exist! You should check your config file.");
-          DEFAULT_DIR = System.getProperty("user.home").replace('\\', '/');
+          
+          if (isAndroid()) {
+            DEFAULT_DIR = "/storage/emulated/0/";
+          }
+          else {
+            DEFAULT_DIR = System.getProperty("user.home").replace('\\', '/');
+          }
         }
         currentDir  = DEFAULT_DIR;
       }
       
       if (DEFAULT_DIR.length() > 0)
         if (DEFAULT_DIR.charAt(DEFAULT_DIR.length()-1) == '/')  DEFAULT_DIR = DEFAULT_DIR.substring(0, DEFAULT_DIR.length()-1);
+        
+      // Cus we can't get any information on anything about our files, we'll need to load a list which contains everything
+      // so that exists() works.
+      if (isAndroid()) {
+        String[] strings = loadStrings(EVERYTHING_TXT_PATH);
+        for (String path : strings) {
+          everything.add(path.trim());
+        }
+      }
     }
     
     
@@ -3163,7 +3198,7 @@ class Engine {
     public boolean fileSelectSuccess = false;
     public boolean selectingFile = false;
     public Object objectToSave;
-    public 
+    private HashSet<String> everything = new HashSet<String>();
     
     
     void selectOutput(String promptMessage) {
@@ -3251,7 +3286,7 @@ class Engine {
   
     public void backupMove(String path) {
       String name = getFilename(path);
-      String newPath = APPPATH+CACHE_PATH+"_"+name+"_"+getLastModified(path).replaceAll("[\\.:]", "-")+".txt";
+      String newPath = CACHE_PATH+"_"+name+"_"+getLastModified(path).replaceAll("[\\.:]", "-")+".txt";
       if (!mv(path, newPath)) {
         console.log(newPath);
         // If a file doesn't back up, it's not the end of the world.
@@ -3269,6 +3304,11 @@ class Engine {
     
     
     public String getLastModified(String path) {
+      // For now, nothing we can do
+      if (isAndroid()) {
+        return "000000";
+      }
+      
       Path file = Paths.get(path);
   
       if (!file.toFile().exists()) {
@@ -3281,7 +3321,7 @@ class Engine {
       }
       catch (IOException e) {
         console.warn("Couldn't get date modified time: "+e.getMessage());
-        return null;
+        return "";
       }
   
       return attr.lastModifiedTime().toString();
@@ -3331,7 +3371,7 @@ class Engine {
         return str;
       }
       catch (StringIndexOutOfBoundsException e) {
-        return path;
+        return "";
       }
     }
     
@@ -3374,8 +3414,8 @@ class Engine {
     
     // Yes.
     public boolean exists(String path) {
-      File f = new File(path);
-      return f.exists();
+      boolean exists = (new File(path)).exists();
+      return isAndroid() ? exists || everything.contains(path) : exists;
     }
     
     public boolean isImage(String path) {
@@ -3514,12 +3554,24 @@ class Engine {
   
     // A function of conditions for a file to be hidden,
     // for now files are only hidden if they have '.' at the front.
-    private boolean fileHidden(String filename) {
+    public boolean fileHidden(String filename) {
       if (filename.length() > 0) {
         if      (filename.charAt(0) == '.') return true;
         else if (filename.equals("desktop.ini")) return true;
       }
       return false;
+    }
+    
+    public String unhide(String original) {
+      String name = getFilename(original);
+      String dir  = getDir(original);
+      
+      if (dir.length() > 1) {
+        dir = directorify(dir);
+      }
+      
+      if (name.charAt(0) == '.') name = name.substring(1);
+      return dir+name;
     }
   
     // Opens the dir and populates the currentFiles list.
@@ -3644,25 +3696,7 @@ class Engine {
       // TODO: use xdg-open in linux.
       // TODO: figure out how to open apps with MacOS.
       else {
-        if (Desktop.isDesktopSupported()) {
-          // Open desktop app with this snippet of code that I stole.
-          try {
-            Desktop desktop = Desktop.getDesktop();
-            File myFile = new File(filePath);
-            try {
-              desktop.open(myFile);
-            }
-            catch (IllegalArgumentException fileNotFound) {
-              console.log("This file or dir no longer exists!");
-              refreshDir();
-            }
-          } 
-          catch (IOException ex) {
-            console.warn("Couldn't open file IOException");
-          }
-        } else {
-          console.warn("Couldn't open file, isDesktopSupported=false.");
-        }
+        desktopOpen(filePath);
       }
     }
   
@@ -3671,34 +3705,7 @@ class Engine {
       if (file.isDirectory()) {
         openDirInNewThread(path);
       } else {
-        // Stuff to open with our own app (timeway)
-        if (file.fileext.equals(ENTRY_EXTENSION)) {
-          currScreen.requestScreen(new Editor(engine, path));
-        }
-  
-        // Anything else which is opened by a windows app or something.
-        // TODO: use xdg-open in linux.
-        // TODO: figure out how to open apps with MacOS.
-        else {
-          if (Desktop.isDesktopSupported()) {
-            // Open desktop app with this snippet of code that I stole.
-            try {
-              Desktop desktop = Desktop.getDesktop();
-              File myFile = new File(path);
-              try {
-                desktop.open(myFile);
-              }
-              catch (IllegalArgumentException fileNotFound) {
-                console.log("This file or dir no longer exists!");
-                refreshDir();
-              }
-            } 
-            catch (IOException ex) {
-            }
-          } else {
-            console.warn("Couldn't open file, isDesktopSupported=false.");
-          }
-        }
+        desktopOpen(path);
       }
     }
   
@@ -4003,6 +4010,15 @@ class Engine {
     console = new Console();
     console.info("Hello console");
     
+    if (isAndroid()) {
+      APPPATH = "";
+      CACHE_PATH = getAndroidCacheDir();
+    }
+    else {
+      // TODO: This is ugly and unmaintainable.
+      CACHE_PATH = APPPATH+"cache/";
+    }
+    
     settings = new SettingsModule();
     input = new InputModule();
     file = new FilemanagerModule(this);
@@ -4022,7 +4038,14 @@ class Engine {
     loadAllAssets(APPPATH+IMG_PATH+"loadingmorph/");
     // Find out how many images there are in loadingmorph
     File f = new File(APPPATH+IMG_PATH+"loadingmorph/");
-    display.loadingFramesLength = f.listFiles().length;
+    
+    // Idc
+    if (isAndroid()) {
+      display.loadingFramesLength = 84;
+    }
+    else {
+      display.loadingFramesLength = f.listFiles().length;
+    }
     loadAsset(APPPATH+DEFAULT_FONT_PATH);
     
     // Load in seperate thread.
@@ -4063,6 +4086,7 @@ class Engine {
     input.addNewlineWhenEnterPressed = false;
     promptText = prompt;
     doWhenPromptSubmitted = doWhenSubmitted;
+    openTouchKeyboard();
   }
 
   public void displayInputPrompt() {
@@ -4101,6 +4125,7 @@ class Engine {
         }
         doWhenPromptSubmitted.run();
         lastInput = input.keyboardMessage;
+        closeTouchKeyboard();
       }
     }
   }
@@ -4921,7 +4946,7 @@ class Engine {
       try {
         consoleFont = createFont(APPPATH+CONSOLE_FONT, 24);
       }
-      catch (NullPointerException e) {
+      catch (RuntimeException e) {
         createFontFailed = true;
       }
       if (createFontFailed) consoleFont = null;
@@ -5164,21 +5189,42 @@ class Engine {
 
   public void loadAllAssets(String path) {
     // Get list of all assets in current dir
+    
+    
     File f = new File(path);
-    File[] assets = f.listFiles();
+    String[] assets = null;
+    
+    // Unfortunately in Android, we're not allowed to call listFiles()
+    // in our own data directory. Therefore, there is a list of predefined
+    // asset locations that tell our system which files to load.
+    // It should be in the same directory where we call loadAllAssets()
+    
+    if (isAndroid()) {
+      assets = app.loadStrings(file.directorify(path)+"load_list.txt");
+    }
+    else {
+      File[] files = f.listFiles();
+      assets = new String[files.length];
+      for (int i = 0; i < files.length; i++) {
+        assets[i] = files[i].getAbsolutePath();
+      }
+    }
     
     if (assets != null) {
       // Loop through all assets
       for (int i = 0; i < assets.length; i++) {
         // If asset is a directory
-        if (assets[i].isFile()) {
-          // Load asset
-          loadAsset(assets[i].getAbsolutePath());
+        String ext = file.getExt(assets[i]);
+        if (ext.length() <= 1) {
+          // Load all assets in that directory
+          loadAllAssets(assets[i]);
+          //println(assets[i]+" is dir");
         }
         // If asset is a file
-        else if (assets[i].isDirectory()) {
-          // Load all assets in that directory
-          loadAllAssets(assets[i].getAbsolutePath());
+        else {
+          // Load asset
+          loadAsset(assets[i]);
+          //println(assets[i]+" is file");
         }
       }
     }
@@ -5220,6 +5266,9 @@ class Engine {
       cacheHit |= sound.cacheHit(DEFAULT_DIR+"/"+PixelRealm.REALM_BGM+".wav");
       cacheHit |= sound.cacheHit(DEFAULT_DIR+"/"+PixelRealm.REALM_BGM+".ogg");
       cacheHit |= sound.cacheHit(DEFAULT_DIR+"/"+PixelRealm.REALM_BGM+".mp3");
+      cacheHit |= sound.cacheHit(DEFAULT_DIR+"/"+file.unhide(PixelRealm.REALM_BGM+".wav"));
+      cacheHit |= sound.cacheHit(DEFAULT_DIR+"/"+file.unhide(PixelRealm.REALM_BGM+".ogg"));
+      cacheHit |= sound.cacheHit(DEFAULT_DIR+"/"+file.unhide(PixelRealm.REALM_BGM+".mp3"));
       cacheHit |= sound.cacheHit(APPPATH+PixelRealm.REALM_BGM_DEFAULT);
       cacheHit |= sound.cacheHit(APPPATH+PixelRealm.REALM_BGM_DEFAULT_LEGACY);
       if (sound.loadingMusic() && !cacheHit)
@@ -5266,7 +5315,7 @@ class Engine {
   public void openCacheInfo() {
     boolean createNewInfoFile = false;
 
-    File cacheFolder = new File(APPPATH+CACHE_PATH);
+    File cacheFolder = new File(CACHE_PATH);
     if ((cacheFolder.exists() && cacheFolder.isDirectory()) == false) {
       console.info("openCacheInfo: cache folder gone, regenerating folder.");
       if (!cacheFolder.mkdir()) {
@@ -5278,13 +5327,13 @@ class Engine {
     // First, open the cache file if it's not been opened already.
     if (cacheInfoTimeout == 0) {
       // Should be true if the info file doesn't exist.
-      console.info("openCacheInfo: "+APPPATH+CACHE_INFO);
+      console.info("openCacheInfo: "+CACHE_PATH+CACHE_INFO);
       File f = new File(APPPATH+CACHE_INFO);
       if (!f.exists()) {
         createNewInfoFile = true;
       } else {
         try {
-          cacheInfoJSON = loadJSONObject(APPPATH+CACHE_INFO);
+          cacheInfoJSON = loadJSONObject(CACHE_PATH+CACHE_INFO);
         }
         catch (RuntimeException e) {
           console.warn("Cache file is curroupted. Cache will be erased and regenerated.");
@@ -5310,7 +5359,7 @@ class Engine {
       // Create the new json file.
       cacheInfoJSON = new JSONObject();
       cacheInfoJSON.setString("?cache_compatibility_version", CACHE_COMPATIBILITY_VERSION);
-      saveJSONObject(cacheInfoJSON, APPPATH+CACHE_INFO);
+      saveJSONObject(cacheInfoJSON, CACHE_PATH+CACHE_INFO);
 
       cacheInfoTimeout = 0;
     }
@@ -5512,10 +5561,10 @@ class Engine {
   // TODO: Put this in a seperate thread, because hoo lordy.
   public String saveCacheImage(String originalPath, PImage image) {
     console.info("saveCacheImage: "+originalPath);
-    if (image instanceof Gif) {
-      console.warn("Caching gifs not supported yet!");
-      return originalPath;
-    }
+    //if (image instanceof Gif) {
+    //  console.warn("Caching gifs not supported yet!");
+    //  return originalPath;
+    //}
     openCacheInfo();
 
     JSONObject properties = new JSONObject();
@@ -5588,7 +5637,7 @@ class Engine {
     String cachePath = APPPATH+CACHE_PATH+"cache-"+str(int(random(0, 2147483646)))+"."+ext;
     File f = new File(cachePath);
     while (f.exists()) {
-      cachePath = APPPATH+CACHE_PATH+"cache-"+str(int(random(0, 2147483646)))+"."+ext;
+      cachePath = CACHE_PATH+"cache-"+str(int(random(0, 2147483646)))+"."+ext;
       f = new File(cachePath);
     }
 
@@ -6080,87 +6129,38 @@ class Engine {
     private Object cachedClipboardObject;
     
     public boolean isImage() {
-      if (cachedClipboardObject == null) cachedClipboardObject = getFromClipboard(DataFlavor.imageFlavor);
+      if (cachedClipboardObject == null) cachedClipboardObject = getFromClipboardImageFlavour();
       
       // If still false, is nothing so isn't an image.
       if (cachedClipboardObject == null) return false;
-      return (cachedClipboardObject instanceof java.awt.Image);
+      return isClipboardImage(cachedClipboardObject);
     }
   
     public String getText()
     {
-      if (cachedClipboardObject == null) cachedClipboardObject = getFromClipboard(DataFlavor.stringFlavor);
+      if (cachedClipboardObject == null) cachedClipboardObject = getFromClipboardStringFlavour();
       String text = (String) cachedClipboardObject;
       cachedClipboardObject = null;
       return text;
     }
     
     public boolean isString() {
-      if (cachedClipboardObject == null) cachedClipboardObject = getFromClipboard(DataFlavor.stringFlavor);
+      if (cachedClipboardObject == null) cachedClipboardObject = getFromClipboardStringFlavour();
       
       // If still false, is nothing so isn't an image.
       if (cachedClipboardObject == null) return false;
       return (cachedClipboardObject instanceof String);
     }
   
-    // That can be the future's problem lol
-    @SuppressWarnings("deprecation")
-    public PImage getImage()
-    {
-      PImage img = null;
-      
-      if (cachedClipboardObject == null) cachedClipboardObject = getFromClipboard(DataFlavor.imageFlavor);
-      
-      java.awt.Image image = (java.awt.Image) getFromClipboard(DataFlavor.imageFlavor);
-      
-      cachedClipboardObject = null;
-      
-      if (image != null)
-      {
-        img = new PImage(image);
-      }
-      return img;
+    public PImage getImage() {
+      return getPImageFromClipboard();
     }
-  
-    private Object getFromClipboard(DataFlavor flavor)
-    {
-      Clipboard clipboard = Toolkit.getDefaultToolkit().getSystemClipboard();
-      Transferable contents;
-      try {
-        contents = clipboard.getContents(null);
-      }
-      catch (IllegalStateException e) {
-        contents = null;
-      }
-  
-      Object obj = null;
-      if (contents != null && contents.isDataFlavorSupported(flavor))
-      {
-        try
-        {
-          obj = contents.getTransferData(flavor);
-        }
-        catch (UnsupportedFlavorException exu) // Unlikely but we must catch it
-        {
-          console.warn("(Copy/paste) Unsupported flavor");
-          //~  exu.printStackTrace();
-        }
-        catch (java.io.IOException exi)
-        {
-          console.warn("(Copy/paste) Unavailable data: " + exi);
-          //~  exi.printStackTrace();
-        }
-      }
-      return obj;
-    } 
     
     // Returns true if successful, false if not
     public boolean copyString(String str) {
       String myString = str;
       try {
-        StringSelection stringSelection = new StringSelection(myString);
-        Clipboard clipboard = Toolkit.getDefaultToolkit().getSystemClipboard();
-        clipboard.setContents(stringSelection, null);
+        copyStringToClipboard(myString);
       }
       catch (RuntimeException e) {
         console.warn(e.getMessage());
@@ -6200,7 +6200,7 @@ class Engine {
       if (cacheInfoTimeout == 0) {
         if (cacheInfoJSON != null) {
           console.info("processCaching: saving cache info.");
-          saveJSONObject(cacheInfoJSON, APPPATH+CACHE_INFO);
+          saveJSONObject(cacheInfoJSON, CACHE_PATH+CACHE_INFO);
         }
       }
     }

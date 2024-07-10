@@ -1,0 +1,11 @@
+engine/everything.txt
+engine/info.txt
+engine/font/
+engine/img/
+engine/largeimg/
+engine/music/
+engine/realmtemplates/
+engine/shaders/
+engine/shell/
+engine/sounds/
+engine/spritedata/

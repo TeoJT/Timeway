@@ -1,5 +1,3 @@
-import javax.swing.JOptionPane;
-import processing.sound.*;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.StringWriter;
@@ -40,7 +38,7 @@ void settings() {
     }
   }
   catch (Exception e) {
-    JOptionPane.showMessageDialog(null,"A fatal error has occurred: \n"+e.getMessage()+"\n"+e.getStackTrace(),Engine.APP_NAME,1);
+    minimalErrorDialog("A fatal error has occurred: \n"+e.getMessage()+"\n"+e.getStackTrace());
   }
 }
 
@@ -52,19 +50,10 @@ void sketch_openErrorLog(String mssg) {
     FileWriter myWriter = new FileWriter(sketch_ERR_LOG_PATH);
     myWriter.write(mssg);
     myWriter.close();
+    println(mssg);
   } catch (IOException e2) {}
   
-  
-  if (Desktop.isDesktopSupported()) {
-    // Open desktop app with this snippet of code that I stole.
-    try {
-      Desktop desktop = Desktop.getDesktop();
-      File myFile = new File(sketch_ERR_LOG_PATH);
-      desktop.open(myFile);
-    } 
-    catch (IOException ex) {
-    }
-  }
+  openErrorLog();
 }
 
 void sketch_openErrorLog(Exception e) {
@@ -87,9 +76,12 @@ void sketch_openErrorLog(Exception e) {
 // This is all the code you need to set up and start running
 // the timeway engine.
 void setup() {
-    
     hint(DISABLE_OPENGL_ERRORS);
     background(0);
+    
+    if (isAndroid()) {
+      orientation(LANDSCAPE);    
+    }
     
     // Are we running in Processing or as an exported application?
     File f1 = new File(sketchPath()+"/lib");
@@ -97,6 +89,7 @@ void setup() {
     println("ShowcrashScreen: ", sketch_showCrashScreen);
     sketch_ERR_LOG_PATH = sketchPath()+"/data/error_log.txt";
     timewayEngine = new Engine(this);
+    requestAndroidPermissions();
 }
 
 void draw() {

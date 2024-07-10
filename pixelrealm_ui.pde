@@ -96,7 +96,11 @@ public class PixelRealmWithUI extends PixelRealm {
     ui.useSpriteSystem(gui);
 
     // Indicates first time running, run the tutorial.
-    if (!file.exists(engine.APPPATH+engine.STATS_FILE)) {
+    boolean statsExists = false;
+    statsExists = isAndroid() ? file.exists(getAndroidWriteableDir()+engine.STATS_FILE) : !file.exists(engine.APPPATH+engine.STATS_FILE);
+    
+    // For now (for convenience purposes), get rid of the tutorial thank you very much.
+    if (statsExists && !isAndroid()) {
       this.requestTutorial();
     }
   }
@@ -588,10 +592,23 @@ public class PixelRealmWithUI extends PixelRealm {
         console.warn("Templates folder not found.");
         menuShown = false;
       }
-      File realms = new File(engine.APPPATH+engine.TEMPLATES_PATH);
-      for (File f : realms.listFiles()) {
-        if (f.isDirectory()) {
-          templates.add(file.directorify(f.getAbsolutePath()));
+      
+      // Can't list our own files, gotta use the load_lists.txt
+      if (isAndroid()) {
+        String[] realms = loadStrings(engine.APPPATH+engine.TEMPLATES_PATH+"load_list.txt");
+        for (String path : realms) {
+          // Same as isDirectory() but check the string directly.
+          if (path.charAt(path.length()-1) == '/') {
+            templates.add(path);
+          }
+        }
+      }
+      else {
+        File realms = new File(engine.APPPATH+engine.TEMPLATES_PATH);
+        for (File f : realms.listFiles()) {
+          if (f.isDirectory()) {
+            templates.add(file.directorify(f.getAbsolutePath()));
+          }
         }
       }
     }
@@ -698,23 +715,47 @@ public class PixelRealmWithUI extends PixelRealm {
 
         ArrayList<String> movefiles = new ArrayList<String>();
         // get the realm files
-        File realmfile = new File(templates.get(tempIndex));
+        String realmDir = templates.get(tempIndex);
+        File realmfile = new File(realmDir);
         String dest = file.directorify(currRealm.stateDirectory);
         boolean conflict = false;
-        for (File f : realmfile.listFiles()) {
-          String src = f.getAbsolutePath().replaceAll("\\\\", "/");
-          String name = file.getFilename(src);
-
-          // The realmtemplate file is an exception
-          if (name.equals(TEMPLATE_METADATA_FILENAME))
-            continue;
-
-          if (file.exists(dest+name)) {
-            conflict = true;
-            break;
+        
+        // I've commented about it so many times at this point that, do you really need to know?
+        // Actually for all I know this might be the first time you read this.
+        // Basically, can't list files in our own files on Android.
+        if (isAndroid()) {
+          String[] items = loadStrings(file.directorify(realmDir)+"load_list.txt");
+          for (String src : items) {
+            String name = file.getFilename(src);
+  
+            // The realmtemplate file is an exception
+            if (name.equals(TEMPLATE_METADATA_FILENAME))
+              continue;
+  
+            if (file.exists(dest+name)) {
+              conflict = true;
+              break;
+            }
+  
+            movefiles.add(src);
           }
-
-          movefiles.add(src);
+        }
+        else {
+          for (File f : realmfile.listFiles()) {
+            String src = f.getAbsolutePath().replaceAll("\\\\", "/");
+            String name = file.getFilename(src);
+  
+            // The realmtemplate file is an exception
+            if (name.equals(TEMPLATE_METADATA_FILENAME))
+              continue;
+  
+            if (file.exists(dest+name)) {
+              conflict = true;
+              break;
+            }
+  
+            movefiles.add(src);
+          }
         }
         
         issueRefresherCommand(REFRESHER_PAUSE);
@@ -1285,7 +1326,12 @@ public class PixelRealmWithUI extends PixelRealm {
               tutorialStage = 0;
               doNotAllowCloseMenu = false;
               // For now just save some file so that it exists.
-              app.saveJSONObject(new JSONObject(), engine.APPPATH+engine.STATS_FILE);
+              if (isAndroid()) {
+                app.saveJSONObject(new JSONObject(), getAndroidWriteableDir()+engine.STATS_FILE);
+              }
+              else {
+                app.saveJSONObject(new JSONObject(), engine.APPPATH+engine.STATS_FILE);
+              }
             }
           };
           tutorialStage = 0;

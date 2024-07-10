@@ -229,7 +229,6 @@ public class Benchmark extends Screen {
 
 
 
-import java.awt.Desktop;
 
 public class Explorer extends Screen {
   

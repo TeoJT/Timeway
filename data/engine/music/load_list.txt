@@ -1,0 +1,3 @@
+engine/music/pixelrealm_default_bgm.wav
+engine/music/pixelrealm_default_bgm_legacy.wav
+engine/music/update_music.wav

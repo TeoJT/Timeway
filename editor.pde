@@ -1,7 +1,7 @@
 import java.util.Base64;
 import de.humatic.dsj.DSCapture;
 import processing.video.Capture;
-import java.awt.image.BufferedImage;
+//import java.awt.image.BufferedImage;
 import java.util.concurrent.atomic.AtomicInteger;
 
 class CameraException extends RuntimeException {};
@@ -253,8 +253,8 @@ class DCapture extends EditorCapture implements java.beans.PropertyChangeListene
       }
     }
     
-    width = capture.getDisplaySize().width;
-    height = capture.getDisplaySize().height;
+    width =  getDCaptureWidth(capture);
+    height = getDCaptureHeight(capture);
   }
   
   public void switchNextCamera() {
@@ -275,11 +275,7 @@ class DCapture extends EditorCapture implements java.beans.PropertyChangeListene
   }
  
   public PImage updateImage() {
-    PImage img = createImage(width, height, RGB);
-    BufferedImage bimg = capture.getImage();
-    bimg.getRGB(0, 0, img.width, img.height, img.pixels, 0, img.width);
-    img.updatePixels();
-    return img;
+    return getDCaptureImage(capture);
   }
  
   public void propertyChange(java.beans.PropertyChangeEvent e) {
