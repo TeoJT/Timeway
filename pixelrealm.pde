@@ -398,6 +398,12 @@ public class PixelRealm extends Screen {
       singleImg = display.systemImages.get(imgName);
     }
     
+    public int length() {
+      if (singleImg != null) return 1;
+      else if (aniImg != null) return aniImg.length;
+      else return 1;
+    }
+    
     public PImage get(int index) {
       if (singleImg != null) {
         width = singleImg.width;
@@ -3413,7 +3419,7 @@ public class PixelRealm extends Screen {
       JSONObject jsonFile = null;
       
       String realm_turf = REALM_TURF;
-      if (isAndroid() || !file.exists(dir+REALM_TURF)) {
+      if (!file.exists(dir+realm_turf)) {
         realm_turf = file.unhide(REALM_TURF);
       }
       
@@ -4582,7 +4588,7 @@ public class PixelRealm extends Screen {
       scene.noTint();
       scene.noStroke();
       
-      float sky_fov = 0.25;
+      float sky_fov = (float(scene.width)/float(img_sky.get().width));
       
       // Render the sky.
       float skyDelta = -(direction/TWO_PI);

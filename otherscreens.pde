@@ -44,23 +44,10 @@ public class Updater extends Screen {
   }
   
   public boolean button(String display, float x, float y) {
-    color c = color(200);
-    
     x = x+10;
     float wi = (WIDTH/2)-40;    // idk why 40
     float hi = 50;
-    boolean hovering = (engine.mouseX() > x && engine.mouseY() > y && engine.mouseX() < x+wi && engine.mouseY() < y+hi);
-    if (hovering) c = color(255);
-    
-    noFill();
-    stroke(c);
-    rect(x+10, y, wi, hi);
-    
-    textSize(32);
-    textAlign(CENTER, CENTER);
-    fill(c);
-    text(display, x+wi/2, y+hi/2);
-    return hovering && input.primaryClick;
+    return ui.basicButton(display, x, y, wi, hi);
   }
   
   public void content() {

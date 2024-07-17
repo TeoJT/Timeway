@@ -18,6 +18,7 @@ String sketch_ERR_LOG_PATH;
 // rather than throw the error to processing (can be useful if you need more
 // error info)
 final boolean sketch_FORCE_CRASH_SCREEN = false;
+final boolean sketch_MAXIMISE = false;
 
 void settings() {
   try {
@@ -25,6 +26,7 @@ void settings() {
     if (isLinux())
       System.setProperty("jogl.disable.openglcore", "true");
     size(displayWidth, displayHeight, P2D);
+    //size(900, 1800, P2D);
     //size(750, 1200, P2D);
     smooth(1);
     
@@ -80,7 +82,7 @@ void setup() {
     background(0);
     
     if (isAndroid()) {
-      orientation(LANDSCAPE);    
+      //orientation(LANDSCAPE);    
     }
     
     // Are we running in Processing or as an exported application?

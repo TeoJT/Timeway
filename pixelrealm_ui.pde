@@ -97,10 +97,9 @@ public class PixelRealmWithUI extends PixelRealm {
 
     // Indicates first time running, run the tutorial.
     boolean statsExists = false;
-    statsExists = isAndroid() ? file.exists(getAndroidWriteableDir()+engine.STATS_FILE) : !file.exists(engine.APPPATH+engine.STATS_FILE);
+    statsExists = isAndroid() ? file.exists(getAndroidWriteableDir()+engine.STATS_FILE) : file.exists(engine.APPPATH+engine.STATS_FILE);
     
-    // For now (for convenience purposes), get rid of the tutorial thank you very much.
-    if (statsExists && !isAndroid()) {
+    if (!statsExists) {
       this.requestTutorial();
     }
   }
@@ -157,7 +156,8 @@ public class PixelRealmWithUI extends PixelRealm {
     }
 
     protected void displayBackground(String backgroundName) {
-      gui.sprite(backgroundName, "black");
+      gui.spriteVary(backgroundName, "black");
+      if (display.phoneMode) backgroundName += "-phone";
       if (!cached || gui.interactable) {
         cache_backgroundName = backgroundName;
         cache_backX = gui.getSprite(backgroundName).getX();
@@ -339,14 +339,14 @@ public class PixelRealmWithUI extends PixelRealm {
     public void display() {
       super.display();
 
-      if (ui.button("menu_yes", "tick_128", "Yes")) {
+      if (ui.buttonVary("menu_yes", "tick_128", "Yes")) {
         sound.playSound("menu_select");
         menuShown = false;
         menu = null;
         if (runWhenDone != null)
           runWhenDone.run();
       }
-      if (ui.button("menu_no", "cross_128", "No")) {
+      if (ui.buttonVary("menu_no", "cross_128", "No")) {
         sound.playSound("menu_select");
         menuShown = false;
         menu = null;
@@ -368,19 +368,28 @@ public class PixelRealmWithUI extends PixelRealm {
       super.display();
 
       // --- Creator menu ---
-      if (ui.button("creator_1", "new_entry_128", "Creator")) {
+      if (ui.buttonVary("creator_1", "new_entry_128", "Creator")) {
         sound.playSound("menu_select");
         menu = new CreatorMenu();
       }
 
       // --- Pocket menu ---
-      if (ui.button("pocket_menu", "new_entry_128", "Pockets")) {
+      if (ui.buttonVary("pocket_menu", "new_entry_128", "Pockets")) {
         sound.playSound("menu_select");
         menu = new PocketMenu();
       }
+      
+      // --- Command menu (for phone) ---
+      if (display.phoneMode) {
+        if (ui.buttonVary("command_button", "command_256", "Command")) {
+          engine.showCommandPrompt();
+          menu = null;
+          menuShown = false;
+        }
+      }
 
       // --- Edit terrain menu ---
-      if (ui.button("terraform_menu", "new_entry_128", "Terraform")) {
+      if (ui.buttonVary("terraform_menu", "new_entry_128", "Terraform")) {
         sound.playSound("menu_select");
 
         Runnable ryes = new Runnable() {
@@ -428,7 +437,7 @@ public class PixelRealmWithUI extends PixelRealm {
       }
 
       // --- Grabber tool ---
-      if (ui.button("grabber_1", "grabber_tool_128", "Grabber")) {
+      if (ui.buttonVary("grabber_1", "grabber_tool_128", "Grabber")) {
         // Select the last item in the inventory if not already selected.
         if (globalHoldingObject == null) {
           if (pockets.tail != null) {
@@ -443,7 +452,7 @@ public class PixelRealmWithUI extends PixelRealm {
       }
 
       // --- No tool ---
-      if (ui.button("notool_1", "notool_128", "No tool")) {
+      if (ui.buttonVary("notool_1", "notool_128", "No tool")) {
         currentTool = TOOL_NORMAL;
         globalHoldingObjectSlot = null;
         currRealm.updateHoldingItem(globalHoldingObjectSlot);
@@ -458,18 +467,18 @@ public class PixelRealmWithUI extends PixelRealm {
     }
     public void display() {
       displayBackground("back-creatormenu");
-      if (ui.button("newentry", "new_entry_128", "New entry")) {
+      if (ui.buttonVary("newentry", "new_entry_128", "New entry")) {
         sound.playSound("menu_select");
         newEntry();
       }
 
 
-      if (ui.button("newfolder", "new_folder_128", "New folder")) {
+      if (ui.buttonVary("newfolder", "new_folder_128", "New folder")) {
         sound.playSound("menu_select");
         newFolder();
       }
 
-      if (ui.button("newshortcut", "create_shortcut_128", "New shortcut")) {
+      if (ui.buttonVary("newshortcut", "create_shortcut_128", "New shortcut")) {
         sound.playSound("menu_select");
         ((PixelRealmState.ShortcutPortal)currRealm.createPRObjectAndPickup(currRealm.createShortcut())).loadShortcut();
         menuShown = false;
@@ -492,6 +501,8 @@ public class PixelRealmWithUI extends PixelRealm {
           } else {
             sound.playSound("nope");
             console.log(input.keyboardMessage+" already exists!");
+            menuShown = false;
+            menu = null;
             return;
           }
 
@@ -521,6 +532,8 @@ public class PixelRealmWithUI extends PixelRealm {
           if (file.exists(path)) {
             sound.playSound("nope");
             console.log(input.keyboardMessage+" already exists!");
+            menuShown = false;
+            menu = null;
             return;
           }
 
@@ -557,11 +570,11 @@ public class PixelRealmWithUI extends PixelRealm {
     public void display() {
       displayBackground("back-pocketmenu");
 
-      gui.sprite("pocket_line1", "white");
-      gui.sprite("pocket_line2", "white");
+      gui.spriteVary("pocket_line1", "white");
+      gui.spriteVary("pocket_line2", "white");
 
 
-      if (ui.button("pocket_back", "back_arrow_128", "")) {
+      if (ui.buttonVary("pocket_back", "back_arrow_128", "")) {
         sound.playSound("menu_select");
         menu = new Menu();
       }
@@ -688,20 +701,20 @@ public class PixelRealmWithUI extends PixelRealm {
 
 
       if ((input.keyActionOnce("inventorySelectLeft")
-        || ui.button("newrealm-prev", "back_arrow_128", ""))
+        || ui.buttonVary("newrealm-prev", "back_arrow_128", ""))
         && coolDown == 0) {
         tempIndex--;
         if (tempIndex < 0) tempIndex = templates.size()-1;
         preview(tempIndex);
       }
       if ((input.keyActionOnce("inventorySelectRight")
-        || ui.button("newrealm-next", "forward_arrow_128", ""))
+        || ui.buttonVary("newrealm-next", "forward_arrow_128", ""))
         && coolDown == 0) {
         tempIndex++;
         if (tempIndex > templates.size()-1) tempIndex = 0;
         preview(tempIndex);
       }
-      if (input.enterOnce || ui.button("newrealm-confirm", "tick_128", "")) {
+      if (input.enterOnce || ui.buttonVary("newrealm-confirm", "tick_128", "")) {
         sound.playSound("menu_select");
 
         // User didn't select any realm.
@@ -715,7 +728,7 @@ public class PixelRealmWithUI extends PixelRealm {
 
         ArrayList<String> movefiles = new ArrayList<String>();
         // get the realm files
-        String realmDir = templates.get(tempIndex);
+        String realmDir = file.directorify(templates.get(tempIndex));
         File realmfile = new File(realmDir);
         String dest = file.directorify(currRealm.stateDirectory);
         boolean conflict = false;
@@ -723,11 +736,32 @@ public class PixelRealmWithUI extends PixelRealm {
         // I've commented about it so many times at this point that, do you really need to know?
         // Actually for all I know this might be the first time you read this.
         // Basically, can't list files in our own files on Android.
+        //if (isAndroid()) {
+        //  currRealm.img_grass.get().save(dest+REALM_GRASS+".png");
+          
+        //  for (int i = 0; i < currRealm.img_sky.length(); i++) {
+        //    currRealm.img_sky.get(i).save(dest+REALM_SKY+"-"+str(i+1)+".png");
+        //  }
+          
+        //  for (int i = 0; i < currRealm.img_tree.length(); i++) {
+        //    currRealm.img_tree.get(i).save(dest+REALM_TREE+"-"+str(i+1)+".png");
+        //  }
+          
+        //  JSONObject json = null; 
+        //  if (file.exists(realmDir+REALM_TURF)) {
+        //    json = loadJSONObject(realmDir+REALM_TURF);
+        //  }
+        //  else if (file.exists(file.unhide(realmDir+REALM_TURF))) {
+        //    json = loadJSONObject(file.unhide(realmDir+REALM_TURF));
+        //  }
+        //  if (json != null) saveJSONObject(json, dest+REALM_TURF);
+        //}
+        
         if (isAndroid()) {
-          String[] items = loadStrings(file.directorify(realmDir)+"load_list.txt");
-          for (String src : items) {
+          String[] files = loadStrings(realmDir+"load_list.txt");
+          for (String src : files) {
             String name = file.getFilename(src);
-  
+            
             // The realmtemplate file is an exception
             if (name.equals(TEMPLATE_METADATA_FILENAME))
               continue;
@@ -831,21 +865,21 @@ public class PixelRealmWithUI extends PixelRealm {
       app.text(currRealm.terrain.NAME, cache_backX+cache_backWi/2, cache_backY+85);
 
 
-      if (ui.button("customise-prev", "back_arrow_128", "")) {
+      if (ui.buttonVary("customise-prev", "back_arrow_128", "")) {
         sound.playSound("menu_select");
         generatorIndex--;
         if (generatorIndex < 0) generatorIndex = NUM_GENERATORS-1;
         //switchGenerator(generatorIndex);
         currRealm.switchTerrain(generatorIndex);
       }
-      if (ui.button("customise-next", "forward_arrow_128", "")) {
+      if (ui.buttonVary("customise-next", "forward_arrow_128", "")) {
         sound.playSound("menu_select");
         generatorIndex++;
         if (generatorIndex >= NUM_GENERATORS) generatorIndex = 0;
         currRealm.switchTerrain(generatorIndex);
       }
 
-      if (ui.button("customise-ok", "tick_128", "Done")) {
+      if (ui.buttonVary("customise-ok", "tick_128", "Done")) {
         sound.playSound("menu_select");
         close();
         menuShown = false;
@@ -993,15 +1027,15 @@ public class PixelRealmWithUI extends PixelRealm {
       boolean click = false;
       
       // Buttons on the top-right
-      if (ui.button("touch-menu", "touch_menu", "")) {
+      if (ui.buttonVary("touch-menu", "touch_menu", "")) {
         input.setAction("menu");
         click = true;
       }
-      if (ui.button("touch-prevrealm", "touch_prevrealm", "")) {
+      if (ui.buttonVary("touch-prevrealm", "touch_prevrealm", "")) {
         input.setAction("prevDirectory");
         click = true;
       }
-      if (ui.button("touch-home", "touch_home", "")) {
+      if (ui.buttonVary("touch-home", "touch_home", "")) {
         input.setAction("quickWarp1");
         click = true;
       }
@@ -1013,15 +1047,15 @@ public class PixelRealmWithUI extends PixelRealm {
       // But as long as the user is touching anywhere on the screen
       // after intially pressing a move button, we keep moving.
       boolean touchOnce = false;
-      if (ui.button("touch-move", "touch_forward", "")) {
+      if (ui.buttonVary("touch-move", "touch_forward", "")) {
         touchForward = true;
         touchOnce = true;
       }
-      if (ui.button("touch-left", "touch_left", "")) {
+      if (ui.buttonVary("touch-left", "touch_left", "")) {
         touchLeft = true;
         touchOnce = true;
       }
-      if (ui.button("touch-right", "touch_right", "")) {
+      if (ui.buttonVary("touch-right", "touch_right", "")) {
         touchRight = true;
         touchOnce = true;
       }
@@ -1048,11 +1082,11 @@ public class PixelRealmWithUI extends PixelRealm {
       }
       
       // Buttons on the bottom-right; action buttons
-      if (ui.button("touch-a", "touch_a", "")) {
+      if (ui.buttonVary("touch-a", "touch_a", "")) {
         input.setAction("primaryAction");
         click = true;
       }
-      if (ui.button("touch-b", "touch_b", "")) {
+      if (ui.buttonVary("touch-b", "touch_b", "")) {
         input.setAction("secondaryAction");
         click = true;
       }
@@ -1060,10 +1094,10 @@ public class PixelRealmWithUI extends PixelRealm {
       // Basically to overcome quirk in the sprite system
       // and to make hover areas visible while editing
       if (gui.interactable || showOnceTouch) {
-        ui.button("touch-jump", "black", "");
-        ui.button("touch-look-left", "black", "");
-        ui.button("touch-look-right", "black", "");
-        ui.button("touch-walkback", "black", "");
+        ui.buttonVary("touch-jump", "black", "");
+        ui.buttonVary("touch-look-left", "black", "");
+        ui.buttonVary("touch-look-right", "black", "");
+        ui.buttonVary("touch-walkback", "black", "");
         showOnceTouch = false;
       }
       
@@ -1095,21 +1129,21 @@ public class PixelRealmWithUI extends PixelRealm {
         }
 
 
-        if (ui.buttonHover("touch-jump")) {
+        if (ui.buttonHoverVary("touch-jump")) {
           input.setAction("jump");
         }
         
         if (touchForward) {
-          if (ui.buttonHover("touch-walkback")) {
+          if (ui.buttonHoverVary("touch-walkback")) {
             input.setAction("moveBackwards");
           } else {
             input.setAction("moveForewards");
           }
           
-          if (ui.buttonHover("touch-look-left")) {
+          if (ui.buttonHoverVary("touch-look-left")) {
             input.setAction("lookLeftTouch");
           }
-          if (ui.buttonHover("touch-look-right")) {
+          if (ui.buttonHoverVary("touch-look-right")) {
             input.setAction("lookRightTouch");
           }
         }
@@ -1153,10 +1187,10 @@ public class PixelRealmWithUI extends PixelRealm {
 
       if (touchControlsEnabled) {
 
-        if (ui.button("touch-slot-left", "touch_left", "")) {
+        if (ui.buttonVary("touch-slot-left", "touch_left", "")) {
           input.setAction("inventorySelectLeft");
         }
-        if (ui.button("touch-slot-right", "touch_right", "")) {
+        if (ui.buttonVary("touch-slot-right", "touch_right", "")) {
           input.setAction("inventorySelectRight");
         }
       }
@@ -1311,6 +1345,19 @@ public class PixelRealmWithUI extends PixelRealm {
       }
     }
   }
+  
+  public void endTutorial() {
+    usePortalAllowed = true;
+    tutorialStage = 0;
+    doNotAllowCloseMenu = false;
+    // For now just save some file so that it exists.
+    if (isAndroid()) {
+      app.saveJSONObject(new JSONObject(), getAndroidWriteableDir()+engine.STATS_FILE);
+    }
+    else {
+      app.saveJSONObject(new JSONObject(), engine.APPPATH+engine.STATS_FILE);
+    }
+  }
 
   protected void promptPlonkedDownItem() {
     if (tutorialStage == 4 || tutorialStage == 5) {
@@ -1322,16 +1369,7 @@ public class PixelRealmWithUI extends PixelRealm {
           menuShown = true;
           Runnable r = new Runnable() {
             public void run() {
-              usePortalAllowed = true;
-              tutorialStage = 0;
-              doNotAllowCloseMenu = false;
-              // For now just save some file so that it exists.
-              if (isAndroid()) {
-                app.saveJSONObject(new JSONObject(), getAndroidWriteableDir()+engine.STATS_FILE);
-              }
-              else {
-                app.saveJSONObject(new JSONObject(), engine.APPPATH+engine.STATS_FILE);
-              }
+              endTutorial();
             }
           };
           tutorialStage = 0;
@@ -1381,7 +1419,10 @@ public class PixelRealmWithUI extends PixelRealm {
   }
 
 
-
+  public void closeMenu() {
+    menuShown = false;
+    menu = null;
+  }
 
 
 
@@ -1541,6 +1582,11 @@ public class PixelRealmWithUI extends PixelRealm {
       app.textFont(engine.DEFAULT_FONT, 38);
       app.textAlign(CENTER, CENTER);
       app.text(mssg, WIDTH*0.1, 70, WIDTH*0.8, 200);
+    }
+    
+    if (ui.basicButton("Skip tutorial", display.WIDTH/2-200, display.HEIGHT-40-myUpperBarWeight, 400, 30)) {
+      endTutorial();
+      console.log("Skipped tutorial.");
     }
   }
 }

@@ -1051,6 +1051,24 @@ public final class SpriteSystemPlaceholder {
             Sprite s = getSprite(identifier);
             return s.mouseWithinHitbox();
         }
+        
+        public void spriteVary(String nameAndID) {
+          if (engine.display.phoneMode) {
+            this.sprite(nameAndID+"-phone", nameAndID);
+          }
+          else {
+            this.sprite(nameAndID, nameAndID);
+          }
+        }
+
+        public void spriteVary(String identifier, String image) {
+          if (engine.display.phoneMode) {
+            this.sprite(identifier+"-phone", image);
+          }
+          else {
+            this.sprite(identifier, image);
+          }
+        }
 
         public void sprite(String nameAndID) {
             this.sprite(nameAndID, nameAndID);
@@ -1174,16 +1192,18 @@ public final class SpriteSystemPlaceholder {
         
         //idk man. I'm not in the mood to name things today lol.
         public void keyboardInteractionEnabler() {
-          if (engine.input.ctrlDown && engine.input.keyDownOnce('~')) {
-            if (!this.interactable) {
-              this.interactable = true;
-              engine.console.log("Sprite system interactability enabled.");
+          if (engine.input.ctrlDown && engine.input.altDown && engine.input.shiftDown) {
+            if (engine.input.secondaryClick) {
+              if (!this.interactable) {
+                this.interactable = true;
+                engine.console.log("Sprite system interactability enabled.");
+              }
+              else {
+                this.interactable = false;
+                engine.console.log("Sprite system interactability disabled.");
+              }
             }
-            else {
-              this.interactable = false;
-              engine.console.log("Sprite system interactability disabled.");
-            }
-          };
+          }
         }
 
         public void updateSpriteSystem() {

@@ -6,6 +6,7 @@ engine/img/pixelrealm/coin_2.gif
 engine/img/pixelrealm/coin_3.gif
 engine/img/pixelrealm/coin_4.gif
 engine/img/pixelrealm/coin_5.gif
+engine/img/pixelrealm/command_256.png
 engine/img/pixelrealm/cuber_tool_128.png
 engine/img/pixelrealm/find_128.png
 engine/img/pixelrealm/glow.png

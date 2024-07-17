@@ -323,11 +323,12 @@ public class Editor extends Screen {
     final float  EXPAND_HITBOX           = 10;                     // For the (unused) ERS system to slightly increase the erase area to prevent glitches
     final String DEFAULT_FONT            = "Typewriter";           // Default font for entries
     final float  STANDARD_FONT_SIZE      = 64;                     // You get the idea
-    final float  DEFAULT_FONT_SIZE       = 30;
+          float  DEFAULT_FONT_SIZE       = 30;
     final color  DEFAULT_FONT_COLOR      = color(255, 255, 255);
     final float  MIN_FONT_SIZE           = 8.;
     final float  UPPER_BAR_DROP_WEIGHT   = 150;                    
     final int    SCALE_DOWN_SIZE         = 512;
+    final float  SCROLL_LIMIT            = 600.;
     
     final color BACKGROUND_COLOR = 0xFF0f0f0e;
     
@@ -639,15 +640,20 @@ public class Editor extends Screen {
           if (isWindows()) {
             camera = new DCapture(engine);
           }
-          else {
+          else if (isAndroid()) {
             camera = new PCapture(engine);
           }
+          // In android we use our own camera.
         
           // Because of the really annoying delay thing, we wanna create a canvas that uses the cpu to draw the frame instead
           // of the P2D renderer struggling to draw things. In the future, we can implement this into the engine so that it can
           // be used in other places and not just for the camera.
           int SIZE_DIVIDER = 2;
           cameraDisplay = createGraphics(int(WIDTH)/SIZE_DIVIDER, int(HEIGHT)/SIZE_DIVIDER);
+        }
+        
+        if (isAndroid()) {
+          DEFAULT_FONT_SIZE = 50;
         }
         
         placeables = new SpriteSystemPlaceholder(engine);
@@ -1025,6 +1031,7 @@ public class Editor extends Screen {
                // Oh wait it's in the endAnimation function.
                // Bit misleading there, past me.
                
+               closeTouchKeyboard();
                previousScreen();
           }
   
@@ -1166,6 +1173,13 @@ public class Editor extends Screen {
     }
     
     public void beginCamera() {
+      // In android, we don't do anything below us, and just
+      // launch the system camera. EZ.
+      if (isAndroid()) {
+        openAndroidCamera();
+        return;
+      }
+      
       upperBarDrop = CAMERA_ON_ANIMATION;        // Set to 
       upperbarExpand = 1.;
       cameraMode = true;
@@ -1201,6 +1215,10 @@ public class Editor extends Screen {
       camera.turnOffCamera();
       myBackgroundColor = BACKGROUND_COLOR;       // Restore original background color
       engine.sharedResources.set("lastusedcamera", camera.selectedCamera);
+    }
+    
+    public void endCameraAndroid(PImage photo) {
+      insertImage(photo);
     }
 
     // New name without the following path.
@@ -1352,8 +1370,7 @@ public class Editor extends Screen {
         }
         
         // Update max scroll.
-        final float PADDING = 350.;
-        scrollLimitY = max(extentY+PADDING-HEIGHT+myLowerBarWeight, 0);
+        scrollLimitY = max(extentY+SCROLL_LIMIT-HEIGHT+myLowerBarWeight, 0);
     }
     
     private void copy() {
@@ -1505,6 +1522,11 @@ public class Editor extends Screen {
           // Check back to see if something's been clicked.
           if (clickedThing) {
             insertText("", engine.mouseX(), engine.mouseY()-20);
+            // And in android
+            openTouchKeyboard();
+          }
+          else {
+            closeTouchKeyboard();
           }
           
           if (scrolling) {

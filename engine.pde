@@ -1015,6 +1015,7 @@ class Engine {
     private IntBuffer clearList;
     private int clearListIndex = 0;
     public boolean showMemUsage = false;
+    public boolean phoneMode = false;
     
     public final float BASE_FRAMERATE = 60.;
     public final int CLEARLIST_SIZE = 4096;
@@ -1122,6 +1123,12 @@ class Engine {
         displayScale = width/1500.;
         WIDTH = width/displayScale;
         HEIGHT = height/displayScale;
+        
+        if (HEIGHT > WIDTH) {
+          displayScale *= 2.;
+          phoneMode = true;
+        }
+        
         console.info("init: width/height set to "+str(WIDTH)+", "+str(HEIGHT));
         
         clearList = IntBuffer.allocate(CLEARLIST_SIZE);
@@ -1196,26 +1203,31 @@ class Engine {
       String ext  = file.getExt(path);
       
       
-      // If we're loading a vertex shader, we also have to load the corresponding 
-      // fragment shader.
-      if (ext.equals("vert")) {
-        String fragPath = file.getDir(path)+"/"+name+".frag";
-        // Again can't check if file exists on android, so just trust that it's there.
-        if (file.exists(fragPath)) {
-          PShader s = app.loadShader(fragPath, path);
-          PShaderEntry shaderentry = new PShaderEntry(s, path);
-          shaders.put(name, shaderentry);
-          return;
+      try {
+        // If we're loading a vertex shader, we also have to load the corresponding 
+        // fragment shader.
+        if (ext.equals("vert")) {
+          String fragPath = file.getDirLegacy(path)+"/"+name+".frag";
+          // Again can't check if file exists on android, so just trust that it's there.
+          if (file.exists(fragPath)) {
+            PShader s = app.loadShader(fragPath, path);
+            PShaderEntry shaderentry = new PShaderEntry(s, path);
+            shaders.put(name, shaderentry);
+            return;
+          }
+          else {
+            // File not found, continue to the normal fragment-only code.
+            console.warn("loadShader: corresponding "+name+" fragment shader file not found.");
+          }
         }
-        else {
-          // File not found, continue to the normal fragment-only code.
-          console.warn("loadShader: corresponding "+name+" fragment shader file not found.");
-        }
-      }
       
-      PShader s = app.loadShader(path);
-      PShaderEntry shaderentry = new PShaderEntry(s, path);
-      shaders.put(name, shaderentry);
+        PShader s = app.loadShader(path);
+        PShaderEntry shaderentry = new PShaderEntry(s, path);
+        shaders.put(name, shaderentry);
+      }
+      catch (RuntimeException e) {
+        console.warn(path+" couldn't be loaded due to runtime exception.");
+      }
     }
   
     public DImage getImg(String name) {
@@ -1329,6 +1341,8 @@ class Engine {
     
     
     LargeImage createLargeImage(PImage img) {
+      
+      try {
         IntBuffer data = IntBuffer.allocate(img.width*img.height);
         
         // Copy pimage data to the intbuffer.
@@ -1368,6 +1382,10 @@ class Engine {
         largeimg.width = img.width;
         largeimg.height = img.height;
         return largeimg;
+      }
+      catch (RuntimeException e) {
+        return createLargeImage(systemImages.get("white").pimage);
+      }
     }
     
     public void destroyImage(LargeImage im) {
@@ -2074,7 +2092,15 @@ class Engine {
     
     
     public void colorPicker(float x, float y, Runnable runWhenPicked) {
-      currMinimenu = new ColorPicker(x, y, 300, 200, runWhenPicked);
+      float wi = 300., hi = 200.;
+      if (display.phoneMode) {
+        wi = 450.;
+        hi = 300.;
+      }
+      if (x+wi > display.WIDTH) {
+        x = display.WIDTH-wi;
+      }
+      currMinimenu = new ColorPicker(x, y, wi, hi, runWhenPicked);
     }
     
     public color getPickedColor() {
@@ -2121,6 +2147,13 @@ class Engine {
       this.guiFade = 255.;
     }
     
+    public boolean buttonHoverVary(String name) {
+      if (display.phoneMode) {
+        name += "-phone";
+      }
+      return buttonHover(name);
+    }
+    
     public boolean buttonHover(String name) {
       if (this.currentSpritePlaceholderSystem == null) {
         console.bugWarn("You forgot to call useSpriteSystem()!");
@@ -2128,6 +2161,16 @@ class Engine {
       }
       
       return (currentSpritePlaceholderSystem.buttonHover(name) && !currentSpritePlaceholderSystem.interactable && spriteSystemClickable);
+    }
+    
+    // This vary version has multiple types of buttons (normal and phone) for different size configurations.
+    public boolean buttonVary(String name, String texture, String displayText) {
+      if (display.phoneMode) {
+        return button(name+"-phone", texture, displayText);
+      }
+      else {
+        return button(name, texture, displayText);
+      }
     }
   
     public boolean button(String name, String texture, String displayText) {
@@ -2171,6 +2214,23 @@ class Engine {
   
       // Only when the button is actually clicked.
       return hover && input.primaryClick;
+    }
+    
+    public boolean basicButton(String display, float x, float y, float wi, float hi) {
+      color c = color(200);
+      
+      boolean hovering = (input.mouseX() > x && input.mouseY() > y && input.mouseX() < x+wi && input.mouseY() < y+hi);
+      if (hovering) c = color(255);
+      
+      noFill();
+      stroke(c);
+      rect(x+10, y, wi, hi);
+      
+      textSize(32);
+      textAlign(CENTER, CENTER);
+      fill(c);
+      text(display, x+wi/2, y+hi/2);
+      return hovering && input.primaryClick;
     }
     
     public void loadingIcon(float x, float y, float widthheight) {
@@ -2260,10 +2320,12 @@ class Engine {
       final int NONE = 0;
       final int CACHED = 1;
       final int STREAM = 2;
+      final int ANDROID = 3;
       int mode = 0;
       boolean cacheMiss = false;
       private Movie streamMusic;
       private SoundFile cachedMusic;
+      private AndroidMedia androidMusic;
       String originalPath = "";
       float volume = 0.;
       
@@ -2297,7 +2359,7 @@ class Engine {
               boolean playDefaultLoadingMusic = true;
               
               final int COMPRESSED_MAX_SIZE = 1048576; // 1mb
-              final int UNCOMPRESSED_MAX_SIZE = 15728640; // 10mb
+              final int UNCOMPRESSED_MAX_SIZE = 15728640; // 15mb
               
               // Compressed file formats can take long to decompress,
               // so we'll only allow a minute or two at most.
@@ -2338,9 +2400,16 @@ class Engine {
         // Otherwise use gstreamer
         else {
           //console.log("Stream music mode");
-          mode = STREAM;
-          if (!DISABLE_GSTREAMER)
-            streamMusic = new Movie(app, path);
+          
+          if (isAndroid()) {
+            mode = ANDROID;
+            androidMusic = new AndroidMedia(path);
+          }
+          else {
+            mode = STREAM;
+            if (!DISABLE_GSTREAMER)
+              streamMusic = new Movie(app, path);
+          }
         }
       }
       
@@ -2349,44 +2418,56 @@ class Engine {
           if (!cachedMusic.isPlaying()) cachedMusic.play(); 
         } 
         else if (mode == STREAM && !DISABLE_GSTREAMER) streamMusic.play();
+        else if (mode == ANDROID) androidMusic.loop();     // Here we loop cus this ain't the half-working Movie library, we can freely do that
       }
       
       public void stop() {
-        if (mode == CACHED) cachedMusic.stop(); else if (mode == STREAM && !DISABLE_GSTREAMER) streamMusic.stop();
+        if (mode == CACHED) cachedMusic.stop(); 
+        else if (mode == STREAM && !DISABLE_GSTREAMER) streamMusic.stop();
+        else if (mode == ANDROID) androidMusic.stop();
       }
       
       public boolean available() {
-        if (mode == CACHED)
-          return true;
-        else if (mode == STREAM && !DISABLE_GSTREAMER) return streamMusic.available();
+        if (mode == STREAM && !DISABLE_GSTREAMER) return streamMusic.available();
+        // No need in android
         return true;
       }
       
       public void read() {
         if (mode == STREAM && !DISABLE_GSTREAMER) streamMusic.read();
+        // No need in android
       }
       
       public void volume(float vol) {
         volume = vol;
         if (mode == STREAM && !DISABLE_GSTREAMER) streamMusic.volume(vol);
+        else if (mode == ANDROID) androidMusic.volume(vol);
       }
       
       public float duration() {
-        if (mode == CACHED) return cachedMusic.duration(); else if (mode == STREAM && !DISABLE_GSTREAMER) return streamMusic.duration();
+        if (mode == CACHED) return cachedMusic.duration(); 
+        else if (mode == STREAM && !DISABLE_GSTREAMER) return streamMusic.duration();
+        // Since android loops we don't need to worry about this (for now).
         return 0.;
       }
       
       public float time() {
-        if (mode == CACHED) return cachedMusic.position(); else if (mode == STREAM && !DISABLE_GSTREAMER) return streamMusic.time();
+        if (mode == CACHED) return cachedMusic.position(); 
+        else if (mode == STREAM && !DISABLE_GSTREAMER) return streamMusic.time();
+        // Since android loops we don't need to worry about this (for now).
         return 0.;
       }
       
       public void jump(float pos) {
-        if (mode == CACHED) cachedMusic.jump(pos); else if (mode == STREAM && !DISABLE_GSTREAMER) streamMusic.jump(pos);
+        if (mode == CACHED) cachedMusic.jump(pos); 
+        else if (mode == STREAM && !DISABLE_GSTREAMER) streamMusic.jump(pos);
+        // Since android loops we don't need to worry about this (for now).
       }
       
       public boolean isPlaying() {
-        if (mode == CACHED) return cachedMusic.isPlaying(); else if (mode == STREAM && !DISABLE_GSTREAMER) return streamMusic.isPlaying();
+        if (mode == CACHED) return cachedMusic.isPlaying(); 
+        else if (mode == STREAM && !DISABLE_GSTREAMER) return streamMusic.isPlaying();
+        else if (mode == ANDROID) return androidMusic.isPlaying();
         return true;
       }
       
@@ -2403,9 +2484,13 @@ class Engine {
           streamMusic.playbin.setVolume(vol*masterVolume);
           streamMusic.playbin.getState();
         }
+        else if (mode == ANDROID) {
+          androidMusic.volume(vol);
+        }
       }
       
       // When gstreamer finally loads, switches seamlessly to gstreamer version.
+      // Note that this should not be called in android mode.
       public void switchMode() {
         if (!loadingMusic() && mode != STREAM) {
           
@@ -2542,7 +2627,7 @@ class Engine {
         return;
       }
       
-      if (CACHE_MUSIC && cacheTime < MAX_CACHE_TIME) {
+      if ((CACHE_MUSIC && !isAndroid()) && cacheTime < MAX_CACHE_TIME) {
         
         boolean cacheLoaded = true;
         String cacheFilePath = CACHE_PATH+MUSIC_CACHE_FILE;
@@ -2637,43 +2722,45 @@ class Engine {
           final String cachedFileNameFinal = temp;
           cachedFileName = cachedFileNameFinal;
           
-          // Kickstart the thread that will cache the file.
-          Thread t1 = new Thread(new Runnable() {
-            public void run() {
-              // As soon as we're not caching anymore, take the opportunity and set to true.
-              // Otherwise, wait wait wait
-              while (!caching.compareAndSet(false, true)) {
-                try {
-                  Thread.sleep(10);
+          if (!DISABLE_GSTREAMER) {
+            // Kickstart the thread that will cache the file.
+            Thread t1 = new Thread(new Runnable() {
+              public void run() {
+                // As soon as we're not caching anymore, take the opportunity and set to true.
+                // Otherwise, wait wait wait
+                while (!caching.compareAndSet(false, true)) {
+                  try {
+                    Thread.sleep(10);
+                  }
+                  catch (InterruptedException e) {
+                    // we don't care.
+                  }
                 }
-                catch (InterruptedException e) {
-                  // we don't care.
-                }
-              }
-              
-              try {
-                println("Caching "+path+"...");
-                SoundFile s = new SoundFile(app, path);
-                int samplerate = s.sampleRate();
-                // Bug fix: mp3 sampleRate() doesn't seem to be very accurate
-                // for mp3 files
-                // TODO: Read mp3/ogg header data and determine samplerate there.
-                if (ext.equals("mp3")) {
-                  samplerate = 48000;
-                }
-                saveAsWav(s, samplerate, cachedFileNameFinal);
-                println("DONE SOUND CACHE "+path);
                 
+                try {
+                  println("Caching "+path+"...");
+                  SoundFile s = new SoundFile(app, path);
+                  int samplerate = s.sampleRate();
+                  // Bug fix: mp3 sampleRate() doesn't seem to be very accurate
+                  // for mp3 files
+                  // TODO: Read mp3/ogg header data and determine samplerate there.
+                  if (ext.equals("mp3")) {
+                    samplerate = 48000;
+                  }
+                  saveAsWav(s, samplerate, cachedFileNameFinal);
+                  println("DONE SOUND CACHE "+path);
+                  
+                }
+                catch (RuntimeException e) {
+                  console.warn("Sound caching error: "+e.getMessage());
+                }
+                // Release so that another thread can begin its caching process.
+                caching.set(false);
               }
-              catch (RuntimeException e) {
-                console.warn("Sound caching error.");
-              }
-              // Release so that another thread can begin its caching process.
-              caching.set(false);
             }
+            );
+            t1.start();
           }
-          );
-          t1.start();
         }
         
         // Nothing more to do.
@@ -2715,7 +2802,7 @@ class Engine {
     // IMPORTANT NOTE: this does NOT run the loader code in a seperate thread. Make sure
     // to run this in a seperate thread otherwise you're going to experience stalling BIIIIIG time.
     public void loadMusicCache() {
-      if (CACHE_MUSIC) {
+      if (CACHE_MUSIC && !isAndroid()) {
         String cacheFilePath = CACHE_PATH+MUSIC_CACHE_FILE;
         File f = new File(cacheFilePath);
         if (f.exists()) {
@@ -2847,6 +2934,8 @@ class Engine {
     
     // Ugly code but secure
     public boolean loadingMusic() {
+      // In android, we use a completely different system that doesn't need loading.
+      if (isAndroid()) return false;
       boolean ready = musicReady.get();
       //if (gstreamerLoading && ready) gstreamerLoading = false;
       return !ready;
@@ -2924,8 +3013,8 @@ class Engine {
       
       
       
-  
-      if (startupGStreamer) {
+      // We don't need to boot up gstreamer in android cus gstreamer doesn't exist in android.
+      if (startupGStreamer && !isAndroid()) {
         //console.log("startup gstreamer");
         // Start music and don't play anything (just want it to get past the inital delay of starting gstreamer.
         musicReady.set(false);
@@ -3046,7 +3135,7 @@ class Engine {
     public void processSound() {
       // Once gstreamer has loaded up, begin playing the music we actually want to play.
       if (reloadMusic && !loadingMusic()) {
-        if (CACHE_MUSIC) {
+        if (CACHE_MUSIC && !isAndroid()) {
           if (streamerMusic != null) streamerMusic.switchMode();
           if (streamerMusicFadeTo != null) streamerMusicFadeTo.switchMode();
           // We no longer need the cached music map. Just to be safe, don't null it
@@ -3107,10 +3196,15 @@ class Engine {
         // PERFORMANCE ISSUE: streamMusic.time()
         
         // If the music has finished playing, jump to beginning to play again.
-        if (streamerMusic.time() >= streamerMusic.duration()-error) {
-          streamerMusic.jump(0.);
-          if (!streamerMusic.isPlaying()) {
-            streamerMusic.play();
+        if (isAndroid()) {
+          
+        }
+        else {
+          if (streamerMusic.time() >= streamerMusic.duration()-error) {
+            streamerMusic.jump(0.);
+            if (!streamerMusic.isPlaying()) {
+              streamerMusic.play();
+            }
           }
         }
       }
@@ -3244,6 +3338,12 @@ class Engine {
     }
     
     public boolean mv(String oldPlace, String newPlace) {
+      // We know we're merely accessing a fake filesystem now in android.
+      if (isAndroid() && (oldPlace.charAt(0) != '/' || newPlace.charAt(0) != '/')) {
+        console.bugWarn("You can't move files to/from the assets folder! It's read-only!");
+        return false;
+      }
+      
       try {
         File of = new File(oldPlace);
         File nf = new File(newPlace);
@@ -3265,21 +3365,61 @@ class Engine {
       return true;
     }
     
-    public boolean copy(String src, String destination) {
-      if (!exists(src)) {
-        console.bugWarn("copy: "+src+" doesn't exist!");
-        return false;
-      }
+    public boolean copy(String src, String dest) {
+      //if (!exists(src)) {
+      //  console.bugWarn("copy: "+src+" doesn't exist!");
+      //  return false;
+      //}
       
+      // In android mode, we need to tell when we're copying from the source folder.
       
-      try {
-        Path copied = Paths.get(destination);
-        Path originalPath = (new File(src)).toPath();
-        Files.copy(originalPath, copied, StandardCopyOption.REPLACE_EXISTING);
+      if (isAndroid()) {
+        // Can't write to assets, dest should never be in assets.
+        if (dest.charAt(0) != '/') {
+          console.bugWarn("copy: you can't copy to destination! Assets is read-only!");
+        }
+        
+        // Case: copying from assets directory. We use android mode's buildin function to make
+        // a inputstreamer.
+        InputStream fis = null;
+        OutputStream fos = null;
+        try {
+            if (src.charAt(0) != '/') {
+                fis = createInput(src);
+                fos = new FileOutputStream(dest);
+            }
+            else {
+                fis = new FileInputStream(src);
+                fos = new FileOutputStream(dest);
+            }
+        
+
+            byte[] buffer = new byte[1024];
+            int length;
+            while ((length = fis.read(buffer)) > 0) {
+                fos.write(buffer, 0, length);
+            }
+            System.out.println("File copied successfully.");
+            
+            fis.close();
+            fos.close();
+
+        } catch (IOException e) {
+            console.warn("Couldn't copy files: "+e.getMessage());
+            return false;
+        }
+        
       }
-      catch (IOException e) {
-        console.warn(e.getMessage());
-        return false;
+      else {
+        try {
+          Path copied = Paths.get(dest);
+          Path originalPath = (new File(src)).toPath();
+          Files.copy(originalPath, copied, StandardCopyOption.REPLACE_EXISTING);
+        }
+        catch (IOException e) {
+          console.warn(e.getMessage());
+          return false;
+        }
       }
       return true;
     }
@@ -3372,6 +3512,18 @@ class Engine {
       }
       catch (StringIndexOutOfBoundsException e) {
         return "";
+      }
+    }
+    
+    // Because I can't be bothered to solve bugs.
+    // If there's no dir, returns the full path instead of nothing.
+    public String getDirLegacy(String path) {
+      try {
+        String str = path.substring(0, path.lastIndexOf('/', path.length()-2));
+        return str;
+      }
+      catch (StringIndexOutOfBoundsException e) {
+        return path;
       }
     }
     
@@ -4036,6 +4188,8 @@ class Engine {
     loadAsset(APPPATH+SOUND_PATH+"intro.wav");
     loadAsset(APPPATH+IMG_PATH+"logo.png");
     loadAllAssets(APPPATH+IMG_PATH+"loadingmorph/");
+    // We need to load shaders on the main thread.
+    loadAllAssets(APPPATH+SHADER_PATH);
     // Find out how many images there are in loadingmorph
     File f = new File(APPPATH+IMG_PATH+"loadingmorph/");
     
@@ -4091,16 +4245,6 @@ class Engine {
 
   public void displayInputPrompt() {
     if (inputPromptShown) {
-      // this is such a placeholder lol
-      app.noStroke();
-
-      app.fill(255);
-      app.textAlign(CENTER, CENTER);
-      app.textFont(DEFAULT_FONT, 60);
-      app.text(promptText, display.WIDTH/2, display.HEIGHT/2-100);
-      app.textSize(30);
-      app.text(input.keyboardMessage, display.WIDTH/2, display.HEIGHT/2);
-      
       if (keyCode == UP) {
         keyCode = 0;
         if (lastInput.length() > 0) {
@@ -4114,8 +4258,11 @@ class Engine {
           input.keyboardMessage += clipboard.getText();
         }
       }
+      
+      float buttonwi = 200;
+      boolean button = ui.basicButton("Enter", display.WIDTH/2-buttonwi/2, display.HEIGHT/2+50, buttonwi, 50);
 
-      if (input.enterOnce) {
+      if (input.enterOnce || button) {
         inputPromptShown = false;
         //if (input.keyboardMessage.length() <= 0) return;
         // Remove enter character at end
@@ -4127,6 +4274,16 @@ class Engine {
         lastInput = input.keyboardMessage;
         closeTouchKeyboard();
       }
+      
+      // this is such a placeholder lol
+      app.noStroke();
+
+      app.fill(255);
+      app.textAlign(CENTER, CENTER);
+      app.textFont(DEFAULT_FONT, 60);
+      app.text(promptText, display.WIDTH/2, display.HEIGHT/2-100);
+      app.textSize(30);
+      app.text(input.keyboardMessage, display.WIDTH/2, display.HEIGHT/2);
     }
   }
 
@@ -4590,17 +4747,22 @@ class Engine {
       if (console.debugInfo) console.log("Debug info enabled.");
       else console.log("Debug info disabled.");
     } else if (commandEquals(command, "/update")) {
-      shownUpdateScreen = false;
-      showUpdateScreen = false;
-      getUpdateInfo();
-      // Force delay
-      while (!updateInfoLoaded.get()) { delay(10); }
-      processUpdate();
-      if (showUpdateScreen) {
-        currScreen.requestScreen(new Updater(this, this.updateInfo));
-        console.log("An update is available!");
+      if (isAndroid()) {
+        console.log("Can't update within the app, check https://teojt.github.io/timeway for updates!");
       }
-      else console.log("No updates available.");
+      else {
+        shownUpdateScreen = false;
+        showUpdateScreen = false;
+        getUpdateInfo();
+        // Force delay
+        while (!updateInfoLoaded.get()) { delay(10); }
+        processUpdate();
+        if (showUpdateScreen) {
+          currScreen.requestScreen(new Updater(this, this.updateInfo));
+          console.log("An update is available!");
+        }
+        else console.log("No updates available.");
+      }
     } 
     else if (commandEquals(command, "/throwexception")) {
       console.log("Prepare for a crash!");
@@ -4747,20 +4909,23 @@ class Engine {
   AtomicBoolean updateInfoLoaded = new AtomicBoolean(false);
   public boolean showUpdateScreen = false;
   public void getUpdateInfo() {
-    Thread t = new Thread(new Runnable() {
-      public void run() {
-        try {
-          updateInfo = loadJSONObject(UPDATE_INFO_URL);
+    // That's right, the update feature goes completely unused in android.
+    if (!isAndroid()) {
+      Thread t = new Thread(new Runnable() {
+        public void run() {
+          try {
+            updateInfo = loadJSONObject(UPDATE_INFO_URL);
+          }
+          catch (Exception e) {
+            console.warn("Couldn't get update info");
+          }
+          updateInfoLoaded.set(true);
         }
-        catch (Exception e) {
-          console.warn("Couldn't get update info");
-        }
-        updateInfoLoaded.set(true);
       }
+      );
+      updateInfoLoaded.set(false);
+      t.start();
     }
-    );
-    updateInfoLoaded.set(false);
-    t.start();
   }
 
 
@@ -5160,7 +5325,7 @@ class Engine {
     //println(name);
 
     // We don't need to bother with content that's already been loaded.
-    if (loadedContent.contains(name)) {
+    if (loadedContent.contains(name) || name.equals("everything") || name.equals("load_list")) {
       return;
     }
     // if extension is image
@@ -5252,7 +5417,11 @@ class Engine {
     if (loadedEverything.get() == false) return true;
     
     // If caching's turned off wait for GStreamer.
-    if (!CACHE_MUSIC) {
+    if (isAndroid()) {
+      // Android doesn't wait for music
+      // Anyways do nothing here to stop the other code below running.
+    }
+    else if (!CACHE_MUSIC) {
       if (sound.loadingMusic()) return true;
     }
     else {
@@ -5282,28 +5451,33 @@ class Engine {
   public int calculateChecksum(PImage image) {
     // To prevent a really bad bug from happening, only actually calculate the checksum if the image is bigger than say,
     // 64 pixels lol.
-    if (image.width > 64 || image.height > 64) {
-      int checksum = 0;
-      int w = image.width;
-      int h = image.height;
-
-      int gapx = int(image.width*0.099);
-      int gapy = int(image.height*0.099);
-
-      for (int y = 0; y < h; y+=gapy) {
-        for (int x = 0; x < w; x+=gapx) {
-          int pixel = image.get(x, y);
-          int red = (pixel >> 16) & 0xFF; // Extract red component
-          int green = (pixel >> 8) & 0xFF; // Extract green component
-          int blue = pixel & 0xFF; // Extract blue component
-
-          // Add the pixel values to the checksum
-          checksum += red + green + blue;
+    try {
+      if (image.width > 64 || image.height > 64) {
+        int checksum = 0;
+        int w = image.width;
+        int h = image.height;
+  
+        int gapx = int(image.width*0.099);
+        int gapy = int(image.height*0.099);
+  
+        for (int y = 0; y < h; y+=gapy) {
+          for (int x = 0; x < w; x+=gapx) {
+            int pixel = image.get(x, y);
+            int red = (pixel >> 16) & 0xFF; // Extract red component
+            int green = (pixel >> 8) & 0xFF; // Extract green component
+            int blue = pixel & 0xFF; // Extract blue component
+  
+            // Add the pixel values to the checksum
+            checksum += red + green + blue;
+          }
         }
-      }
-
-      return checksum;
-    } else return 0;
+  
+        return checksum;
+      } else return 0;
+    }
+    catch (RuntimeException e) {
+      return 0;
+    }
   }
 
   public JSONObject cacheInfoJSON = null;
@@ -5591,8 +5765,7 @@ class Engine {
     properties.setString("actual", cachePath);
     properties.setInt("checksum", calculateChecksum(image));
     
-    File f = new File(originalPath);
-    if (f.exists()) {
+    if (file.exists(originalPath)) {
       properties.setString("lastModified", file.getLastModified(originalPath));
       properties.setInt("size", image.width*image.height*4);
     }
@@ -5634,13 +5807,10 @@ class Engine {
 
   public String generateCachePath(String ext) {
     // Get a unique idenfifier for the file
-    String cachePath = APPPATH+CACHE_PATH+"cache-"+str(int(random(0, 2147483646)))+"."+ext;
-    File f = new File(cachePath);
-    while (f.exists()) {
+    String cachePath = CACHE_PATH+"cache-"+str(int(random(0, 2147483646)))+"."+ext;
+    while (file.exists(cachePath)) {
       cachePath = CACHE_PATH+"cache-"+str(int(random(0, 2147483646)))+"."+ext;
-      f = new File(cachePath);
     }
-
     return cachePath;
   }
   
@@ -5922,12 +6092,16 @@ class Engine {
         case ALT:
           altDown = false;
           break;
+        // For android
+        case 67:
+          backspaceDown = false;
+          break;
         }
       }
       else if (kkey == BACKSPACE || kkey == RETURN) {
         backspaceDown = false;
       }
-      else if (kkey == ENTER) {
+      else if (kkey == ENTER || kkey == RETURN || int(kkey) == 10) {
         enterDown = false;
       }
       // Down keys
@@ -6088,12 +6262,18 @@ class Engine {
           case ALT:
             altDown = true;
             return;
+          case 67:
+            this.backspace();
+            backspaceDown = true;
+            return;
         }
-      } else if (kkey == ENTER || kkey == RETURN) {
+        // 10 for android
+      } else if (kkey == ENTER || kkey == RETURN || int(kkey) == 10) {
         if (this.addNewlineWhenEnterPressed) {
           this.keyboardMessage += "\n";
         }
         enterDown = true;
+        // 65535 67 for android
       } else if (kkey == BACKSPACE) {    // Backspace
         this.backspace();
         backspaceDown = true;

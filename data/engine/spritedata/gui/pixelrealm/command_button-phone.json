@@ -1,0 +1,17 @@
+{
+  "h": 170,
+  "vy0": 546,
+  "vx1": 546,
+  "vy2": 802,
+  "vx0": 290,
+  "vy1": 546,
+  "mode": "SINGLE",
+  "vx3": 290,
+  "vx2": 546,
+  "vy3": 802,
+  "w": 170,
+  "name": "command_button-phone",
+  "x": 290,
+  "y": 546,
+  "locked": false
+}
