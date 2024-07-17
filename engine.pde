@@ -30,7 +30,6 @@ import java.util.List;
 import com.sun.jna.Native;
 import com.sun.jna.Structure;
 import processing.video.Movie;
-import processing.sound.*;
 import gifAnimation.*;
 //import cassette.audiofiles.*;
 
@@ -2563,28 +2562,25 @@ class Engine {
     
     @SuppressWarnings("unused")
     public void saveAsWav(SoundFile s, int sampleRate, String path) {
-      //AudioSample a = (AudioSample)s;
-      
-      //// Only allow a maximum of a minute of audio data to be loaded
-      //int size = min(a.frames()*a.channels(), 60*a.channels()*sampleRate);
-      //float[] data = new float[size];
-      //a.read(data);
-      
-      //int bitDepth = 16;
-      //int numChannels = a.channels();
-
-      //AudioFormat audioFormat = new AudioFormat(sampleRate, bitDepth, numChannels, true, false);
-      //byte[] audioData = floatArrayToByteArray(data, bitDepth);
-      
-      //try {
-      //    ByteArrayInputStream byteArrayInputStream = new ByteArrayInputStream(audioData);
-      //    AudioInputStream audioInputStream = new AudioInputStream(byteArrayInputStream, audioFormat, data.length / numChannels);
-      //    AudioSystem.write(audioInputStream, AudioFileFormat.Type.WAVE, new File(path));
-      //} catch (IOException e) {
-      //    e.printStackTrace();
-      //}
-      
-      //updateMusicCache(path);
+      // Android uses a completely different audio system and caching isn't needed 
+      // (cus we don't need to wait for gstreamer to start up), so we disable caching
+      // music, it's not needed.
+      if (!isAndroid()) {
+        AudioSample a = (AudioSample)s;
+        
+        // Only allow a maximum of a minute of audio data to be loaded
+        int size = min(a.frames()*a.channels(), 60*a.channels()*sampleRate);
+        float[] data = new float[size];
+        a.read(data);
+        int bitDepth = 16;
+        int numChannels = a.channels();
+  
+        byte[] audioData = floatArrayToByteArray(data, bitDepth);
+        
+        saveByteArrayAsWAV(audioData, sampleRate, bitDepth, numChannels, path);
+        
+        updateMusicCache(path);
+      }
       
       //// TODO: User may close application midway while creating wav which might end up
       //// in Timeway not loading.
@@ -2748,7 +2744,7 @@ class Engine {
                     samplerate = 48000;
                   }
                   saveAsWav(s, samplerate, cachedFileNameFinal);
-                  println("DONE SOUND CACHE "+path);
+                  println("DONE SOUND CACHE "+cachedFileNameFinal);
                   
                 }
                 catch (RuntimeException e) {
@@ -5502,8 +5498,7 @@ class Engine {
     if (cacheInfoTimeout == 0) {
       // Should be true if the info file doesn't exist.
       console.info("openCacheInfo: "+CACHE_PATH+CACHE_INFO);
-      File f = new File(APPPATH+CACHE_INFO);
-      if (!f.exists()) {
+      if (!file.exists(CACHE_PATH+CACHE_INFO)) {
         createNewInfoFile = true;
       } else {
         try {
@@ -6313,7 +6308,7 @@ class Engine {
       
       // If still false, is nothing so isn't an image.
       if (cachedClipboardObject == null) return false;
-      return isClipboardImage(cachedClipboardObject);
+      return (cachedClipboardObject instanceof PImage);
     }
   
     public String getText()
@@ -6333,7 +6328,9 @@ class Engine {
     }
   
     public PImage getImage() {
-      return getPImageFromClipboard();
+      if (cachedClipboardObject == null) cachedClipboardObject = getFromClipboardImageFlavour();
+      
+      return (PImage)cachedClipboardObject;
     }
     
     // Returns true if successful, false if not
