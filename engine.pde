@@ -106,6 +106,7 @@ class Engine {
   public PowerModeModule power;
   public AudioModule sound;
   public FilemanagerModule file;
+  public StatsModule stats;
   public ClipboardModule clipboard;
   public UIModule ui;
   public InputModule input;
@@ -439,7 +440,7 @@ class Engine {
   public class PowerModeModule {
     
   // Power modes
-    private PowerMode powerMode = PowerMode.HIGH;
+    public PowerMode powerMode = PowerMode.HIGH;
     private boolean noBattery = false;
     private boolean sleepyMode = false;
     private boolean dynamicFramerate = true;
@@ -723,7 +724,7 @@ class Engine {
         lastPowerCheck = millis()+POWER_CHECK_INTERVAL;
   
         // If we specifically requested slow, then go right ahead.
-        if (powerSaver || sleepyMode) {
+        if (sleepyMode) {
           prevPowerMode = powerMode;
           fpsTrackingMode = SLEEPY;
           setPowerMode(PowerMode.SLEEPY);
@@ -736,7 +737,7 @@ class Engine {
       //  return;
       //}
       
-      if (powerSaver || sleepyMode) return;
+      if (sleepyMode) return;
         
       // If forced power mode is enabled, don't bother with the powermode selection algorithm below.
       if (forcePowerModeEnabled) {
@@ -862,8 +863,15 @@ class Engine {
                 n = 1;
                 break;
               case NORMAL:
-                setPowerMode(PowerMode.HIGH);
-                n = 1;
+                // Cap it out at 30fps when in power saver mode.
+                if (getPowerSaver()) {
+                  fpsScore = FPS_SCORE_RECOVERY;
+                  n = 2;
+                }
+                else {
+                  setPowerMode(PowerMode.HIGH);
+                  n = 1;
+                }
                 break;
               case SLEEPY:
                 setPowerMode(PowerMode.NORMAL);
@@ -1642,30 +1650,30 @@ class Engine {
   
         // Sorry for the code duplication!
         switch (transitionDirection) {
-        case RIGHT:
-          app.pushMatrix();
-          prevScreen.screenx = ((WIDTH*transition)-WIDTH)*displayScale;
-          prevScreen.display();
-          app.popMatrix();
-  
-  
-          app.pushMatrix();
-          currScreen.screenx = ((WIDTH*transition)*displayScale);
-          currScreen.display();
-          app.popMatrix();
-          break;
-        case LEFT:
-          app.pushMatrix();
-          prevScreen.screenx = ((WIDTH-(WIDTH*transition))*displayScale);
-          prevScreen.display();
-          app.popMatrix();
-  
-  
-          app.pushMatrix();
-          currScreen.screenx = ((-WIDTH*transition)*displayScale);
-          currScreen.display();
-          app.popMatrix();
-          break;
+          case RIGHT:
+            app.pushMatrix();
+            prevScreen.screenx = ((WIDTH*transition)-WIDTH)*displayScale;
+            prevScreen.display();
+            app.popMatrix();
+    
+    
+            app.pushMatrix();
+            currScreen.screenx = ((WIDTH*transition)*displayScale);
+            currScreen.display();
+            app.popMatrix();
+            break;
+          case LEFT:
+            app.pushMatrix();
+            prevScreen.screenx = ((WIDTH-(WIDTH*transition))*displayScale);
+            prevScreen.display();
+            app.popMatrix();
+    
+    
+            app.pushMatrix();
+            currScreen.screenx = ((-WIDTH*transition)*displayScale);
+            currScreen.display();
+            app.popMatrix();
+            break;
         }
   
         if (transition < 0.001) {
@@ -2587,6 +2595,8 @@ class Engine {
         saveByteArrayAsWAV(audioData, sampleRate, bitDepth, numChannels, path);
         
         updateMusicCache(path);
+        
+        stats.increase("music_cache_files", 1);
       }
       
       //// TODO: User may close application midway while creating wav which might end up
@@ -3224,6 +3234,80 @@ class Engine {
     // End of the module
   }
   
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  public class StatsModule {
+    JSONObject json;
+    
+    public StatsModule() {
+      if (isAndroid()) {
+        String path = file.directorify(getAndroidWriteableDir())+STATS_FILE;
+        if (file.exists(path))
+          json = loadJSONObject(path);
+        else json = new JSONObject();
+      }
+      else {
+        String path = APPPATH+STATS_FILE;
+        if (file.exists(path))
+          json = loadJSONObject(path);
+        else json = new JSONObject();
+      }
+    }
+    
+    public void set(String name, int value) {
+      json.setInt(name, value);
+    }
+    
+    public void set(String name, float value) {
+      json.setFloat(name, value);
+    }
+    
+    public void increase(String name, int value) {
+      json.setInt(name, json.getInt(name, 0)+value);
+    }
+    
+    public void increase(String name, float value) {
+      json.setFloat(name, json.getFloat(name, 0.0)+value);
+    }
+    
+    public void save() {
+      String path = "";
+      if (isAndroid()) {
+        path = file.directorify(getAndroidWriteableDir())+STATS_FILE;
+      }
+      else {
+        path = APPPATH+STATS_FILE;
+      }
+      saveJSONObject(json, path);
+    }
+  }
   
   
   
@@ -4180,6 +4264,7 @@ class Engine {
     settings = new SettingsModule();
     input = new InputModule();
     file = new FilemanagerModule(this);
+    stats = new StatsModule();
     sharedResources = new SharedResourcesModule();
     display = new DisplayModule();
     power = new PowerModeModule();
@@ -4207,6 +4292,8 @@ class Engine {
       display.loadingFramesLength = f.listFiles().length;
     }
     loadAsset(APPPATH+DEFAULT_FONT_PATH);
+    
+    stats.increase("started_up", 1);
     
     // Load in seperate thread.
     loadedEverything.set(false);
@@ -4714,6 +4801,8 @@ class Engine {
 
 
   public void runCommand(String command) throws RuntimeException {
+    boolean success = true;
+    
     // TODO: have a better system for commands.
     if (command.equals("/powersaver")) {
       if (!power.getPowerSaver()) {
@@ -4831,7 +4920,9 @@ class Engine {
       // Do nothing, we just don't want it to return "unknown command" for a custom command.
     } else {
       console.log("Unknown command.");
+      success = false;
     }
+    stats.increase("commands_entered", 1);
   }
 
 
@@ -5783,6 +5874,7 @@ class Engine {
 
     cacheInfoJSON.setJSONObject(originalPath, properties);
     console.info("saveCacheImage: Done creating cache");
+    stats.increase("cache_files_created", 1);
 
     return cachePath;
   }
@@ -5799,12 +5891,17 @@ class Engine {
     saveBytes(cachePath, bytes);
     // Load the png.
     PImage img = loadImage(cachePath);
-
-    properties.setString("actual", cachePath);
-    properties.setInt("checksum", calculateChecksum(img));
-    properties.setString("lastModified", "");
-    properties.setInt("size", 0);
-    cacheInfoJSON.setJSONObject(originalPath, properties);
+    
+    // TODO: I don't like this line of code at all...
+    File f = new File(cachePath);
+    f.delete();
+    
+    // Also remember to uncomment that.
+    //properties.setString("actual", cachePath);
+    //properties.setInt("checksum", calculateChecksum(img));
+    //properties.setString("lastModified", "");
+    //properties.setInt("size", 0);
+    //cacheInfoJSON.setJSONObject(originalPath, properties);
 
 
     return img;
@@ -6293,6 +6390,7 @@ class Engine {
       if (val >= 1024) return;
       if (keys[val] > 0) return;
       keys[val] = 1;
+      stats.increase("keys_pressed", 1);
     }
   }
 
@@ -6388,16 +6486,23 @@ class Engine {
     if (cacheInfoTimeout > 0) {
       cacheInfoTimeout--;
       if (cacheInfoTimeout == 0) {
-        if (cacheInfoJSON != null) {
-          console.info("processCaching: saving cache info.");
-          saveJSONObject(cacheInfoJSON, CACHE_PATH+CACHE_INFO);
-        }
+        saveCacheInfoNow();
       }
+    }
+  }
+  
+  public void saveCacheInfoNow() {
+    if (cacheInfoJSON != null) {
+      console.info("processCaching: saving cache info.");
+      saveJSONObject(cacheInfoJSON, CACHE_PATH+CACHE_INFO);
+      cacheInfoTimeout = 0;
+      stats.increase("total_cache_info_saves", 1);
     }
   }
 
   // Woops I should place this at the start.
   boolean focusedMode = true;
+  int before = 0;
 
   // The core engine function which essentially runs EVERYTHING in Timeway.
   // All the screens, all the input management, and everything else.
@@ -6415,6 +6520,9 @@ class Engine {
     sound.processSound();
     processCaching();
 
+    if ((int)app.frameCount % 2000 == 0) {
+      stats.save();
+    }
 
     if (display != null) display.recordRendererTime();
     // This should be run at all times because apparently (for some stupid reason)
@@ -6494,6 +6602,9 @@ class Engine {
     display.resetTimes();
     
     if (display != null) display.timeMode = display.IDLE_TIME;
+    
+    stats.increase("total_time_in_timeway", (float(millis())-float(before))/1000.);
+    before = millis();
   }
   
 }
@@ -6526,6 +6637,7 @@ public abstract class Screen {
   protected Engine.PowerModeModule power;
   protected Engine.AudioModule sound;
   protected Engine.FilemanagerModule file;
+  protected Engine.StatsModule stats;
   protected Engine.ClipboardModule clipboard;
   protected Engine.UIModule ui;
   
@@ -6557,6 +6669,7 @@ public abstract class Screen {
     this.sound = engine.sound;
     this.file = engine.file;
     this.clipboard = engine.clipboard;
+    this.stats = engine.stats;
     
     this.WIDTH = engine.display.WIDTH;
     this.HEIGHT = engine.display.HEIGHT;
@@ -6584,6 +6697,11 @@ public abstract class Screen {
     noStroke();
     rect(0, myUpperBarWeight, WIDTH, HEIGHT-myUpperBarWeight-myLowerBarWeight);
     display.recordLogicTime();
+  }
+  
+  // Run code here you want to run in the background during MINIMAL mode.
+  protected void runMinimal() {
+    
   }
 
   public void startupAnimation() {
@@ -6658,7 +6776,6 @@ public abstract class Screen {
       app.translate(screenx, screeny);
       app.scale(display.getScale());
       this.backg();
-
       this.content();
       this.upperBar();
       this.lowerBar();
@@ -6666,6 +6783,9 @@ public abstract class Screen {
       // Show the minimenu if any.
       
       app.popMatrix();
+    }
+    else {
+      this.runMinimal();
     }
   }
 }

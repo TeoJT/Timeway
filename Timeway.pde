@@ -38,10 +38,21 @@ void settings() {
     if (f.exists()) {
       setDesktopIcon(iconLocation);
     }
+    
+    Runtime.getRuntime().addShutdownHook(new Thread(new Runnable() {
+        public void run() {
+            shutdown();
+        }
+    }, "Shutdown-thread"));
+    
   }
   catch (Exception e) {
     minimalErrorDialog("A fatal error has occurred: \n"+e.getMessage()+"\n"+e.getStackTrace());
   }
+}
+
+void shutdown() {
+  timewayEngine.stats.save();
 }
 
 

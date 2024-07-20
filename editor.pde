@@ -625,8 +625,9 @@ public class Editor extends Screen {
     
     //**************************************************************************************
     //**********************************EDITOR SCREEN CODE**********************************
-    //**************************************************************************************    
-    public Editor(Engine engine, String entryPath, PGraphics c) {
+    //**************************************************************************************  
+    // Pls don't use this constructor in your code if you are sane.
+    public Editor(Engine engine, String entryPath, PGraphics c, boolean doMultithreaded) {
         super(engine);
         this.entryPath = entryPath;
         if (c == null) {
@@ -688,12 +689,17 @@ public class Editor extends Screen {
         myUpperBarColor   = myLowerBarColor;
         myBackgroundColor = BACKGROUND_COLOR;
         //myBackgroundColor = color(255,0,0);
-
-        readEntryJSONInSeperateThread();
+        
+        if (doMultithreaded) 
+          readEntryJSONInSeperateThread();
+        else {
+          readEntryJSON();
+          loading = false;
+        }
     }
     
     public Editor(Engine e, String entryPath) {
-      this(e, entryPath, null);
+      this(e, entryPath, null, true);
     }
 
     //*****************************************************************
@@ -762,6 +768,10 @@ public class Editor extends Screen {
         String cachePath = engine.saveCacheImage(entryPath+"_"+str(numImages++), image.pimage);
         
         byte[] cacheBytes = loadBytes(cachePath);
+        
+        // TODO: I don't like this line of code at all...
+        File f = new File(cachePath);
+        f.delete();
         
         // NullPointerException
         String encodedPng = new String(Base64.getEncoder().encode(cacheBytes));
@@ -1389,7 +1399,10 @@ public class Editor extends Screen {
       if (clipboard.isImage()) {
         PImage pastedImage = clipboard.getImage();
         if (pastedImage == null) console.log("Can't paste image from clipboard!");
-        else insertImage(pastedImage);
+        else {
+          insertImage(pastedImage);
+          stats.increase("images_pasted", 1);
+        }
       }
       else if (clipboard.isString()) {
         String pastedString = clipboard.getText();
@@ -1413,6 +1426,7 @@ public class Editor extends Screen {
           insertedYpos += 20;
           insertText(pastedString, insertedXpos, insertedYpos);
         }
+        stats.increase("strings_pasted", 1);
       }
       else console.log("Can't paste item from clipboard!");
     }
@@ -1653,6 +1667,8 @@ public class Editor extends Screen {
         app.popMatrix();
       }
     }
+    
+    int before = 0;
 
     public void content() {
       if (loading) {
@@ -1667,6 +1683,9 @@ public class Editor extends Screen {
           renderEditor();
         }
       }
+      
+      stats.increase("time_in_editor", (float(millis())-float(before))/1000.);
+      before = millis();
     }
 
     public void startupAnimation() {

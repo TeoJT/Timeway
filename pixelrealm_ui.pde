@@ -504,6 +504,7 @@ public class PixelRealmWithUI extends PixelRealm {
           if (!file.exists(folderpath)) {
             issueRefresherCommand(REFRESHER_PAUSE);
             new File(folderpath).mkdirs();
+            stats.increase("folders_created", 1);
           } else {
             sound.playSound("nope");
             console.log(input.keyboardMessage+" already exists!");
@@ -549,6 +550,7 @@ public class PixelRealmWithUI extends PixelRealm {
             FileWriter emptyFile = new FileWriter(path);
             emptyFile.write("");
             emptyFile.close();
+            stats.increase("entries_created", 1);
           }
           catch (IOException e2) {
             console.warn("Couldn't create entry, IO error!");

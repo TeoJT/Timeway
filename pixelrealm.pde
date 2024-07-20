@@ -86,6 +86,7 @@ public class PixelRealm extends Screen {
   private int drawnEntries = 0;
   private int entriesTotal = 0;
   private int timeInRealm  = 0;
+  private float timeNotMoving = 0.;
   
   
   // --- Legacy backward-compatibility stuff & easter eggs ---
@@ -911,6 +912,7 @@ public class PixelRealm extends Screen {
     protected TerrainAttributes terrain;
     private DirectoryPortal exitPortal = null;
     private String musicPath = engine.APPPATH+REALM_BGM_DEFAULT;
+    private boolean loadMinimal = false;
     
     public HashMap<Integer, TerrainChunkV2> chunks = new HashMap<Integer, TerrainChunkV2>();
     
@@ -936,6 +938,22 @@ public class PixelRealm extends Screen {
     
     
     // --- Constructor ---
+    public PixelRealmState(String dir, boolean loadMinimal) {
+      this.stateDirectory = file.directorify(dir);
+      
+      this.loadMinimal = loadMinimal;
+      if (isNewRealm() && !loadMinimal) promptNewRealm();
+      // Load realm emerging from our exit portal.
+      loadRealm();
+      
+      // For backwards compatibility (just set version = "1.0")
+      if (version.equals("1.0") || version.equals("1.1")) {
+        legacy_terrainObjects = new Stack<PRObject>(int(((terrain.getRenderDistance()+5)*2)*((terrain.getRenderDistance()+5)*2)));
+        legacy_autogenStuff = new HashSet<String>();
+        engine.noiseSeed(getHash(dir));
+      }
+    }
+    
     public PixelRealmState(String dir, String emergeFrom) {
       this.stateDirectory = file.directorify(dir);
       
@@ -952,18 +970,8 @@ public class PixelRealm extends Screen {
     }
     
     public PixelRealmState(String dir) {
-      this.stateDirectory = file.directorify(dir);
-
-      if (isNewRealm()) promptNewRealm();
-      // Load realm emerging from our exit portal.
-      loadRealm();
-      
-      // For backwards compatibility (just set version = "1.0")
-      if (version.equals("1.0") || version.equals("1.1")) {
-        legacy_terrainObjects = new Stack<PRObject>(int(((terrain.getRenderDistance()+5)*2)*((terrain.getRenderDistance()+5)*2)));
-        legacy_autogenStuff = new HashSet<String>();
-        engine.noiseSeed(getHash(dir));
-      }
+      // Shortest constructor for when you aren't doing fancy background stuff with this state.
+      this(dir, false);
     }
     
     
@@ -2242,13 +2250,14 @@ public class PixelRealm extends Screen {
           loadFlag = true;
           
           display.uploadAllAtOnce(true);
-          scene.endDraw();
+          if (power.powerMode != PowerMode.MINIMAL) scene.endDraw();
+            
           display.setPGraphics(mycanvas);
           mycanvas.beginDraw();
           mycanvas.background(0xFF0f0f0e);
           mycanvas.endDraw();
           display.setPGraphics(g);
-          scene.beginDraw();
+          if (power.powerMode != PowerMode.MINIMAL) scene.beginDraw();
           img = new RealmTexture();
           img.setLarge(mycanvas);
           display.uploadAllAtOnce(false);
@@ -2265,9 +2274,25 @@ public class PixelRealm extends Screen {
         super.load(json);
       }
       
+      // Yeah I'm getting too lazy now.
+      public void loadNonConcurrent() {
+        // Basically:
+        // Run our "does this cache exist?" function.
+        
+        engine.tryLoadImageCache(dir, new Runnable() {
+          // Here, we gotta generate cache.
+          // Pretty easy in hindsight.
+          public void run() {
+            renderedEntry = new Editor(engine, dir, mycanvas, false);
+            loadFromSource = true;
+          }
+        });
+        
+      }
+      
       public void loadFromSource() {
         entriesTotal++;
-        renderedEntry = new Editor(engine, dir, mycanvas);
+        renderedEntry = new Editor(engine, dir, mycanvas, true);
         loadFromSource = true;
       }
       
@@ -2285,7 +2310,7 @@ public class PixelRealm extends Screen {
             // but this is a load so it doesn't matter that much), quickly render our entry, then go back
             // to rendering to the main scene. Remember this all runs on the main thread.
             display.uploadAllAtOnce(true);
-            scene.endDraw();
+            if (power.powerMode != PowerMode.MINIMAL) scene.endDraw();
             display.setPGraphics(mycanvas);
             mycanvas.beginDraw();
             mycanvas.background(renderedEntry.BACKGROUND_COLOR);
@@ -2293,7 +2318,7 @@ public class PixelRealm extends Screen {
             renderedEntry.renderPlaceables();
             mycanvas.endDraw();
             display.setPGraphics(g);
-            scene.beginDraw();
+            if (power.powerMode != PowerMode.MINIMAL) scene.beginDraw();
             img = new RealmTexture();
             img.setLarge(mycanvas);
             display.uploadAllAtOnce(false);
@@ -2418,7 +2443,7 @@ public class PixelRealm extends Screen {
         // Reset tint
         this.tint = color(255);
       }
-  
+      
       public void load(JSONObject json) {
         super.load(json);
   
@@ -2429,6 +2454,29 @@ public class PixelRealm extends Screen {
         if (file.getExt(this.filename).equals("gif") && showExperimentalGifs) cacheFlag = false;
           
         addRequestToQueue(dir, MAX_CACHE_SIZE);
+      }
+      
+      // Same as load, except we do NOT call addRequestToQueue(dir, MAX_CACHE_SIZE) and instead copy the multithreaded code
+      // and run it in the main thread.
+      public void loadNonConcurrent() {
+        
+        // Annnnnd yeah let's just save the cache immediately.
+        // To be honest we should probably assign the result to img, but
+        // let's be real: right now we're only ever using this for background caching.
+        // If for whatever reason you need to load displayable images into the main thread,
+        // well it's future me's problem to deal with.
+        // Except I wrote a comment here explaining what exactly you're supposed to do in the
+        // event that you need to load images in the main thread so you're welcome I guess.
+        engine.tryLoadImageCache(dir, new Runnable() {
+          public void run() {
+            PImage im2 = loadImage(dir);
+            engine.scaleDown(im2, MAX_CACHE_SIZE);
+            engine.setOriginalImage(im2);
+            engine.setCachingShrink(MAX_CACHE_SIZE, 0);
+            engine.saveCacheImage(dir, im2);
+          }
+        }
+        );
       }
   
       public JSONObject save() {
@@ -2469,6 +2517,7 @@ public class PixelRealm extends Screen {
         console.warn("A problem occured with creating the shortcut file...");
         console.warn(e.getMessage());
       }
+      stats.increase("shortcuts_created", 1);
       
       return shortcutPath;
     }
@@ -2559,6 +2608,7 @@ public class PixelRealm extends Screen {
           
           sound.playSound("shift");
           //prevRealm = currRealm;
+          stats.increase("shortcut_portals_entered", 1);
           gotoRealm(this.shortcutDir);
         }
       }
@@ -2646,6 +2696,7 @@ public class PixelRealm extends Screen {
           
           sound.playSound("shift");
           // Perfectly optimised. Creating a new state instead of a new screen
+          stats.increase("directory_portals_entered", 1);
           gotoRealm(this.dir, stateDirectory);
         }
       }
@@ -2712,9 +2763,12 @@ public class PixelRealm extends Screen {
         if (touchingPlayer()) {
           coinCounterBounce = 1.;
           sound.playSound("coin");
+          stats.increase("coins_collected", 1);
           collectedCoins++;
-          if (collectedCoins % 100 == 0)
+          if (collectedCoins % 100 == 0) {
             sound.playSound("oneup");
+            stats.increase("oneups", 1);
+          }
           this.destroy();
         }
       }
@@ -3223,9 +3277,10 @@ public class PixelRealm extends Screen {
     
     
     // ----- LOAD REALM CODE -----
-    
     // Load realm but we don't emerge out of anywhere.
     public void loadRealm() {
+      if (!loadMinimal)
+        stats.increase("realms_loaded", 1);
       // Reset memory usage
       memUsage.set(0);
       // TODO: we should also prolly kill all active loading threads too somehow...
@@ -3245,6 +3300,7 @@ public class PixelRealm extends Screen {
     }
     
     public void refreshFiles() {
+      stats.increase("refreshes", 1);
       // Reset memory usage
       memUsage.set(0);
       files = new LinkedList<FileObject>();
@@ -3395,6 +3451,7 @@ public class PixelRealm extends Screen {
           
           // Create actual file object
           FileObject fileObject = createPRObject(path);
+          
           fileObject.load(somejson);
           
           // Create pocket item
@@ -3479,10 +3536,15 @@ public class PixelRealm extends Screen {
         // Our current version
         if (version.equals("2.0")) {
           loadRealmV2(jsonFile);
+          stats.increase("load_v_2_0", 1);
         }
         // Legacy "world_3d" version where everything was simple and a mess lol.
         else if (version.equals("1.0") || version.equals("1.1")) {
           loadRealmV1(jsonFile);
+          if (version.equals("1.0"))
+            stats.increase("load_v_1_0", 1);
+          else if (version.equals("1.1"))
+            stats.increase("load_v_1_1", 1);
         }
         // Unknown version.
         else {
@@ -3496,7 +3558,9 @@ public class PixelRealm extends Screen {
         
       // File doesn't exist; create new turf file.
       } else {
-        console.log("Creating new realm turf file.");
+        if (!loadMinimal) {
+          console.log("Creating new realm turf file.");
+        }
         
         if (version.equals("1.0") || version.equals("1.1")) terrain = new SinesinesineTerrain();
         else if (version.equals("2.0")) {
@@ -3505,8 +3569,11 @@ public class PixelRealm extends Screen {
           SinesinesineTerrain t = new SinesinesineTerrain();
           t.setRenderDistance(3);
           t.setGroundSize(150.);
-          terrain = t;
+          terrain = t;          
+          stats.increase("new_realms_created", 1);
         }
+        
+        if (loadMinimal) return;
         
         // None of the objects are loaded from file but we still need to
         // call load() since this contains code to init the objects.
@@ -3561,6 +3628,8 @@ public class PixelRealm extends Screen {
         legacy_autogenStuff = new HashSet<String>();
       }
       engine.noiseSeed(getHash(stateDirectory));
+      
+      if (loadMinimal) return;
 
       int l = objects3d.size();
       // Loop thru each file object in the array. Remember each object is uniquely identified by its filename.
@@ -3579,7 +3648,7 @@ public class PixelRealm extends Screen {
             // on to the next item.
             continue;
           }
-
+          
           // From here, the way the object is loaded is depending on its type.
           o.load(probjjson);
         }
@@ -3651,6 +3720,9 @@ public class PixelRealm extends Screen {
         }
       }
       
+      
+      if (loadMinimal) return;
+      
       l = objects3d.size();
       // Loop thru each file object in the array. Remember each object is uniquely identified by its filename.
       for (int i = 0; i < l; i++) {
@@ -3674,8 +3746,8 @@ public class PixelRealm extends Screen {
             // on to the next item.
             continue;
           }
+          
 
-          // From here, the way the object is loaded is depending on its type.
           o.load(probjjson);
         //}
         // For some reason we can get unexplained nullpointerexceptions.
@@ -3686,11 +3758,12 @@ public class PixelRealm extends Screen {
         //}
       }
       
+      
       // For any remaiining items (still in the hashmap because they  are new files that were not
       // in the json file), call the load function to init them.
       JSONObject emptyJSON = new JSONObject();
       for (FileObject o : namesToObjects.values()) {
-        o.load(emptyJSON);
+          o.load(emptyJSON);
       }
       
       // Bye bye Evolving Gateway coins :(
@@ -4136,6 +4209,7 @@ public class PixelRealm extends Screen {
         //requestScreen(new Explorer(engine, stateDirectory));
         if (!file.atRootDir(stateDirectory)) {
           gotoRealm(file.getPrevDir(stateDirectory), stateDirectory);
+          stats.increase("previous_directory_traversals", 1);
         }
       }
   
@@ -4232,6 +4306,12 @@ public class PixelRealm extends Screen {
                 //  sound.playSound("water_jump", random(1.9, 2.5));
                 //else
               }
+              
+              
+              timeNotMoving = 0; 
+            }
+            else {
+              timeNotMoving += display.getDelta();
             }
           }
           
@@ -4258,6 +4338,7 @@ public class PixelRealm extends Screen {
               coyoteJump = 0.;
               yvel = jumpStrength;
               playerY -= 10;
+              stats.increase("jumps", 1);
               if (isInWater) {
                 sound.playSound("water_jump");
                 jumpTimeout = 40.;
@@ -4288,6 +4369,7 @@ public class PixelRealm extends Screen {
           else if (splash) {
             yvel = 0.;
             sound.playSound("splash", random(0.8, 1.4));
+            stats.increase("splashes", 1);
           }
           else {
             // Change yvel while we're in the air
@@ -5134,6 +5216,13 @@ public class PixelRealm extends Screen {
       currRealm = new PixelRealmState(to);
     else
       currRealm = new PixelRealmState(to, fro);
+    
+    stats.increase("realms_traversed", 1);
+      
+      
+    backgroundRealm = null;
+    realmsToVisit.clear();
+    //visitedBackgroundRealms.add(to);
         
     
     // Creating a new realm won't start the music automatically cus we like manual bug-free control.
@@ -5254,7 +5343,8 @@ public class PixelRealm extends Screen {
     
     
     
-    
+  int before = 0;
+  boolean beginBackgroundCaching = true;
     
     
   // Finally, the most important code of all
@@ -5264,6 +5354,26 @@ public class PixelRealm extends Screen {
     // Pre-rendering stuff.
     portalCoolDown -= display.getDelta();
     animationTick += display.getDelta();
+    // Trollolloloolloollolloll
+    // (This is so that we can begin in a new caching location if we decide to move)
+    //backgroundRealm = null;
+    //if (realmsToVisit.size() > 0) {
+    //  realmsToVisit.clear();
+    //}
+    
+    if (timeNotMoving > 800) {
+      if (!power.getPowerSaver()) {
+        doBackgroundCaching(15);
+      }
+      if (beginBackgroundCaching) {
+        console.log("zzz...");
+        beginBackgroundCaching = false;
+      }
+    }
+    else {
+      beginBackgroundCaching = true;
+    }
+    
     runMultithreadedLoader();
     if (refreshRealm.getAndSet(false) == true) {
       console.log("Change detected, refreshing realm.");
@@ -5334,6 +5444,7 @@ public class PixelRealm extends Screen {
       
     // Quickwarp controls (outside of player controls because we need non-state
     // class to run it)
+    // TODO: This should really be in runPlayer yet it's here for some reason?
     if (!movementPaused) {
       for (int i = 0; i < 10; i++) {
         // Go through all the keys 0-9 and check if it's being pressed
@@ -5349,6 +5460,7 @@ public class PixelRealm extends Screen {
           else {
             switchToRealm (quickWarpRealms[i]);
           }
+          stats.increase("warps", 1);
           quickWarpIndex = i;
           sound.playSound("swish");
           portalLight = 255;
@@ -5358,6 +5470,8 @@ public class PixelRealm extends Screen {
     }
     
     timeInRealm++;
+    stats.increase("time_in_pixelrealm", (float(millis())-float(before))/1000.);
+    before = millis();
   }
   
   
@@ -5368,6 +5482,138 @@ public class PixelRealm extends Screen {
   public void content() {
     if (engine.power.getSleepyMode()) engine.power.setAwake();
     runPixelRealm(); 
+  }
+  
+  PixelRealmState backgroundRealm = null;
+  HashSet<String> visitedBackgroundRealms = new HashSet<String>();
+  ArrayList<String> realmsToVisit = new ArrayList<String>();
+  ArrayList<PixelRealmState.ImageFileObject> entriesToLoad = new ArrayList<PixelRealmState.ImageFileObject>();
+  AtomicBoolean completeBackgroundLoading = new AtomicBoolean(false);
+  PixelRealmState.EntryFileObject backgroundEntry;
+  
+  int intervalBackground = 0;
+  
+  protected void runMinimal() {
+    //if (!power.getPowerSaver()) {
+    //  doBackgroundCaching(1);
+    //}
+  }
+  
+  protected void doBackgroundCaching(int interval) {
+    intervalBackground++;
+    
+    
+    // Skip a turn and wait for loading to complete.
+    if (completeBackgroundLoading.get() == true) {
+      return;
+    }
+    
+    // Once the entry has been loaded, rendering stage and save to disk
+    if (backgroundEntry != null) {
+      drawEntryOnce = true;
+      backgroundEntry.run();
+      
+      //println("In "+backgroundRealm.stateDirectory);
+      //if (!drawEntryOnce) {
+      //  println(backgroundEntry.filename+" loaded.");
+      //}
+      //else println(backgroundEntry.filename+" is already cached.");
+      backgroundEntry = null;
+      return;
+    }
+    
+    // Ready the individual entries
+    if (entriesToLoad.size() > 0) {
+      PixelRealmState.ImageFileObject p = null;
+      PImage result = display.systemImages.get("white").pimage;
+      while (entriesToLoad.size() > 0 && result != null) {
+        // Until we get an entry that actually needs caching so we don't wait forever.
+        // Run it so that we trigger the "once per frame" entries loading.
+        p = entriesToLoad.remove(0);
+        
+        // Let's just use it to check if cache exists.
+        result = engine.tryLoadImageCache(p.dir, new Runnable() {public void run() { }});
+      }
+      
+      if (result == null && p != null) {
+        if (p instanceof PixelRealmState.EntryFileObject) {
+          backgroundEntry = (PixelRealmState.EntryFileObject)p;
+        }
+        else {
+          backgroundEntry = null;
+        }
+        final PixelRealmState.ImageFileObject pp = p;
+        Thread t1 = new Thread(new Runnable() {
+          public void run() {
+            pp.loadNonConcurrent();
+            
+            completeBackgroundLoading.set(false);
+          }
+        }
+        );
+        completeBackgroundLoading.set(true);
+        t1.start();
+        //Enough work done.
+        return;
+      }
+    }
+    
+    // Go into realms and find stuff.
+    if (intervalBackground > interval) {
+      intervalBackground = 0;
+      
+      if (backgroundRealm == null) {
+        realmsToVisit.add(currRealm.stateDirectory);
+      }
+      
+      
+      if (realmsToVisit.size() > 0) {
+        String nextRealm = realmsToVisit.remove(0);
+        
+        while (visitedBackgroundRealms.contains(nextRealm)) {
+          //println("Already visited "+nextRealm+"!");
+          
+          // Nothing left, cancel everything.
+          if (realmsToVisit.size() == 0) {
+            return;
+          }
+          
+          nextRealm = realmsToVisit.remove(0);
+        }
+        
+        // We get to load our realm here
+        backgroundRealm = null;
+        // Quick garbage cleaning to get rid of the gunk and prevent memory from overloading
+        System.gc();
+        
+        backgroundRealm = new PixelRealmState(nextRealm, true);
+        visitedBackgroundRealms.add(nextRealm);
+        // The part of the code where we "run" our pixelrealm
+        for (PixelRealmState.FileObject p : backgroundRealm.files) {
+          // Add it to our list for a "recursive" behaviour but once every second.
+          if (p instanceof PixelRealmState.DirectoryPortal && !(p instanceof PixelRealmState.ShortcutPortal)) {
+            realmsToVisit.add(((PixelRealmState.DirectoryPortal)p).dir);
+          }
+          
+          if (p instanceof PixelRealmState.ImageFileObject) {
+            entriesToLoad.add((PixelRealmState.ImageFileObject)p);
+          }
+        }
+        
+        // Just debug stuff.
+        //println("------------------------------");
+        //for (String item : realmsToVisit) {
+        //  println(item);
+        //}
+        //println("Visited "+nextRealm);
+        
+        engine.saveCacheInfoNow();
+      }
+      else {
+        
+        console.log("nothing left");
+      }
+    }
   }
   
   public void upperBar() {
@@ -5518,6 +5764,7 @@ public class PixelRealm extends Screen {
         console.log("aa");
         chunk.doThing();
       }
+      stats.increase("cool_things_done", 1);
       return true;
     }
     else if (engine.commandEquals(command, "/regeneratetrees")) {

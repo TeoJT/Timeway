@@ -1228,67 +1228,67 @@ public final class SpriteSystemPlaceholder {
     }
 
     public class Stack<T> implements Iterable<T> {
-    private Object[] S;
-    private int top;
-    private int capacity;
-    
-    public Stack(int size){
-        capacity = size;
-        S = new Object[size];
-        top = -1;
-    }
-
-    public Stack(){
-        this(100);
-    }
-    
-    public T peek() {
-        if(isEmpty())
-        throw new StackException("stack is empty");
-        return (T)S[top];
-    }
-    
-    public T peek(int indexFromTop) {
-        //Accessing negative indexes should be impossible.
-        if(top-indexFromTop < 0)
-        throw new StackException("stack is empty");
-        return (T)S[top-indexFromTop];
-    }
-    
-    public boolean isEmpty(){
-        return top < 0;
-    }
-    
-    public int size(){
-        return top+1; 
-    }
-    
-    public void empty() {
-        top = -1;
-    }
-
-    public void push(T e){
-        if(size() == capacity)
-        throw new StackException("stack is full");
-        S[++top] = e;
-    }
-    
-    public T pop() throws StackException{
-        if(isEmpty())
-        throw new StackException("stack is empty");
-        // this type cast is safe because we type checked the push method
-        return (T) S[top--];
-    }
-    
-    public T top() throws StackException{
-        if(isEmpty())
-        throw new StackException("stack is empty");
-        // this type cast is safe because we type checked the push method
-        return (T) S[top];
-    }
-    
-    public Iterator<T> iterator() {
-      return (Iterator<T>)Arrays.asList(S).iterator();
-    }
+      private Object[] S;
+      private int top;
+      private int capacity;
+      
+      public Stack(int size){
+          capacity = size;
+          S = new Object[size];
+          top = -1;
+      }
+  
+      public Stack(){
+          this(100);
+      }
+      
+      public T peek() {
+          if(isEmpty())
+          throw new StackException("stack is empty");
+          return (T)S[top];
+      }
+      
+      public T peek(int indexFromTop) {
+          //Accessing negative indexes should be impossible.
+          if(top-indexFromTop < 0)
+          throw new StackException("stack is empty");
+          return (T)S[top-indexFromTop];
+      }
+      
+      public boolean isEmpty(){
+          return top < 0;
+      }
+      
+      public int size(){
+          return top+1; 
+      }
+      
+      public void empty() {
+          top = -1;
+      }
+  
+      public void push(T e){
+          if(size() == capacity)
+          throw new StackException("stack is full");
+          S[++top] = e;
+      }
+      
+      public T pop() throws StackException{
+          if(isEmpty())
+          throw new StackException("stack is empty");
+          // this type cast is safe because we type checked the push method
+          return (T) S[top--];
+      }
+      
+      public T top() throws StackException{
+          if(isEmpty())
+          throw new StackException("stack is empty");
+          // this type cast is safe because we type checked the push method
+          return (T) S[top];
+      }
+      
+      public Iterator<T> iterator() {
+        return (Iterator<T>)Arrays.asList(S).iterator();
+      }
     
     }

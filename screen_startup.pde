@@ -39,6 +39,8 @@ public class Startup extends Screen {
     public void transitionAnimation() {
 
     }
+    
+    int before = 0;
 
     public void content() {
         
@@ -115,5 +117,8 @@ public class Startup extends Screen {
         app.text(Engine.VERSION, 10-3, HEIGHT-30-3);
         app.fill(255, 255-(255*floatIn));
         app.text(Engine.VERSION, 10, HEIGHT-30);
+        
+        stats.increase("time_in_startscreen", (float(millis())-float(before))/1000.);
+        before = millis();
     }
 }
