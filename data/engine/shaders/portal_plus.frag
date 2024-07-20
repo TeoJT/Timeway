@@ -5,8 +5,6 @@ precision mediump float;
 
 
 #define PI 3.1415926535
-
-uniform vec2 u_resolution;
 uniform float u_dir;
 uniform float u_time;
 uniform sampler2D texture;
@@ -44,8 +42,8 @@ void main(void)
 
     
     
-    float ti = u_time*speed;
-    float t = (ti-floor(ti))*PI;
+    float t = u_time*speed*PI;
+    //float t = (ti-floor(ti))*PI;
     
     tt.x += u_dir;
     

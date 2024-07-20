@@ -41,10 +41,11 @@ class Engine {
   // Info and versioning
   public static final String APP_NAME        = "Timeway";
   public static final String AUTHOR      = "Teo Taylor";
-  public static final String VERSION     = "0.1.2-alpha";
+  public static final String VERSION     = "0.1.2";
   public static final String VERSION_DESCRIPTION = 
-    "- Added terrain customisation\n"+
-    "- Fixed a buncha bugs.";
+    "- Added previews to entries in pixel realm\n"+
+    "- Performance improvements\n"+
+    "- Timeway now runs on Android!\n";
   // ***************************
   // How versioning works:
   // a.b.c
@@ -1735,6 +1736,12 @@ class Engine {
       return time/display.BASE_FRAMERATE;
     }
     
+    // Same as getTimeSeconds() but resets after every 1 second.
+    public float getTimeSecondsLoop() {
+      float t = getTimeSeconds();
+      return t-floor(t);
+    }
+    
   
   }
 
@@ -2560,7 +2567,7 @@ class Engine {
       public int priority = 0;
     }
     
-    @SuppressWarnings("unused")
+    //@SuppressWarnings("unused")
     public void saveAsWav(SoundFile s, int sampleRate, String path) {
       // Android uses a completely different audio system and caching isn't needed 
       // (cus we don't need to wait for gstreamer to start up), so we disable caching
@@ -2586,7 +2593,7 @@ class Engine {
       //// in Timeway not loading.
     }
 
-    @SuppressWarnings("unused")
+    //@SuppressWarnings("unused")
     private byte[] floatArrayToByteArray(float[] floatArray, int bitDepth) {
         ByteBuffer byteBuffer = ByteBuffer.allocate(floatArray.length * (bitDepth / 8));
         ByteOrder order = ByteOrder.LITTLE_ENDIAN;
@@ -3617,6 +3624,9 @@ class Engine {
       
       // Now strip off the ext.
       index = filenameWithExt.indexOf('.');
+      if (index == -1) {
+        return filenameWithExt;
+      }
       String result = filenameWithExt.substring(0, index);
       //console.log(result);
       return result;
@@ -6304,7 +6314,7 @@ class Engine {
     private Object cachedClipboardObject;
     
     public boolean isImage() {
-      if (cachedClipboardObject == null) cachedClipboardObject = getFromClipboardImageFlavour();
+      if (cachedClipboardObject == null) cachedClipboardObject = getPImageFromClipboard();
       
       // If still false, is nothing so isn't an image.
       if (cachedClipboardObject == null) return false;
@@ -6328,7 +6338,10 @@ class Engine {
     }
   
     public PImage getImage() {
-      if (cachedClipboardObject == null) cachedClipboardObject = getFromClipboardImageFlavour();
+      if (!isImage()) {
+        console.bugWarn("getImage: clipboard doesn't contain an image, make sure to check first with isImage()!");
+        return display.systemImages.get("white").pimage;
+      }
       
       return (PImage)cachedClipboardObject;
     }

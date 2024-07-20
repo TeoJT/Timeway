@@ -854,7 +854,6 @@ engine/realmtemplates/071/pixelrealm-terrain_object-1.png
 engine/realmtemplates/071/pixelrealm-terrain_object-2.png
 engine/realmtemplates/071/pixelrealm-turf.json
 engine/realmtemplates/071/realmtemplate.json
-engine/realmtemplates/072/pixelrealm-bgm
 engine/realmtemplates/072/pixelrealm-bgm.mp3
 engine/realmtemplates/072/pixelrealm-grass.png
 engine/realmtemplates/072/pixelrealm-sky.png
@@ -1578,6 +1577,7 @@ engine/spritedata/gui/pixelrealm/back-newrealm.json
 engine/spritedata/gui/pixelrealm/back-pocketmenu.json
 engine/spritedata/gui/pixelrealm/back-yesno-phone.json
 engine/spritedata/gui/pixelrealm/back-yesno.json
+engine/spritedata/gui/pixelrealm/back_welcome-phone.json
 engine/spritedata/gui/pixelrealm/back_welcome.json
 engine/spritedata/gui/pixelrealm/bomber_1.json
 engine/spritedata/gui/pixelrealm/command_button-phone.json
@@ -1641,7 +1641,9 @@ engine/spritedata/gui/pixelrealm/touch-prevrealm-phone.json
 engine/spritedata/gui/pixelrealm/touch-prevrealm.json
 engine/spritedata/gui/pixelrealm/touch-right-phone.json
 engine/spritedata/gui/pixelrealm/touch-right.json
+engine/spritedata/gui/pixelrealm/touch-slot-left-phone.json
 engine/spritedata/gui/pixelrealm/touch-slot-left.json
+engine/spritedata/gui/pixelrealm/touch-slot-right-phone.json
 engine/spritedata/gui/pixelrealm/touch-slot-right.json
 engine/spritedata/gui/pixelrealm/touch-walkback-phone.json
 engine/spritedata/gui/pixelrealm/touch-walkback.json

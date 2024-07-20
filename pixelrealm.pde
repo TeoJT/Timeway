@@ -2655,7 +2655,7 @@ public class PixelRealm extends Screen {
           display.recordRendererTime();
           
           usingFadeShader = false;
-          display.shader(scene, "portal_plus", "u_time", display.getTimeSeconds(), "u_dir", -direction/(PI*2));
+          display.shader(scene, "portal_plus", "u_time", display.getTimeSecondsLoop(), "u_dir", -direction/(PI*2));
           
           
           displayBillboard();
@@ -2990,6 +2990,7 @@ public class PixelRealm extends Screen {
     }
     
     private boolean outOfBounds(float x, float z) {
+      if (terrain == null) return false;
       float tilex = floor(x/terrain.groundSize)+1.;
       float tilez = floor(z/terrain.groundSize)+1.;
       
@@ -3343,8 +3344,25 @@ public class PixelRealm extends Screen {
       
       for (int i = 0; i < l; i++) {
         if (file.currentFiles[i] != null) {
+          
+          // To address the unhidden realm files as of 0.1.2
+          String isolatedName = file.getIsolatedFilename(file.currentFiles[i].filename);
+          if (isolatedName.equals(file.unhide(REALM_GRASS))) continue;
+          if (isolatedName.equals(file.unhide(REALM_TREE))) continue;
+          if (isolatedName.equals(file.unhide(REALM_TREE_LEGACY))) continue;
+          if (isolatedName.equals(file.unhide(REALM_SKY))) continue;
+          if (isolatedName.equals(file.unhide(REALM_BGM))) continue;
+          if (file.currentFiles[i].filename.equals(file.unhide(REALM_TURF))) continue;
+          if (isolatedName.equals("load_list")) continue;
+          for (int j = 1; j < 9; j++) {
+            if (isolatedName.equals(file.unhide(REALM_TREE+"-"+j))) continue;
+            if (isolatedName.equals(file.unhide(REALM_TREE_LEGACY+"-"+j))) continue;
+            if (isolatedName.equals(file.unhide(REALM_SKY+"-"+j))) continue;
+          }
+          
           // Here we determine which type of object to load into our scene.
           FileObject o = createPRObject(file.currentFiles[i].path);
+          
           files.add(o);
           if (file.currentFiles[i].filename.equals("[Prev dir]") && o instanceof DirectoryPortal) {
             exitPortal = (DirectoryPortal)o;
@@ -4743,6 +4761,7 @@ public class PixelRealm extends Screen {
       
       // Plonking down objects
       if (currentTool == TOOL_GRABBER && currRealm.holdingObject != null && secondaryAction) {
+        issueRefresherCommand(REFRESHER_PAUSE);
         placeDownObject();
         sound.playSound("plonk");
       }

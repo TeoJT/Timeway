@@ -1,3 +1,8 @@
+
+// Wanna find a name of a realm template without searching through tons of folders?
+// grep -r "[realm name]" $(find ./ -type f -name "realmtemplate")
+
+
 public class PixelRealmWithUI extends PixelRealm {
 
   private final String TEMPLATE_METADATA_FILENAME = "realmtemplate.json";
@@ -480,6 +485,7 @@ public class PixelRealmWithUI extends PixelRealm {
 
       if (ui.buttonVary("newshortcut", "create_shortcut_128", "New shortcut")) {
         sound.playSound("menu_select");
+        issueRefresherCommand(REFRESHER_PAUSE);
         ((PixelRealmState.ShortcutPortal)currRealm.createPRObjectAndPickup(currRealm.createShortcut())).loadShortcut();
         menuShown = false;
       }
