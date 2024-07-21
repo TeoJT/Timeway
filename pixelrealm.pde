@@ -4160,7 +4160,6 @@ public class PixelRealm extends Screen {
     boolean wasInWater = false;
     
     boolean wasOnGround = false;
-    boolean slippingDown = false;
     
     // Finally, the most important code of all
     
@@ -4277,7 +4276,6 @@ public class PixelRealm extends Screen {
           }
           
           float slopeness = ypoint2-ypoint1;
-          slippingDown = false;
           if (slopeness != 0. && onGround()) {
             float allowance = 1.0-(min(max(slopeness, 0.), 3.)/3.);
             
@@ -4316,16 +4314,36 @@ public class PixelRealm extends Screen {
             direction += rot;
             xvel += movex;
             zvel += movez;
+            
+            boolean slipping = false;
+            if (onGround() && !isInWater) {
+              float x_ypoint1 = onSurface(playerX+1, playerZ);  // Front
+              float x_ypoint2 = onSurface(playerX-1, playerZ);  // Behind
+              float z_ypoint1 = onSurface(playerX, playerZ+1);  // Right
+              float z_ypoint2 = onSurface(playerX, playerZ-1);  // Left
+              
+              float x_slope = (x_ypoint2-x_ypoint1);
+              float z_slope = (z_ypoint2-z_ypoint1);
+              
+              final float THRESHOLD = 2.5;
+              
+              if ((abs(x_slope) > THRESHOLD || abs(z_slope) > THRESHOLD)) {
+                xvel = max(min(xvel-x_slope*0.05, 5.), -5.0);
+                zvel = max(min(zvel-z_slope*0.05, 5.), -5.0);
+                slipping = true;
+              }
+            }
+            
             playerX += xvel;
             playerZ += zvel;
             
             // slippingDown can only be true when player is on ground.
-            if (slippingDown) playerY = onSurface(playerX, playerZ);
+            if (slipping) playerY = onSurface(playerX, playerZ);
             
             float deacceleration = 0.5;
             if (!onGround())
               deacceleration = 0.97;
-            else if (slippingDown) 
+            else if (slipping) 
               deacceleration = 0.99;
             xvel *= pow(deacceleration, display.getDelta());
             zvel *= pow(deacceleration, display.getDelta());
