@@ -4160,10 +4160,13 @@ public class PixelRealm extends Screen {
     boolean wasInWater = false;
     
     boolean wasOnGround = false;
+    boolean slippingDown = false;
     
     // Finally, the most important code of all
     
     // ----- Pixel Realm logic code -----
+    
+    
     
     public void runPlayer() {
       primaryAction = input.keyActionOnce("primaryAction");
@@ -4208,6 +4211,9 @@ public class PixelRealm extends Screen {
       if (isInWater) {
         speed *= UNDERWATER_SPEED_MULTIPLIER;
       }
+      
+      
+      //if
   
       // TODO: re-enable reposition mode
       //if (repositionMode) {
@@ -4229,33 +4235,54 @@ public class PixelRealm extends Screen {
   
       
       
-      // Adjust for lower framerates than the target.
-      speed *= display.getDelta();
+          // Adjust for lower framerates than the target.
+          speed *= display.getDelta();
+          float rot = 0.;
           float movex = 0.;
           float movez = 0.;
-          float rot = 0.;
+          float ypoint1 = 0.;
+          float ypoint2 = 0.;
+          
           if (input.keyAction("moveForewards")) {
             movex += sin_d*speed;
             movez += cos_d*speed;
+            ypoint1 = onSurface(playerX+sin_d, playerZ+cos_d);  // Front
+            ypoint2 = onSurface(playerX-sin_d, playerZ-cos_d);  // Behind
   
             isWalking = true;
           }
           if (input.keyAction("moveLeft")) {
             movex += cos_d*speed;
             movez += -sin_d*speed;
+            ypoint1 = onSurface(playerX+cos_d, playerZ-sin_d);  // Left
+            ypoint2 = onSurface(playerX-cos_d, playerZ+sin_d);  // Right
   
             isWalking = true;
           }
           if (input.keyAction("moveBackwards")) {
             movex += -sin_d*speed;
             movez += -cos_d*speed;
+            ypoint1 = onSurface(playerX-sin_d, playerZ-cos_d);  // Behind
+            ypoint2 = onSurface(playerX+sin_d, playerZ+cos_d);  // Front
   
             isWalking = true;
           }
           if (input.keyAction("moveRight")) {
             movex += -cos_d*speed;
             movez += sin_d*speed;
+            ypoint1 = onSurface(playerX-cos_d, playerZ+sin_d);  // Right
+            ypoint2 = onSurface(playerX+cos_d, playerZ-sin_d);  // Left
+            
             isWalking = true;
+          }
+          
+          float slopeness = ypoint2-ypoint1;
+          slippingDown = false;
+          if (slopeness != 0. && onGround()) {
+            float allowance = 1.0-(min(max(slopeness, 0.), 3.)/3.);
+            
+            movex *= allowance;
+            movez *= allowance;
           }
   
   
@@ -4292,9 +4319,14 @@ public class PixelRealm extends Screen {
             playerX += xvel;
             playerZ += zvel;
             
+            // slippingDown can only be true when player is on ground.
+            if (slippingDown) playerY = onSurface(playerX, playerZ);
+            
             float deacceleration = 0.5;
             if (!onGround())
               deacceleration = 0.97;
+            else if (slippingDown) 
+              deacceleration = 0.99;
             xvel *= pow(deacceleration, display.getDelta());
             zvel *= pow(deacceleration, display.getDelta());
             
@@ -5115,7 +5147,7 @@ public class PixelRealm extends Screen {
     // and the y-value on the line we calculated before, and successfully get the y height on the quad!
     float percent = playerLen/len;
     float calculatedY = lerp(v1.y, point1Height, percent);
-
+    
     return calculatedY;
   }
   
