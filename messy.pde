@@ -961,6 +961,8 @@ public final class SpriteSystemPlaceholder {
             }
             //draw.autoImg(s.getImg(), s.getX(), s.getY()+s.getHeight()*s.getBop(), s.getWidth(), s.getHeight()-int((float)s.getHeight()*s.getBop()));
             
+            // Bug fix (hopefully)
+            fill(255);
             switch (s.mode) {
               case SINGLE:
               engine.display.img(s.imgName, s.getX(), s.getY()+s.getHeight()*s.getBop(), s.getWidth(), s.getHeight()-int((float)s.getHeight()*s.getBop()));

@@ -4,11 +4,65 @@ import java.io.StringWriter;
 import java.io.PrintWriter;
 
 /**
-*********** Timeway ************
-* Explore your system files in a
-* 3D retro world and create notes
-* in a Onenote-like editor.
+*********************************** Timeway ***********************************
+*                      Your computer is your universe.
+* 
+* Visit https://teojt.github.io/timeway.html for more info on Timeway.
+* 
+* Here's the basics of Timeway's code:
+* Timeway is split into "screens", which you can think of as mini-apps.
+* The most significant of them all is the Pixel Realm (where all the 3d file 
+* stuff is). There is also the Editor, and other miscellaneous screens in
+* otherscreens.pde. 
+* 
+* Screens have their own states and variables which are cleared when the screen is
+* no longer in use. All screens use Timeway's engine, which stores the entire 
+* application's state and provides shared functions for all screens to access 
+* (e.g. file management, sounds, displaying).
+* 
+* 
+* Here's a quick rundown of what the other .pde files contain:
+*
+* messy.pde: Contains messy imported code from Sketchiepad that includes the sprite
+* system (used for UI and draggable text and images in the editor).
+*
+* pixelrealm_ui: Simply adds UI functionality to the base PixelRealm class since
+* having it all in one class would make it bloated and extremely difficult to 
+* maintain.
+*
+* screen_startup: Screen that shows the Timeway logo and loading screen and does a 
+* few startup stuff.
+*
+* zAndroid and zDesktop: Timeway is designed to work on both Desktop and Android using
+* the same codebase. However, there are obviously some big differences between the two,
+* and libraries that exist in Android mode simply don't exist for Java (desktop) mode
+* and vice verca.
+* The solution? Have two scripts for each version.
+* When you switch to Android mode, uncomment all the code in zAndroid and comment zDeskstop.
+* When you switch to Java mode, uncomment all the code in zDesktop and comment zAndroid.
+* Probably the worst system ever, but we like to keep it simple instead of spending ages
+* looking for another solution.
+*
+* Anyways, I have no idea who's reading this or who would delve into the code of Timeway,
+* but if you're here reading this, then have fun!
+*
+*
+*
+* 
 **/
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 Engine timewayEngine;
 boolean sketch_showCrashScreen = false;

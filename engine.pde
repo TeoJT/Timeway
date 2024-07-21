@@ -31,7 +31,6 @@ import com.sun.jna.Native;
 import com.sun.jna.Structure;
 import processing.video.Movie;
 import gifAnimation.*;
-//import cassette.audiofiles.*;
 
 // Timeway's engine code.
 // TODO: add documentation lmao.
@@ -41,7 +40,7 @@ class Engine {
   // Info and versioning
   public static final String APP_NAME        = "Timeway";
   public static final String AUTHOR      = "Teo Taylor";
-  public static final String VERSION     = "0.1.2";
+  public static final String VERSION     = "0.1.3-alpha";
   public static final String VERSION_DESCRIPTION = 
     "- Added previews to entries in pixel realm\n"+
     "- Performance improvements\n"+

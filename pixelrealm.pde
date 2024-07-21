@@ -49,6 +49,7 @@ public class PixelRealm extends Screen {
   final static float PLAYER_WIDTH  = 20;
   final static float UNDERWATER_TEMINAL_VEL = 3.0;
   final static float SWIM_UP_SPEED = 0.8;
+  final static float SLIP_THRESHOLD = 2.5;
   
   
   // Tool constants
@@ -4325,9 +4326,7 @@ public class PixelRealm extends Screen {
               float x_slope = (x_ypoint2-x_ypoint1);
               float z_slope = (z_ypoint2-z_ypoint1);
               
-              final float THRESHOLD = 2.5;
-              
-              if ((abs(x_slope) > THRESHOLD || abs(z_slope) > THRESHOLD)) {
+              if ((abs(x_slope) > SLIP_THRESHOLD || abs(z_slope) > SLIP_THRESHOLD)) {
                 xvel = max(min(xvel-x_slope*0.05, 5.), -5.0);
                 zvel = max(min(zvel-z_slope*0.05, 5.), -5.0);
                 slipping = true;
