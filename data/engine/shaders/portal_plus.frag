@@ -63,5 +63,5 @@ void main(void)
     
     color *= color.g >= 0.99 ? texture2D(texture, tt).rgb : vec3(1.0);
     
-    gl_FragColor = vec4(color, opacity);
+    gl_FragColor = vec4(color, opacity) * vertColor;
 }

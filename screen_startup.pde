@@ -118,7 +118,6 @@ public class Startup extends Screen {
         app.fill(255, 255-(255*floatIn));
         app.text(Engine.VERSION, 10, HEIGHT-30);
         
-        stats.increase("time_in_startscreen", (float(millis())-float(before))/1000.);
-        before = millis();
+        stats.recordTime("time_in_startscreen");
     }
 }

@@ -601,6 +601,7 @@ public final class SpriteSystemPlaceholder {
                     
                     app.saveJSONObject(attributes, myPath+name+".json");
                 }
+                engine.stats.increase("sprites_moved", 1);
             }
             
             public boolean isDragging() {

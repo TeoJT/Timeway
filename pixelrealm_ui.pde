@@ -440,6 +440,16 @@ public class PixelRealmWithUI extends PixelRealm {
           currRealm.terraformWarning = false;
         }
       }
+      
+      // --- Morpher tool ---
+      if (ui.buttonVary("morpher_1", "morpher_tool_128", "Morpher")) {
+        currentTool = TOOL_MORPHER;
+        
+        globalHoldingObjectSlot = null;
+        currRealm.updateHoldingItem(globalHoldingObjectSlot);
+        menuShown = false;
+        sound.playSound("menu_select");
+      }
 
       // --- Grabber tool ---
       if (ui.buttonVary("grabber_1", "grabber_tool_128", "Grabber")) {
@@ -813,6 +823,7 @@ public class PixelRealmWithUI extends PixelRealm {
           // Successful so we can close the menu.
           menuShown = false;
           menu = null;
+          stats.increase("realm_templates_created", 1);
         } else {
           prompt("Can't copy template", "You already have realm asset files in this folder.");
         }
@@ -1358,12 +1369,14 @@ public class PixelRealmWithUI extends PixelRealm {
     usePortalAllowed = true;
     tutorialStage = 0;
     doNotAllowCloseMenu = false;
+    stats.set("last_closed", (int)(System.currentTimeMillis() / 1000L));
     // For now just save some file so that it exists.
     if (isAndroid()) {
-      app.saveJSONObject(new JSONObject(), getAndroidWriteableDir()+engine.STATS_FILE);
+      // Save without requiring the file to exist first.
+      stats.save(false);
     }
     else {
-      app.saveJSONObject(new JSONObject(), engine.APPPATH+engine.STATS_FILE);
+      stats.save(false);
     }
   }
 

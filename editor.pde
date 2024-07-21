@@ -770,8 +770,8 @@ public class Editor extends Screen {
         byte[] cacheBytes = loadBytes(cachePath);
         
         // TODO: I don't like this line of code at all...
-        File f = new File(cachePath);
-        f.delete();
+        //File f = new File(cachePath);
+        //f.delete();
         
         // NullPointerException
         String encodedPng = new String(Base64.getEncoder().encode(cacheBytes));
@@ -1155,6 +1155,7 @@ public class Editor extends Screen {
           if (!camera.error.get() && camera.ready.get()) {
             if (ui.button("snap", "snap_button_128", "")) {
               sound.playSound("select_snap");
+              stats.increase("photos_taken", 1);
               insertImage(camera.updateImage());
               
               // Rest of the stuff is just for cosmetic effects :sparkle_emoji:
@@ -1345,6 +1346,7 @@ public class Editor extends Screen {
           // Select the image we just pasted.
           editingPlaceable = imagePlaceable;
           changesMade = true;
+          stats.increase("images_created", 1);
         }
       }
     }
@@ -1359,6 +1361,7 @@ public class Editor extends Screen {
         input.keyboardMessage = initText;
         editingTextPlaceable.updateDimensions();
         engine.allowShowCommandPrompt = false;
+        stats.increase("text_created", 1);
     }
     
     private void renderPlaceables() {
@@ -1673,6 +1676,7 @@ public class Editor extends Screen {
     public void content() {
       if (loading) {
         ui.loadingIcon(WIDTH/2, HEIGHT/2);
+        stats.recordTime("editor_loading_time");
       }
       else {
         if (cameraMode) {
@@ -1684,8 +1688,8 @@ public class Editor extends Screen {
         }
       }
       
-      stats.increase("time_in_editor", (float(millis())-float(before))/1000.);
-      before = millis();
+      stats.recordTime("time_in_editor");
+      stats.increase("total_frames_editor", 1);
     }
 
     public void startupAnimation() {

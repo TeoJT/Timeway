@@ -54,9 +54,7 @@ public class PixelRealm extends Screen {
   // Tool constants
   protected final static int TOOL_NORMAL = 1;
   protected final static int TOOL_GRABBER = 2;
-  protected final static int TOOL_CUBER = 3;
-  protected final static int TOOL_BOMBER = 4;
-  protected final static int TOOL_CREATOR = 5;
+  protected final static int TOOL_MORPHER = 3;
   
   // File names without an extension accept various file types (png, jpeg, gif)
   public final static String REALM_GRASS = ".pixelrealm-grass";
@@ -887,6 +885,7 @@ public class PixelRealm extends Screen {
   public class PixelRealmState {
     
     public String stateDirectory;
+    public String stateFilename;
     
     // --- Player state --- 
     // (1000, 0, 1000) is our default position (and it's imporant for shortcuts)
@@ -940,6 +939,7 @@ public class PixelRealm extends Screen {
     // --- Constructor ---
     public PixelRealmState(String dir, boolean loadMinimal) {
       this.stateDirectory = file.directorify(dir);
+      this.stateFilename  = file.getFilename(stateDirectory);
       
       this.loadMinimal = loadMinimal;
       if (isNewRealm() && !loadMinimal) promptNewRealm();
@@ -952,10 +952,15 @@ public class PixelRealm extends Screen {
         legacy_autogenStuff = new HashSet<String>();
         engine.noiseSeed(getHash(dir));
       }
+      if (!loadMinimal) {
+        stats.increase("REALMVISITED_"+stateFilename, 1);
+      }
     }
     
     public PixelRealmState(String dir, String emergeFrom) {
       this.stateDirectory = file.directorify(dir);
+      this.stateFilename  = file.getFilename(stateDirectory);
+      
       
       if (isNewRealm()) promptNewRealm();
       loadRealm();
@@ -967,6 +972,7 @@ public class PixelRealm extends Screen {
         legacy_autogenStuff = new HashSet<String>();
         engine.noiseSeed(getHash(dir));
       }
+      stats.increase("REALMVISITED_"+stateFilename, 1);
     }
     
     public PixelRealmState(String dir) {
@@ -2212,7 +2218,7 @@ public class PixelRealm extends Screen {
         float d = direction-PI;
   
         display.recordRendererTime();
-        if (lights) scene.noLights();
+        
         scene.pushMatrix();
         scene.translate(x, y-hi-20, z);
         scene.rotateY(d);
@@ -2221,7 +2227,7 @@ public class PixelRealm extends Screen {
         scene.fill(255);
         scene.text(filename, 0, 0, 0);
         scene.popMatrix();
-        if (lights) scene.lights();
+        
         display.recordLogicTime();
   
         displayBillboard();
@@ -2433,7 +2439,9 @@ public class PixelRealm extends Screen {
               }
                
               display.shader(scene, "largeimg");
+              app.fill(tint);
               displayQuad(this.img.getD(), x1, y1, z1, x2, y1+hi, z2);
+              
               
               // TODO: Obviously optimise...
               scene.resetShader();
@@ -2708,7 +2716,7 @@ public class PixelRealm extends Screen {
           usingFadeShader = false;
           display.shader(scene, "portal_plus", "u_time", display.getTimeSecondsLoop(), "u_dir", -direction/(PI*2));
           
-          
+          scene.fill(this.tint);
           displayBillboard();
           if (versionCompatibility == 2) {
             useFadeShader();
@@ -2717,22 +2725,20 @@ public class PixelRealm extends Screen {
             scene.resetShader();
           }
           
-          scene.noTint();
   
           // Display text over the portal showing the directory.
           float d = direction-PI;
           //float w = img.width*size;
-          if (lights) scene.noLights();
+          
           scene.pushMatrix();
           scene.translate(x, y-hi, z);
           scene.rotateY(d);
           scene.textSize(24);
           scene.textFont(engine.DEFAULT_FONT);
           scene.textAlign(CENTER, CENTER);
-          scene.fill(255);
           scene.text(filename, 0, 0, 0);
           scene.popMatrix();
-          if (lights) scene.lights();
+          
           
           display.recordLogicTime();
   
@@ -2883,8 +2889,9 @@ public class PixelRealm extends Screen {
           // Highlight the object if its being hovered over.
           // We only hover on certain tools where the object's interactable.
           // TODO: bring back currentTools or something
-          if (currentTool == TOOL_GRABBER)
-            this.tint = color(255, 230, 200);
+          if (currentTool == TOOL_GRABBER) {
+            this.tint = color(255, 200, 200);
+          }
           return true;
         } else {
           return false;
@@ -2970,10 +2977,14 @@ public class PixelRealm extends Screen {
             float fade = calculateFade(dist, terrain.FADE_DIST_OBJECTS);
             if (fade > 1) {
               scene.tint(tint, fade);
+              scene.fill(tint, fade);
             } else {
               dontRender = true;
             }
-          } else scene.tint(tint, 255);
+          } else {
+            scene.tint(tint, 255);
+            scene.fill(tint, 255);
+          }
         }
         else if (versionCompatibility == 2) {
           float x = playerX-this.x;
@@ -2981,12 +2992,13 @@ public class PixelRealm extends Screen {
           if (x*x+z*z > terrain.FADE_DIST_OBJECTS) {
             dontRender = true;
           }
+          scene.fill(tint, 255);
         }
     
         if (useFinder) {
           scene.stroke(255, 127, 127);
           scene.strokeWeight(2.);
-          scene.noFill();
+          //scene.fill(255);
         } else {
           scene.noStroke();
         }
@@ -3023,6 +3035,7 @@ public class PixelRealm extends Screen {
           if (useFinder) scene.vertex(x1, y1, z1, 0, 0);  // Extra vertex to render a complete square if finder is enabled.
           // Not necessary if just rendering the quad without the line.
           scene.noTint();
+          scene.fill(255);
           scene.endShape();
   
           scene.popMatrix();
@@ -3220,6 +3233,7 @@ public class PixelRealm extends Screen {
       
       globalHoldingObjectSlot = addToPockets(p);
       updateHoldingItem(globalHoldingObjectSlot);
+      stats.increase("items_picked_up", 1);
     }
     
     protected void updateHoldingItem(ItemSlot<PocketItem> newSlot) {
@@ -4288,6 +4302,8 @@ public class PixelRealm extends Screen {
               float bob_speed = speed*0.075;
               
               float maxBobSpeed = display.getDelta()*1.5;
+              
+              stats.increase("distance_travelled", speed);
   
               // If we bob too much, the bob will jiggle wayyyy to much
               // and the sound effect will be played too much and end up reallllly glitchy
@@ -4301,6 +4317,7 @@ public class PixelRealm extends Screen {
               if (bob-HALF_PI > TWO_PI-HALF_PI) {
                 bob = 0.;
                 sound.playSound("step", random(0.9, 1.2));
+                stats.increase("steps", 1);
                 //if (isInWater) 
                 //  // TODO: get an actual water step sound effect
                 //  sound.playSound("water_jump", random(1.9, 2.5));
@@ -4399,6 +4416,7 @@ public class PixelRealm extends Screen {
           
           // Head under the water.
           isUnderwater = playerY+(sin(bob)*3.)-PLAYER_HEIGHT-1. > terrain.waterLevel && !outOfBounds(playerX, playerZ) && terrain.hasWater;
+          if (isUnderwater) stats.recordTime("time_underwater");
           
           // If holding an item, allow scaling up and down.
           //if (inventorySelectedItem != null) {
@@ -4489,9 +4507,13 @@ public class PixelRealm extends Screen {
           boolean dontRender = false;
           if (dist > tt.FADE_DIST_GROUND) {
             float fade = calculateFade(dist, tt.FADE_DIST_GROUND);
-            if (fade > 1) scene.tint(255, fade);
+            if (fade > 1) {scene.tint(255, fade);
+            scene.fill(255, fade); }
             else dontRender = true;
-          } else scene.noTint();
+          } else {
+            scene.noTint();
+            scene.fill(255);
+          }
   
           if (!dontRender) {
             float noisePosition = engine.noise(tilex, tilez);
@@ -4557,6 +4579,7 @@ public class PixelRealm extends Screen {
       
       display.recordRendererTime();
       scene.noTint();
+      scene.fill(255);
       scene.colorMode(RGB, 255);
   
       scene.popMatrix();
@@ -4629,6 +4652,7 @@ public class PixelRealm extends Screen {
     
     public void renderWater() {
       scene.noTint();
+      scene.fill(255);
       
       scene.beginShape(QUAD);
       scene.textureMode(NORMAL);
@@ -4687,6 +4711,7 @@ public class PixelRealm extends Screen {
       scene.background(0);
       scene.noTint();
       scene.noStroke();
+      scene.fill(255);
       
       float sky_fov = (float(scene.width)/float(img_sky.get().width));
       
@@ -4846,6 +4871,7 @@ public class PixelRealm extends Screen {
         issueRefresherCommand(REFRESHER_PAUSE);
         placeDownObject();
         sound.playSound("plonk");
+        stats.increase("items_plonked_down", 1);
       }
       
       // Holding object
@@ -4857,6 +4883,7 @@ public class PixelRealm extends Screen {
           float z = playerZ+cos(direction)*SELECT_FAR;
           holdingObject.x = x;
           holdingObject.z = z;
+          holdingObject.tint = color(255, 80);
           if (onGround())
             holdingObject.y = onSurface(x, z);
           else
@@ -4915,6 +4942,8 @@ public class PixelRealm extends Screen {
     float closestDist = 0;
     public void renderPRObjects() {
       for (PRObject o : ordering) {
+        if (currentTool == TOOL_GRABBER && closestObject == o)
+          o.tint = color(255, 200, 200);
         o.display();
       }
     }
@@ -5343,7 +5372,6 @@ public class PixelRealm extends Screen {
     
     
     
-  int before = 0;
   boolean beginBackgroundCaching = true;
     
     
@@ -5470,8 +5498,8 @@ public class PixelRealm extends Screen {
     }
     
     timeInRealm++;
-    stats.increase("time_in_pixelrealm", (float(millis())-float(before))/1000.);
-    before = millis();
+    stats.recordTime("time_in_pixelrealm");
+    stats.recordTime("REALMTIME_"+currRealm.stateFilename);
   }
   
   
@@ -5482,6 +5510,7 @@ public class PixelRealm extends Screen {
   public void content() {
     if (engine.power.getSleepyMode()) engine.power.setAwake();
     runPixelRealm(); 
+    stats.increase("total_frames_pixelrealm", 1);
   }
   
   PixelRealmState backgroundRealm = null;

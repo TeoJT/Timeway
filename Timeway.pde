@@ -53,6 +53,7 @@ void settings() {
 
 void shutdown() {
   timewayEngine.stats.save();
+  timewayEngine.stats.set("last_closed", (int)(System.currentTimeMillis() / 1000L));
 }
 
 

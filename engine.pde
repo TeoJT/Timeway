@@ -3265,6 +3265,7 @@ class Engine {
   
   public class StatsModule {
     JSONObject json;
+    HashMap<String, Float> befores = new HashMap<String, Float>();
     
     public StatsModule() {
       if (isAndroid()) {
@@ -3289,6 +3290,26 @@ class Engine {
       json.setFloat(name, value);
     }
     
+    public void setIfHigher(String name, int value) {
+      if (value > stats.getInt(name)) {
+        set(name, value);
+      }
+    }
+    
+    public void setIfIHigher(String name, float value) {
+      if (value > stats.getFloat(name)) {
+        set(name, value);
+      }
+    }
+    
+    public int getInt(String name) {
+      return json.getInt(name, 0);
+    }
+    
+    public float getFloat(String name) {
+      return json.getFloat(name, 0.0);
+    }
+    
     public void increase(String name, int value) {
       json.setInt(name, json.getInt(name, 0)+value);
     }
@@ -3297,7 +3318,20 @@ class Engine {
       json.setFloat(name, json.getFloat(name, 0.0)+value);
     }
     
-    public void save() {
+    public void recordTime(String name) {
+      float before = 0;
+      if (befores.containsKey(name)) {
+        before = befores.get(name);
+      }
+      float timesince = (float(millis())-before)/1000.;
+      // To only make the timer run when the method is called.
+      if (timesince > 0.5) timesince = 0.;
+      
+      increase(name, timesince);
+      befores.put(name, float(millis()));
+    }
+    
+    public void save(boolean onlyIfExists) {
       String path = "";
       if (isAndroid()) {
         path = file.directorify(getAndroidWriteableDir())+STATS_FILE;
@@ -3305,7 +3339,12 @@ class Engine {
       else {
         path = APPPATH+STATS_FILE;
       }
+      if (onlyIfExists && !file.exists(path)) return;
       saveJSONObject(json, path);
+    }
+    
+    public void save() {
+      save(true);
     }
   }
   
@@ -4294,6 +4333,10 @@ class Engine {
     loadAsset(APPPATH+DEFAULT_FONT_PATH);
     
     stats.increase("started_up", 1);
+    // Huh, "Timeaway" sounds strangely familiar, huh?
+    int lastClosed = stats.getInt("last_closed") > 1000 ? stats.getInt("last_closed") : ((int)(System.currentTimeMillis() / 1000L));
+    int timeAway = ((int)(System.currentTimeMillis() / 1000L))-lastClosed;
+    stats.setIfHigher("longest_time_away", timeAway);
     
     // Load in seperate thread.
     loadedEverything.set(false);
@@ -4922,7 +4965,8 @@ class Engine {
       console.log("Unknown command.");
       success = false;
     }
-    stats.increase("commands_entered", 1);
+    if (success)
+      stats.increase("commands_entered", 1);
   }
 
 
@@ -5893,15 +5937,15 @@ class Engine {
     PImage img = loadImage(cachePath);
     
     // TODO: I don't like this line of code at all...
-    File f = new File(cachePath);
-    f.delete();
+    //File f = new File(cachePath);
+    //f.delete();
     
     // Also remember to uncomment that.
-    //properties.setString("actual", cachePath);
-    //properties.setInt("checksum", calculateChecksum(img));
-    //properties.setString("lastModified", "");
-    //properties.setInt("size", 0);
-    //cacheInfoJSON.setJSONObject(originalPath, properties);
+    properties.setString("actual", cachePath);
+    properties.setInt("checksum", calculateChecksum(img));
+    properties.setString("lastModified", "");
+    properties.setInt("size", 0);
+    cacheInfoJSON.setJSONObject(originalPath, properties);
 
 
     return img;
@@ -6502,7 +6546,6 @@ class Engine {
 
   // Woops I should place this at the start.
   boolean focusedMode = true;
-  int before = 0;
 
   // The core engine function which essentially runs EVERYTHING in Timeway.
   // All the screens, all the input management, and everything else.
@@ -6603,8 +6646,8 @@ class Engine {
     
     if (display != null) display.timeMode = display.IDLE_TIME;
     
-    stats.increase("total_time_in_timeway", (float(millis())-float(before))/1000.);
-    before = millis();
+    stats.recordTime("total_time_in_timeway");
+    stats.increase("total_frames_timeway", 1);
   }
   
 }
