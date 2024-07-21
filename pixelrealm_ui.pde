@@ -443,12 +443,17 @@ public class PixelRealmWithUI extends PixelRealm {
       
       // --- Morpher tool ---
       if (ui.buttonVary("morpher_1", "morpher_tool_128", "Morpher")) {
-        currentTool = TOOL_MORPHER;
-        
-        globalHoldingObjectSlot = null;
-        currRealm.updateHoldingItem(globalHoldingObjectSlot);
-        menuShown = false;
-        sound.playSound("menu_select");
+        if (currRealm.versionCompatibility == 1) {
+          menu = new DialogMenu("Can't use morpher", "back-newrealm", "You can't use the morpher tool in the older 1.x versions. Please upgrade realm to 2.0 to use this tool.");
+        }
+        else {
+          currentTool = TOOL_MORPHER;
+          
+          globalHoldingObjectSlot = null;
+          currRealm.updateHoldingItem(globalHoldingObjectSlot);
+          menuShown = false;
+          sound.playSound("menu_select");
+        }
       }
 
       // --- Grabber tool ---
@@ -460,7 +465,6 @@ public class PixelRealmWithUI extends PixelRealm {
           }
         }
         currRealm.updateHoldingItem(globalHoldingObjectSlot);
-
         currentTool = TOOL_GRABBER;
         menuShown = false;
         sound.playSound("menu_select");
@@ -667,6 +671,7 @@ public class PixelRealmWithUI extends PixelRealm {
       // Need to clear terrain objects when we load a new realm otherwise we end up with wayyyy too much
       // in our face.
       currRealm.chunks.clear();
+      tilesCache.clear();
       currRealm.ordering = new LinkedList();
       currRealm.legacy_autogenStuff = new HashSet<String>();
 
@@ -941,6 +946,7 @@ public class PixelRealmWithUI extends PixelRealm {
 
     public void close() {
       currRealm.chunks.clear();
+      tilesCache.clear();
       currRealm.regenerateTrees();
       //chunks = new HashMap<Integer, TerrainChunkV2>();
     }

@@ -86,6 +86,7 @@ public class PixelRealm extends Screen {
   private int entriesTotal = 0;
   private int timeInRealm  = 0;
   private float timeNotMoving = 0.;
+  protected HashMap<Integer, PVector> tilesCache = new HashMap<Integer, PVector>();
   
   
   // --- Legacy backward-compatibility stuff & easter eggs ---
@@ -119,6 +120,7 @@ public class PixelRealm extends Screen {
   protected boolean modifyTerrain = false;
   protected int nodeSound = 0;
   private boolean drawEntryOnce = true;
+  private float morpherRadius = 150.;
   
   private AtomicBoolean refreshRealm = new AtomicBoolean(false);
   private AtomicInteger refresherCommand = new AtomicInteger(0);
@@ -1572,8 +1574,9 @@ public class PixelRealm extends Screen {
           }
         }
         
-        createPShape();
+        //joinTiles();
         
+        updatePShape();
       }
       
       // Create new chunk by loading data (equivalent to a load function)
@@ -1617,12 +1620,41 @@ public class PixelRealm extends Screen {
         catch (RuntimeException e) {
           console.warn("Couldn't load chunk from JSON. Maybe chunk is corrupted?");
         }
-        createPShape();
+        
+        //joinTiles();
+        
+        updatePShape();
       }
+      
+      // This entire method is a bug fix.
+      //private void joinTiles() {
+      //  TerrainChunkV2 ch_xadjacent = getChunk(chunkX-1, chunkY);
+      //  TerrainChunkV2 ch_yadjacent = getChunk(chunkX, chunkY-1);
+        
+      //  if (ch_xadjacent != null) {
+      //    console.log("ch_xadjacent found");
+      //    for (int i = 0; i < CHUNK_SIZE+1; i++) {
+      //      ch_xadjacent.tiles[CHUNK_SIZE][i] = tiles[0][i];
+      //    }
+      //  }
+      //  else {
+      //    console.warn("ch_xadjacent not found");
+      //  }
+        
+      //  if (ch_yadjacent != null) {
+      //    console.log("ch_yadjacent found");
+      //    for (int i = 0; i < CHUNK_SIZE+1; i++) {
+      //      ch_yadjacent.tiles[i][CHUNK_SIZE] = tiles[i][0];
+      //    }
+      //  }
+      //  else {
+      //    console.warn("ch_yadjacent not found");
+      //  }
+      //}
       
       
       // Assumes tiles has already been set
-      private void createPShape() {
+      private void updatePShape() {
           scene.textureWrap(REPEAT);
           pshapeChunk = createShape();
           pshapeChunk.beginShape(QUAD);
@@ -1694,11 +1726,6 @@ public class PixelRealm extends Screen {
       }
       boolean blink = true;
       public void renderChunk() {
-        //if (glowingchunk == hashIndex) {
-        //  createPShape();
-        //  blink = !blink;
-        //}
-        
         // In modifyTerrain mode, terrain is re-generated every frame (slow but dynamic, used for previewing custom terrain)
         // In non-modifyTerrain mode, terrain uses PShapes stored in GPU memory (fast but rigid, to change tile data you must re-generate entire chunk)
         if (!modifyTerrain) {
@@ -1729,46 +1756,12 @@ public class PixelRealm extends Screen {
           }
           scene.endShape();
         }
-        
-        // This below is for hitbox debug purposes
-        
-        //PVector[][] test = new PVector[CHUNK_SIZE+1][CHUNK_SIZE+1];
-        //for (int y = 0; y < CHUNK_SIZE+1; y++) {
-        //   for (int x = 0; x < CHUNK_SIZE+1; x++) {
-             
-        //      float xx = float(x+chunkX*CHUNK_SIZE);
-        //      float yy = float(y+chunkY*CHUNK_SIZE);
-              
-        //      test[y][x] = calcTile(xx-1., yy-1.);
-        //  }
-        //}
-        
-        //scene.beginShape(QUAD);
-        //for (int y = 0; y < CHUNK_SIZE; y++) {
-        //   for (int x = 0; x < CHUNK_SIZE; x++) {
-        //      PVector[] v = new PVector[4];
-        //      v[0] = test[y][x];
-        //      v[1] = test[y][x+1];
-        //      v[2] = test[y+1][x+1];
-        //      v[3] = test[y+1][x];
-              
-              
-        //      scene.noStroke();
-        //      scene.fill(255, 200, 0, 127);
-        //      scene.vertex(v[0].x, v[0].y, v[0].z);                                    
-        //      scene.vertex(v[1].x, v[1].y, v[1].z);  
-        //      scene.vertex(v[2].x, v[2].y, v[2].z);  
-        //      scene.vertex(v[3].x, v[3].y, v[3].z);
-        //  }
-        //}
-        //scene.endShape();
-         
-          
       }
       
+      // For "testing" purposes
       public void doThing() {
         tiles[int(random(0, 9))][int(random(0, 9))].y = random(-1000, 1000);
-        createPShape();
+        updatePShape();
       }
 
 
@@ -3122,21 +3115,46 @@ public class PixelRealm extends Screen {
       return 255-(d*scale);
     }
     
-    @SuppressWarnings("unused")
-    private PVector calcTile(float x, float z, boolean debug) {
-      PVector v = calcTileXZ(x,z);
-      v.y = calcTileY(x,z, debug);
-      return v;
+    private void removeTileCacheAt(float x, float z) {
+      float tilex = floor(x/terrain.groundSize)+1.;
+      float tilez = floor(z/terrain.groundSize)+1.;
+      removeTileCache(int(tilex), int(tilez));
+    }
+    
+    private void removeTileCache(int x, int z) {
+      int hashIndex = (MAX_CHUNKS_XZ)*(z) + (x);
+      tilesCache.remove(hashIndex);
     }
     
     private PVector calcTile(float x, float z) {
       PVector v = calcTileXZ(x,z);
-      v.y = calcTileY(x,z, false);
+      v.y = calcTileY(x,z);
       return v;
     }
     
     private PVector calcTileXZ(float x, float z) {
-      return terrain.getPointXZ(x,z);
+      
+      // Yup, chunks over here, but I don't really care.
+      // Not like we're going to the farlands with this MAX_CHUNKS_XZ
+      // Though, this could be potentially a very hard bug to find in
+      // the future if worlds become large enough.
+      int hashIndex = (MAX_CHUNKS_XZ)*int(z) + int(x);
+      //console.log(hashIndex);
+      
+      PVector cacheEntry = tilesCache.get(hashIndex);
+      
+      if (cacheEntry != null && !modifyTerrain) {
+        return cacheEntry;
+      }
+      else {
+        PVector v = terrain.getPointXZ(x,z);
+        v.y = calcTileY(x,z);
+        if (versionCompatibility != 1) {
+          tilesCache.put(hashIndex, v);
+        }
+        return v;
+      }
+      
     }
     
     
@@ -3144,67 +3162,108 @@ public class PixelRealm extends Screen {
     //  return calcTileY(x, z, false);
     //}
     
+    private int[] getTileIndicies(float x, float z) {
+      int tilex = 0;
+      int tilez = 0;
+      if (x >= 0) {
+        tilex = (int(x+1)%(CHUNK_SIZE));
+      }
+      else {
+        tilex = CHUNK_SIZE-abs(int(x+1)%(CHUNK_SIZE));
+      }
+      
+      if (z >= 0) {
+        tilez = (int(z+1)%(CHUNK_SIZE));
+      }
+      else {
+        tilez = CHUNK_SIZE-abs(int(z+1)%(CHUNK_SIZE));
+      }
+      
+      int[] ret = new int[2];
+      ret[0] = abs(tilex);
+      ret[1] = abs(tilez);
+      
+      return ret;
+    }
+    
+    private TerrainChunkV2 getChunkAt(float x, float z) {
+      if (terrain == null) return null;
+      float tilex = floor(x/terrain.groundSize)+1.;
+      float tilez = floor(z/terrain.groundSize)+1.;
+      return getChunkUsingIndices(tilex, tilez);
+    }
+    
+    private TerrainChunkV2 getChunkUsingIndices(float x, float z) {
+      int chunkx = int((x+1)/float(CHUNK_SIZE)) - (x < 0 ? 1 : 0);
+      int chunkz = int((z+1)/float(CHUNK_SIZE)) - (z < 0 ? 1 : 0);
+      return getChunk(chunkx, chunkz);
+    }
+    
+    // In chunk coords here.
+    private TerrainChunkV2 getChunk(int chunkx, int chunkz) {
+      int hashIndex = (MAX_CHUNKS_XZ)*chunkz + chunkx;
+      return chunks.get(hashIndex);
+    }
+    
+    private PVector getTileAt(float x, float z) {
+      float tilex = floor(x/terrain.groundSize)+1.;
+      float tilez = floor(z/terrain.groundSize)+1.;
+      
+      return getTileUsingIndicies(tilex, tilez);
+    }
+    
+    
+    private PVector getTileUsingIndicies(float x, float z) {
+      if (versionCompatibility == 1) {
+        console.bugWarn("getTileAt: Not compatible in realms with v1.x");
+        return new PVector(0,0,0);
+      }
+         
+      //if (debug) {
+      //  console.log(x+ " " + z + "   "+ tilex + " " + tilez + "   " + chunkx + " " + chunkz);
+      //}
+      
+      //glowingchunk = hashIndex;
+
+      //glowingtilex = tilex;
+      //glowingtiley = tilez;
+      
+      // Can't believe how expertly unreadable this code was.
+      // In order to get a tile, we need both the chunk and the tile's x and z index.
+      TerrainChunkV2 ch = getChunkUsingIndices(x, z);
+      int[] indicies = getTileIndicies(x, z);
+      
+      // return cached tile.
+      if (ch != null) {
+        return ch.tiles[indicies[1]][indicies[0]];
+      }
+      else {
+        // Our code should know what to expect
+        return new PVector(x, terrain.getPointY(x,z), z);
+      }
+    }
+    
     int glowingchunk = 0;
     int glowingtilex = 0;
     int glowingtiley = 0;
-    private float calcTileY(float x, float z, boolean debug) {
+    private float calcTileY(float x, float z) {
+      
       
       if (versionCompatibility == 1) return terrain.getPointY(x,z);
       else {
-        //int chunkx = int((x + (x < 0 ? 2 : 1))/(CHUNK_SIZE)) - (x < 0 ? 1 : 0);
-        //int chunkz = int((z + (z < 0 ? 1 : 0) )/(CHUNK_SIZE)) - (z < 0 ? 1 : 0);
+        // Skip all that if we just wanna modify terrain
+        if (modifyTerrain) return terrain.getPointY(x,z);
         
-        //int chunkx = int((x + (x < 0 ? 1 : -1))/(CHUNK_SIZE)) - (x < 0 ? 0 : 0);
-        //int chunkz = int((z + (x < 0 ? 1 : -1) )/(CHUNK_SIZE)) - (z < 0 ? 0 : 0);
-        engine.timestamp("find chunk");
-        int chunkx = int((x+1)/float(CHUNK_SIZE)) - (x < 0 ? 1 : 0);
-        int chunkz = int((z+1)/float(CHUNK_SIZE)) - (z < 0 ? 1 : 0);
+        PVector v = getTileUsingIndicies(x, z);
         
-        engine.timestamp("find tilex");
-        int tilex = 0;
-        int tilez = 0;
-        if (x >= 0) {
-          tilex = (int(x+1)%(CHUNK_SIZE));
-        }
-        else {
-          tilex = CHUNK_SIZE-abs(int(x+1)%(CHUNK_SIZE));
-        }
-        engine.timestamp("find tilez");
-        
-        if (z >= 0) {
-          tilez = (int(z+1)%(CHUNK_SIZE));
-        }
-        else {
-          tilez = CHUNK_SIZE-abs(int(z+1)%(CHUNK_SIZE));
-        }
-        
-              
-        if (debug) {
-          console.log(x+ " " + z + "   "+ tilex + " " + tilez + "   " + chunkx + " " + chunkz);
-        }
-        
-        
-        engine.timestamp("calc hashindex");
-        int hashIndex = (MAX_CHUNKS_XZ)*chunkz + chunkx;
-        glowingchunk = hashIndex;
-  
-        
-        engine.timestamp("find cached");
-        glowingtilex = tilex;
-        glowingtiley = tilez;
-        TerrainChunkV2 ch = chunks.get(hashIndex);
-        
-        engine.timestamp("get cached");
+        return v.y;
         // return cached tile.
-        if (ch != null && !modifyTerrain) {
-          engine.timestamp("cached");
-          return ch.tiles[abs(tilez)][abs(tilex)].y;
-        }
-        // If the chunk has not been cached or we want the terrain to change real-time...
-        else {
-          engine.timestamp("calc point");
-          return terrain.getPointY(x,z);
-        }
+        //if (v != null) {
+        //}
+        //// If the chunk has not been cached or we want the terrain to change real-time...
+        //else {
+        //  return terrain.getPointY(x,z);
+        //}
       }
     }
     
@@ -3539,6 +3598,8 @@ public class PixelRealm extends Screen {
         version = jsonFile.getString("compatibility_version", "");
         if (version.equals("1.0") || version.equals("1.1")) {
           versionCompatibility = 1;
+          // While we're here, make sure we're not in the morpher tool
+          if (currentTool == TOOL_MORPHER) currentTool = TOOL_NORMAL;
         }
         else if (version.equals("2.0")) {
           versionCompatibility = 2;
@@ -4377,7 +4438,9 @@ public class PixelRealm extends Screen {
               timeNotMoving = 0; 
             }
             else {
-              timeNotMoving += display.getDelta();
+              if (!input.keyAction("lookRight") && !input.keyAction("lookLeft") && !input.keyAction("jump") && !input.keyAction("primaryAction")) {
+                timeNotMoving += display.getDelta();
+              }
             }
           }
           
@@ -4520,6 +4583,78 @@ public class PixelRealm extends Screen {
       else {
         console.bugWarn("renderTerrain: unknown version"+version);
         return;
+      }
+      
+      
+      // TODO: put that somewhere else 
+      // plz
+      if (currentTool == TOOL_MORPHER) {
+        
+        if (input.keyAction("scaleUp")) {
+          morpherRadius *= 1.03;
+        }
+        if (input.keyAction("scaleDown")) {
+          morpherRadius *= 0.97;
+        }
+        morpherRadius = min(max(morpherRadius, 25.), 4000.);
+        
+        float SELECT_FAR = 300.;
+        float px = playerX+sin(direction)*SELECT_FAR;
+        float pz = playerZ+cos(direction)*SELECT_FAR;
+        
+        float size = (morpherRadius*2.)/8.;
+        float uvSize = 1.0/8.;
+        
+        scene.beginShape(QUAD);
+        scene.textureMode(NORMAL);
+        scene.textureWrap(REPEAT);
+        scene.texture(display.systemImages.get("morpher_circle").pimage);
+        //scene.stroke(0);
+        //scene.noFill();
+        for (float z = -4.; z < 4.; z += 1.0) {
+          float v = (z+4.)/8.;
+          float tz = pz+z*size;
+          for (float x = -4.; x < 4.; x+=1.0) {
+            float u = (x+4.)/8.;
+            float tx = px+x*size;
+            // TODO: we could perhaps add some verrrrrrrrry temporary cache to onSurface()
+            // so that it returns a cached result after each loop iteration?
+            // Eh nah.
+            // TODO: delete this TODO note.
+            scene.vertex(tx,      onSurface(tx, tz)-10.,           tz,      u,        v);
+            scene.vertex(tx+size, onSurface(tx+size, tz)-10.,      tz,      u+uvSize, v);
+            scene.vertex(tx+size, onSurface(tx+size, tz+size)-10., tz+size, u+uvSize, v+uvSize);
+            scene.vertex(tx,      onSurface(tx, tz+size)-10.,      tz+size, u,        v+uvSize);
+          }
+        }
+        scene.endShape();
+        
+        
+        if (input.keyAction("primaryAction")) {
+          HashSet<TerrainChunkV2> chunksModified = new HashSet<TerrainChunkV2>();
+          for (float z = -morpherRadius-terrain.groundSize; z < morpherRadius; z += terrain.groundSize) {
+            float zrange = (z+morpherRadius+terrain.groundSize)/(morpherRadius+morpherRadius+terrain.groundSize);
+            for (float x = -morpherRadius-terrain.groundSize; x < morpherRadius; x += terrain.groundSize) {
+              float xrange = (x+morpherRadius+terrain.groundSize)/(morpherRadius+morpherRadius+terrain.groundSize);
+              
+              float bulge = sin(xrange*PI)*sin(zrange*PI)*5;
+              if (input.shiftDown) 
+                getTileAt(px+x, pz+z).y += bulge;
+              else
+                getTileAt(px+x, pz+z).y -= bulge;
+                
+              removeTileCacheAt(px+x, pz+z);
+                
+              TerrainChunkV2 ch = getChunkAt(px+x, pz+z);
+              if (ch != null) chunksModified.add(ch);
+            }
+          }
+          
+          //console.log(terrain.groundSize);
+          for (TerrainChunkV2 ch : chunksModified) {
+            ch.updatePShape();
+          }
+        }
       }
     }
     
@@ -4909,7 +5044,6 @@ public class PixelRealm extends Screen {
             p.interationAction();
             break;
             default:
-            file.open(p.dir);
             break;
           }
         }
@@ -4932,6 +5066,8 @@ public class PixelRealm extends Screen {
           float z = playerZ+cos(direction)*SELECT_FAR;
           holdingObject.x = x;
           holdingObject.z = z;
+          
+          // Fade the held object so we can actually see where we're going.
           holdingObject.tint = color(255, 80);
           if (onGround())
             holdingObject.y = onSurface(x, z);
@@ -5290,6 +5426,8 @@ public class PixelRealm extends Screen {
       prevRealm = currRealm;
     }
     
+    tilesCache.clear();
+    
     if (fro.length() == 0)
       currRealm = new PixelRealmState(to);
     else
@@ -5331,6 +5469,8 @@ public class PixelRealm extends Screen {
       return;
     }
     currRealm.saveRealmJson();
+    
+    tilesCache.clear();
     
     sound.streamMusicWithFade(r.musicPath);
     portalCoolDown = 10.;
@@ -5477,7 +5617,7 @@ public class PixelRealm extends Screen {
     // Make us see really really farrrrrrr
     float zNear = 10.;
     if (movementPaused) zNear = 120.;
-    scene.perspective(PI/3.0, (float)scene.width/scene.height, zNear, 10000.);
+    scene.perspective(PI/3.0, (float)scene.width/scene.height, zNear, 1000000.);
     scene.pushMatrix();
     display.recordLogicTime();
 
