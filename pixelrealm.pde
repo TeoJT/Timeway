@@ -52,10 +52,20 @@ public class PixelRealm extends Screen {
   final static float SLIP_THRESHOLD = 2.5;
   
   
+  
   // Tool constants
   protected final static int TOOL_NORMAL = 1;
   protected final static int TOOL_GRABBER = 2;
   protected final static int TOOL_MORPHER = 3;
+  
+  // Morpher
+  protected final static int MORPHER_BULGE   = 1;
+  protected final static int MORPHER_FLAT    = 2;
+  protected final static int MORPHER_BLOCK   = 3;
+  protected final static int MORPHER_PIT     = 4;
+  protected final static int MORPHER_RESTORE = 5;
+  
+  
   
   // File names without an extension accept various file types (png, jpeg, gif)
   public final static String REALM_GRASS = ".pixelrealm-grass";
@@ -87,6 +97,9 @@ public class PixelRealm extends Screen {
   private int timeInRealm  = 0;
   private float timeNotMoving = 0.;
   protected HashMap<Integer, PVector> tilesCache = new HashMap<Integer, PVector>();
+  private float lastXBlockGetHeightAction = 0.;
+  private float lastZBlockGetHeightAction = 0.;
+  private boolean playingWarpingSound = false;
   
   
   // --- Legacy backward-compatibility stuff & easter eggs ---
@@ -110,6 +123,7 @@ public class PixelRealm extends Screen {
   private boolean finderEnabled = false;   // Maybe this could be part of Pixel Realm state?
   protected boolean launchWhenPlaced = false; 
   protected int     currentTool = TOOL_NORMAL;
+  protected int     subTool     = 0;
   private boolean isWalking = false;
   public boolean movementPaused = false;
   protected float portalLight = 255.;
@@ -120,7 +134,11 @@ public class PixelRealm extends Screen {
   protected boolean modifyTerrain = false;
   protected int nodeSound = 0;
   private boolean drawEntryOnce = true;
-  private float morpherRadius = 150.;
+  protected float morpherRadius = 150.;
+  protected float morpherBlockHeight = 0.;
+  protected float fovx = PI/3.0;
+  protected float fovy = 0.;
+  private int slippingJumpsAllowed = 2;
   
   private AtomicBoolean refreshRealm = new AtomicBoolean(false);
   private AtomicInteger refresherCommand = new AtomicInteger(0);
@@ -200,7 +218,7 @@ public class PixelRealm extends Screen {
     scene = createGraphics((int(WIDTH/DISPLAY_SCALE)), int(this.height/DISPLAY_SCALE), P3D);
     ((PGraphicsOpenGL)scene).textureSampling(2);        
     scene.hint(DISABLE_OPENGL_ERRORS);
-    
+    fovy = (float)scene.width/scene.height;
     // Only set up legacy portal when we go into the easter egg.
     // TODO: re-add. Or most likely remove it :(
     //setupLegacyPortal();
@@ -3230,11 +3248,40 @@ public class PixelRealm extends Screen {
       
       // Can't believe how expertly unreadable this code was.
       // In order to get a tile, we need both the chunk and the tile's x and z index.
-      TerrainChunkV2 ch = getChunkUsingIndices(x, z);
+      
+      // This absolute clusterflonk of code over there is used to help solve a bug which
+      // is so complicated that I don't even know how to explain it.
+      float xx = x;
+      float zz = z;
+      if (int(x) == CHUNK_SIZE+CHUNK_SIZE*terrain.chunkLimitX-1) {
+        xx -= 1;
+      }
+      if (int(z) == CHUNK_SIZE+CHUNK_SIZE*terrain.chunkLimitZ-1) {
+        zz -= 1;
+      }
+      TerrainChunkV2 ch = getChunkUsingIndices(xx, zz);
+      
+      
       int[] indicies = getTileIndicies(x, z);
+      
+      
+      //if (debug) {
+      //  console.log("x      "+x);
+      //  if (terrain != null) console.log("xlimit "+(CHUNK_SIZE+CHUNK_SIZE*terrain.chunkLimitX-2));
+      //  console.log("z      "+z);
+      //  if (terrain != null) console.log("zlimit "+(CHUNK_SIZE+CHUNK_SIZE*terrain.chunkLimitZ-2));
+      //}
       
       // return cached tile.
       if (ch != null) {
+        // Bug fix
+        if (int(x) == (CHUNK_SIZE+CHUNK_SIZE*terrain.chunkLimitX-2)) {
+          ch.tiles[indicies[1]][indicies[0]] = ch.tiles[indicies[1]][indicies[0]+1];
+        }
+        if (int(z) == (CHUNK_SIZE+CHUNK_SIZE*terrain.chunkLimitZ-2)) {
+          ch.tiles[indicies[1]][indicies[0]] = ch.tiles[indicies[1]+1][indicies[0]];
+        }
+        
         return ch.tiles[indicies[1]][indicies[0]];
       }
       else {
@@ -3242,6 +3289,8 @@ public class PixelRealm extends Screen {
         return new PVector(x, terrain.getPointY(x,z), z);
       }
     }
+    
+    int count = 0;
     
     int glowingchunk = 0;
     int glowingtilex = 0;
@@ -4372,7 +4421,6 @@ public class PixelRealm extends Screen {
           //    inventorySelectedItem.carrying.z += movez;
           //  }
           //} else
-          {
             direction += rot;
             xvel += movex;
             zvel += movez;
@@ -4391,6 +4439,9 @@ public class PixelRealm extends Screen {
                 xvel = max(min(xvel-x_slope*0.05, 5.), -5.0);
                 zvel = max(min(zvel-z_slope*0.05, 5.), -5.0);
                 slipping = true;
+              }
+              else {
+                slippingJumpsAllowed = 2;
               }
             }
             
@@ -4442,7 +4493,6 @@ public class PixelRealm extends Screen {
                 timeNotMoving += display.getDelta();
               }
             }
-          }
           
           cache_flatSinDirection = sin(direction-PI+HALF_PI);
           cache_flatCosDirection = cos(direction-PI+HALF_PI);
@@ -4464,17 +4514,22 @@ public class PixelRealm extends Screen {
             }
             
             if ((onGround() || coyoteJump > 0.) && jumpTimeout < 1.) {
-              coyoteJump = 0.;
-              yvel = jumpStrength;
-              playerY -= 10;
-              stats.increase("jumps", 1);
-              if (isInWater) {
-                sound.playSound("water_jump");
-                jumpTimeout = 40.;
-              }
-              else {
-                sound.playSound("jump");
-                jumpTimeout = 30.;
+              // Don't allow the player to jump anymore if they slippin' and
+              // don't have any jumps left.
+              if ((slipping && slippingJumpsAllowed > 0) || !slipping) {
+                coyoteJump = 0.;
+                yvel = jumpStrength;
+                playerY -= 10;
+                stats.increase("jumps", 1);
+                slippingJumpsAllowed--;
+                if (isInWater) {
+                  sound.playSound("water_jump");
+                  jumpTimeout = 40.;
+                }
+                else {
+                  sound.playSound("jump");
+                  jumpTimeout = 30.;
+                }
               }
             }
           }
@@ -4573,6 +4628,280 @@ public class PixelRealm extends Screen {
     }
     
     
+    public void runMorpherTool() {
+      if (currentTool == TOOL_MORPHER) {
+        // Some keyboard actions and controls (i dont need to explain that)
+        if (input.keyAction("scaleUp")) {
+          if (subTool == MORPHER_BULGE || subTool == MORPHER_FLAT) {
+            morpherRadius *= 1.03;
+          }
+          else if (subTool == MORPHER_BLOCK) {
+            if (input.shiftDown) {
+              morpherBlockHeight -= 3.;
+            }
+            else {
+              morpherBlockHeight -= 10.;
+            }
+          }
+        }
+        if (input.keyAction("scaleDown")) {
+          if (subTool == MORPHER_BULGE || subTool == MORPHER_FLAT) {
+            morpherRadius *= 0.97;
+          }
+          else if (subTool == MORPHER_BLOCK) {
+            if (input.shiftDown) {
+              morpherBlockHeight += 3.;
+            }
+            else {
+              morpherBlockHeight += 10.;
+            }
+          }
+        }
+        if (input.keyActionOnce("nextSubTool")) {
+          subTool++;
+          if (subTool > 3) subTool = 1;
+          sound.playSound("switch_subtool");
+        }
+        else if (input.keyActionOnce("prevSubTool")) {
+          subTool--;
+          if (subTool <= 0) subTool = 3;
+          sound.playSound("switch_subtool");
+        }
+        
+        
+        morpherRadius = min(max(morpherRadius, 25.), 2000.);
+        
+        // Place cursor in front of player.
+        float SELECT_FAR = 300.;
+        float px = playerX+sin(direction)*SELECT_FAR;
+        float pz = playerZ+cos(direction)*SELECT_FAR;
+        
+        // For getting height in block subtool mode later in the code.
+        float snappedx = 0.;
+        float snappedz = 0.;
+        
+        // Bulge tool
+        if (subTool == MORPHER_BULGE || subTool == MORPHER_FLAT) {
+          // Here we display the cool ass morpher circle.
+          float size = (morpherRadius*2.)/8.;
+          float uvSize = 1.0/8.;
+          scene.beginShape(QUAD);
+          scene.textureMode(NORMAL);
+          scene.textureWrap(REPEAT);
+          
+          // Prepare the texture depending on subtool
+          if (subTool == MORPHER_BULGE) {
+            scene.texture(display.systemImages.get("morpher_circle_bulge").pimage);
+          }
+          else if (subTool == MORPHER_FLAT) {
+            scene.texture(display.systemImages.get("morpher_circle_flat").pimage);
+          }
+          
+          // Now, go through a grid, getting y points on the terrain, and place a nice
+          // blanket of circle texture on top, wrapping around the terrain.
+          for (float z = -4.; z < 4.; z += 1.0) {
+            float v = (z+4.)/8.;
+            float tz = pz+z*size;
+            for (float x = -4.; x < 4.; x+=1.0) {
+              float u = (x+4.)/8.;
+              float tx = px+x*size;
+              // TODO: we could perhaps add some verrrrrrrrry temporary cache to onSurface()
+              // so that it returns a cached result after each loop iteration?
+              // Eh nah.
+              // TODO: delete this TODO note.
+              scene.vertex(tx,      onSurface(tx, tz)-10.,           tz,      u,        v);
+              scene.vertex(tx+size, onSurface(tx+size, tz)-10.,      tz,      u+uvSize, v);
+              scene.vertex(tx+size, onSurface(tx+size, tz+size)-10., tz+size, u+uvSize, v+uvSize);
+              scene.vertex(tx,      onSurface(tx, tz+size)-10.,      tz+size, u,        v+uvSize);
+            }
+          }
+          scene.endShape();
+        }
+        // Now for the block subtool
+        else if (subTool == MORPHER_BLOCK) {
+          // Render cursor
+          // Texture doesn't work let's just switch shaders who cares.
+          // Let's destroy good performance here.
+          //scene.texture(display.systemImages.get("white").pimage);
+          scene.resetShader();
+          scene.stroke(0);
+          scene.strokeWeight(1);
+          scene.fill(127, 0, 0, 127);
+          
+          // Here we render a box large enough that it goes off-camera at the bottom of the world.
+          final float BOX_HEIGHT = 2000.;
+          
+          // Snap box to the tiles
+          snappedx = (floor(px/terrain.groundSize)+0.5)*terrain.groundSize;
+          snappedz = (floor(pz/terrain.groundSize)+0.5)*terrain.groundSize;
+          
+          boolean disabledDepthTest = false;
+          // If you're confused, remember, up is negative in Processing.
+          if (morpherBlockHeight > onSurface(snappedx, snappedz)) {
+            // I'm reallly sorry, just a lil performance hit is all.
+            scene.hint(DISABLE_DEPTH_TEST);
+            disabledDepthTest = true;
+          }
+          
+          scene.pushMatrix();
+          scene.translate(snappedx, (BOX_HEIGHT+morpherBlockHeight)/2, snappedz);
+          scene.box(terrain.groundSize, BOX_HEIGHT-morpherBlockHeight+1, terrain.groundSize);
+          scene.popMatrix();
+          //console.log(x+" "+onSurface(x, z)+" "+z);
+          
+          if (disabledDepthTest) scene.hint(ENABLE_DEPTH_TEST);
+        }
+        // Finish rendering
+        
+        // This part of the code is what actually morphs the terrain.
+        if (input.keyAction("primaryAction") || input.keyAction("secondaryAction")) {
+          // Need this hashset so that only one unique chunk is in there at a time (I think)
+          HashSet<TerrainChunkV2> chunksModified = new HashSet<TerrainChunkV2>();
+          
+          if (subTool == MORPHER_BULGE || subTool == MORPHER_FLAT) {
+            
+            // Another grid, but for morphing this time
+            for (float z = -morpherRadius-terrain.groundSize; z < morpherRadius; z += terrain.groundSize) {
+              
+              // zrange and xrange are values from 0 to 1 so that we can use it to determine the bulge/circle shape.
+              // Apologies if it looks complicated but just know that it goes from 0 to 1 in this loop, no higher.
+              float zrange = (z+morpherRadius+terrain.groundSize)/(morpherRadius+morpherRadius+terrain.groundSize);
+              
+              for (float x = -morpherRadius-terrain.groundSize; x < morpherRadius; x += terrain.groundSize) {
+                float xrange = (x+morpherRadius+terrain.groundSize)/(morpherRadius+morpherRadius+terrain.groundSize);
+                
+                // Calculate bulge. It's just like creating a basic circle in glsl shaders.
+                float bulge = sin(xrange*PI)*sin(zrange*PI);
+                
+                // Slow down morphing if shift pressed
+                float morphSpeed = 7.;
+                if (input.shiftDown) {
+                  morphSpeed = 2.5;
+                }
+                
+                // If it's flat, "pixelate" it so that its one value or the other,
+                // not anything in between.
+                // Basically nerd term for saying it rises/sinks the terrain in a flat way.
+                if (subTool == MORPHER_FLAT) {
+                  bulge = bulge > 0.5 ? 1. : 0.;
+                }
+                
+                // Modify tile y-values (the actual morphing!)
+                if (input.keyAction("primaryAction"))
+                  getTileAt(px+x, pz+z).y += bulge*morphSpeed;
+                else
+                  getTileAt(px+x, pz+z).y -= bulge*morphSpeed;
+                
+                // Long story short, need this because of stupid chunk-border bugs.
+                removeTileCacheAt(px+x, pz+z);
+                
+                // And of course, we need to update the display of the chunk once we're
+                // done with our tiles. So add it to the list (unique values only) so
+                // that we can update it after.
+                TerrainChunkV2 ch = getChunkAt(px+x, pz+z);
+                
+                // TODO: see if this is really needed.
+                if (ch != null) chunksModified.add(ch);
+                
+                ch = getChunkAt(px+x-terrain.groundSize, pz+z-terrain.groundSize);
+                if (ch != null) chunksModified.add(ch);
+                
+                // Play warping sound
+                if (!playingWarpingSound) {
+                  sound.loopSound("terraform_1");
+                  playingWarpingSound = true;
+                }
+              }
+            }              
+            // And update the pshape (effectively updates the display on-screen)
+            //console.log(chunksModified.size());
+            for (TerrainChunkV2 ch : chunksModified) {
+              ch.updatePShape();
+            }            
+          }
+          // End bulge and flat subtools
+          // Begin block tool >:)
+          else if (subTool == MORPHER_BLOCK) {
+            // woops while testing it was in the wrong place.
+            // let's just do this.
+            // I'm sure nothing bad will happen...
+            px -= terrain.groundSize;
+            pz -= terrain.groundSize;
+            
+            // This one is pretty easy. We just modify the tile points
+            // for a nice block shape.
+            if ((getTileAt(px, pz).y != morpherBlockHeight 
+             || getTileAt(px+terrain.groundSize, pz).y != morpherBlockHeight
+             || getTileAt(px+terrain.groundSize, pz+terrain.groundSize).y != morpherBlockHeight
+             || getTileAt(px, pz+terrain.groundSize).y != morpherBlockHeight)
+             && !outOfBounds(px+terrain.groundSize, pz+terrain.groundSize) // This is just to prevent an annoying sound bug from happening.
+             ) {
+              
+             
+              if (input.keyAction("secondaryAction")) {
+                getTileAt(px, pz).y                                       = morpherBlockHeight;
+                removeTileCacheAt(px, pz);
+                getTileAt(px+terrain.groundSize, pz).y                    = morpherBlockHeight;
+                removeTileCacheAt(px+terrain.groundSize, pz);
+                getTileAt(px+terrain.groundSize, pz+terrain.groundSize).y = morpherBlockHeight;
+                removeTileCacheAt(px+terrain.groundSize, pz+terrain.groundSize);
+                getTileAt(px, pz+terrain.groundSize).y                    = morpherBlockHeight;
+                removeTileCacheAt(px, pz+terrain.groundSize);
+                
+                // I could prolly write this to be a lot neater but let's be real:
+                // do you really need explaining what this code below does?
+                TerrainChunkV2 ch = getChunkAt(px, pz);
+                if (ch != null) chunksModified.add(ch);
+                ch = getChunkAt(px+terrain.groundSize, pz);
+                if (ch != null) chunksModified.add(ch);
+                ch = getChunkAt(px+terrain.groundSize, pz+terrain.groundSize);
+                if (ch != null) chunksModified.add(ch);
+                ch = getChunkAt(px, pz+terrain.groundSize);
+                if (ch != null) chunksModified.add(ch);
+                
+                //ch = getChunkAt(px-terrain.groundSize, pz);
+                //if (ch != null) chunksModified.add(ch);
+                //ch = getChunkAt(px-terrain.groundSize, pz-terrain.groundSize);
+                //if (ch != null) chunksModified.add(ch);
+                //ch = getChunkAt(px, pz-terrain.groundSize);
+                //if (ch != null) chunksModified.add(ch);
+                
+                sound.playSound("blockdd");
+                // And update the pshape (effectively updates the display on-screen)
+                //console.log(chunksModified.size());
+                for (TerrainChunkV2 chh : chunksModified) {
+                  chh.updatePShape();
+                }
+              }
+            }
+            
+            if (input.keyAction("primaryAction") && (snappedx != lastXBlockGetHeightAction || snappedz != lastZBlockGetHeightAction)) {
+              // Let's calculate the highest point!
+              // We use min because remember: up => numbers go down.
+              morpherBlockHeight = min(getTileAt(px, pz).y, 
+              min(getTileAt(px+terrain.groundSize, pz).y, 
+              min(getTileAt(px+terrain.groundSize, pz+terrain.groundSize).y, getTileAt(px, pz+terrain.groundSize).y)));
+              
+              lastXBlockGetHeightAction = snappedx;
+              lastZBlockGetHeightAction = snappedz;
+              
+              sound.playSound("blockdd", 0.8);
+            }
+          }
+        }
+        // End pressing action keys
+        else {
+          // stop sounds if they're playing
+          if (playingWarpingSound) {
+            playingWarpingSound = false;
+            sound.stopSound("terraform_1");
+          }
+        }
+      }
+    }
+    
+    
+    
     public void renderTerrain() {
       if (version.equals("1.0") || version.equals("1.1")) {
         renderTerrainV1();
@@ -4583,78 +4912,6 @@ public class PixelRealm extends Screen {
       else {
         console.bugWarn("renderTerrain: unknown version"+version);
         return;
-      }
-      
-      
-      // TODO: put that somewhere else 
-      // plz
-      if (currentTool == TOOL_MORPHER) {
-        
-        if (input.keyAction("scaleUp")) {
-          morpherRadius *= 1.03;
-        }
-        if (input.keyAction("scaleDown")) {
-          morpherRadius *= 0.97;
-        }
-        morpherRadius = min(max(morpherRadius, 25.), 4000.);
-        
-        float SELECT_FAR = 300.;
-        float px = playerX+sin(direction)*SELECT_FAR;
-        float pz = playerZ+cos(direction)*SELECT_FAR;
-        
-        float size = (morpherRadius*2.)/8.;
-        float uvSize = 1.0/8.;
-        
-        scene.beginShape(QUAD);
-        scene.textureMode(NORMAL);
-        scene.textureWrap(REPEAT);
-        scene.texture(display.systemImages.get("morpher_circle").pimage);
-        //scene.stroke(0);
-        //scene.noFill();
-        for (float z = -4.; z < 4.; z += 1.0) {
-          float v = (z+4.)/8.;
-          float tz = pz+z*size;
-          for (float x = -4.; x < 4.; x+=1.0) {
-            float u = (x+4.)/8.;
-            float tx = px+x*size;
-            // TODO: we could perhaps add some verrrrrrrrry temporary cache to onSurface()
-            // so that it returns a cached result after each loop iteration?
-            // Eh nah.
-            // TODO: delete this TODO note.
-            scene.vertex(tx,      onSurface(tx, tz)-10.,           tz,      u,        v);
-            scene.vertex(tx+size, onSurface(tx+size, tz)-10.,      tz,      u+uvSize, v);
-            scene.vertex(tx+size, onSurface(tx+size, tz+size)-10., tz+size, u+uvSize, v+uvSize);
-            scene.vertex(tx,      onSurface(tx, tz+size)-10.,      tz+size, u,        v+uvSize);
-          }
-        }
-        scene.endShape();
-        
-        
-        if (input.keyAction("primaryAction")) {
-          HashSet<TerrainChunkV2> chunksModified = new HashSet<TerrainChunkV2>();
-          for (float z = -morpherRadius-terrain.groundSize; z < morpherRadius; z += terrain.groundSize) {
-            float zrange = (z+morpherRadius+terrain.groundSize)/(morpherRadius+morpherRadius+terrain.groundSize);
-            for (float x = -morpherRadius-terrain.groundSize; x < morpherRadius; x += terrain.groundSize) {
-              float xrange = (x+morpherRadius+terrain.groundSize)/(morpherRadius+morpherRadius+terrain.groundSize);
-              
-              float bulge = sin(xrange*PI)*sin(zrange*PI)*5;
-              if (input.shiftDown) 
-                getTileAt(px+x, pz+z).y += bulge;
-              else
-                getTileAt(px+x, pz+z).y -= bulge;
-                
-              removeTileCacheAt(px+x, pz+z);
-                
-              TerrainChunkV2 ch = getChunkAt(px+x, pz+z);
-              if (ch != null) chunksModified.add(ch);
-            }
-          }
-          
-          //console.log(terrain.groundSize);
-          for (TerrainChunkV2 ch : chunksModified) {
-            ch.updatePShape();
-          }
-        }
       }
     }
     
@@ -4892,6 +5149,7 @@ public class PixelRealm extends Screen {
       display.recordRendererTime();
       // Clear canvas (we need to do that because opengl is big stoopid)
       // TODO: benchmark; scene.clear or scene.background()?
+      scene.perspective(PI/3.0, (float)scene.width/scene.height, 10., 1000000.);
       scene.background(0);
       scene.noTint();
       scene.noStroke();
@@ -5144,6 +5402,7 @@ public class PixelRealm extends Screen {
     
     // That "effect" is just the portal glow.
     public void renderEffects() {
+      scene.perspective(PI/3.0, (float)scene.width/scene.height, 10., 1000000.);
       float FADE = 0.9;
       display.recordRendererTime();
       if (isUnderwater) {
@@ -5558,7 +5817,11 @@ public class PixelRealm extends Screen {
     display.recordLogicTime();
   }
   
-    
+  private void setPerspective() {
+    float zNear = 10.;
+    if (movementPaused) zNear = 120.;
+    scene.perspective(fovx, fovy, zNear, 1000000.);
+  }
     
     
   boolean beginBackgroundCaching = true;
@@ -5578,7 +5841,7 @@ public class PixelRealm extends Screen {
     //  realmsToVisit.clear();
     //}
     
-    if (timeNotMoving > 800) {
+    if (timeNotMoving > 2000) {
       if (!power.getPowerSaver()) {
         doBackgroundCaching(15);
       }
@@ -5612,12 +5875,9 @@ public class PixelRealm extends Screen {
     scene.beginDraw();
     display.recordLogicTime();
     currRealm.renderSky();
-    
+    setPerspective();
     display.recordRendererTime();
     // Make us see really really farrrrrrr
-    float zNear = 10.;
-    if (movementPaused) zNear = 120.;
-    scene.perspective(PI/3.0, (float)scene.width/scene.height, zNear, 1000000.);
     scene.pushMatrix();
     display.recordLogicTime();
 
@@ -5636,6 +5896,7 @@ public class PixelRealm extends Screen {
     }
 
     currRealm.renderTerrain();
+    currRealm.runMorpherTool();
     currRealm.renderPRObjects(); 
     scene.resetShader();
     
@@ -6005,6 +6266,22 @@ public class PixelRealm extends Screen {
       else {
         console.log("Please provide a path where you want to go!");
       }
+      return true;
+    }
+    else if (engine.commandEquals(command, "/fov")) {
+      String[] args = getArgs(command);
+      int i = 0;
+      float xy[] = {PI/3.,(float)scene.width/scene.height};
+      for (String arg : args) {
+        if (i >= xy.length) break;
+        xy[i++] = float(arg);
+      }
+      
+      fovx = xy[0];
+      fovy = xy[1];
+      
+      console.log("FOV updated.");
+      
       return true;
     }
     else if (engine.commandEquals(command, "/puthere")) {

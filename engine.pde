@@ -356,6 +356,8 @@ class Engine {
         defaultKeybindings.putIfAbsent("scaleDownSlow", '_');
         defaultKeybindings.putIfAbsent("showCommandPrompt", '/');
         defaultKeybindings.putIfAbsent("prevDirectory", char(8));
+        defaultKeybindings.putIfAbsent("nextSubTool", ']');
+        defaultKeybindings.putIfAbsent("prevSubTool", '[');
         for (int i = 0; i < 10; i++) defaultKeybindings.putIfAbsent("quickWarp"+str(i), str(i).charAt(0));
       }
       
@@ -2993,6 +2995,13 @@ class Engine {
       if (s != null) {
         if (!s.isPlaying())
           s.loop();
+      }
+    }
+    
+    public void stopSound(String name) {
+      SoundFile s = getSound(name);
+      if (s != null) {
+          s.stop();
       }
     }
     

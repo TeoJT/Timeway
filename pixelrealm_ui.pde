@@ -448,6 +448,9 @@ public class PixelRealmWithUI extends PixelRealm {
         }
         else {
           currentTool = TOOL_MORPHER;
+          subTool = MORPHER_BULGE;
+          morpherBlockHeight = 0.;
+          morpherRadius = 150.;
           
           globalHoldingObjectSlot = null;
           currRealm.updateHoldingItem(globalHoldingObjectSlot);
@@ -803,7 +806,7 @@ public class PixelRealmWithUI extends PixelRealm {
             String name = file.getFilename(src);
   
             // The realmtemplate file is an exception
-            if (name.equals(TEMPLATE_METADATA_FILENAME))
+            if (name.equals(TEMPLATE_METADATA_FILENAME) || name.equals("load_list.txt"))
               continue;
   
             if (file.exists(dest+name)) {
@@ -818,7 +821,12 @@ public class PixelRealmWithUI extends PixelRealm {
         issueRefresherCommand(REFRESHER_PAUSE);
         if (!conflict) {
           for (String src : movefiles) {
-            if (!file.copy(src, dest+file.getFilename(src))) {
+            // Make it hidden
+            String filename = file.getFilename(src);
+            if (filename.charAt(0) != '.') filename = "."+filename;
+            
+            
+            if (!file.copy(src, dest+filename)) {
               prompt("Copy error", "An error occured while copying realm template files. Maybe permissions are denied?");
               // Return here so the menu stays open.
               return;
