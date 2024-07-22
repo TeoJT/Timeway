@@ -5935,7 +5935,6 @@ class Engine {
   public PImage saveCacheImageBytes(String originalPath, byte[] bytes, String type) {
     openCacheInfo();
 
-    JSONObject properties = new JSONObject();
 
     String cachePath = generateCachePath(type);
 
@@ -5949,11 +5948,14 @@ class Engine {
     //f.delete();
     
     // Also remember to uncomment that.
-    properties.setString("actual", cachePath);
-    properties.setInt("checksum", calculateChecksum(img));
-    properties.setString("lastModified", "");
-    properties.setInt("size", 0);
-    cacheInfoJSON.setJSONObject(originalPath, properties);
+    // Actually... I think that's what was causing the annoying concurrentException bug...
+    // Let's leave that commented...
+    //JSONObject properties = new JSONObject();
+    //properties.setString("actual", cachePath);
+    //properties.setInt("checksum", calculateChecksum(img));
+    //properties.setString("lastModified", "");
+    //properties.setInt("size", 0);
+    //cacheInfoJSON.setJSONObject(originalPath, properties);
 
 
     return img;
