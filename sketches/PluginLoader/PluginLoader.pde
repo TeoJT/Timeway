@@ -1,4 +1,3 @@
-
 import java.net.URLClassLoader;
 import java.net.URL;
 import java.lang.reflect.Method;
@@ -169,12 +168,11 @@ void setup() {
   consoleFont = createFont("Courier New Bold", 32);
   textFont(consoleFont, 40);
   
-  
-  
   // Get the java executables path.
   String pp = (new File(".").getAbsolutePath());
   javapath = pp.substring(0, pp.length()-2).replaceAll("\\\\", "/")+"/java";
   println(javapath);
+  
   
   myplugin = new Plugin();
   
@@ -209,7 +207,7 @@ void setup() {
     }
   """;
   
-  // Compile the code.
+  //// Compile the code.
   myplugin.compile(code);
 }
 

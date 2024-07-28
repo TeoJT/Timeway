@@ -37,7 +37,7 @@ public class CustomPlugin {
       app.background(0);
       tmr++;
       if (tmr % 60 == 0) {
-        bump(0.5f)
+        bump(0.5f);
       }
     }
   

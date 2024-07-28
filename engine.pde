@@ -78,8 +78,9 @@ public class TWEngine {
   public final String POCKET_PATH         = "pocket/";
   public final String TEMPLATES_PATH      = "engine/realmtemplates/";
   public final String EVERYTHING_TXT_PATH = "engine/everything.txt";
-  public final String DEFAULT_MUSIC_PATH  = "engine/music/pixelrealm_default_bgm.wav";
+  public final String DEFAULT_MUSIC_PATH  = "engine/music/default.wav";
   public       String DEFAULT_UPDATE_PATH = "";  // Set up by setup()
+  public final String BOILERPLATE_PATH    = "engine/plugindata/plugin_boilerplate.java";
 
   // Static constants
   public static final float   KEY_HOLD_TIME       = 30.; // 30 frames
@@ -117,6 +118,7 @@ public class TWEngine {
   public ClipboardModule clipboard;
   public UIModule ui;
   public InputModule input;
+  public TWEngine.PluginModule plugins;
 
 
   
@@ -4320,18 +4322,18 @@ public class TWEngine {
   
   public class PluginModule {
     
-    String pluginBoilerplateCode_1;
-    private String pluginBoilerplateCode_2;
+    private String pluginBoilerplateCode_1 = "";
+    private String pluginBoilerplateCode_2 = "";
     private String javapath;
     private int cacheEntry = 0;
 
     
-    
+    // We need this because simply storing the output message in a command line
+    // is not sufficient; we need error code, whether it was successful or not etc.
     class CmdOutput {
       public int exitCode = -1;
       public boolean success = false;
       public String message = "";
-      
       
       public CmdOutput(int ec, String mssg) {
         exitCode = ec;
@@ -4339,19 +4341,57 @@ public class TWEngine {
         message = mssg;
       }
     }
+    
+    public PluginModule() {
+      // Load the boilerplate for plugin code.
+      if (file.exists(APPPATH+BOILERPLATE_PATH)) {
+        String[] txts = app.loadStrings(APPPATH+BOILERPLATE_PATH);
+        boolean secondPart = false;
+        for (String s : txts) {
+          if (!secondPart && s.trim().equals("[plugin_code]")) {
+            // Don't add [plugin_code] line, initiate the second part.
+            secondPart = true;
+          }
+          else if (!secondPart)
+            pluginBoilerplateCode_1 += s+"\n";
+          else
+            pluginBoilerplateCode_2 += s+"\n";
+        }
+      }
+      else {
+        console.warn(APPPATH+BOILERPLATE_PATH+" not found! Plugins will not work.");
+      }
+      
+      // Get the location of java that is currently running our beloved timeway (we will need it
+      // for compiling classes)
+      String pp = (new File(".").getAbsolutePath());
+      javapath = pp.substring(0, pp.length()-2).replaceAll("\\\\", "/")+"/java";
+    }
 
-
+    // Actual plugin object
     public class Plugin {
+      // These are needed to load the java code
       private Class pluginClass;
+      
+      // These are needed for comminication between master and slave
+      // (Timeway is master and plugin is slave)
+      // (yes, it's kinda an offensive term but this is what it's
+      // called in the computing world unfortunately.)
       private Method pluginRunPoint;
       private Method pluginGetOpCode;
       private Method pluginGetArgs;
       private Method pluginSetRet;
       private Object pluginIntance;
+      
+      // Need this because the run method needs our plugin object.
       private Plugin thisPlugin;
+      
       public boolean compiled = false;
       public String errorOutput = "";
       
+      // Famous callAPI method.
+      // Remember that whenever our plugin (slave) wants to call an API method from master,
+      // using a runnable method is the way for inter-plugin communication.
       private Runnable callAPI = new Runnable() {
             public void run() {
               runAPI(thisPlugin);
@@ -4362,7 +4402,7 @@ public class TWEngine {
         this.thisPlugin = this;
       }
       
-      
+      // Call this to run a cycle of the plugin.
       void run() {
         if (compiled && pluginRunPoint != null && pluginIntance != null) {
           try {
@@ -4377,8 +4417,10 @@ public class TWEngine {
       
       // Loads class from file.
       void loadPlugin(String pluginPath) {
-        System.out.println("Loading plugin "+pluginPath);
+        //System.out.println("Loading plugin "+pluginPath);
         
+        // Here, we do some wacky java stuff I found online to slap some java code into Timeway
+        // during runtime.
         URLClassLoader child = null;
         try {
           child = new URLClassLoader(
@@ -4387,54 +4429,73 @@ public class TWEngine {
           );
         }
         catch (Exception e) {
-          System.err.println("URL Exception: "+ e.getClass().getSimpleName());
-          exit();
+          console.warn("URL Exception: "+ e.getClass().getSimpleName());
         }
         
+        // Dunno why we set pluginClass to null but imma keep it that
+        // way so it doesn't break things.
         pluginClass = null;
         try {
+          // TODO: Is having the same class name for each plugin bad? Eh, I guess we'll find out soon enough.
           pluginClass = Class.forName("CustomPlugin", true, child);
+          // Get the run() method
           pluginRunPoint = pluginClass.getDeclaredMethod("run");
+          // annnnd rest should be self-explainatory
           pluginGetOpCode = pluginClass.getDeclaredMethod("getCallOpCode");
           pluginGetArgs = pluginClass.getDeclaredMethod("getArgs");
           pluginSetRet = pluginClass.getDeclaredMethod("setRet", Object.class);
           pluginIntance = pluginClass.getDeclaredConstructor().newInstance();
         }
+        // TODO: extended error-catching.
         catch (Exception e) {
-          System.err.println("LoadPlugin Exception: "+ e.getClass().getSimpleName());
-          exit();
+          console.warn("LoadPlugin Exception: "+ e.getClass().getSimpleName());
         }
-        //listMethods();
         
+        // here we call setup(). Maybe TODO: perhaps we should have an onLoad() then an actual setup()?
         try {
           Method passAppletMethod = pluginClass.getDeclaredMethod("setup", PApplet.class, Runnable.class);
           
           passAppletMethod.invoke(pluginIntance, app, callAPI);
         }
+        // TODO: extended error checking
         catch (Exception e) {
           System.err.println("passPApplet Exception: "+ e.getClass().getSimpleName());
           System.err.println(e.getMessage());
-          //exit();
         }
       }
       
       
       // Compiles the code into a file, then loads the file.
+      // And you read this method right, you just provide the code into
+      // this method and boom, it'll compile just like that.
       public boolean compile(String code) {
+        // You might be thinking it's ineffective to just keep
+        // counting up the cacheEntries, but they're held on by
+        // java (meaning we can't delete them) until the program
+        // closes, at which point cacheEntry will obviously be
+        // 0, so it'll just end up overwriting the old dead cached
+        // entries.
         cacheEntry++;
         compiled = false;
         
-        println("Compiling plugin...");
+        console.log("Compiling plugin...");
         
-        //makeCacheFolder();
-        final String javaFileOut = sketchPath()+"/data/pluginCache/CustomPlugin.java";
-        final String classFileOut = sketchPath()+"/data/pluginCache/CustomPlugin.class";
+        // We don't actually need the cache info, but calling this method will
+        // create the cache folder if it doesn't already exist, which is wayyyy
+        // less work and coding to do. Plus it'll automatically close after 10
+        // frames, you know the routine.
+        openCacheInfo();
         
+        // Now remember, we go
+        // raw code -> java file (combined with boilerplate) -> class file -> jar file.
+        final String javaFileOut = CACHE_PATH+"CustomPlugin.java";
+        final String classFileOut = CACHE_PATH+"CustomPlugin.class";
+        
+        // raw code -> java file
         String fullCode = pluginBoilerplateCode_1+code+pluginBoilerplateCode_2;
-        println(fullCode);
+        app.saveStrings(javaFileOut, fullCode.split("\n"));
         
-        saveStrings(javaFileOut, fullCode.split("\n"));
-        
+        // java file -> class file
         CmdOutput cmd = toClassFile(javaFileOut);
         compiled = cmd.success;
         
@@ -4443,115 +4504,146 @@ public class TWEngine {
           return false;
         }
         this.errorOutput = "";
-        loadPlugin(toJarFile(classFileOut));
+        
+        // class file -> executable jar
+        String executableJarFile = toJarFile(classFileOut);
+        
+        // Finally, load the plugin!
+        loadPlugin(executableJarFile);
         return true;
       }
       
+      // Now the following methods are to be used by the runAPI functions.
+      // Imagine this: slave sends API function, master gets the opcode,
+      // gets the arguments, and then returns the value.
       public void ret(Object val) {
         try {
           pluginSetRet.invoke(pluginIntance, val);
         }
         catch (Exception e) {
+          // TODO: extended error checking
           println("Ohno");
         }
       }
       
+      // Get the API opcode called from slave
       public int getOpCode() {
         try {
           return (int) pluginGetOpCode.invoke(pluginIntance);
         }
         catch (Exception e) {
+          // TODO: extended error checking
           println("Ohno");
           return -1;
         }
       }
       
+      // Get the arguments from the API call from slave.
       public Object[] getArgs() {
         try {
           return (Object[]) pluginGetArgs.invoke(pluginIntance);
         }
         catch (Exception e) {
+          // TODO: extended error checking
           println("Ohno");
           return null;
         }
       }
+      
+    }
+    // End plugin class.
+    
+    // Literally no point to this other than so you don't
+    // need to type out TWEngine.PluginModule.Plugin each time.
+    // Damn I need to sort out Timeway...
+    public Plugin createPlugin() {
+      return new Plugin();
     }
     
+    // Now this thing basically just runs a windows command, not too complicated.
+    // If I'm lucky enough, I think this thing should work in linux too even though
+    // the cmd system is completely different, because we're essentially just calling
+    // some java executables.
     public CmdOutput runOSCommand(String cmd) {
       try {
+        // Run the OS command
         Process process = Runtime.getRuntime().exec(cmd);
         
+        // Get the messages from the console (so that we can get stuff like error messages).
         BufferedReader stdInput = new BufferedReader(new InputStreamReader(process.getInputStream()));
         BufferedReader stdError = new BufferedReader(new InputStreamReader(process.getErrorStream()));
         
+        // This function should prolly run this in a different thread.
         int exitCode = process.waitFor();
         
+        // s will be used to read the stdout lines.
         String s = null;
         
+        // Where we'll actually store our stdoutput
         String stdoutput = "";
         
         if (exitCode == 1) {
           while ((s = stdInput.readLine()) != null) {
               stdoutput += s+"\n";
           }
+          // Truth be told, i should prolly have seperate stdout and stderr
+          // but I don't really mind combining it into one message.
           while ((s = stdError.readLine()) != null) {
               stdoutput += s+"\n";
           }
           
-          System.out.println(stdoutput);
+          //System.out.println(stdoutput);
         }
         
-        System.out.println("Exit code: "+exitCode);
+        //System.out.println("Exit code: "+exitCode);
+        // Done!
         return new CmdOutput(exitCode, stdoutput);
       }
+      // No need to do additional error checking here because I highly doubt we will get this kind
+      // of error unless we intentionally realllllllly mess up some files here.
       catch (Exception e) {
-        System.err.println("OS command exception: "+ e.getClass().getSimpleName());
-        System.err.println(e.getMessage());
+        console.warn("OS command exception: "+ e.getClass().getSimpleName());
+        console.warn(e.getMessage());
+        // 666 eeeeeevil number.
         return new CmdOutput(666, e.getClass().getSimpleName());
       }
     }
     
+    // Use javac (java compiler) to turn our file into a .class file.
+    // I have no idea what a .class file is lol.
     CmdOutput toClassFile(String inputFile) {
       final String javacPath = javapath+"/bin/javac.exe";
-      final String processingCorePath = "C:/mydata/apps/processing-4.3/core/library/core.jar";
-      final String pluginPath = sketchPath()+"/data/pluginCache/";
       
+      // TODO: we might not need... this.
+      // If we're not too lazy to create a binding.
+      console.bugWarn("Remember to auto get processingCorePath instead of that specific path on your computer!");
+      final String processingCorePath = "C:/mydata/apps/processing-4.3/core/library/core.jar";
+      
+      // Stored in the cache folder.
+      final String pluginPath = CACHE_PATH;
+      
+      // run as if we've opened up cmd/terminal and are running our command.
       CmdOutput cmd = runOSCommand("\""+javacPath+"\" -cp \""+processingCorePath+";"+pluginPath+"\" \""+inputFile+"\"");
       return cmd;
     }
     
     String toJarFile(String classFile) {
-      final String jarExePath = "C:/mydata/apps/processing-4.3/java/bin/jar.exe";
-      final String out = sketchPath()+"/data/pluginCache/cache-"+cacheEntry+".jar";
+      // Good ol jar thingie.
+      final String jarExePath = javapath+"/bin/jar.exe";
+      
+      // In our cachepath.
+      final String out = CACHE_PATH+"plugin-"+cacheEntry+".jar";
+      
+      // We need the class path because the command line argument is weird,
+      // (that might be an issue if we have tons of other items in our cache folder but oh well)
       final String classPath = (new File(classFile)).getParent().toString();
       final String className = (new File(classFile)).getName();
+      
+      // And boom. It is then done.
       runOSCommand("\""+jarExePath+"\" cvf \""+out+"\" -C \""+classPath+"\" "+className);
+      
       return out;
     }
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
     
     public void runAPI(Plugin p) {
       // The getCallOpCode method takes no arguments and returns an int
@@ -4559,20 +4651,17 @@ public class TWEngine {
       // The setRet method takes an Object as argument and returns void
       int opcode = p.getOpCode();
       Object[] args = p.getArgs();
+      // Opcode of -1 means there was a class-based error with calling the
+      // getOpCode method in slave. Same applies with args being null
       if (opcode == -1 || args == null) {
-        println("Ohno");
         // error handling code
         return;
       }
-      
-      switch (opcode) {
-        case 1:
-        
-        break;
-        default:
-        println("Unknown opcode "+opcode);
-        break;
-      }
+      // Run TimeWay's Interfacing Toolkit
+      // We're returning stuff every time, but it should not matter
+      // if a method does not expect something to return, because
+      // it shouldn't check the returned value.
+      p.ret(runTWIT(opcode, args));
     }
   }
   
@@ -4609,6 +4698,7 @@ public class TWEngine {
     ui = new UIModule();
     sound = new AudioModule();
     clipboard = new ClipboardModule();
+    plugins = new PluginModule();
     
     power.putFPSSystemIntoGraceMode();
     
@@ -6984,6 +7074,7 @@ public abstract class Screen {
   protected TWEngine.StatsModule stats;
   protected TWEngine.ClipboardModule clipboard;
   protected TWEngine.UIModule ui;
+  protected TWEngine.PluginModule plugins;
   
   protected float screenx = 0;
   protected float screeny = 0;
@@ -7014,6 +7105,7 @@ public abstract class Screen {
     this.file = engine.file;
     this.clipboard = engine.clipboard;
     this.stats = engine.stats;
+    this.plugins = engine.plugins;
     
     this.WIDTH = engine.display.WIDTH;
     this.HEIGHT = engine.display.HEIGHT;
