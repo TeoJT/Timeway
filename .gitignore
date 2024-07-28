@@ -31,4 +31,6 @@ windows-amd64
 linux-amd64
 macos-amd64
 macos-arm64
+buildPackage
+*.apk
 
