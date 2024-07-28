@@ -81,7 +81,7 @@ protected PSurface initSurface() {
         }
       }
     }
-    s.setTitle(Engine.APP_NAME);
+    s.setTitle(TWEngine.APP_NAME);
     s.setResizable(true);
     return s;
 }
@@ -189,7 +189,7 @@ public void openErrorLog() {
 }
 
 public void minimalErrorDialog(String mssg) {
-  JOptionPane.showMessageDialog(null,mssg,Engine.APP_NAME,1);
+  JOptionPane.showMessageDialog(null,mssg,TWEngine.APP_NAME,1);
 }
 
 public void requestAndroidPermissions() {

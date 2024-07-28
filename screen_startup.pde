@@ -7,7 +7,7 @@ public class Startup extends Screen {
     boolean nextScreen = false;
     boolean firstTimeStartup = false;
 
-    public Startup(Engine engine) {
+    public Startup(TWEngine engine) {
         super(engine);
         
         // Kickstart gstreamer by playing default realm music (but also not really playing it)
@@ -96,9 +96,9 @@ public class Startup extends Screen {
         app.textAlign(CENTER, CENTER);
         app.textFont(engine.DEFAULT_FONT, 34);
         app.fill(0, 255-(255*floatIn));
-        app.text("by "+Engine.AUTHOR, WIDTH/2-3, HEIGHT/2+150-3);
+        app.text("by "+TWEngine.AUTHOR, WIDTH/2-3, HEIGHT/2+150-3);
         app.fill(255, 255-(255*floatIn));
-        app.text("by "+Engine.AUTHOR, WIDTH/2, HEIGHT/2+150);
+        app.text("by "+TWEngine.AUTHOR, WIDTH/2, HEIGHT/2+150);
         
         
         // First time startup
@@ -114,9 +114,9 @@ public class Startup extends Screen {
         app.textAlign(LEFT, CENTER);
         app.textFont(engine.DEFAULT_FONT, 30);
         app.fill(0, 255-(255*floatIn));
-        app.text(Engine.VERSION, 10-3, HEIGHT-30-3);
+        app.text(TWEngine.VERSION, 10-3, HEIGHT-30-3);
         app.fill(255, 255-(255*floatIn));
-        app.text(Engine.VERSION, 10, HEIGHT-30);
+        app.text(TWEngine.VERSION, 10, HEIGHT-30);
         
         stats.recordTime("time_in_startscreen");
     }

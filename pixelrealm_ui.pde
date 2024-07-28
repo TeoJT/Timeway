@@ -21,7 +21,7 @@ public class PixelRealmWithUI extends PixelRealm {
 
 
   private String[] dm_welcome = {
-    "Welcome to "+Engine.APP_NAME+".",
+    "Welcome to "+TWEngine.APP_NAME+".",
     "Your folders are realms.",
     "Your computer is a universe.",
     "But first, let me show you the ropes.",
@@ -66,7 +66,7 @@ public class PixelRealmWithUI extends PixelRealm {
     "Remember, all the items you see in your realms are files on your computer.",
     "Portals resemble folders. Walk into them to go to enter the folder, or \"realm\".",
     "You should be able to figure out the rest yourself, it's not too complicated.",
-    Engine.APP_NAME+" is an ongoing project. There may be bugs and missing features.",
+    TWEngine.APP_NAME+" is an ongoing project. There may be bugs and missing features.",
     "But there are many more things to come.",
     "In the meantime, I hope you enjoy this demo."
   };
@@ -83,7 +83,7 @@ public class PixelRealmWithUI extends PixelRealm {
 
 
   // --- Constructors ---
-  public PixelRealmWithUI(Engine engine, String dir) {
+  public PixelRealmWithUI(TWEngine engine, String dir) {
     super(engine, dir);
     // Ugh. whatever.
 

@@ -2,12 +2,12 @@ public class Updater extends Screen {
   String updateName = "";
   String headerText = "An update is available!";
   String displayMessage = "This update contains the following additions, changes, and/or fixes:\n";
-  String footerMessage = "Downloading and installing will run in the background as "+Engine.APP_NAME+" runs, so please leave Timeway running until the update completes. Don't worry, none of your personal data will be modified.";
+  String footerMessage = "Downloading and installing will run in the background as "+TWEngine.APP_NAME+" runs, so please leave Timeway running until the update completes. Don't worry, none of your personal data will be modified.";
   String patchNotes = "";
   boolean startedMusic = false;
   JSONObject updateInfo;
   
-  public Updater(Engine engine, JSONObject updateInfo) {
+  public Updater(TWEngine engine, JSONObject updateInfo) {
     super(engine);
     this.updateInfo = updateInfo;
     //sound.streamMusicWithFade(engine.APPPATH+UPDATE_MUSIC);
@@ -138,7 +138,7 @@ public class Benchmark extends Screen {
   
   public SpriteSystemPlaceholder gui;
   
-  public Benchmark(Engine e) {
+  public Benchmark(TWEngine e) {
     super(e);
     textFont(engine.DEFAULT_FONT);
     gui = new SpriteSystemPlaceholder(engine, engine.APPPATH+engine.PATH_SPRITES_ATTRIB+"gui/benchmark/");
@@ -228,7 +228,7 @@ public class Explorer extends Screen {
   private int numTimewayEntries;
   public  float scrollBottom = 0.0;
   
-  public Explorer(Engine engine) {
+  public Explorer(TWEngine engine) {
         super(engine);
         
         file.openDirInNewThread(engine.DEFAULT_DIR);
@@ -242,7 +242,7 @@ public class Explorer extends Screen {
   }
   
   // Sorry for code duplication!
-  public Explorer(Engine engine, String dir) {
+  public Explorer(TWEngine engine, String dir) {
         super(engine);
         
         file.openDirInNewThread(dir);

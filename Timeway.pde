@@ -64,7 +64,7 @@ import java.io.PrintWriter;
 
 
 
-Engine timewayEngine;
+TWEngine timewayEngine;
 boolean sketch_showCrashScreen = false;
 String sketch_ERR_LOG_PATH;
 
@@ -131,7 +131,7 @@ void sketch_openErrorLog(Exception e) {
   String sStackTrace = sw.toString();
   
   String errMsg = 
-  "Sorry! "+Engine.APP_NAME+" crashed :(\n"+
+  "Sorry! "+TWEngine.APP_NAME+" crashed :(\n"+
   "Please provide Teo Taylor with this error log, thanks <3\n\n\n"+
   e.getClass().toString()+"\nMessage: \""+
   e.getMessage()+"\"\nStack trace:\n"+
@@ -156,13 +156,14 @@ void setup() {
     sketch_showCrashScreen = f1.exists();
     println("ShowcrashScreen: ", sketch_showCrashScreen);
     sketch_ERR_LOG_PATH = sketchPath()+"/data/error_log.txt";
-    timewayEngine = new Engine(this);
+    timewayEngine = new TWEngine(this);
+    timewayEngine.startScreen(new Startup(timewayEngine));
     requestAndroidPermissions();
 }
 
 void draw() {
   if (timewayEngine == null) {
-    timewayEngine = new Engine(this);
+    timewayEngine = new TWEngine(this);
   }
   else {
       // Show error message on crash
@@ -173,7 +174,7 @@ void draw() {
           timewayEngine.engine();
         }
         catch (java.lang.OutOfMemoryError outofmem) {
-          sketch_openErrorLog(Engine.APP_NAME+" has run out of memory.");
+          sketch_openErrorLog(TWEngine.APP_NAME+" has run out of memory.");
           exit();
         }
         catch (Exception e) {
@@ -227,4 +228,55 @@ void outputFileSelected(File selection) {
 
 void mouseClicked() {
   if (timewayEngine != null && timewayEngine.input != null) timewayEngine.input.clickEventAction();
+}
+
+
+
+
+
+
+
+
+
+
+// Because TWEngine is designed to be isolated from the rest of... well, Timeweay,
+// there are some things that TWEngine needs to access that are external to the engine,
+// and isolating it would mean those external dependancies wouldn't exist.
+// These methods handle these external dependencies required by the engine through
+// void methods
+//@SuppressWarnings("unused")
+void twengineRequestEditor(String path) {
+  timewayEngine.requestScreen(new Editor(timewayEngine, path));
+}
+
+//@SuppressWarnings("unused")
+void twengineRequestUpdater(JSONObject json) {
+  timewayEngine.requestScreen(new Updater(timewayEngine, json));
+}
+
+//@SuppressWarnings("unused")
+void twengineRequestBenchmarks() {
+  //timewayEngine.requestScreen(new Updater(timewayEngine, json));
+  //timewayEngine.requestScreen(new Benchmark(this));
+}
+
+@SuppressWarnings("unused")
+boolean hasPixelrealm() {
+  return false;
+}
+
+
+@SuppressWarnings("unused")
+boolean pixelrealmCache() {
+  //boolean cacheHit = false;
+  //cacheHit |= sound.cacheHit(DEFAULT_DIR+"/"+PixelRealm.REALM_BGM+".wav");
+  //cacheHit |= sound.cacheHit(DEFAULT_DIR+"/"+PixelRealm.REALM_BGM+".ogg");
+  //cacheHit |= sound.cacheHit(DEFAULT_DIR+"/"+PixelRealm.REALM_BGM+".mp3");
+  //cacheHit |= sound.cacheHit(DEFAULT_DIR+"/"+file.unhide(PixelRealm.REALM_BGM+".wav"));
+  //cacheHit |= sound.cacheHit(DEFAULT_DIR+"/"+file.unhide(PixelRealm.REALM_BGM+".ogg"));
+  //cacheHit |= sound.cacheHit(DEFAULT_DIR+"/"+file.unhide(PixelRealm.REALM_BGM+".mp3"));
+  //cacheHit |= sound.cacheHit(APPPATH+PixelRealm.REALM_BGM_DEFAULT);
+  //cacheHit |= sound.cacheHit(APPPATH+PixelRealm.REALM_BGM_DEFAULT_LEGACY);
+  //return cacheHit;
+  return false;
 }

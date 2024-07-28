@@ -23,7 +23,7 @@ public class PixelRealm extends Screen {
   final static int    MAX_CACHE_SIZE = 512;
   final static float  BACKWARD_COMPAT_SCALE = 256./(float)MAX_CACHE_SIZE;
   final static int    MAX_MEM_USAGE = 1024*1024*1024;   // 1GB 
-  final static int    DISPLAY_SCALE = 4;
+               int    DISPLAY_SCALE = 4;
   final static int    FOLDER_SIZE_LIMIT = 500;  // If a folder has over this number of files, moving is restricted to prevent any potentially dangerous data moves.
   final static float  MIN_PORTAL_LIGHT_THRESHOLD = 19600.;   // 140 ^ 2
   final static int    CHUNK_SIZE = 8;
@@ -191,7 +191,7 @@ public class PixelRealm extends Screen {
   // --- Our constructors ---
   // Remember, these are for the screen which does NOT rely on per-realm states.
   // i.e. canvas creation, asset loading etc should only be done ONCE.
-  public PixelRealm(Engine engine, String dir) {
+  public PixelRealm(TWEngine engine, String dir) {
     super(engine);
     
     // --- Load default assets ---
@@ -240,7 +240,7 @@ public class PixelRealm extends Screen {
     sound.streamMusicWithFade(currRealm.musicPath);
   }
   
-  public PixelRealm(Engine engine) {
+  public PixelRealm(TWEngine engine) {
     this(engine, engine.DEFAULT_DIR);
   }
   
@@ -776,7 +776,7 @@ public class PixelRealm extends Screen {
         if (item instanceof PixelRealmState.DirectoryPortal) {
           PixelRealmState.DirectoryPortal p = (PixelRealmState.DirectoryPortal)item;
           if (file.countFiles(p.dir) > FOLDER_SIZE_LIMIT) {
-            prompt("Folder size limit", name+" has over "+str(FOLDER_SIZE_LIMIT)+" files in it. As a safety precaution, "+Engine.APP_NAME+" won't move large folders.", 20);
+            prompt("Folder size limit", name+" has over "+str(FOLDER_SIZE_LIMIT)+" files in it. As a safety precaution, "+TWEngine.APP_NAME+" won't move large folders.", 20);
             return false;
           }
         }
@@ -3275,12 +3275,12 @@ public class PixelRealm extends Screen {
       // return cached tile.
       if (ch != null) {
         // Bug fix
-        if (int(x) == (CHUNK_SIZE+CHUNK_SIZE*terrain.chunkLimitX-2)) {
-          ch.tiles[indicies[1]][indicies[0]] = ch.tiles[indicies[1]][indicies[0]+1];
-        }
-        if (int(z) == (CHUNK_SIZE+CHUNK_SIZE*terrain.chunkLimitZ-2)) {
-          ch.tiles[indicies[1]][indicies[0]] = ch.tiles[indicies[1]+1][indicies[0]];
-        }
+        //if (int(x) == (CHUNK_SIZE+CHUNK_SIZE*terrain.chunkLimitX-2)) {
+        //  ch.tiles[indicies[1]][indicies[0]] = ch.tiles[indicies[1]][indicies[0]+1];
+        //}
+        //if (int(z) == (CHUNK_SIZE+CHUNK_SIZE*terrain.chunkLimitZ-2)) {
+        //  ch.tiles[indicies[1]][indicies[0]] = ch.tiles[indicies[1]+1][indicies[0]];
+        //}
         
         return ch.tiles[indicies[1]][indicies[0]];
       }
@@ -3763,7 +3763,7 @@ public class PixelRealm extends Screen {
           JSONObject probjjson = objects3d.getJSONObject(i);
           
           // Each object is uniquely identified by its filename/folder name.
-          String name = probjjson.getString("filename", engine.APPPATH+engine.GLITCHED_REALM);
+          String name = probjjson.getString("filename", "");
           // Due to the filename used to be called "dir", check for legacy names.
 
           // Get the object by name so we can do a lil bit of things to it.
@@ -5155,7 +5155,9 @@ public class PixelRealm extends Screen {
       scene.noStroke();
       scene.fill(255);
       
-      float sky_fov = (float(scene.width)/float(img_sky.get().width));
+      float pixelsCorrectness = float(4/DISPLAY_SCALE);
+      
+      float sky_fov = (float(scene.width)/float(img_sky.get().width))/pixelsCorrectness;
       
       // Render the sky.
       float skyDelta = -(direction/TWO_PI);
@@ -5171,11 +5173,11 @@ public class PixelRealm extends Screen {
       
       scene.vertex(0, 0, skyViewportLeft, 0.);
       scene.vertex(scene.width, 0, skyViewportRight, 0.);
-      scene.vertex(scene.width, img_sky.get().height, skyViewportRight, 1.);
-      scene.vertex(0, img_sky.get().height, skyViewportLeft, 1.);
+      scene.vertex(scene.width, img_sky.get().height*pixelsCorrectness, skyViewportRight, 1.);
+      scene.vertex(0, img_sky.get().height*pixelsCorrectness, skyViewportLeft, 1.);
       
-      scene.vertex(0, img_sky.get().height, skyViewportLeft, 1.);
-      scene.vertex(scene.width, img_sky.get().height, skyViewportRight, 1.);
+      scene.vertex(0, img_sky.get().height*pixelsCorrectness, skyViewportLeft, 1.);
+      scene.vertex(scene.width, img_sky.get().height*pixelsCorrectness, skyViewportRight, 1.);
       scene.vertex(scene.width, height, skyViewportRight, 0.9999);
       scene.vertex(0,   height, skyViewportLeft, 0.9999);
       
@@ -5626,12 +5628,12 @@ public class PixelRealm extends Screen {
     
     // Prevent the player going into directories that would make Timeway implode on itself
     if (file.directorify(to).equals(file.directorify(engine.APPPATH+engine.POCKET_PATH))) {
-      prompt("Nice try", "You can't go into "+Engine.APP_NAME+"'s pocket directory. Doing so would cause a paradox.", 20);
+      prompt("Nice try", "You can't go into "+TWEngine.APP_NAME+"'s pocket directory. Doing so would cause a paradox.", 20);
       bumpBack();
       return;
     }
     if (file.directorify(to).equals(file.directorify(engine.CACHE_PATH))) {
-      prompt("Nice try", "You can't go into "+Engine.APP_NAME+"'s cache directory. Doing so would cause a paradox.", 20);
+      prompt("Nice try", "You can't go into "+TWEngine.APP_NAME+"'s cache directory. Doing so would cause a paradox.", 20);
       bumpBack();
       return;
     }
@@ -6284,6 +6286,14 @@ public class PixelRealm extends Screen {
       
       return true;
     }
+    else if (engine.commandEquals(command, "/hiresmode") || engine.commandEquals(command, "/hires")) {
+      DISPLAY_SCALE = 2;
+      scene = createGraphics((int(WIDTH/DISPLAY_SCALE)), int(this.height/DISPLAY_SCALE), P3D);
+      ((PGraphicsOpenGL)scene).textureSampling(2);     
+      console.log("High res mode enabled.");
+      console.log("Please restart to switch back");
+      return true;
+    }
     else if (engine.commandEquals(command, "/puthere")) {
       int successfulRelocations = 0;
       for (PixelRealmState.PRObject p : currRealm.files) {
@@ -6377,7 +6387,7 @@ class WorldLegacy extends Screen {
   float HIGHEST_MOUNTAIN=1500; 
   float LOWEST_DIPS=1200;
   int OCTAVE=2; 
-  public WorldLegacy(Engine engine) { 
+  public WorldLegacy(TWEngine engine) { 
     super(engine); 
     this.height=HEIGHT-myLowerBarWeight-myUpperBarWeight;
     myRandomSeed=(int)app.random(100000); 

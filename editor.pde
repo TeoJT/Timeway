@@ -8,7 +8,7 @@ class CameraException extends RuntimeException {};
 
 abstract class EditorCapture {
   public int width, height;
-  protected Engine engine;
+  protected TWEngine engine;
   
   public AtomicBoolean ready = new AtomicBoolean(false);
   public AtomicBoolean error = new AtomicBoolean(false);
@@ -27,7 +27,7 @@ class PCapture extends EditorCapture {
   private Capture capture = null;
   private PImage currCapture = null;
   
-  public PCapture(Engine e) {
+  public PCapture(TWEngine e) {
     ready.set(false);
     error.set(false);
     engine = e;
@@ -170,7 +170,7 @@ class DCapture extends EditorCapture implements java.beans.PropertyChangeListene
   
   public ArrayList<DSFilterInfo> cameraDevices;
  
-  public DCapture(Engine e) {
+  public DCapture(TWEngine e) {
     ready.set(false);
     error.set(false);
     engine = e;
@@ -627,7 +627,7 @@ public class Editor extends Screen {
     //**********************************EDITOR SCREEN CODE**********************************
     //**************************************************************************************  
     // Pls don't use this constructor in your code if you are sane.
-    public Editor(Engine engine, String entryPath, PGraphics c, boolean doMultithreaded) {
+    public Editor(TWEngine engine, String entryPath, PGraphics c, boolean doMultithreaded) {
         super(engine);
         this.entryPath = entryPath;
         if (c == null) {
@@ -698,7 +698,7 @@ public class Editor extends Screen {
         }
     }
     
-    public Editor(Engine e, String entryPath) {
+    public Editor(TWEngine e, String entryPath) {
       this(e, entryPath, null, true);
     }
 
