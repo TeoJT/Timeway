@@ -1,7 +1,7 @@
 // How to enable Desktop mode in your code:
 // ctrl+a
 // ctrl+/
-// Yes. That's really now you do it.
+// Yes. That's really how you do it.
 // Make sure to do it to zAndroid too.
 
 

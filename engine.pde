@@ -46,7 +46,7 @@ import java.util.Arrays;   // Used by the stack class at the bottom
 public class TWEngine {
   //*****************CONSTANTS SETTINGS**************************
   // Info and versioning
-  public static final String APP_NAME        = "Timeway";
+  public static final String APP_NAME        = "SketchIO";
   public static final String AUTHOR      = "Teo Taylor";
   public static final String VERSION     = "0.1.3-alpha";
   public static final String VERSION_DESCRIPTION = 
@@ -1029,7 +1029,7 @@ public class TWEngine {
     private float time = 0.;
     private float selectBorderTime = 0.;
     public boolean showCPUBenchmarks = false;
-    private PGraphics currentPG;
+    public PGraphics currentPG;
     private boolean allAtOnce = false;
     private LargeImage white;
     private IntBuffer clearList;
@@ -1518,13 +1518,13 @@ public class TWEngine {
       
       
       if (image == null) {
-        app.image(errorImg, x, y, w, h);
+        currentPG.image(errorImg, x, y, w, h);
         recordLogicTime();
         console.warnOnce("Image listed as 'loaded' but image doesn't seem to exist.");
         return;
       }
       if (image.width == -1 || image.height == -1) {
-        app.image(errorImg, x, y, w, h);
+        currentPG.image(errorImg, x, y, w, h);
         recordLogicTime();
         console.warnOnce("Corrupted image.");
         return;
@@ -1532,7 +1532,7 @@ public class TWEngine {
       // If image is loaded render.
       if (image.width > 0 && image.height > 0) {
         if (image.mode == 1) {
-          app.image(image.pimage, x, y, w, h);
+          currentPG.image(image.pimage, x, y, w, h);
         }
         else if (image.mode == 2) {
           largeImg(currentPG, image.largeImage, x, y, w, h);
@@ -1541,21 +1541,21 @@ public class TWEngine {
         // Annnnd a wireframe
         if (wireframe) {
           recordRendererTime();
-          app.stroke(sin(selectBorderTime)*127+127, 100);
+          currentPG.stroke(sin(selectBorderTime)*127+127, 100);
           selectBorderTime += 0.1*getDelta();
-          app.strokeWeight(3);
-          app.noFill();
+          currentPG.strokeWeight(3);
+          currentPG.noFill();
           
-          app.beginShape(QUADS);
-          app.vertex(x, y);
-          app.vertex(x+w, y);
-          app.vertex(x+w, y+h);
-          app.vertex(x, y+h);
-          app.endShape();
+          currentPG.beginShape(QUADS);
+          currentPG.vertex(x, y);
+          currentPG.vertex(x+w, y);
+          currentPG.vertex(x+w, y+h);
+          currentPG.vertex(x, y+h);
+          currentPG.endShape();
           
-          app.noStroke();
+          currentPG.noStroke();
         } else {
-          app.noStroke();
+          currentPG.noStroke();
         }
         
         
@@ -1572,7 +1572,7 @@ public class TWEngine {
         img(systemImages.get(name), x, y, w, h);
       } else {
         recordRendererTime();
-        app.image(errorImg, x, y, w, h);
+        currentPG.image(errorImg, x, y, w, h);
         recordLogicTime();
         console.warnOnce("Image "+name+" does not exist");
       }
@@ -1584,7 +1584,7 @@ public class TWEngine {
         img(systemImages.get(name), x, y, image.width, image.height);
       } else {
         recordRendererTime();
-        app.image(errorImg, x, y, errorImg.width, errorImg.height);
+        currentPG.image(errorImg, x, y, errorImg.width, errorImg.height);
         recordLogicTime();
         console.warnOnce("Image "+name+" does not exist");
       }
@@ -2290,6 +2290,38 @@ public class TWEngine {
     
     public boolean miniMenuShown() {
       return (currMinimenu != null);
+    }
+    
+    float textAreaZoom = 22.0;
+    
+    public void displayTextArea(float x, float y, float wi, float hi) {
+      // TODO: I really wanna use our shaders to reduce shader-switching
+      // instead of processing's shaders.
+      app.resetShader();
+      // Draw background
+      app.fill(60);
+      app.noStroke();
+      app.rect(x, y, wi, hi);
+      
+      
+      if (input.altDown && input.keys[int('=')] == 2) {
+        textAreaZoom += 2.;
+        input.backspace();
+      }
+      if (input.altDown && input.keys[int('-')] == 2) {
+        textAreaZoom -= 2.;
+        input.backspace();
+      }
+      
+      x += 5;
+      y += 5;
+        
+      app.fill(255);
+      app.textAlign(LEFT, TOP);
+      app.textFont(display.getFont("Source Code"), textAreaZoom);
+      app.textLeading(textAreaZoom);
+      app.text(input.keyboardMessageDisplay(), x, y/*, wi-10, hi-10*/);
+      
     }
   }
 
@@ -3151,7 +3183,6 @@ public class TWEngine {
       musicFadeOut = 0.99;
     }
     
-    // TODO: Doesn't work totally.
     public void fadeAndStopMusic() {
       if (musicFadeOut < 1.) {
         if (streamerMusicFadeTo != null) {
@@ -3611,7 +3642,6 @@ public class TWEngine {
     
     
   
-    // TODO: change this so that you can modify the default dir.
     // TODO: Make it follow the UNIX file system with compatibility with windows.
     public String currentDir;
     public class DisplayableFile {
@@ -4382,6 +4412,7 @@ public class TWEngine {
       private Method pluginGetArgs;
       private Method pluginSetRet;
       private Object pluginIntance;
+      public PGraphics sketchioGraphics;
       
       // Need this because the run method needs our plugin object.
       private Plugin thisPlugin;
@@ -4410,7 +4441,6 @@ public class TWEngine {
           }
           catch (Exception e) {
             System.err.println("Run plugin exception: "+ e.getClass().getSimpleName());
-            exit();
           }
         }
       }
@@ -4453,9 +4483,14 @@ public class TWEngine {
         
         // here we call setup(). Maybe TODO: perhaps we should have an onLoad() then an actual setup()?
         try {
-          Method passAppletMethod = pluginClass.getDeclaredMethod("setup", PApplet.class, Runnable.class);
-          
-          passAppletMethod.invoke(pluginIntance, app, callAPI);
+          if (sketchioGraphics != null) {
+            Method passAppletMethod = pluginClass.getDeclaredMethod("setup", PApplet.class, Runnable.class, PGraphics.class);
+            passAppletMethod.invoke(pluginIntance, app, callAPI, sketchioGraphics);
+          }
+          else {
+            Method passAppletMethod = pluginClass.getDeclaredMethod("setup", PApplet.class, Runnable.class);
+            passAppletMethod.invoke(pluginIntance, app, callAPI);
+          }
         }
         // TODO: extended error checking
         catch (Exception e) {
@@ -4762,7 +4797,7 @@ public class TWEngine {
   public String lastInput = "";
 
   public void beginInputPrompt(String prompt, Runnable doWhenSubmitted) {
-    input.keyboardMessage = "";
+    input.prepareTyping();
     inputPromptShown = true;
     input.addNewlineWhenEnterPressed = false;
     promptText = prompt;
@@ -4772,10 +4807,10 @@ public class TWEngine {
 
   public void displayInputPrompt() {
     if (inputPromptShown) {
-      if (keyCode == UP) {
-        keyCode = 0;
+      if (input.upOnce) {
         if (lastInput.length() > 0) {
           input.keyboardMessage = lastInput;
+          input.cursorX = input.keyboardMessage.length();
         }
       }
       
@@ -4810,7 +4845,7 @@ public class TWEngine {
       app.textFont(DEFAULT_FONT, 60);
       app.text(promptText, display.WIDTH/2, display.HEIGHT/2-100);
       app.textSize(30);
-      app.text(input.keyboardMessage, display.WIDTH/2, display.HEIGHT/2);
+      app.text(input.keyboardMessageDisplay(), display.WIDTH/2, display.HEIGHT/2);
     }
   }
 
@@ -5221,6 +5256,7 @@ public class TWEngine {
 
     beginInputPrompt("Enter command", r);
     input.keyboardMessage = "/";
+    input.cursorX = input.keyboardMessage.length();
   }
 
   private boolean commandEquals(String input, String expected) {
@@ -6445,6 +6481,8 @@ public class TWEngine {
     public boolean keyOnce = false;
     public boolean keyDown = false;
     
+    public int cursorX = 0;
+    
     public boolean mouseMoved = false;
     
     public float   rawScroll = 0;
@@ -6468,6 +6506,7 @@ public class TWEngine {
     private float cache_mouseX = 0.0;
     private float cache_mouseY = 0.0;
     public  float scrollOffset = 0.0;
+    private float blinkTime = 0.0;
     
     public int keys[]       = new int[1024];
     private int robotKeys[] = new int[1024];
@@ -6478,6 +6517,10 @@ public class TWEngine {
     public boolean ctrlDown = false;
     public boolean altDown  = false;
     public boolean enterDown = false;
+    public boolean leftDown = false;
+    public boolean rightDown = false;
+    public boolean upDown = false;
+    public boolean downDown = false;
     
     // Down counters
     private int backspaceDownCounter = 0;
@@ -6485,6 +6528,10 @@ public class TWEngine {
     private int ctrlDownCounter = 0;
     private int altDownCounter  = 0;
     private int enterDownCounter = 0;
+    private int leftDownCounter = 0;
+    private int rightDownCounter = 0;
+    private int upDownCounter = 0;
+    private int downDownCounter = 0;
     
     // Once
     public boolean backspaceOnce = false;
@@ -6492,6 +6539,11 @@ public class TWEngine {
     public boolean ctrlOnce = false;
     public boolean altOnce  = false;
     public boolean enterOnce = false;
+    public boolean leftOnce = false;
+    public boolean rightOnce = false;
+    public boolean upOnce = false;
+    public boolean downOnce = false;
+    
     
     public InputModule() {
       scrollSensitivity = settings.getFloat("scrollSensitivity");
@@ -6500,8 +6552,8 @@ public class TWEngine {
       
     public void runInputManagement() {
       //*************MOUSE MOVEMENT*************
-      cache_mouseX = mouseX/display.getScale();
-      cache_mouseY = mouseY/display.getScale();
+      cache_mouseX = app.mouseX/display.getScale();
+      cache_mouseY = app.mouseY/display.getScale();
       
       
       
@@ -6518,6 +6570,7 @@ public class TWEngine {
       secondaryClick = false;
       primaryReleased = false;
       secondaryReleased = false;
+      keyOnce = false;
       
       normalClickTimeout -= display.getDelta();
   
@@ -6558,6 +6611,10 @@ public class TWEngine {
       // Oneshot key control
       for (int i = 0; i < 1024; i++) {
         if (keys[i] > 0) {
+          // If at least one of them is pressed, keyOnce is true
+          if (keys[i] == 1) {
+            keyOnce = true;
+          }
           keys[i]++;
         }
         if (robotKeys[i] > 0) {
@@ -6575,6 +6632,10 @@ public class TWEngine {
       if (ctrlDown) ctrlDownCounter++; else ctrlDownCounter = 0;
       if (altDown) altDownCounter++; else altDownCounter = 0;
       if (enterDown) enterDownCounter++; else enterDownCounter = 0;
+      if (leftDown) leftDownCounter++; else leftDownCounter = 0;
+      if (rightDown) rightDownCounter++; else rightDownCounter = 0;
+      if (upDown) upDownCounter++; else upDownCounter = 0;
+      if (downDown) downDownCounter++; else downDownCounter = 0;
       
       
       backspaceOnce = (backspaceDownCounter == 1);
@@ -6582,6 +6643,10 @@ public class TWEngine {
       ctrlOnce = (ctrlDownCounter == 1);
       altOnce = (altDownCounter == 1);
       enterOnce = (enterDownCounter == 1);
+      leftOnce = (leftDownCounter == 1);
+      rightOnce = (rightDownCounter == 1);
+      upOnce = (upDownCounter == 1);
+      downOnce = (downDownCounter == 1);
       
       // Holding counter (for repeating held keys)
       if (keyHoldCounter >= 1.) {
@@ -6599,6 +6664,62 @@ public class TWEngine {
         }
         holdKeyFrames += display.getDelta();
       }
+      
+      
+      // ************TYPING*******************
+      boolean solidifyBlink = true;
+      
+      if (leftOnce) { 
+        cursorX--;
+      }
+      else if (rightOnce) {
+        cursorX++;
+      }
+      else if (upOnce) { 
+        // Start of current line
+        int startOfCurrLine = keyboardMessage.lastIndexOf('\n', cursorX)+1;
+        int dist = cursorX-startOfCurrLine;
+        
+        // start of prev line
+        int startOfPrevLine = keyboardMessage.lastIndexOf('\n', startOfCurrLine-2)+1;
+        
+        // Let's say for example you move your cursor like this:
+        //
+        // short
+        // A longer mess|ge hello world
+        // 
+        // short|
+        // A longer message hello world
+        //
+        // As you can see, "short" is not long enough to plonk the cursor into the new position,
+        // so it gets put at the start.
+        if (startOfCurrLine-startOfPrevLine < dist) {
+          cursorX = startOfCurrLine-1;
+        }
+        else {
+          cursorX = startOfPrevLine+dist;
+        }
+      }
+      else if (downOnce) { 
+        // Start of current line
+        int startOfThisLine = keyboardMessage.lastIndexOf('\n', cursorX-1)+1;
+        int startOfNextLine = keyboardMessage.indexOf('\n', cursorX)+1;
+        if (startOfNextLine != 0) {
+          int dist = cursorX-startOfThisLine;
+          cursorX = startOfNextLine+dist;
+        }
+      }
+      else if (keyOnce) {}
+      else solidifyBlink = false;
+      
+      if (solidifyBlink) {
+        blinkTime = 0.0;
+      }
+      cursorX = max(min(cursorX, keyboardMessage.length()), 0);
+    
+      blinkTime += display.getDelta();
+    
+      
   
       //*************MOUSE WHEEL*************
       if (rawScroll != 0) {
@@ -6607,6 +6728,12 @@ public class TWEngine {
         scroll *= 0.5;
       }
       rawScroll = 0.;
+    }
+    
+    
+    public void prepareTyping() {
+      keyboardMessage = "";
+      cursorX = 0;
     }
     
   
@@ -6623,6 +6750,18 @@ public class TWEngine {
           break;
         case ALT:
           altDown = false;
+          break;
+        case LEFT:
+          leftDown = false;
+          break;
+        case RIGHT:
+          rightDown = false;
+          break;
+        case UP:
+          upDown = false;
+          break;
+        case DOWN:
+          downDown = false;
           break;
         // For android
         case 67:
@@ -6642,6 +6781,26 @@ public class TWEngine {
       if (val >= 1024) return;
       
       keys[val] = 0;
+    }
+    
+    public String keyboardMessageDisplay() {
+      if (int(blinkTime) % 60 < 30) {
+        // Blinking cursor replaces the current character with █
+        // But we do NOT want it to replace \n since this will remove the newline and make
+        // the text all wonky.
+        // Also ignore all the min(), I don't want to get a StringIndexOutOfBoundsException.
+        int l = keyboardMessage.length();
+        if (l == 0) return "_";
+        
+        
+        if (keyboardMessage.charAt(min(cursorX, l-1)) == '\n') {
+          return keyboardMessage.substring(0, min(cursorX, l))+"_"+keyboardMessage.substring(min(cursorX, l-1));
+        }
+        else {
+          return keyboardMessage.substring(0, min(cursorX, l))+"_"+keyboardMessage.substring(min(cursorX+1, l));
+        }
+      }
+      return keyboardMessage;
     }
   
     public boolean keyDown(char k) {
@@ -6699,8 +6858,9 @@ public class TWEngine {
     }
   
     public void backspace() {
-      if (this.keyboardMessage.length() > 0) {
-        this.keyboardMessage = this.keyboardMessage.substring(0, this.keyboardMessage.length()-1);
+      if (this.keyboardMessage.length() > 0 && cursorX > 0)  {
+        this.keyboardMessage = keyboardMessage.substring(0, cursorX-1)+keyboardMessage.substring(cursorX);
+        cursorX--;
       }
     }
     
@@ -6794,6 +6954,22 @@ public class TWEngine {
           case ALT:
             altDown = true;
             return;
+          case LEFT:
+            leftDownCounter = 0;
+            leftDown = true;
+            break;
+          case RIGHT:
+            rightDownCounter = 0;
+            rightDown = true;
+            break;
+          case UP:
+            upDownCounter = 0;
+            upDown = true;
+            break;
+          case DOWN:
+            downDownCounter = 0;
+            downDown = true;
+            break;
           case 67:
             this.backspace();
             backspaceDown = true;
@@ -6802,7 +6978,7 @@ public class TWEngine {
         // 10 for android
       } else if (kkey == ENTER || kkey == RETURN || int(kkey) == 10) {
         if (this.addNewlineWhenEnterPressed) {
-          this.keyboardMessage += "\n";
+          insert('\n');
         }
         enterDown = true;
         // 65535 67 for android
@@ -6811,7 +6987,7 @@ public class TWEngine {
         backspaceDown = true;
       }
       else {
-        this.keyboardMessage += kkey;
+        insert(kkey);
       }
       
       // And actually set the current pressed key state
@@ -6822,8 +6998,20 @@ public class TWEngine {
       keys[val] = 1;
       stats.increase("keys_pressed", 1);
     }
+  
+    public void insert(char c) {
+      // Remember, we now have a cursor.
+      // If we're typing at the end, simply append char (like normal)
+      if (cursorX == keyboardMessage.length()) {
+        keyboardMessage += c;
+      }
+      // Otherwise, add the char in between the text.
+      else {
+        this.keyboardMessage = keyboardMessage.substring(0, cursorX) + c + keyboardMessage.substring(cursorX);
+      }
+      cursorX++;
+    }
   }
-
   // Cus why replace 9999999 lines of code when you can write 6 new lines of code that makes sure everything still works.
   public float mouseX() {
     return input.mouseX();
@@ -7324,6 +7512,10 @@ public final class SpriteSystemPlaceholder {
         public boolean suppressSpriteWarning = false;
         public boolean repositionSpritesToScale = true;
         public boolean allowSelectOffContentPane = true;
+        public float mouseScaleX = 1.0;
+        public float mouseScaleY = 1.0;
+        public float mouseOffsetX = 0.0;
+        public float mouseOffsetY = 0.0;
 
         public String PATH_SPRITES_ATTRIB;
         public String APPPATH; 
@@ -7334,6 +7526,13 @@ public final class SpriteSystemPlaceholder {
         public final int ROTATE = 4;   
         
         public float selectBorderTime = 0.;
+        
+        private float mouseX() {
+          return ((engine.mouseX()-mouseOffsetX)/mouseScaleX);
+        }
+        private float mouseY() {
+          return ((engine.mouseY()-mouseOffsetY)/mouseScaleY);
+        }
 
         // Use this constructor for no saving sprite data.
         public SpriteSystemPlaceholder(TWEngine engine) {
@@ -7371,18 +7570,18 @@ public final class SpriteSystemPlaceholder {
             
             public void update() {
                 draggingEnd = false;
-                if (!mousePressed && dragging) {
+                if (!engine.input.primaryDown && dragging) {
                 dragging = false;
                 draggingEnd = true;
                 }
                 if (clickDelay > 0) {
                 clickDelay--;
                 }
-                if (!click && mousePressed) {
+                if (!click && engine.input.primaryDown) {
                 click = true;
                 clickDelay = 1;
                 }
-                if (click && !mousePressed) {
+                if (click && !engine.input.primaryDown) {
                 click = false;
                 }
             }
@@ -7392,7 +7591,7 @@ public final class SpriteSystemPlaceholder {
             }
             
             public void beginDrag() {
-                if (mousePressed && clickDelay > 0) {
+                if (engine.input.primaryDown && clickDelay > 0) {
                 dragging = true;
                 }
             }
@@ -7726,7 +7925,7 @@ public final class SpriteSystemPlaceholder {
                 switch (mode) {
                 case SINGLE: {
                     float d = BOX_SIZE, x = (float)wi-d+xpos, y = (float)hi-d+ypos;
-                    if (engine.mouseX() > x && engine.mouseY() > y && engine.mouseX() < x+d && engine.mouseY() < y+d) {
+                    if (mouseX() > x && mouseY() > y && mouseX() < x+d && mouseY() < y+d) {
                       return true;
                     }
                 }
@@ -7736,8 +7935,8 @@ public final class SpriteSystemPlaceholder {
                     float d = BOX_SIZE, x1 = (float)wi-(d/2)+xpos, y1 = (float)(hi/2)-(d/2)+ypos;
                   // height square
                     float               x2 = (float)(wi/2)-(d/2)+xpos, y2 = (float)(hi)-(d/2)+ypos;
-                    if ((engine.mouseX() > x1 && engine.mouseY() > y1 && engine.mouseX() < x1+d && engine.mouseY() < y1+d)
-                    || (engine.mouseX() > x2 && engine.mouseY() > y2 && engine.mouseX() < x2+d && engine.mouseY() < y2+d)) {
+                    if ((mouseX() > x1 && mouseY() > y1 && mouseX() < x1+d && mouseY() < y1+d)
+                    || (mouseX() > x2 && mouseY() > y2 && mouseX() < x2+d && mouseY() < y2+d)) {
                       return true;
                     }
                 }
@@ -7747,7 +7946,7 @@ public final class SpriteSystemPlaceholder {
                     float d = BOX_SIZE;
                     float x = vertex.v[i].x;
                     float y = vertex.v[i].y;
-                    if (engine.mouseX() > x-d/2 && engine.mouseY() > y-d/2 && engine.mouseX() < x+d/2 && engine.mouseY() < y+d/2) {
+                    if (mouseX() > x-d/2 && mouseY() > y-d/2 && mouseX() < x+d/2 && mouseY() < y+d/2) {
                         return true;
                     }
                     }
@@ -7766,7 +7965,7 @@ public final class SpriteSystemPlaceholder {
                 float d = BOX_SIZE;
                 float x = cx+sin(rot)*radius,  y = cy+cos(rot)*radius;
                 
-                if (engine.mouseX() > x-d/2 && engine.mouseY() > y-d/2 && engine.mouseX() < x+d/2 && engine.mouseY() < y+d/2) {
+                if (mouseX() > x-d/2 && mouseY() > y-d/2 && mouseX() < x+d/2 && mouseY() < y+d/2) {
                     return true;
                 }
                 break;
@@ -7774,7 +7973,7 @@ public final class SpriteSystemPlaceholder {
                     d = BOX_SIZE;
                     x = (float)wi-d+xpos;
                     y = (float)hi-d+ypos;
-                    if (engine.mouseX() > x && engine.mouseY() > y && engine.mouseX() < x+d && engine.mouseY() < y+d) {
+                    if (mouseX() > x && mouseY() > y && mouseX() < x+d && mouseY() < y+d) {
                     return true;
                     }
                 }
@@ -7831,7 +8030,7 @@ public final class SpriteSystemPlaceholder {
                 vertex.v[0].x = x;
                 vertex.v[0].y = y;
                 
-                return polyPoint(vertex.v, engine.mouseX(), engine.mouseY());
+                return polyPoint(vertex.v, mouseX(), mouseY());
             }
             
             
@@ -7839,15 +8038,15 @@ public final class SpriteSystemPlaceholder {
                 switch (mode) {
                 case SINGLE: {
                     float x = xpos, y = ypos;
-                    return (engine.mouseX() > x && engine.mouseY() > y && engine.mouseX() < x+wi && engine.mouseY() < y+hi);
+                    return (mouseX() > x && mouseY() > y && mouseX() < x+wi && mouseY() < y+hi);
                     //return (mouseX > x && mouseY > y && mouseX < x+wi && mouseY < y+hi && !repositionDrag.isDragging());
                 }
                 case DOUBLE: {
                     float x = xpos, y = ypos;
-                    return (engine.mouseX() > x && engine.mouseY() > y && engine.mouseX() < x+wi && engine.mouseY() < y+hi);
+                    return (mouseX() > x && mouseY() > y && mouseX() < x+wi && mouseY() < y+hi);
                 }
                 case VERTEX:
-                    return polyPoint(vertex.v, engine.mouseX(), engine.mouseY());
+                    return polyPoint(vertex.v, mouseX(), mouseY());
                 case ROTATE: {
                     return rotateCollision();
                 }
@@ -7915,25 +8114,25 @@ public final class SpriteSystemPlaceholder {
                 repositionDrag.beginDrag();
                 
                 //X and Y position
-                repositionDragStartX = this.xpos-engine.mouseX();
-                repositionDragStartY = this.ypos-engine.mouseY();
+                repositionDragStartX = this.xpos-mouseX();
+                repositionDragStartY = this.ypos-mouseY();
                 
                 //Vertex position
                 for (int i = 0; i < 4; i++) {
-                    repositionV.v[i].set(vertex.v[i].x-engine.mouseX(), vertex.v[i].y-engine.mouseY());
+                    repositionV.v[i].set(vertex.v[i].x-mouseX(), vertex.v[i].y-mouseY());
                 }
                 }
                 if (repositionDrag.isDragging()) {
                 //X and y position
-                this.xpos = repositionDragStartX+engine.mouseX();
-                this.ypos = repositionDragStartY+engine.mouseY();
+                this.xpos = repositionDragStartX+mouseX();
+                this.ypos = repositionDragStartY+mouseY();
                 
                 defxpos = xpos-offxpos;
                 defypos = ypos-offypos;
                 
                 //Vertex position
                 for (int i = 0; i < 4; i++) {
-                    vertex.v[i].set(repositionV.v[i].x+engine.mouseX(), repositionV.v[i].y+engine.mouseY());
+                    vertex.v[i].set(repositionV.v[i].x+mouseX(), repositionV.v[i].y+mouseY());
                     defvertex.v[i].set(vertex.v[i].x-offvertex.v[i].x, vertex.v[i].y-offvertex.v[i].y);
                 }
                 }
@@ -7975,15 +8174,15 @@ public final class SpriteSystemPlaceholder {
                     float d = BOX_SIZE, x = (float)wi-d+xpos, y = (float)hi-d+ypos;
                     resizeDrag.update();
                     this.square(x,y, d);
-                    if (engine.mouseX() > x && engine.mouseY() > y && engine.mouseX() < x+d && engine.mouseY() < y+d) {
+                    if (mouseX() > x && mouseY() > y && mouseX() < x+d && mouseY() < y+d) {
                     resizeDrag.beginDrag();
                     this.hoveringOverResizeSquare = true;
                     } else {
                     this.hoveringOverResizeSquare = false;
                     }
                     if (resizeDrag.isDragging()) {
-                    wi = int((engine.mouseX()+d/2-xpos));
-                    hi = int((engine.mouseX()+d/2-xpos)*aspect);
+                    wi = int((mouseX()+d/2-xpos));
+                    hi = int((mouseX()+d/2-xpos)*aspect);
                     
                     defwi = wi-offwi;
                     defhi = hi-offhi;
@@ -8003,12 +8202,12 @@ public final class SpriteSystemPlaceholder {
                     resizeDrag.update();
                     this.square(x1, y1, d);
                     this.square(x2, y2, d);
-                    if (engine.mouseX() > x1 && engine.mouseY() > y1 && engine.mouseX() < x1+d && engine.mouseY() < y1+d) {
+                    if (mouseX() > x1 && mouseY() > y1 && mouseX() < x1+d && mouseY() < y1+d) {
                       resizeDrag.beginDrag();
                       // whatever we're using currentVertex
                       currentVertex = 1;
                       this.hoveringOverResizeSquare = true;
-                    } else if (engine.mouseX() > x2 && engine.mouseY() > y2 && engine.mouseX() < x2+d && engine.mouseY() < y2+d) {
+                    } else if (mouseX() > x2 && mouseY() > y2 && mouseX() < x2+d && mouseY() < y2+d) {
                       resizeDrag.beginDrag();
                       // whatever we're using currentVertex
                       currentVertex = 2;
@@ -8021,10 +8220,10 @@ public final class SpriteSystemPlaceholder {
                     
                     if (resizeDrag.isDragging()) {
                       if (currentVertex == 1) {
-                        wi = int((engine.mouseX()+d/2-xpos));
+                        wi = int((mouseX()+d/2-xpos));
                       }
                       else if (currentVertex == 2) {
-                        hi = int((engine.mouseY()+d/2-ypos));
+                        hi = int((mouseY()+d/2-ypos));
                       }
                       
                       defwi = wi-offwi;
@@ -8045,7 +8244,7 @@ public final class SpriteSystemPlaceholder {
                       float y = vertex.v[i].y;
                       this.square(x-d/2, y-d/2, d);
                       
-                      if (engine.mouseX() > x-d/2 && engine.mouseY() > y-d/2 && engine.mouseX() < x+d/2 && engine.mouseY() < y+d/2) {
+                      if (mouseX() > x-d/2 && mouseY() > y-d/2 && mouseX() < x+d/2 && mouseY() < y+d/2) {
                           resizeDrag.beginDrag();
                           currentVertex = i;
                           this.hoveringOverResizeSquare = true;
@@ -8053,8 +8252,8 @@ public final class SpriteSystemPlaceholder {
                           this.hoveringOverResizeSquare = false;
                       }
                       if (resizeDrag.isDragging() && currentVertex == i) {
-                          vertex.v[i].x = engine.mouseX();
-                          vertex.v[i].y = engine.mouseY();
+                          vertex.v[i].x = mouseX();
+                          vertex.v[i].y = mouseY();
                           defvertex.v[i].set(vertex.v[i].x-offvertex.v[i].x, vertex.v[i].y-offvertex.v[i].y);
                       }
                     }
@@ -8073,7 +8272,7 @@ public final class SpriteSystemPlaceholder {
                     
                     this.square(x-d/2, y-d/2, d);
                     
-                    if (engine.mouseX() > x-d/2 && engine.mouseY() > y-d/2 && engine.mouseX() < x+d/2 && engine.mouseY() < y+d/2) {
+                    if (mouseX() > x-d/2 && mouseY() > y-d/2 && mouseX() < x+d/2 && mouseY() < y+d/2) {
                     resizeDrag.beginDrag();
                     this.hoveringOverResizeSquare = true;
                     } else {
@@ -8081,8 +8280,8 @@ public final class SpriteSystemPlaceholder {
                     }
                     
                     if (resizeDrag.isDragging()) {
-                    float decx = (engine.mouseX())-cx;
-                    float decy = cy-(engine.mouseY());
+                    float decx = (mouseX())-cx;
+                    float decy = cy-(mouseY());
                     if (decy < 0) {
                         rot = atan(-decx/decy);
                     }
@@ -8126,8 +8325,8 @@ public final class SpriteSystemPlaceholder {
 
             private void square(float x, float y, float d) {
                 noStroke();
-                app.fill(sin(selectBorderTime += 0.1*engine.display.getDelta())*50+200, 100);
-                app.rect(x, y, d, d);
+                engine.display.currentPG.fill(sin(selectBorderTime += 0.1*engine.display.getDelta())*50+200, 100);
+                engine.display.currentPG.rect(x, y, d, d);
             }
         }
         
@@ -8506,6 +8705,16 @@ public final class SpriteSystemPlaceholder {
             this.generalClick.update();
             this.runSpriteInteraction();
             this.emptySpriteStack();
+        }
+        
+        public void setMouseScale(float x, float y) {
+          mouseScaleX = x;
+          mouseScaleY = y;
+        }
+        
+        public void setMouseOffset(float x, float y) {
+          mouseOffsetX = x;
+          mouseOffsetY = y;
         }
 
     }

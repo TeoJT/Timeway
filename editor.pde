@@ -504,10 +504,7 @@ public class Editor extends Screen {
 
             String displayText = "";
             if (editing()) {
-                if (int(display.getTime()) % 60 < 30)
-                    displayText = input.keyboardMessage+"|";
-                else
-                    displayText = input.keyboardMessage;
+              displayText = input.keyboardMessageDisplay();
             }
               else {
                   displayText = text;
@@ -548,6 +545,7 @@ public class Editor extends Screen {
                 engine.allowShowCommandPrompt = false;
                 editingPlaceable = this;
                 input.keyboardMessage = text;
+                input.cursorX = input.keyboardMessage.length();
                 selectedFontSize = this.fontSize;
             }
                 // Mini menu for text
@@ -1359,6 +1357,7 @@ public class Editor extends Screen {
         editingTextPlaceable.sprite.setY(y-input.scrollOffset);
         editingPlaceable = editingTextPlaceable;
         input.keyboardMessage = initText;
+        input.cursorX = input.keyboardMessage.length();
         editingTextPlaceable.updateDimensions();
         engine.allowShowCommandPrompt = false;
         stats.increase("text_created", 1);

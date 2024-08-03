@@ -1,7 +1,7 @@
 //// How to enable Android mode in your code:
 //// ctrl+a
 //// ctrl+/
-//// Yes. That's really now you do it.
+//// Yes. That's really how you do it.
 //// Make sure to do it to zDesktop too.
 //import android.content.Context;
 //import android.app.Activity;
