@@ -416,7 +416,7 @@ public class PixelRealmWithUI extends PixelRealm {
           // Additional functionality for upgrading the realm.
           ryes = new Runnable() {
             public void run() {
-              if (!COMPATIBILITY_VERSION.equals("2.0")) {
+              if (!COMPATIBILITY_VERSION.equals("2.0") && !COMPATIBILITY_VERSION.equals("2.1")) {
                 menuShown = false;
                 menu = null;
                 console.bugWarn("Expecting COMPATIBILITY_VERSION "+COMPATIBILITY_VERSION+". Please remember to change this part of the code!");
@@ -674,7 +674,7 @@ public class PixelRealmWithUI extends PixelRealm {
       // Need to clear terrain objects when we load a new realm otherwise we end up with wayyyy too much
       // in our face.
       currRealm.chunks.clear();
-      tilesCache.clear();
+      //tilesCache.clear();
       currRealm.ordering = new LinkedList();
       currRealm.legacy_autogenStuff = new HashSet<String>();
 
@@ -954,7 +954,7 @@ public class PixelRealmWithUI extends PixelRealm {
 
     public void close() {
       currRealm.chunks.clear();
-      tilesCache.clear();
+      //tilesCache.clear();
       currRealm.regenerateTrees();
       //chunks = new HashMap<Integer, TerrainChunkV2>();
     }

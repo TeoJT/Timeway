@@ -46,9 +46,9 @@ import java.util.Arrays;   // Used by the stack class at the bottom
 public class TWEngine {
   //*****************CONSTANTS SETTINGS**************************
   // Info and versioning
-  public static final String APP_NAME        = "SketchIO";
+  public static final String APP_NAME        = "Timeway";
   public static final String AUTHOR      = "Teo Taylor";
-  public static final String VERSION     = "0.1.3-alpha";
+  public static final String VERSION     = "0.1.3";
   public static final String VERSION_DESCRIPTION = 
     "- Added previews to entries in pixel realm\n"+
     "- Performance improvements\n"+
@@ -340,6 +340,7 @@ public class TWEngine {
         defaultSettings.putIfAbsent("enableExperimentalGifs", false);
         defaultSettings.putIfAbsent("cache_miss_no_music", true);
         defaultSettings.putIfAbsent("touch_controls", false);
+        defaultSettings.putIfAbsent("text_cursor_char", "_");
     
         defaultKeybindings = new HashMap<String, Character>();
         defaultKeybindings.putIfAbsent("CONFIG_VERSION", char(1));
@@ -1532,7 +1533,15 @@ public class TWEngine {
       // If image is loaded render.
       if (image.width > 0 && image.height > 0) {
         if (image.mode == 1) {
-          currentPG.image(image.pimage, x, y, w, h);
+          // For some reason an occasional exception occures here
+          try {
+            currentPG.image(image.pimage, x, y, w, h);
+          }
+          catch (IndexOutOfBoundsException e) {
+            // Doesn't matter if we don't render an image for one frame
+            // if a serious error occures
+            return;
+          }
         }
         else if (image.mode == 2) {
           largeImg(currentPG, image.largeImage, x, y, w, h);
@@ -6482,6 +6491,7 @@ public class TWEngine {
     public boolean keyDown = false;
     
     public int cursorX = 0;
+    public String CURSOR_CHAR = "";
     
     public boolean mouseMoved = false;
     
@@ -6547,6 +6557,7 @@ public class TWEngine {
     
     public InputModule() {
       scrollSensitivity = settings.getFloat("scrollSensitivity");
+      CURSOR_CHAR = settings.getString("text_cursor_char");
     }
     
       
@@ -6790,14 +6801,14 @@ public class TWEngine {
         // the text all wonky.
         // Also ignore all the min(), I don't want to get a StringIndexOutOfBoundsException.
         int l = keyboardMessage.length();
-        if (l == 0) return "_";
+        if (l == 0) return CURSOR_CHAR;
         
         
         if (keyboardMessage.charAt(min(cursorX, l-1)) == '\n') {
-          return keyboardMessage.substring(0, min(cursorX, l))+"_"+keyboardMessage.substring(min(cursorX, l-1));
+          return keyboardMessage.substring(0, min(cursorX, l))+CURSOR_CHAR+keyboardMessage.substring(min(cursorX, l-1));
         }
         else {
-          return keyboardMessage.substring(0, min(cursorX, l))+"_"+keyboardMessage.substring(min(cursorX+1, l));
+          return keyboardMessage.substring(0, min(cursorX, l))+CURSOR_CHAR+keyboardMessage.substring(min(cursorX+1, l));
         }
       }
       return keyboardMessage;
