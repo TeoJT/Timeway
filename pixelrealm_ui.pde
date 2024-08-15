@@ -725,14 +725,19 @@ public class PixelRealmWithUI extends PixelRealm {
           app.rect(random(getXmid()-200, getXmid()+200), random(getYmid()-20, getYmid()+20), random(10, 50), random(5, 20));
       }
 
-
-      if ((input.keyActionOnce("inventorySelectLeft")
-        || ui.buttonVary("newrealm-prev", "back_arrow_128", ""))
-        && coolDown == 0) {
-        tempIndex--;
-        if (tempIndex < 0) tempIndex = templates.size()-1;
-        preview(tempIndex);
+      // Special condition to make sure we can't go to the last realm that isn't cached on our first playthrough
+      boolean allow = (sound.loadingMusic() && tempIndex > 0) || !sound.loadingMusic();
+      
+      if (allow) {
+        if ((input.keyActionOnce("inventorySelectLeft")
+          || ui.buttonVary("newrealm-prev", "back_arrow_128", ""))
+          && coolDown == 0) {
+          tempIndex--;
+          if (tempIndex < 0) tempIndex = templates.size()-1;
+          preview(tempIndex);
+        }
       }
+      
       if ((input.keyActionOnce("inventorySelectRight")
         || ui.buttonVary("newrealm-next", "forward_arrow_128", ""))
         && coolDown == 0) {
@@ -1448,6 +1453,63 @@ public class PixelRealmWithUI extends PixelRealm {
     } 
     else if (engine.commandEquals(command, "/realmtemplate") || engine.commandEquals(command, "/realmtemplates") || engine.commandEquals(command, "/templates") || engine.commandEquals(command, "/template")) {
       promptNewRealm();
+      return true;
+    }
+    // To cache realm templates music
+    else if (engine.commandEquals(command, "/cachetemplates")) {
+      if (isAndroid()) {
+        console.log("Not available in Android version!");
+        return true;
+      }
+      
+      // Get arg which is how many music files to cache.
+      // Default is 10.
+      int numRealmsToCache = 10;
+      String arg = "";
+      if (command.length() > 16) {
+        arg = command.substring(16);
+        numRealmsToCache = int(arg);
+      }
+      
+      int count = 0;
+      // Now loop and cache each file.
+      File realms = new File(engine.APPPATH+engine.TEMPLATES_PATH);
+      for (File f : realms.listFiles()) {
+        if (f.isDirectory()) {
+          String dir = (file.directorify(f.getAbsolutePath().replaceAll("\\\\", "/")));
+          String path = "";
+          // Find .pixelrealm-bgm
+          // either .wav, .mp3 or .ogg.
+          path = dir+file.unhide(PixelRealm.REALM_BGM)+".wav";
+          if (!file.exists(path)) path = dir+file.unhide(PixelRealm.REALM_BGM)+".ogg";
+          if (!file.exists(path)) path = dir+file.unhide(PixelRealm.REALM_BGM)+".mp3";
+          
+          // If none exist, the default realm sound will already be cached of course. Let's continue
+          // since we won't be caching anything.
+          if (!file.exists(path)) continue;
+          
+          // Now, engine is of course
+          
+          // Honestly updateMusicCache should be named to createMusicCache lmao
+          // And let's set it to a score of 10000, it's small enough that this startup
+          // premade cache will eventually get cleared out when cache is full, it's 
+          // big enough to evict any larger cache music files that may be there
+          // for whatever reason.
+          sound.updateMusicCache(path, 10000);
+          
+          
+          
+          // Remember do x times where x = our argument.
+          count++;
+          if (count > numRealmsToCache) {
+            // End it here if we reach our number of realms to cache
+            break;
+          }
+        }
+      }
+      
+      console.log("Caching music in "+numRealmsToCache+" realm templates.");
+      console.log("Please wait a bit. Caching takes some time.");
       return true;
     }
     else return false;

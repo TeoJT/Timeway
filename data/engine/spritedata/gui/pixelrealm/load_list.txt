@@ -31,6 +31,7 @@ engine/spritedata/gui/pixelrealm/menu_no-phone.json
 engine/spritedata/gui/pixelrealm/menu_no.json
 engine/spritedata/gui/pixelrealm/menu_yes-phone.json
 engine/spritedata/gui/pixelrealm/menu_yes.json
+engine/spritedata/gui/pixelrealm/morpher_1.json
 engine/spritedata/gui/pixelrealm/move_rename.json
 engine/spritedata/gui/pixelrealm/newentry-phone.json
 engine/spritedata/gui/pixelrealm/newentry.json

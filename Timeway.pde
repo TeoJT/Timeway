@@ -261,22 +261,26 @@ void twengineRequestBenchmarks() {
 }
 
 @SuppressWarnings("unused")
+void twengineRequestSketch(String path) {
+  
+}
+
+//@SuppressWarnings("unused")
 boolean hasPixelrealm() {
   return false;
 }
 
 
-@SuppressWarnings("unused")
+//@SuppressWarnings("unused")
 boolean pixelrealmCache() {
-  //boolean cacheHit = false;
-  //cacheHit |= sound.cacheHit(DEFAULT_DIR+"/"+PixelRealm.REALM_BGM+".wav");
-  //cacheHit |= sound.cacheHit(DEFAULT_DIR+"/"+PixelRealm.REALM_BGM+".ogg");
-  //cacheHit |= sound.cacheHit(DEFAULT_DIR+"/"+PixelRealm.REALM_BGM+".mp3");
-  //cacheHit |= sound.cacheHit(DEFAULT_DIR+"/"+file.unhide(PixelRealm.REALM_BGM+".wav"));
-  //cacheHit |= sound.cacheHit(DEFAULT_DIR+"/"+file.unhide(PixelRealm.REALM_BGM+".ogg"));
-  //cacheHit |= sound.cacheHit(DEFAULT_DIR+"/"+file.unhide(PixelRealm.REALM_BGM+".mp3"));
-  //cacheHit |= sound.cacheHit(APPPATH+PixelRealm.REALM_BGM_DEFAULT);
-  //cacheHit |= sound.cacheHit(APPPATH+PixelRealm.REALM_BGM_DEFAULT_LEGACY);
-  //return cacheHit;
-  return false;
+  boolean cacheHit = false;
+  cacheHit |= timewayEngine.sound.cacheHit(timewayEngine.DEFAULT_DIR+"/"+PixelRealm.REALM_BGM+".wav");
+  cacheHit |= timewayEngine.sound.cacheHit(timewayEngine.DEFAULT_DIR+"/"+PixelRealm.REALM_BGM+".ogg");
+  cacheHit |= timewayEngine.sound.cacheHit(timewayEngine.DEFAULT_DIR+"/"+PixelRealm.REALM_BGM+".mp3");
+  cacheHit |= timewayEngine.sound.cacheHit(timewayEngine.DEFAULT_DIR+"/"+timewayEngine.file.unhide(PixelRealm.REALM_BGM+".wav"));
+  cacheHit |= timewayEngine.sound.cacheHit(timewayEngine.DEFAULT_DIR+"/"+timewayEngine.file.unhide(PixelRealm.REALM_BGM+".ogg"));
+  cacheHit |= timewayEngine.sound.cacheHit(timewayEngine.DEFAULT_DIR+"/"+timewayEngine.file.unhide(PixelRealm.REALM_BGM+".mp3"));
+  cacheHit |= timewayEngine.sound.cacheHit(timewayEngine.APPPATH+PixelRealm.REALM_BGM_DEFAULT);
+  cacheHit |= timewayEngine.sound.cacheHit(timewayEngine.APPPATH+PixelRealm.REALM_BGM_DEFAULT_LEGACY);
+  return cacheHit;
 }

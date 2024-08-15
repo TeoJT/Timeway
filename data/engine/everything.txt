@@ -4,6 +4,7 @@ engine/font/
 engine/img/
 engine/largeimg/
 engine/music/
+engine/plugindata/
 engine/realmtemplates/
 engine/shaders/
 engine/shell/
@@ -149,6 +150,9 @@ engine/img/pixelrealm/find_128.png
 engine/img/pixelrealm/glow.png
 engine/img/pixelrealm/grabber_tool_128.png
 engine/img/pixelrealm/menuborder.png
+engine/img/pixelrealm/morpher_circle_bulge.png
+engine/img/pixelrealm/morpher_circle_flat.png
+engine/img/pixelrealm/morpher_tool_128.png
 engine/img/pixelrealm/music.png
 engine/img/pixelrealm/notool_128.png
 engine/img/pixelrealm/white.png
@@ -180,6 +184,7 @@ engine/img/pixelrealm/world/nightsky4.png
 engine/music/pixelrealm_default_bgm.wav
 engine/music/pixelrealm_default_bgm_legacy.wav
 engine/music/update_music.wav
+engine/plugindata/plugin_boilerplate.java
 engine/realmtemplates/pixelrealm-turf.json
 engine/realmtemplates/realmtemplate.json
 engine/realmtemplates/unhide.py
@@ -1503,6 +1508,7 @@ engine/shaders/unlit_fog.glsl
 engine/shell/mywindowscommand.bat
 engine/sounds/bapp.wav
 engine/sounds/bling.wav
+engine/sounds/blockdd.wav
 engine/sounds/chime.wav
 engine/sounds/coin.wav
 engine/sounds/fade_in.wav
@@ -1532,6 +1538,7 @@ engine/sounds/splash_2.wav
 engine/sounds/step.wav
 engine/sounds/swimming.wav
 engine/sounds/swish.wav
+engine/sounds/switch_subtool.wav
 engine/sounds/terraform_1.wav
 engine/sounds/terraform_2.wav
 engine/sounds/terraform_3.wav
@@ -1597,6 +1604,7 @@ engine/spritedata/gui/pixelrealm/menu_no-phone.json
 engine/spritedata/gui/pixelrealm/menu_no.json
 engine/spritedata/gui/pixelrealm/menu_yes-phone.json
 engine/spritedata/gui/pixelrealm/menu_yes.json
+engine/spritedata/gui/pixelrealm/morpher_1.json
 engine/spritedata/gui/pixelrealm/move_rename.json
 engine/spritedata/gui/pixelrealm/newentry-phone.json
 engine/spritedata/gui/pixelrealm/newentry.json

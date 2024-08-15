@@ -4,6 +4,7 @@ engine/font/
 engine/img/
 engine/largeimg/
 engine/music/
+engine/plugindata/
 engine/realmtemplates/
 engine/shaders/
 engine/shell/

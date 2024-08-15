@@ -12,6 +12,9 @@ engine/img/pixelrealm/find_128.png
 engine/img/pixelrealm/glow.png
 engine/img/pixelrealm/grabber_tool_128.png
 engine/img/pixelrealm/menuborder.png
+engine/img/pixelrealm/morpher_circle_bulge.png
+engine/img/pixelrealm/morpher_circle_flat.png
+engine/img/pixelrealm/morpher_tool_128.png
 engine/img/pixelrealm/music.png
 engine/img/pixelrealm/notool_128.png
 engine/img/pixelrealm/white.png
