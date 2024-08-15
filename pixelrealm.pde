@@ -5062,11 +5062,11 @@ public class PixelRealm extends Screen {
       
       if (terrain.hasWater)
         renderWater();
-      
-      
+        
       scene.popMatrix();
-  
     }
+    
+    
     
     
     public void renderWater() {
@@ -5102,11 +5102,22 @@ public class PixelRealm extends Screen {
         for (int x = 0; x < irenderDist*2; x++) {
           tilex += 1.0;
           
-          float xx1 = min(max(tilex*waterSize, -limitX), limitX-chunkSize+fff);
-          float zz1 = min(max(tilez*waterSize, -limitZ), limitZ-chunkSize+fff);
-          float xx2 = min(max(tilex*waterSize+waterSize, -limitX), limitX-chunkSize+fff);
-          float zz2 = min(max(tilez*waterSize+waterSize, -limitZ), limitZ-chunkSize+fff);
+          float xx1, zz1, xx2, zz2;
           
+          // Remmeber, in 2.1 the maximum bounds of chunks at chunklimitxz is reduced.
+          if (version.equals("2.1")) {
+            xx1 = min(max(tilex*waterSize, -limitX), limitX-chunkSize+fff);
+            zz1 = min(max(tilez*waterSize, -limitZ), limitZ-chunkSize+fff);
+            xx2 = min(max(tilex*waterSize+waterSize, -limitX), limitX-chunkSize+fff);
+            zz2 = min(max(tilez*waterSize+waterSize, -limitZ), limitZ-chunkSize+fff);
+          }
+          // This was the original code.
+          else {
+            xx1 = min(max(tilex*waterSize, -limitX), limitX+fff);
+            zz1 = min(max(tilez*waterSize, -limitZ), limitZ+fff);
+            xx2 = min(max(tilex*waterSize+waterSize, -limitX), limitX+fff);
+            zz2 = min(max(tilez*waterSize+waterSize, -limitZ), limitZ+fff);
+          }
                     
           scene.vertex(xx1,           terrain.waterLevel, zz1, ttt, ttt);                                    
           scene.vertex(xx2,           terrain.waterLevel, zz1, ttt+1., ttt);  
@@ -5117,12 +5128,12 @@ public class PixelRealm extends Screen {
         }
         tilez += 1.0;
       }
-      
-      
-  
-  
       scene.endShape();
     }
+    
+    
+    
+    
     
     public void renderSky() {
       display.recordRendererTime();
@@ -5165,6 +5176,10 @@ public class PixelRealm extends Screen {
       scene.resetShader();
       display.recordLogicTime();
     }
+    
+    
+    
+    
     
     private void placeDownObject() {
       if (globalHoldingObject != null && currRealm.holdingObject == null) console.bugWarn("placeDownObject: globalHoldingObject != null currRealm.holdingObject == null");
