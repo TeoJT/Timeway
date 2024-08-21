@@ -2261,7 +2261,7 @@ public class PixelRealm extends Screen {
           // Here, we gotta generate cache.
           // Pretty easy in hindsight.
           public void run() {
-            renderedEntry = new Editor(engine, dir, mycanvas, false);
+            renderedEntry = new ReadOnlyEditor(engine, dir, mycanvas, false);
             loadFromSource = true;
           }
         });
@@ -2270,7 +2270,7 @@ public class PixelRealm extends Screen {
       
       public void loadFromSource() {
         entriesTotal++;
-        renderedEntry = new Editor(engine, dir, mycanvas, true);
+        renderedEntry = new ReadOnlyEditor(engine, dir, mycanvas, true);
         loadFromSource = true;
       }
       
@@ -2292,9 +2292,17 @@ public class PixelRealm extends Screen {
             display.setPGraphics(mycanvas);
             mycanvas.beginDraw();
             mycanvas.background(renderedEntry.BACKGROUND_COLOR);
-            input.scrollOffset = -200.;
+            input.scrollOffset = -renderedEntry.UPPER_BAR_DROP_WEIGHT;
             renderedEntry.renderPlaceables();
-            mycanvas.endDraw();
+            
+            // This can have bad consiquences sometimes by random chance
+            try {
+              mycanvas.endDraw();
+            }
+            catch (RuntimeException e) {
+              console.warn("Entry rendering error, continuing.");
+            }
+            
             display.setPGraphics(g);
             if (power.powerMode != PowerMode.MINIMAL) scene.beginDraw();
             img = new RealmTexture();

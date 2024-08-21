@@ -307,6 +307,7 @@ public class Editor extends Screen {
     private PGraphics canvas;
     private float canvasScale;
     private JSONArray loadedJsonArray;
+    protected boolean readOnly = false;
     
     // X goes unused for now but could be useful later.
     private float extentX = 0.;
@@ -1241,6 +1242,16 @@ public class Editor extends Screen {
       entryName = newName;
       saveEntryJSON();
     }
+    
+    protected void fabric() {
+      display.shader("fabric", 
+      "color", 
+      red(myUpperBarColor)/255. ,
+      green(myUpperBarColor)/255. ,
+      blue(myUpperBarColor)/255. ,
+      1. , 
+      "intensity", 0.1);
+    }
 
     // I don't think you'll really need to modify this code much.
     public void upperBar() {
@@ -1260,7 +1271,7 @@ public class Editor extends Screen {
             if (upperbarExpand <= 0.001) power.setSleepy();
         }
         
-        display.shader("fabric", "color",float((myUpperBarColor>>16)&0xFF)/255.,(float)((myUpperBarColor>>8)&0xFF)/255.,float((myUpperBarColor)&0xFF)/255.,1., "intensity",0.1);
+        fabric();
         
         if (!ui.miniMenuShown() && !cameraMode) 
           display.clip(0, 0, WIDTH, myUpperBarWeight);
@@ -1273,7 +1284,7 @@ public class Editor extends Screen {
     }
     
     public void lowerBar() {
-      display.shader("fabric", "color",float((myUpperBarColor>>16)&0xFF)/255.,float((myUpperBarColor>>8)&0xFF)/255.,float((myUpperBarColor)&0xFF)/255.,1., "intensity",0.1);
+      fabric();
       
       float LOWER_BAR_EXPAND = 100.;
       if (upperBarDrop == CAMERA_ON_ANIMATION) myLowerBarWeight = LOWER_BAR_WEIGHT+(LOWER_BAR_EXPAND * (1.-upperbarExpand));
@@ -1287,6 +1298,8 @@ public class Editor extends Screen {
     public float insertedYpos = this.myUpperBarWeight;
     
     private void insertImage(PImage img) {
+      if (readOnly) return;
+        
       // Because this could potentially take a while to load and cache into the Processing engine,
       // we should expect framerate drops here.
       engine.power.resetFPSSystem();
@@ -1350,6 +1363,9 @@ public class Editor extends Screen {
     }
     
     private void insertText(String initText, float x, float y) {
+        // Don't do anything if readonly enabled.
+        if (readOnly) return;
+        
         TextPlaceable editingTextPlaceable = new TextPlaceable();
         editingTextPlaceable.textColor = selectedColor;
         placeables.selectedSprite = editingTextPlaceable.sprite;
@@ -1364,14 +1380,28 @@ public class Editor extends Screen {
     }
     
     private void renderPlaceables() {
+        placeables.interactable = !readOnly;
+      
         placeables.updateSpriteSystem();
-
-        input.processScroll(0., scrollLimitY);
+        
+        // Because every placeable is placed at a slight offset due to the ribbon bar,
+        // readonly doesn't have this bar and hence we should limit scroll at where the
+        // ribbon bar normally is.
+        if (!readOnly)
+          input.processScroll(0., scrollLimitY);
+        else 
+          input.processScroll(-UPPER_BAR_DROP_WEIGHT, scrollLimitY);
+          
         extentX = 0;
         extentY = 0;
         // Run all placeable objects
         for (Placeable p : placeableset) {
+          try {
             p.update();
+          }
+          catch (RuntimeException e) {
+            console.warn("Entry rendering error, continuing.");
+          }
             
             // Don't care I can tidy things up later.
             // Update extentX and extentY
@@ -1715,6 +1745,94 @@ public class Editor extends Screen {
        }
        imagesInEntry.clear();
     }
+}
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+public class ReadOnlyEditor extends Editor {
+  private SpriteSystemPlaceholder readonlyEditorUI;
+  
+  
+  public ReadOnlyEditor(TWEngine engine, String entryPath, PGraphics c, boolean doMultithreaded) {
+    super(engine, entryPath, c, doMultithreaded);
+    setupp();
+  }
+  
+  public ReadOnlyEditor(TWEngine e, String entryPath) {
+    super(e, entryPath);
+    setupp();
+  }
+  
+  void setupp()
+  {
+    readOnly = true;
+    input.scrollOffset = -UPPER_BAR_DROP_WEIGHT;
     
+    readonlyEditorUI = new SpriteSystemPlaceholder(engine, engine.APPPATH+engine.PATH_SPRITES_ATTRIB+"gui/readonlyeditor/");
+    readonlyEditorUI.repositionSpritesToScale();
+    readonlyEditorUI.interactable = false;
+  }
+  
+  public void upperBar() {
+    fabric();
+    display.recordRendererTime();
+    app.fill(myUpperBarColor);
+    app.noStroke();
+    app.rect(0, 0, WIDTH, myUpperBarWeight);
+    display.recordLogicTime();
+    display.defaultShader();
+    
+    // display our very small ui
+    ui.useSpriteSystem(readonlyEditorUI);
+    
+    if (ui.buttonVary("back-button", "back_arrow_128", "Back")) {
+      previousScreen();
+    }
+    
+    readonlyEditorUI.updateSpriteSystem();
+  }
+  
+  public void lowerBar() {
+    fabric();
+    display.recordRendererTime();
+    app.fill(myLowerBarColor);
+    app.noStroke();
+    app.rect(0, HEIGHT-myLowerBarWeight, WIDTH, myLowerBarWeight);
+    display.recordLogicTime();
+    display.defaultShader();
+  }
+}
+
+
+
+public class CreditsScreen extends ReadOnlyEditor {
+  public final static String CREDITS_PATH        = "engine/acknowledgements.timewayentry";
+  
+  public CreditsScreen(TWEngine engine) {
+    super(engine, engine.APPPATH+CREDITS_PATH);
+  }
+  
+  public void content() {
+    input.scrollOffset -= display.getDelta()*0.7;
+    power.setAwake();
+    super.content();
+  }
 }

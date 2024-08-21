@@ -441,6 +441,18 @@ public class PixelRealmWithUI extends PixelRealm {
         }
       }
       
+      // -- Credits --
+      if (ui.buttonVary("credits", "credits_128", "Credits")) {
+        if (file.exists(engine.APPPATH+CreditsScreen.CREDITS_PATH)) {
+          requestScreen(new CreditsScreen(engine));
+        }
+        else {
+          console.warn("Credits file is missing.");
+        }
+        menu = null;
+        menuShown = false;
+      }
+      
       // --- Morpher tool ---
       if (ui.buttonVary("morpher_1", "morpher_tool_128", "Morpher")) {
         if (currRealm.versionCompatibility == 1) {

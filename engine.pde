@@ -3379,15 +3379,27 @@ public class TWEngine {
     public StatsModule() {
       if (isAndroid()) {
         String path = file.directorify(getAndroidWriteableDir())+STATS_FILE;
-        if (file.exists(path))
-          json = loadJSONObject(path);
-        else json = new JSONObject();
+        try {
+          if (file.exists(path))
+            json = loadJSONObject(path);
+          else json = new JSONObject();
+        }
+        catch (RuntimeException e) {
+          console.warn("Stats file corrupted :(");
+          file.backupMove(path);
+        }
       }
       else {
         String path = APPPATH+STATS_FILE;
-        if (file.exists(path))
-          json = loadJSONObject(path);
-        else json = new JSONObject();
+        try {
+          if (file.exists(path))
+            json = loadJSONObject(path);
+          else json = new JSONObject();
+        }
+        catch (RuntimeException e) {
+          console.warn("Stats file corrupted :(");
+          file.backupMove(path);
+        }
       }
     }
     
@@ -7407,17 +7419,17 @@ public abstract class Screen {
 
   protected void lowerBar() {
     display.recordRendererTime();
-    fill(myLowerBarColor);
-    noStroke();
-    rect(0, HEIGHT-myLowerBarWeight, WIDTH, myLowerBarWeight);
+    app.fill(myLowerBarColor);
+    app.noStroke();
+    app.rect(0, HEIGHT-myLowerBarWeight, WIDTH, myLowerBarWeight);
     display.recordLogicTime();
   }
 
   protected void backg() {
     display.recordRendererTime();
-    fill(myBackgroundColor);
-    noStroke();
-    rect(0, myUpperBarWeight, WIDTH, HEIGHT-myUpperBarWeight-myLowerBarWeight);
+    app.fill(myBackgroundColor);
+    app.noStroke();
+    app.rect(0, myUpperBarWeight, WIDTH, HEIGHT-myUpperBarWeight-myLowerBarWeight);
     display.recordLogicTime();
   }
   
