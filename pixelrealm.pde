@@ -4075,7 +4075,7 @@ public class PixelRealm extends Screen {
     public Object getRealmFile(Object defaultFile, String... paths) {
       for (String path : paths) {
         if (file.exists(path)) {
-          if (file.getExt(path).equals("png") || file.getExt(path).equals("gif")) {
+          if (file.getExt(path).equals("png") || file.getExt(path).equals("gif") || file.getExt(path).equals("jpg") || file.getExt(path).equals("bmp")) {
             incrementMemUsage(file.getImageUncompressedSize(path));
             return loadImage(path);
           }
@@ -4086,7 +4086,7 @@ public class PixelRealm extends Screen {
         // Alt version without the hidden file.
         String unhidden = file.unhide(path);
         if (file.exists(unhidden)) {
-          if (file.getExt(unhidden).equals("png") || file.getExt(unhidden).equals("gif")) {
+          if (file.getExt(unhidden).equals("png") || file.getExt(unhidden).equals("gif") || file.getExt(path).equals("jpg")) {
             incrementMemUsage(file.getImageUncompressedSize(unhidden));
             return loadImage(unhidden);
           }
@@ -4124,8 +4124,9 @@ public class PixelRealm extends Screen {
       }
       
       
-      // TODO: read any image format (png, gif, etc)
-      img_grass = new RealmTexture((PImage)getRealmFile(DEFAULT_GRASS, dir+REALM_GRASS+".png"));
+      String ppath = dir+REALM_GRASS;
+      
+      img_grass = new RealmTexture((PImage)getRealmFile(DEFAULT_GRASS, ppath+".png", ppath+".jpg", ppath+".bmp"));
       
       /// here we search for the terrain objects textures from the dir.
       ArrayList<PImage> imgs = new ArrayList<PImage>();
@@ -4138,14 +4139,16 @@ public class PixelRealm extends Screen {
       }
       else {
         
+        ppath = dir+REALM_SKY;
         // Get either a sky called sky-1 or just sky
         int i = 1;
-        PImage sky = (PImage)getRealmFile(DEFAULT_SKY, dir+REALM_SKY+".png", dir+REALM_SKY+"-1.png");
+        PImage sky = (PImage)getRealmFile(DEFAULT_SKY, ppath+".png", ppath+"-1.png", ppath+".jpg", ppath+"-1.jpg", ppath+".bmp", ppath+"-1.bmp");
         imgs.add(sky);
         
         // If we find a sky, keep looking for sky-2, sky-3 etc
         while (sky != DEFAULT_SKY && i <= 9) {
-          sky = (PImage)getRealmFile(DEFAULT_SKY, dir+REALM_SKY+"-"+str(i+1)+".png");
+          ppath = dir+REALM_SKY+"-"+str(i+1);
+          sky = (PImage)getRealmFile(DEFAULT_SKY, ppath+".png", ppath+".jpg", ppath+".bmp");
           if (sky != DEFAULT_SKY) {
             //if (sky.width != 1500)
             //  console.warn("Width of "+REALM_SKY+" is "+str(sky.width)+"px, should be 1500px for best visual results!");

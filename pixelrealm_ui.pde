@@ -22,8 +22,8 @@ public class PixelRealmWithUI extends PixelRealm {
 
   private String[] dm_welcome = {
     "Welcome to "+TWEngine.APP_NAME+".",
-    "Your folders are realms.",
-    "Your computer is a universe.",
+    "Your folders are your realms.",
+    "Your computer is your universe.",
     "But first, let me show you the ropes.",
     "This place you are in right now is actually your home folder.",
     "This is a realm. Your files inside your home folder are in this realm.",
@@ -41,6 +41,7 @@ public class PixelRealmWithUI extends PixelRealm {
     "Let's learn how to organise things.",
     "Press <tab>, then select \"Grabber\"."
   };
+  // For when the player didn't choose a realm
   private String[] dm_tutorial_2_alt = {
     "You... didn't really choose anything, did you?",
     "Doesn't matter. Let's move on.",
@@ -77,7 +78,6 @@ public class PixelRealmWithUI extends PixelRealm {
   //  "These files can be found under the name .pixelrealm-... in your folders on your computer.",
   //  "If you are on MacOS or Linux, these files may be hidden.",
   //  "Try customising them, see what you can create.",
-  //  "And feel free to submit your creations, somebody (Téo lol) would love to see them."
   //};
 
 
@@ -456,7 +456,7 @@ public class PixelRealmWithUI extends PixelRealm {
       // --- Morpher tool ---
       if (ui.buttonVary("morpher_1", "morpher_tool_128", "Morpher")) {
         if (currRealm.versionCompatibility == 1) {
-          menu = new DialogMenu("Can't use morpher", "back-newrealm", "You can't use the morpher tool in the older 1.x versions. Please upgrade realm to 2.0 to use this tool.");
+          menu = new DialogMenu("Can't use morpher", "back-newrealm", "You can't use the morpher tool in the older 1.x versions. Please upgrade realm via the terraformer to use this tool.");
         }
         else {
           currentTool = TOOL_MORPHER;

@@ -2700,8 +2700,27 @@ public class TWEngine {
     private void updateMusicCache(String ppath, int forceScore) {
       final String path = ppath.replaceAll("\\\\", "/");
       
+      // Bug fix: make an estimation early on because we weren't doing that before and we'd end up caching 1gb files
+      // which would cause an outofmemoryException.
+      // Because we're still loading up the sound file in the background, best we can do here is
+      // make an estimate on how large the file will be.
+      // Here's the rules:
+      // wav: filesize*2
+      // mp3: filesize*10
+      // ogg: filesize*10
+      // flac: filesize*(10/7)
+      // anything else: filesize*2
+      int size = 0;
+      int filesize = (int)(new File(path)).length();
+      if (file.getExt(path).equals("wav")) size = filesize*2;
+      else if (file.getExt(path).equals("mp3")) size = filesize*10;
+      else if (file.getExt(path).equals("ogg")) size = filesize*10;
+      else if (file.getExt(path).equals("flac")) size = filesize*(10/7)/2;
+      else size = filesize*2;
+      
       // FLAC is not supported by soundfile so don't bother caching that.
-      if (file.getExt(path).equals("flac")) {
+      // Also, don't bother with files > 50mb
+      if (file.getExt(path).equals("flac") || size > 50*1024*1024) {
         return;
       }
       
@@ -2874,26 +2893,11 @@ public class TWEngine {
         obj.setString("cachePath", cachedFileName);
         obj.setString("originalPath", newPath);
         obj.setInt("priority", score);
+        obj.setInt("sizekb", size/1024);
+        jsonarray.append(obj);
         
         //console.log("Cache "+path);
         
-        // Because we're still loading up the sound file in the background, best we can do here is
-        // make an estimate on how large the file will be.
-        // Here's the rules:
-        // wav: filesize*2
-        // mp3: filesize*10
-        // ogg: filesize*10
-        // flac: filesize*(10/7)
-        // anything else: filesize*2
-        int size = 0;
-        int filesize = (int)(new File(path)).length();
-        if (file.getExt(path).equals("wav")) size = filesize*2;
-        else if (file.getExt(path).equals("mp3")) size = filesize*10;
-        else if (file.getExt(path).equals("ogg")) size = filesize*10;
-        else if (file.getExt(path).equals("flac")) size = filesize*(10/7)/2;
-        else size = filesize*2;
-        obj.setInt("sizekb", size/1024);
-        jsonarray.append(obj);
         try {
           saveJSONArray(jsonarray, cacheFilePath);
         }
@@ -6354,6 +6358,10 @@ public class TWEngine {
   
 
   public void scaleDown(PImage image, int scale) {
+    if (image == null) {
+      console.bugWarn("scaleDown: image is null");
+      return;
+    }
     console.info("scaleDown: "+str(image.width)+","+str(image.height)+",scale"+str(scale));
     if ((image.width > scale || image.height > scale)) {
       // If the image is vertical, resize to 0x512

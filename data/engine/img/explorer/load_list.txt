@@ -1,4 +1,5 @@
 engine/img/explorer/create_shortcut_128.png
+engine/img/explorer/credits_128.png
 engine/img/explorer/cross.png
 engine/img/explorer/doc_128.png
 engine/img/explorer/folder_128.png

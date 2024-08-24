@@ -17,6 +17,7 @@ engine/spritedata/gui/pixelrealm/bomber_1.json
 engine/spritedata/gui/pixelrealm/command_button-phone.json
 engine/spritedata/gui/pixelrealm/creator_1-phone.json
 engine/spritedata/gui/pixelrealm/creator_1.json
+engine/spritedata/gui/pixelrealm/credits.json
 engine/spritedata/gui/pixelrealm/cuber_1.json
 engine/spritedata/gui/pixelrealm/customise-next-phone.json
 engine/spritedata/gui/pixelrealm/customise-next.json

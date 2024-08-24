@@ -1,3 +1,5 @@
+engine/.pixelrealm-turf.json
+engine/acknowledgements.timewayentry
 engine/everything.txt
 engine/info.txt
 engine/font/

@@ -16,6 +16,8 @@
 //import android.net.Uri;
 //import android.content.res.AssetManager;
 //import processing.sound.*;
+//import android.os.Build;
+//import android.provider.Settings;
 
 //public static final int ANDROID_LAUNCH_CAM = 1;
 //public static final int ANDROID_CAMERA_REQUEST = 2;
@@ -114,6 +116,29 @@
 //  if (!hasPermission("android.permission.WRITE_EXTERNAL_STORAGE")) {
 //    requestPermission("android.permission.WRITE_EXTERNAL_STORAGE");
 //  }
+  
+//  timewayEngine.console.log("All files permission: "+hasAllFilesAccessPermission());
+//  requestAllFilesAccessPermission();
+//}
+
+//public boolean hasAllFilesAccessPermission() {
+//    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+//        // Check if the app has the "All Files Access" permission
+//        return Environment.isExternalStorageManager();
+//    }
+//    return true; // Permissions are handled differently on lower API levels
+//}
+
+//public void requestAllFilesAccessPermission() {
+//    Context context = getContext();
+//    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+//        // If permission is not granted, prompt the user to change the setting
+//        if (!hasAllFilesAccessPermission()) {
+//            Intent intent = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
+//            intent.setData(Uri.parse("package:" + context.getPackageName()));
+//            context.startActivity(intent);
+//        }
+//    }
 //}
 
 //public void openTouchKeyboard() {
