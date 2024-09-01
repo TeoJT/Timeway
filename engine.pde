@@ -2680,18 +2680,46 @@ public class TWEngine {
         return byteBuffer.array();
     }
     
+    
+    
+    private void updateMusicCache(final String path) {
+      // When we pass -1 we don't force the score.
+      updateMusicCache(path, -1);
+    }
+    
+    // Basically checks for paths beginning with ?/ which means it's relative path
+    // aka append "/path/to/Timeway/data/" at "?/"
+    private String processPath(String path) {
+      if (path == null) return null;
+      
+      if (path.length() > 1) {
+        if (path.charAt(0) == '?' && path.charAt(1) == '/') {
+          // Return relative path of timeway
+          // Remember apppath includes /data/
+          return APPPATH+path.substring(2);
+        }
+      }
+      return path;
+    }
+    
+    
+    
     // This increases ever-so steadily.
     private float cacheTime = 0.;
     private final float MAX_CACHE_TIME = 60.*60.;
     private AtomicBoolean caching = new AtomicBoolean(false);
     
-    private void updateMusicCache(final String path) {
+    // Pass forceScore = -1 to disable force score.
+    private void updateMusicCache(String ppath, int forceScore) {
+      final String path = ppath.replaceAll("\\\\", "/");
+      
       // FLAC is not supported by soundfile so don't bother caching that.
       if (file.getExt(path).equals("flac")) {
         return;
       }
       
-      if ((CACHE_MUSIC && !isAndroid()) && cacheTime < MAX_CACHE_TIME) {
+      // For now I'm gonna remove the MAX_CACHE_TIME limitation.
+      if ((CACHE_MUSIC && !isAndroid()) /* && cacheTime < MAX_CACHE_TIME */) {
         
         boolean cacheLoaded = true;
         String cacheFilePath = CACHE_PATH+MUSIC_CACHE_FILE;
@@ -2719,37 +2747,36 @@ public class TWEngine {
         
         // If cache hasn't been found then the entry in the cache will automatically not be found lol.
         JSONObject obj;
-        int score = int(MAX_CACHE_TIME-cacheTime);
+        int score = max(int(MAX_CACHE_TIME-cacheTime), 0);
+        // Set the score to our forced score instead if active.
+        if (forceScore != -1) {
+          score = forceScore;
+        }
         
         // Save these for later, we'll need the below down there in the code.
         String tempCacheFilePath = null;
         boolean createNewEntry = true;
         
+        // TODO: this loop is technically inefficient.
         for (int i = 0; i < jsonarray.size(); i++) {
           obj = jsonarray.getJSONObject(i);
-          if (obj.getString("originalPath", "").equals(path)) {
+          if (processPath(obj.getString("originalPath", "")).equals(path)) {
             // Add to the priority, but we don't want it to overflow, so max out if it reaches max integer value.
             int priority = (int)min(obj.getInt("priority", 0)+score, Integer.MAX_VALUE-MAX_CACHE_TIME*2);
             obj.setInt("priority", priority);
             
             // In case we need to re-create the cached file later.
-            tempCacheFilePath = obj.getString("cachePath", "");
+            tempCacheFilePath = processPath(obj.getString("cachePath", ""));
             
             //console.log("Priority: "+str(priority)+" "+str(score));
-            // Write to the file
-            try {
-              saveJSONArray(jsonarray, cacheFilePath);
-            }
-            catch (RuntimeException e) {
-              console.warn(e.getMessage());
-              console.warn("Failed to write music cache file:");
-            }
             
             // We've of course found an existing entry so no need to create a new one.
             // Tell that to the code below.
             createNewEntry = false;
           }
         }
+        
+        
         
         
         
@@ -2763,6 +2790,7 @@ public class TWEngine {
         // Just tell it that the original path is the cached path.
         if (ext.equals("wav")) {
           cachedFileName = path;
+          //obj.setString("cachePath", cachedFileName.replaceAll("\\\\", "/"));
         }
         // Otherwise, begin to load the compressed file, decompress it, and save as wav in cache folder.
         else {
@@ -2775,7 +2803,7 @@ public class TWEngine {
             if (tempCacheFilePath != null && tempCacheFilePath.length() > 0) {
               temp = tempCacheFilePath;
               // Only bother creating the new file if it doesn't exist
-              if ((new File(tempCacheFilePath)).exists()) return;  // Nothing more to do here.
+              if (file.exists(tempCacheFilePath)) return;  // Nothing more to do here.
             }
             else console.bugWarn("updateMusicCache: tempCacheFilePath read a non-existing json string or is null");
           }
@@ -2783,6 +2811,7 @@ public class TWEngine {
           else {
             temp = generateCachePath("wav");
           }
+          
           final String cachedFileNameFinal = temp;
           cachedFileName = cachedFileNameFinal;
           
@@ -2802,17 +2831,17 @@ public class TWEngine {
                 }
                 
                 try {
-                  println("Caching "+path+"...");
+                  PApplet.println("Caching "+path+"...");
                   SoundFile s = new SoundFile(app, path);
                   int samplerate = s.sampleRate();
                   // Bug fix: mp3 sampleRate() doesn't seem to be very accurate
                   // for mp3 files
                   // TODO: Read mp3/ogg header data and determine samplerate there.
                   if (ext.equals("mp3")) {
-                    samplerate = 48000;
+                    samplerate = 44100;
                   }
                   saveAsWav(s, samplerate, cachedFileNameFinal);
-                  println("DONE SOUND CACHE "+cachedFileNameFinal);
+                  PApplet.println("DONE SOUND CACHE "+cachedFileNameFinal);
                   
                 }
                 catch (RuntimeException e) {
@@ -2828,28 +2857,53 @@ public class TWEngine {
         }
         
         // Nothing more to do.
-        if (!createNewEntry) return;
+        if (!createNewEntry) {
+          // Write to the file
+          try {
+            app.saveJSONArray(jsonarray, cacheFilePath);
+          }
+          catch (RuntimeException e) {
+            console.warn(e.getMessage());
+            console.warn("Failed to write music cache file:");
+          }
+          return;
+        }
+        
+        cachedFileName = cachedFileName.replaceAll("\\\\", "/");
+        
+        // We want our cached paths to be relative
+        if (cachedFileName.contains(APPPATH)) {
+          String newTemp = "?/"+cachedFileName.substring(APPPATH.length());
+          cachedFileName = newTemp;
+        }
+        String newPath = path.replaceAll("\\\\", "/");        
+        if (newPath.contains(APPPATH)) {
+          String newTemp = "?/"+path.substring(APPPATH.length());
+          newPath = newTemp;
+        }
         
         // If we get to this point, entry doesn't exist in the cache file/cache file doesn't exist.
         obj = new JSONObject();
         obj.setString("cachePath", cachedFileName);
-        obj.setString("originalPath", path);
+        obj.setString("originalPath", newPath);
         obj.setInt("priority", score);
+        
+        //console.log("Cache "+path);
         
         // Because we're still loading up the sound file in the background, best we can do here is
         // make an estimate on how large the file will be.
         // Here's the rules:
         // wav: filesize*2
-        // mp3: filesize*20
-        // ogg: filesize*20
+        // mp3: filesize*10
+        // ogg: filesize*10
         // flac: filesize*(10/7)
         // anything else: filesize*2
         int size = 0;
         int filesize = (int)(new File(path)).length();
         if (file.getExt(path).equals("wav")) size = filesize*2;
-        else if (file.getExt(path).equals("mp3")) size = filesize*20;
-        else if (file.getExt(path).equals("ogg")) size = filesize*20;
-        else if (file.getExt(path).equals("flac")) size = filesize*(10/7);
+        else if (file.getExt(path).equals("mp3")) size = filesize*10;
+        else if (file.getExt(path).equals("ogg")) size = filesize*10;
+        else if (file.getExt(path).equals("flac")) size = filesize*(10/7)/2;
         else size = filesize*2;
         obj.setInt("sizekb", size/1024);
         jsonarray.append(obj);

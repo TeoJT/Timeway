@@ -262,6 +262,9 @@ public class AndroidMedia {
   public void stop() {
   }
   
+  public void pause() { 
+  }
+  
   @SuppressWarnings("unused")
   public void volume(float vol) {
   }

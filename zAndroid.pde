@@ -359,6 +359,10 @@
 //      mediaPlayer.setVolume(vol, vol);
 //    }
 //  }
+
+
+  //public void pause() { 
+  //}
   
 //  public boolean isPlaying() {
 //    if (mediaPlayer != null) {
