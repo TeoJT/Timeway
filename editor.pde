@@ -31,7 +31,7 @@ class PCapture extends EditorCapture {
     ready.set(false);
     error.set(false);
     engine = e;
-    currCapture = engine.display.systemImages.get("white").pimage;
+    currCapture = engine.display.errorImg;
   }
   
   
@@ -129,7 +129,7 @@ class PCapture extends EditorCapture {
   public PImage updateImage() {
     if (capture == null) {
       engine.console.bugWarnOnce("No capture available.");
-      return engine.display.systemImages.get("white").pimage;
+      return engine.display.errorImg;
     }
     if (capture.available()) {
       capture.read();

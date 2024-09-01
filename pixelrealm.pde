@@ -436,7 +436,7 @@ public class PixelRealm extends Screen {
         return aniImg[index%aniImg.length].pimage;
       }
       else {
-        return display.systemImages.get("white").pimage;
+        return display.errorImg;
       }
     }
     
@@ -2062,7 +2062,7 @@ public class PixelRealm extends Screen {
               
               // TODO: idk error check here
               else {
-                PImage im = display.systemImages.get("white").pimage;
+                PImage im = display.errorImg;
                 // TODO: this is NOT thread-safe here!
                 if (ext.equals(engine.ENTRY_EXTENSION)) {
                   im = engine.tryLoadImageCache(path, new Runnable() {
@@ -2632,7 +2632,7 @@ public class PixelRealm extends Screen {
       
       private void setupSelf()
       {
-        this.img = new RealmTexture(display.systemImages.get("white").pimage); 
+        this.img = new RealmTexture(display.errorImg); 
         
         requestRealmSky(dir);
         
@@ -2661,7 +2661,7 @@ public class PixelRealm extends Screen {
           // No img sky found, get default sky
           //this.img = new RealmTexture(REALM_SKY_DEFAULT_LEGACY);
           this.img = new RealmTexture();
-          this.img.setLarge(display.systemImages.get("white").pimage);
+          this.img.setLarge(display.errorImg);
         }
       }
       
@@ -4672,7 +4672,7 @@ public class PixelRealm extends Screen {
           // Render cursor
           // Texture doesn't work let's just switch shaders who cares.
           // Let's destroy good performance here.
-          //scene.texture(display.systemImages.get("white").pimage);
+          //scene.texture(display.errorImg);
           scene.resetShader();
           scene.stroke(0);
           scene.strokeWeight(1);
@@ -6012,7 +6012,7 @@ public class PixelRealm extends Screen {
     // Ready the individual entries
     if (entriesToLoad.size() > 0) {
       PixelRealmState.ImageFileObject p = null;
-      PImage result = display.systemImages.get("white").pimage;
+      PImage result = display.errorImg;
       while (entriesToLoad.size() > 0 && result != null) {
         // Until we get an entry that actually needs caching so we don't wait forever.
         // Run it so that we trigger the "once per frame" entries loading.

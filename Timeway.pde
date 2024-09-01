@@ -79,8 +79,8 @@ void settings() {
     // TODO... we're disabling graphics acceleration?!
     if (isLinux())
       System.setProperty("jogl.disable.openglcore", "true");
-    //size(displayWidth, displayHeight, P2D);
-    size(900, 1800, P2D);
+    size(displayWidth, displayHeight, P2D);
+    //size(900, 1800, P2D);
     //size(750, 1200, P2D);
     smooth(1);
     

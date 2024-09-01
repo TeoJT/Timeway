@@ -7170,7 +7170,7 @@ public class TWEngine {
     public PImage getImage() {
       if (!isImage()) {
         console.bugWarn("getImage: clipboard doesn't contain an image, make sure to check first with isImage()!");
-        return display.systemImages.get("white").pimage;
+        return display.errorImg;
       }
       
       PImage ret = (PImage)cachedClipboardObject;

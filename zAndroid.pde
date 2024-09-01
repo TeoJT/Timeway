@@ -73,12 +73,12 @@
 //}
 
 //public Object getFromClipboardImageFlavour() {
-//  return timewayEngine.display.systemImages.get("white").pimage;
+//  return timewayEngine.display.errorImg;
 //}
 
 //public PImage getPImageFromClipboard()
 //{
-//  return timewayEngine.display.systemImages.get("white").pimage;
+//  return timewayEngine.display.errorImg;
 //}
 
 //@SuppressWarnings("unused")
@@ -163,7 +163,7 @@
 
 //@SuppressWarnings("unused")
 //public PImage getDCaptureImage(DSCapture capture) {
-//  return timewayEngine.display.systemImages.get("white").pimage;
+//  return timewayEngine.display.errorImg;
 //}
 
 //@SuppressWarnings("unused")
