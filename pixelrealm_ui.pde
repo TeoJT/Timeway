@@ -1,6 +1,6 @@
 
 // Wanna find a name of a realm template without searching through tons of folders?
-// grep -r "[realm name]" $(find ./ -type f -name "realmtemplate")
+// grep -ir "[realm name]" $(find ./ -type f -name "realmtemplate")
 
 
 public class PixelRealmWithUI extends PixelRealm {

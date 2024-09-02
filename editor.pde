@@ -1730,7 +1730,7 @@ public class Editor extends Screen {
     }
     
     public void endScreenAnimation() {
-      free();
+      //free();
       engine.allowShowCommandPrompt = true;
     }
     
@@ -1804,7 +1804,15 @@ public class ReadOnlyEditor extends Editor {
     ui.useSpriteSystem(readonlyEditorUI);
     
     if (ui.buttonVary("back-button", "back_arrow_128", "Back")) {
-      previousScreen();
+      // This only exists because we can only have one prev screen at a time
+      // and I swear to god I hate this and this is gonna get changed sooner or later.
+      if (!(engine.prevScreen instanceof PixelRealmWithUI)) {
+        sound.stopMusic();
+        requestScreen(new Startup(engine));
+      }
+      else {
+        previousScreen();
+      }
     }
     
     readonlyEditorUI.updateSpriteSystem();
@@ -1825,14 +1833,26 @@ public class ReadOnlyEditor extends Editor {
 
 public class CreditsScreen extends ReadOnlyEditor {
   public final static String CREDITS_PATH        = "engine/acknowledgements.timewayentry";
+  public final static String CREDITS_PATH_PHONE  = "engine/acknowledgements_phone.timewayentry";
   
   public CreditsScreen(TWEngine engine) {
-    super(engine, engine.APPPATH+CREDITS_PATH);
+    // Kinda overcoming an unnecessary java limitation where super must be the first statement,
+    // we choose the phone version (for condensed screens) or the normal version.
+    super(engine, engine.display.phoneMode ? engine.APPPATH+CREDITS_PATH_PHONE : engine.APPPATH+CREDITS_PATH);
   }
   
   public void content() {
     input.scrollOffset -= display.getDelta()*0.7;
     power.setAwake();
     super.content();
+  }
+  
+  protected boolean customCommands(String command) {
+    if (command.equals("/edit") || command.equals("/editcredits")) {
+      console.log("Editing acknowledgements.");
+      requestScreen(new Editor(engine, display.phoneMode ? engine.APPPATH+CREDITS_PATH_PHONE : engine.APPPATH+CREDITS_PATH));
+      return true;
+    }
+    else return false;
   }
 }

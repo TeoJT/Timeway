@@ -17,6 +17,7 @@ engine/spritedata/gui/pixelrealm/bomber_1.json
 engine/spritedata/gui/pixelrealm/command_button-phone.json
 engine/spritedata/gui/pixelrealm/creator_1-phone.json
 engine/spritedata/gui/pixelrealm/creator_1.json
+engine/spritedata/gui/pixelrealm/credits-phone.json
 engine/spritedata/gui/pixelrealm/credits.json
 engine/spritedata/gui/pixelrealm/cuber_1.json
 engine/spritedata/gui/pixelrealm/customise-next-phone.json
@@ -32,6 +33,7 @@ engine/spritedata/gui/pixelrealm/menu_no-phone.json
 engine/spritedata/gui/pixelrealm/menu_no.json
 engine/spritedata/gui/pixelrealm/menu_yes-phone.json
 engine/spritedata/gui/pixelrealm/menu_yes.json
+engine/spritedata/gui/pixelrealm/morpher_1-phone.json
 engine/spritedata/gui/pixelrealm/morpher_1.json
 engine/spritedata/gui/pixelrealm/move_rename.json
 engine/spritedata/gui/pixelrealm/newentry-phone.json

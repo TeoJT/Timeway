@@ -7,7 +7,6 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.io.FileOutputStream;
 import org.freedesktop.gstreamer.*;
-import java.util.TreeSet;
 import java.io.InputStream;
 import java.io.FileOutputStream;
 import java.net.URL;
@@ -46,7 +45,7 @@ import java.util.Arrays;   // Used by the stack class at the bottom
 public class TWEngine {
   //*****************CONSTANTS SETTINGS**************************
   // Info and versioning
-  public static final String APP_NAME        = "Sketchio";
+  public static final String APP_NAME        = "Timeway";
   public static final String AUTHOR      = "Teo Taylor";
   public static final String VERSION     = "0.1.3";
   public static final String VERSION_DESCRIPTION = 
@@ -484,7 +483,7 @@ public class TWEngine {
     private boolean forcePowerModeEnabled = false;
     private PowerMode forcedPowerMode = PowerMode.HIGH;
     private PowerMode powerModeBefore = PowerMode.NORMAL;
-    public boolean allowMinimizedMode = false;
+    public boolean allowMinimizedMode = true;
   
     // The score that seperates the stable fps from the unstable fps.
     // If you've got half a brain, it would make the most sense to keep it at 0.
@@ -2359,7 +2358,8 @@ public class TWEngine {
     public final String MUSIC_CACHE_FILE = "music_cache.json";
     public final int MAX_MUSIC_CACHE_SIZE_KB = 1024*256;  // 256 MB
     public final String[] FORCE_CACHE_MUSIC = {
-      "engine/music/default.wav",
+      "engine/music/pixelrealm_default_bgm.wav",
+      "engine/music/pixelrealm_default_bgm_legacy.wav"
     };
     // For when porting to other platforms which don't support gstreamer (*ahem* android *ahem*) 
     public boolean DISABLE_GSTREAMER = false;
@@ -2707,14 +2707,33 @@ public class TWEngine {
     // This increases ever-so steadily.
     private float cacheTime = 0.;
     private final float MAX_CACHE_TIME = 60.*60.;
+    private final int MAX_CACHE_SIZE = 1024*1024*50;   // Let's go with 50mb ram usage.
     private AtomicBoolean caching = new AtomicBoolean(false);
     
     // Pass forceScore = -1 to disable force score.
     private void updateMusicCache(String ppath, int forceScore) {
       final String path = ppath.replaceAll("\\\\", "/");
       
+        // Bug fix to avoid outofmemoryexception, find the size now, not later.
+        // Because we're still loading up the sound file in the background, best we can do here is
+        // make an estimate on how large the file will be.
+        // Here's the rules:
+        // wav: filesize*2
+        // mp3: filesize*10
+        // ogg: filesize*10
+        // flac: filesize*(10/7)
+        // anything else: filesize*2
+        int size = 0;
+        int filesize = (int)(new File(path)).length();
+        if (file.getExt(path).equals("wav")) size = filesize*2;
+        else if (file.getExt(path).equals("mp3")) size = filesize*10;
+        else if (file.getExt(path).equals("ogg")) size = filesize*10;
+        else if (file.getExt(path).equals("flac")) size = filesize*(10/7)/2;
+        else size = filesize*2;
+      
       // FLAC is not supported by soundfile so don't bother caching that.
-      if (file.getExt(path).equals("flac")) {
+      //if (size > MAX_CACHE_SIZE) console.log("SKIP "+size+" "+MAX_CACHE_SIZE);
+      if (file.getExt(path).equals("flac") || size > MAX_CACHE_SIZE) {
         return;
       }
       
@@ -2887,24 +2906,6 @@ public class TWEngine {
         obj.setString("cachePath", cachedFileName);
         obj.setString("originalPath", newPath);
         obj.setInt("priority", score);
-        
-        //console.log("Cache "+path);
-        
-        // Because we're still loading up the sound file in the background, best we can do here is
-        // make an estimate on how large the file will be.
-        // Here's the rules:
-        // wav: filesize*2
-        // mp3: filesize*10
-        // ogg: filesize*10
-        // flac: filesize*(10/7)
-        // anything else: filesize*2
-        int size = 0;
-        int filesize = (int)(new File(path)).length();
-        if (file.getExt(path).equals("wav")) size = filesize*2;
-        else if (file.getExt(path).equals("mp3")) size = filesize*10;
-        else if (file.getExt(path).equals("ogg")) size = filesize*10;
-        else if (file.getExt(path).equals("flac")) size = filesize*(10/7)/2;
-        else size = filesize*2;
         obj.setInt("sizekb", size/1024);
         jsonarray.append(obj);
         try {
@@ -2914,6 +2915,9 @@ public class TWEngine {
           console.warn(e.getMessage());
           console.warn("Failed to write music cache file:");
         }
+        
+        //console.log("Cache "+path);
+        
       }
     }
     
@@ -6342,6 +6346,7 @@ public class TWEngine {
   // Returns image if an image is found, returns null if cache for that image doesn't exist.
   public PImage tryLoadImageCache(String originalPath, Runnable readOriginalOperation) {
     console.info("tryLoadImageCache: "+originalPath);
+    // TODO: Worryingly bad threading issues here.
     openCacheInfo();
 
     JSONObject cachedItem = cacheInfoJSON.getJSONObject(originalPath);

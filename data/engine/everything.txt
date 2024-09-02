@@ -1,5 +1,6 @@
 engine/.pixelrealm-turf.json
 engine/acknowledgements.timewayentry
+engine/acknowledgements_phone.timewayentry
 engine/everything.txt
 engine/info.txt
 engine/font/
@@ -565,7 +566,7 @@ engine/realmtemplates/025/pixelrealm-terrain_object-2.png
 engine/realmtemplates/025/pixelrealm-terrain_object-3.png
 engine/realmtemplates/025/pixelrealm-turf.json
 engine/realmtemplates/025/realmtemplate.json
-engine/realmtemplates/026/pixelrealm-bgm.mp3
+engine/realmtemplates/026/pixelrealm-bgm.ogg
 engine/realmtemplates/026/pixelrealm-grass.png
 engine/realmtemplates/026/pixelrealm-sky.png
 engine/realmtemplates/026/pixelrealm-terrain_object-1.png
@@ -1009,7 +1010,7 @@ engine/realmtemplates/084/pixelrealm-sky.png
 engine/realmtemplates/084/pixelrealm-terrain_object-1.png
 engine/realmtemplates/084/pixelrealm-turf.json
 engine/realmtemplates/084/realmtemplate.json
-engine/realmtemplates/085/pixelrealm-bgm.mp3
+engine/realmtemplates/085/pixelrealm-bgm.ogg
 engine/realmtemplates/085/pixelrealm-sky.png
 engine/realmtemplates/085/pixelrealm-terrain_object-1.png
 engine/realmtemplates/085/pixelrealm-turf.json
@@ -1628,7 +1629,7 @@ engine/realmtemplates/161/pixelrealm-sky.png
 engine/realmtemplates/161/pixelrealm-terrain_object-1.png
 engine/realmtemplates/161/pixelrealm-turf.json
 engine/realmtemplates/161/realmtemplate.json
-engine/realmtemplates/162/pixelrealm-bgm.mp3
+engine/realmtemplates/162/pixelrealm-bgm.ogg
 engine/realmtemplates/162/pixelrealm-grass.png
 engine/realmtemplates/162/pixelrealm-sky.png
 engine/realmtemplates/162/pixelrealm-turf.json
@@ -2049,6 +2050,7 @@ engine/spritedata/gui/pixelrealm/bomber_1.json
 engine/spritedata/gui/pixelrealm/command_button-phone.json
 engine/spritedata/gui/pixelrealm/creator_1-phone.json
 engine/spritedata/gui/pixelrealm/creator_1.json
+engine/spritedata/gui/pixelrealm/credits-phone.json
 engine/spritedata/gui/pixelrealm/credits.json
 engine/spritedata/gui/pixelrealm/cuber_1.json
 engine/spritedata/gui/pixelrealm/customise-next-phone.json
@@ -2064,6 +2066,7 @@ engine/spritedata/gui/pixelrealm/menu_no-phone.json
 engine/spritedata/gui/pixelrealm/menu_no.json
 engine/spritedata/gui/pixelrealm/menu_yes-phone.json
 engine/spritedata/gui/pixelrealm/menu_yes.json
+engine/spritedata/gui/pixelrealm/morpher_1-phone.json
 engine/spritedata/gui/pixelrealm/morpher_1.json
 engine/spritedata/gui/pixelrealm/move_rename.json
 engine/spritedata/gui/pixelrealm/newentry-phone.json
