@@ -860,8 +860,7 @@ public class Editor extends Screen {
     //*****************************************************************
     public void readEntryJSON() {
         // check if file exists
-        File f = new File(entryPath);
-        if (!f.exists() || f.length() <= 2) {
+        if (!file.exists(entryPath) || file.fileSize(entryPath) <= 2) {
           // If it doesn't exist or is blank, create a new placeable for the name of the entry
             entryNameText = new TextPlaceable();
             entryNameText.sprite.move(20., UPPER_BAR_DROP_WEIGHT + 80);
@@ -1567,9 +1566,11 @@ public class Editor extends Screen {
         if (editingPlaceable == null && !ui.miniMenuShown()) {
           // Check back to see if something's been clicked.
           if (clickedThing) {
-            insertText("", engine.mouseX(), engine.mouseY()-20);
-            // And in android
-            openTouchKeyboard();
+            if (!readOnly) {
+              insertText("", engine.mouseX(), engine.mouseY()-20);
+              // And in android
+              openTouchKeyboard();
+            }
           }
           else {
             closeTouchKeyboard();

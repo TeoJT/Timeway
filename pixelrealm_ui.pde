@@ -379,9 +379,20 @@ public class PixelRealmWithUI extends PixelRealm {
       }
 
       // --- Pocket menu ---
-      if (ui.buttonVary("pocket_menu", "new_entry_128", "Pockets")) {
-        sound.playSound("menu_select");
-        menu = new PocketMenu();
+      //if (ui.buttonVary("pocket_menu", "new_entry_128", "Pockets")) {
+      //  sound.playSound("menu_select");
+      //  menu = new PocketMenu();
+      //}
+      
+      // Lighting menu
+      if (ui.buttonVary("lighting_button", "new_entry_128", "Lighting")) {
+        if (currRealm.versionCompatibility == 1) {
+          menu = new DialogMenu("Can't use morpher", "back-newrealm", "You can't customise lighting in older 1.x versions. Please upgrade realm via the terraformer.");
+        }
+        else {
+          sound.playSound("menu_select");
+          menu = new CustomiseLightingMenu();
+        }
       }
       
       // --- Command menu (for phone) ---
@@ -869,11 +880,64 @@ public class PixelRealmWithUI extends PixelRealm {
 
 
 
-  class CustomiseTerrainMenu extends TitleMenu {
+
+
+
+
+
+
+  class CustomNodeMenu extends TitleMenu {
+    
+    private boolean mouseDown = true;
+    
+    
+    public CustomNodeMenu(String title, String spriteName) {
+      super(title, spriteName);
+    }
+    
+    
+    protected void runCustomNodes(ArrayList<PixelRealmState.CustomNode> customNodes) {
+      
+
+      // Display all parameters for the specified generator that is selected.
+      float x = cache_backX+50;
+      float y = cache_backY+50+95;
+      nodeSound = 0;
+
+      // True upon the menu appearing, and stays true as long as the user holds down the mouse.
+      // Once the user lets go, mouseDown is permantally set to false.
+      // This is used to avoid a slider from being unintentionally clicked when the mouse is down
+      // from the previous menu.
+      mouseDown &= input.primaryDown;
+
+      if (!mouseDown) {
+        for (PixelRealmState.CustomNode n : customNodes) {
+          n.x = x;
+          n.wi = cache_backWi-100.;
+
+          n.display(y);
+
+          y += n.getHeight();
+        }
+      }
+
+      if (nodeSound != 0)
+        sound.loopSound("terraform_"+str(nodeSound));
+      else {
+        sound.pauseSound("terraform_1");
+        sound.pauseSound("terraform_2");
+        sound.pauseSound("terraform_3");
+        sound.pauseSound("terraform_4");
+      }
+    }
+  }
+
+
+
+  class CustomiseTerrainMenu extends CustomNodeMenu {
 
     private int generatorIndex = 1;
 
-    private boolean mouseDown = true;
 
     public CustomiseTerrainMenu() {
       super("", "back-customise");
@@ -935,38 +999,10 @@ public class PixelRealmWithUI extends PixelRealm {
         menu = null;
       }
 
-      // Display all parameters for the specified generator that is selected.
-      float x = cache_backX+50;
-      float y = cache_backY+50+95;
-      nodeSound = 0;
-
-      // True upon the menu appearing, and stays true as long as the user holds down the mouse.
-      // Once the user lets go, mouseDown is permantally set to false.
-      // This is used to avoid a slider from being unintentionally clicked when the mouse is down
-      // from the previous menu.
-      mouseDown &= input.primaryDown;
-
-      if (!mouseDown) {
-        for (PixelRealmState.CustomNode n : currRealm.terrain.customNodes) {
-          n.x = x;
-          n.wi = cache_backWi-100.;
-
-          n.display(y);
-
-          y += n.getHeight();
-        }
-      }
-
-      if (nodeSound != 0)
-        sound.loopSound("terraform_"+str(nodeSound));
-      else {
-        sound.pauseSound("terraform_1");
-        sound.pauseSound("terraform_2");
-        sound.pauseSound("terraform_3");
-        sound.pauseSound("terraform_4");
-      }
+      runCustomNodes(currRealm.terrain.customNodes);
 
       currRealm.terrain.updateAttribs();
+      modifyTerrain = true;
     }
 
     public void close() {
@@ -974,6 +1010,39 @@ public class PixelRealmWithUI extends PixelRealm {
       //tilesCache.clear();
       currRealm.regenerateTrees();
       //chunks = new HashMap<Integer, TerrainChunkV2>();
+    }
+  }
+  
+  
+  
+  class CustomiseLightingMenu extends CustomNodeMenu {
+    
+    public CustomiseLightingMenu() {
+      super("", "back-lighting");
+    }
+    
+    public void display() {
+      setTitle("-- Lighting --");
+      super.display();
+
+      if (ui.buttonVary("lighting-reset", "cross_128", "Reset")) {
+        currRealm.ambientSlider.valFloat = 1f;
+        currRealm.reffectSlider.valFloat = 0f;
+        currRealm.geffectSlider.valFloat = 0f;
+        currRealm.beffectSlider.valFloat = 0f;
+        currRealm.lightDirectionSlider.valInt = 1;
+        currRealm.lightHeightSlider.valInt = 2;
+      }
+
+
+      if (ui.buttonVary("lighting-ok", "tick_128", "Done")) {
+        sound.playSound("menu_select");
+        close();
+        menuShown = false;
+        menu = null;
+      }
+
+      runCustomNodes(currRealm.lightingUINodes);
     }
   }
 
@@ -1052,8 +1121,6 @@ public class PixelRealmWithUI extends PixelRealm {
     if (menuShown && menu != null) {
       ui.useSpriteSystem(gui);
       menu.display();
-
-      modifyTerrain = (menu instanceof CustomiseTerrainMenu);
     }
   }
 

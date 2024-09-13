@@ -1272,6 +1272,7 @@ public class TWEngine {
       );
     }
     
+    
     public void reloadShaders() {
       HashMap<String, PShaderEntry> sh = new HashMap<String, PShaderEntry>(shaders);
       
@@ -1451,7 +1452,14 @@ public class TWEngine {
       );
     }
     
-    public PShader getShaderWithParams(String shaderName, Object... uniforms) {
+    public void shaderUniformList(PGraphics framebuffer, String shaderName, Object[] uniforms) {
+      initShader(shaderName);
+      framebuffer.shader(
+        getShaderWithParams(shaderName, uniforms)
+      );
+    }
+    
+    public PShader getShaderWithParams(String shaderName, Object[] uniforms) {
       PShaderEntry shentry = shaders.get(shaderName);
       if (shentry == null) {
         console.warn("Shader "+shaderName+" not found!");
@@ -3146,8 +3154,6 @@ public class TWEngine {
         reloadMusicPath = path;
       }
       
-      
-      
       // We don't need to boot up gstreamer in android cus gstreamer doesn't exist in android.
       if (startupGStreamer && !isAndroid()) {
         //console.log("startup gstreamer");
@@ -3291,8 +3297,124 @@ public class TWEngine {
       return 0.0;
     }
     
+    
+    public int beat = 0;
+    public int step = 0;
+    
+    private float bpm = 120f;
+    private float musicTime = 0f;
+    private boolean customTime = false;
+    
+    public void setCustomMusicTime(float t) {
+      customTime = true;
+      musicTime = t;
+    }
+    
+    public void setMusicTimeAuto() {
+      customTime = true;
+    }
+    
+    public float getTime() {
+      if (customTime) {
+        return musicTime;
+      }
+      else {
+        if (streamerMusic != null) {
+          // TODO: getting time is slow for some reason.
+          return streamerMusic.time();
+        }
+        return 0f;
+      }
+    }
+    
+    public void setBPM(float bpm) {
+      this.bpm = bpm;
+    }
+    
+    public float beatToTime(int beat) {
+      float beatspersecond = 60f/bpm;
+      return beatspersecond*((float)beat);
+    }
+    
+    public float beatToTime(int beat, int step) {
+      float beatspersecond = 60f/bpm;
+      float stepsspersecond = beatspersecond/4f;
+      return beatspersecond*((float)beat)+stepsspersecond*((float)step);
+    }
+    
+    public boolean beatBetween(int start, int end) {
+      return false;
+    }
+    
+    
+    public float beatSaw(int beatoffset, int stepoffset, int everyxbeat) {
+      if (everyxbeat == 0) everyxbeat = 1;
+      float t = (getTime())+beatToTime(beatoffset, stepoffset);
+    
+      float beatspersecond = 60f/bpm;
+      float beatfloat = (t/beatspersecond);
+      int beat = (int)beatfloat;
+    
+      if (beat % everyxbeat == 0) return 1f-(beatfloat-(float)beat);
+      else return 0f;
+    }
+    
+    public float beatSaw(int beatoffset, int everyxbeat) {
+      return beatSaw(beatoffset, 0, everyxbeat);
+    }
+    
+    public float beatSaw(int beatoffset) {
+      return beatSaw(beatoffset, 0, 1);
+    }
+    
+    public float beatSawOffbeat(int beatoffset, int everyxbeat) {
+      return beatSaw(beatoffset, 2, everyxbeat);
+    }
+    
+    public float beatSaw() {
+      return beatSaw(0, 0, 1);
+    }
+    
+    public float stepSaw(int offset) {
+      float t = (getTime())+beatToTime(0, offset);
+    
+      float beatspersecond = 60f/bpm;
+      float stepfloat = (t/(beatspersecond/4f));
+    
+      return 1f-(stepfloat-(float)((int)stepfloat));
+    }
+    
+    
+    private void processBeat() {
+      float t = 0f;
+      if (customTime) {
+        t = musicTime;
+      }
+      else {
+        if (streamerMusic != null) {
+          // TODO: getting time is slow for some reason.
+          t = streamerMusic.time();
+        }
+        musicTime = t;
+      }
+      if (bpm == 0f) return;
+      
+      float beatspersecond = 60f/bpm;
+
+      float beatfloat = (t/beatspersecond);
+      float stepfloat = (t/(beatspersecond/4f));
+    
+      beat = (int)beatfloat;
+      step = ((int)stepfloat)%4;
+      
+      if (!customTime) {
+        
+      }
+    }
   
     public void processSound() {
+      processBeat();
+      
       // Once gstreamer has loaded up, begin playing the music we actually want to play.
       if (reloadMusic && !loadingMusic()) {
         if (CACHE_MUSIC && !isAndroid()) {
@@ -3837,6 +3959,13 @@ public class TWEngine {
     public boolean exists(String path) {
       boolean exists = (new File(path)).exists();
       return isAndroid() ? exists || everything.contains(path) : exists;
+    }
+    
+    // TODO: For now, only ever used in editor, but eventually will need to be changed to work properly in
+    // android mode.
+    public int fileSize(String path) {
+      File f = new File(path);
+      return isAndroid() ? 10000 : (int)f.length();
     }
     
     public boolean isImage(String path) {
@@ -7332,7 +7461,6 @@ public class TWEngine {
 
     power.updatePowerMode();
 
-    sound.processSound();
     processCaching();
 
     if ((int)app.frameCount % 2000 == 0) {
@@ -7353,6 +7481,8 @@ public class TWEngine {
 
     // Show the current GUI.
     display.displayScreens();
+    
+    sound.processSound();
     
     ui.displayMiniMenu();
     

@@ -956,11 +956,25 @@ public class PixelRealm extends Screen {
     
     protected LinkedList<PRObject> pocketObjects = new LinkedList<PRObject>();
     
+    public ArrayList<CustomNode> lightingUINodes = new ArrayList<CustomNode>();
+    public CustomSlider ambientSlider;
+    public CustomSlider reffectSlider;
+    public CustomSlider geffectSlider;
+    public CustomSlider beffectSlider;
+    public CustomSliderInt lightDirectionSlider;
+    public CustomSliderInt lightHeightSlider;
+    
+    final int[] lightDirectionsX = { -2, -1, 0, 1, 2, 2, 2, 2, 2, 1, 0, -1, -2, -2, -2, -2 };
+    final int[] lightDirectionsZ = { -2, -2, -2, -2, -2, -1, 0, 1, 2, 2, 2, 2, 2, 1, 0, -1 };
+    
+    
     
     // --- Constructor ---
     public PixelRealmState(String dir) {
       this.stateDirectory = file.directorify(dir);
       this.stateFilename  = file.getFilename(stateDirectory);
+      
+      populateLightingUINodes();
       
       loadMinimal = false;
       
@@ -1049,7 +1063,7 @@ public class PixelRealm extends Screen {
       protected void getSliderVal() {
         if (inBox()) {
           app.stroke(160);
-          if (mousePressed) {
+          if (input.primaryDown) {
             valFloat = min+((engine.mouseX()-x-CONTROL_X)/(wi-CONTROL_X))*(max-min);
             valFloat = min(max(valFloat, min), max);
             nodeSound = this.sound;
@@ -1134,6 +1148,16 @@ public class PixelRealm extends Screen {
       }
     }
     
+    
+    private void populateLightingUINodes() {
+        lightingUINodes.add(ambientSlider = new CustomSlider("Ambient", 0f, 1f, 1f, 4));
+        lightingUINodes.add(reffectSlider = new CustomSlider("R", -5f, 5f, 0f, 1));
+        lightingUINodes.add(geffectSlider = new CustomSlider("G", -5f, 5f, 0f, 1));
+        lightingUINodes.add(beffectSlider = new CustomSlider("B", -5f, 5f, 0f, 1));
+        lightingUINodes.add(lightDirectionSlider = new CustomSliderInt("Direction", 0, 16, 0, 4));
+        lightingUINodes.add(lightHeightSlider = new CustomSliderInt("Height", -4, 16, 1, 4));
+        
+    }
     
     
     
@@ -3838,6 +3862,14 @@ public class PixelRealm extends Screen {
           o.load(emptyJSON);
       }
       
+      // Load lighting
+      ambientSlider.valFloat = jsonFile.getFloat("light_ambient", 1f);
+      reffectSlider.valFloat = jsonFile.getFloat("light_reffect", 0f);
+      geffectSlider.valFloat = jsonFile.getFloat("light_geffect", 0f);
+      beffectSlider.valFloat = jsonFile.getFloat("light_beffect", 0f);
+      lightDirectionSlider.valInt = jsonFile.getInt("light_direction", 0);
+      lightHeightSlider.valInt = jsonFile.getInt("light_height", 2);
+      
       // Bye bye Evolving Gateway coins :(
       coins = false;
     }
@@ -3940,6 +3972,14 @@ public class PixelRealm extends Screen {
         chunksArray.setJSONObject(i++, chunk.save());
       }
       jsonFile.setJSONArray("chunks", chunksArray);
+      
+      // Save lighting
+      jsonFile.setFloat("light_ambient", ambientSlider.valFloat);
+      jsonFile.setFloat("light_reffect", reffectSlider.valFloat);
+      jsonFile.setFloat("light_geffect", geffectSlider.valFloat);
+      jsonFile.setFloat("light_beffect", beffectSlider.valFloat);
+      jsonFile.setInt("light_direction", lightDirectionSlider.valInt);
+      jsonFile.setInt("light_height", lightHeightSlider.valInt);
       
       // And we're done already!
       //console.log("Saved realm");
@@ -5009,7 +5049,31 @@ public class PixelRealm extends Screen {
     private void useFadeShader() {
       if (!usingFadeShader) {
         display.recordRendererTime();
-        display.shader(scene, "unlit_fog", "fadeStart", terrain.BEGIN_FADE, "fadeLength", terrain.FADE_LENGTH);
+        //display.shader(scene, "unlit_fog", "fadeStart", terrain.BEGIN_FADE, "fadeLength", terrain.FADE_LENGTH);
+        
+        //float x = sin(lightDirectionSlider.valFloat)*2.2f;
+        //float y = -lightHeightSlider.valFloat;
+        //float z = cos(lightDirectionSlider.valFloat)*2.2f;
+        float x = (float)lightDirectionsX[lightDirectionSlider.valInt%16];
+        float y = -((float)lightHeightSlider.valInt)*0.25f;
+        float z = (float)lightDirectionsZ[lightDirectionSlider.valInt%16];
+        float l = sqrt(x*x + y*y + z*z);
+        x /= l;
+        y /= l;
+        z /= l;
+            
+        display.shader(scene, "lit_fog", 
+        "fadeStart", terrain.BEGIN_FADE, 
+        "fadeLength", terrain.FADE_LENGTH,
+        "ambient", ambientSlider.valFloat,
+        "reffect", reffectSlider.valFloat,
+        "geffect", geffectSlider.valFloat,
+        "beffect", beffectSlider.valFloat,
+        "lightDirection", x, y, z
+        );
+        
+        
+        
         display.recordLogicTime();
         usingFadeShader = true;
       }
