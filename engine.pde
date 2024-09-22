@@ -34,6 +34,7 @@ import java.net.URLClassLoader;
 import java.net.URL;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
+import java.io.OutputStream;
 import java.io.InputStreamReader;
 import java.util.Iterator;   // Used by the stack class at the bottom
 import java.util.Arrays;   // Used by the stack class at the bottom
@@ -80,6 +81,7 @@ public class TWEngine {
   public final String DEFAULT_MUSIC_PATH  = "engine/music/default.wav";
   public       String DEFAULT_UPDATE_PATH = "";  // Set up by setup()
   public final String BOILERPLATE_PATH    = "engine/plugindata/plugin_boilerplate.java";
+  public final String PDFTOPNG_PATH       = "engine/bin/windows/pdftopng.exe";
 
   // Static constants
   public static final float   KEY_HOLD_TIME       = 30.; // 30 frames
@@ -483,7 +485,7 @@ public class TWEngine {
     private boolean forcePowerModeEnabled = false;
     private PowerMode forcedPowerMode = PowerMode.HIGH;
     private PowerMode powerModeBefore = PowerMode.NORMAL;
-    public boolean allowMinimizedMode = true;
+    public boolean allowMinimizedMode = false;
   
     // The score that seperates the stable fps from the unstable fps.
     // If you've got half a brain, it would make the most sense to keep it at 0.
@@ -2504,7 +2506,8 @@ public class TWEngine {
       
       public void volume(float vol) {
         volume = vol;
-        if (mode == STREAM && !DISABLE_GSTREAMER) streamMusic.volume(vol);
+        if (mode == CACHED) cachedMusic.amp(vol);
+        else if (mode == STREAM && !DISABLE_GSTREAMER) streamMusic.volume(vol);
         else if (mode == ANDROID) androidMusic.volume(vol);
       }
       
@@ -4014,8 +4017,9 @@ public class TWEngine {
           path = path.substring(0, path.length()-1);
         }
         filenameWithExt = path.substring(index+1);
-      } else
+      } else {
         filenameWithExt = path;
+      }
       
       // Now strip off the ext.
       index = filenameWithExt.indexOf('.');
@@ -4048,6 +4052,8 @@ public class TWEngine {
         return "unknown_128";
       case FILE_TYPE_IMAGE:
         return "image_128";
+      case FILE_TYPE_PDF:
+        return "doc_128";
       case FILE_TYPE_VIDEO:
         return "media_128";
       case FILE_TYPE_MUSIC:
@@ -4082,8 +4088,10 @@ public class TWEngine {
   
       if (ext.equals("doc")
         || ext.equals("docx")
-        || ext.equals("txt")
-        || ext.equals("pdf")) return FileType.FILE_TYPE_DOC;
+        || ext.equals("txt")) return FileType.FILE_TYPE_DOC;
+        
+        
+      if (ext.equals("pdf")) return FileType.FILE_TYPE_PDF;
         
       if (ext.equals(ENTRY_EXTENSION))
         return FileType.FILE_TYPE_TIMEWAYENTRY;
@@ -4540,7 +4548,7 @@ public class TWEngine {
       if (ext.equals("png")) {
         return getPNGUncompressedSize(path);
       }
-      else if (ext.equals(ENTRY_EXTENSION)) {
+      else if (ext.equals(ENTRY_EXTENSION) || ext.equals("pdf")) {
         return 0;
       }
       else if (ext.equals("jpg") || ext.equals("jpeg")) {
@@ -4551,6 +4559,10 @@ public class TWEngine {
       }
       else if (ext.equals("bmp")) {
         return getBMPUncompressedSize(path);
+      }
+      else if (ext.equals("tiff")) {
+        // TODO: size estimation for tiff
+        return 99999;
       }
       else {
         console.bugWarn("getImageUncompressedSize: file format ("+ext+" is not an image format.");
@@ -4594,21 +4606,6 @@ public class TWEngine {
     private String exepath;
     private String javapath;
     private int cacheEntry = 0;
-
-    
-    // We need this because simply storing the output message in a command line
-    // is not sufficient; we need error code, whether it was successful or not etc.
-    class CmdOutput {
-      public int exitCode = -1;
-      public boolean success = false;
-      public String message = "";
-      
-      public CmdOutput(int ec, String mssg) {
-        exitCode = ec;
-        success =  (exitCode == 0);
-        message = mssg;
-      }
-    }
     
     public PluginModule() {
       // Load the boilerplate for plugin code.
@@ -4841,55 +4838,6 @@ public class TWEngine {
       return new Plugin();
     }
     
-    // Now this thing basically just runs a windows command, not too complicated.
-    // If I'm lucky enough, I think this thing should work in linux too even though
-    // the cmd system is completely different, because we're essentially just calling
-    // some java executables.
-    public CmdOutput runOSCommand(String... cmd) {
-      try {
-        // Run the OS command
-        Process process = Runtime.getRuntime().exec(cmd);
-        
-        // Get the messages from the console (so that we can get stuff like error messages).
-        BufferedReader stdInput = new BufferedReader(new InputStreamReader(process.getInputStream()));
-        BufferedReader stdError = new BufferedReader(new InputStreamReader(process.getErrorStream()));
-        
-        // This function should prolly run this in a different thread.
-        int exitCode = process.waitFor();
-        
-        // s will be used to read the stdout lines.
-        String s = null;
-        
-        // Where we'll actually store our stdoutput
-        String stdoutput = "";
-        
-        if (exitCode == 1) {
-          while ((s = stdInput.readLine()) != null) {
-              stdoutput += s+"\n";
-          }
-          // Truth be told, i should prolly have seperate stdout and stderr
-          // but I don't really mind combining it into one message.
-          while ((s = stdError.readLine()) != null) {
-              stdoutput += s+"\n";
-          }
-          
-          //System.out.println(stdoutput);
-        }
-        
-        //System.out.println("Exit code: "+exitCode);
-        // Done!
-        return new CmdOutput(exitCode, stdoutput);
-      }
-      // No need to do additional error checking here because I highly doubt we will get this kind
-      // of error unless we intentionally realllllllly mess up some files here.
-      catch (Exception e) {
-        console.warn("OS command exception: "+ e.getClass().getSimpleName());
-        console.warn(e.getMessage());
-        // 666 eeeeeevil number.
-        return new CmdOutput(666, e.getClass().getSimpleName());
-      }
-    }
-    
     // Use javac (java compiler) to turn our file into a .class file.
     // I have no idea what a .class file is lol.
     CmdOutput toClassFile(String inputFile) {
@@ -4925,11 +4873,11 @@ public class TWEngine {
       // run as if we've opened up cmd/terminal and are running our command.
       CmdOutput cmd = null;
       if (isWindows()) {
-        cmd = runOSCommand(javacPath, "-cp", processingCorePath+";"+pluginPath, inputFile);
+        cmd = runExecutableCommand(javacPath, "-cp", processingCorePath+";"+pluginPath, inputFile);
       }
       else {
         //cmd = runOSCommand("\""+javacPath+"\" -cp \""+processingCorePath+";"+pluginPath+"\" \""+inputFile+"\"");
-        cmd = runOSCommand(javacPath, "-cp", processingCorePath, inputFile);
+        cmd = runExecutableCommand(javacPath, "-cp", processingCorePath, inputFile);
       }
       return cmd;
     }
@@ -4954,7 +4902,7 @@ public class TWEngine {
       final String className = (new File(classFile)).getName();
       
       // And boom. It is then done.
-      runOSCommand(jarExePath, "cvf", out, "-C", classPath, className);
+      runExecutableCommand(jarExePath, "cvf", out, "-C", classPath, className);
       
       return out;
     }
@@ -5246,18 +5194,123 @@ public class TWEngine {
     }
   }
   
-  public void runOSCommand(String cmd) {
-    if (isWindows()) {
-        String[] cmds = new String[1];
-        cmds[0] = cmd;
-        app.saveStrings(APPPATH+WINDOWS_CMD, cmds);
-        delay(100);
-        file.open(APPPATH+WINDOWS_CMD);
-    }
-    else {
-      console.bugWarn("runOSCommand: support for os not implemented!");
+  
+
+    
+  // We need this because simply storing the output message in a command line
+  // is not sufficient; we need error code, whether it was successful or not etc.
+  class CmdOutput {
+    public int exitCode = -1;
+    public boolean success = false;
+    public String message = "";
+    
+    public CmdOutput(int ec, String mssg) {
+      exitCode = ec;
+      success =  (exitCode == 0);
+      message = mssg;
     }
   }
+
+  //public void runExecutableCommand(String cmd) {
+  //  if (isWindows()) {
+  //      String[] cmds = new String[1];
+  //      cmds[0] = cmd;
+  //      app.saveStrings(APPPATH+WINDOWS_CMD, cmds);
+  //      delay(100);
+  //      file.open(APPPATH+WINDOWS_CMD);
+  //  }
+  //  else {
+  //    console.bugWarn("runOSCommand: support for os not implemented!");
+  //  }
+  //}
+
+
+  
+  // Now this thing basically just runs a windows command, not too complicated.
+  // If I'm lucky enough, I think this thing should work in linux too even though
+  // the cmd system is completely different, because we're essentially just calling
+  // some java executables.
+  public CmdOutput runExecutableCommand(String... cmd) {
+    try {
+      // Run the OS command
+      Process process = Runtime.getRuntime().exec(cmd);
+      
+      // Get the messages from the console (so that we can get stuff like error messages).
+      BufferedReader stdInput = new BufferedReader(new InputStreamReader(process.getInputStream()));
+      //BufferedReader stdOutput = new BufferedReader(new OutputStream(process.getOutputStream()));
+      BufferedReader stdError = new BufferedReader(new InputStreamReader(process.getErrorStream()));
+      
+      // This function should prolly run this in a different thread.
+      int exitCode = process.waitFor();
+      
+      // s will be used to read the stdout lines.
+      String s = null;
+      
+      // Where we'll actually store our stdoutput
+      String stdoutput = "";
+      
+      if (exitCode == 1) {
+        while ((s = stdInput.readLine()) != null) {
+            stdoutput += s+"\n";
+        }
+        //while ((s = stdOutput.readLine()) != null) {
+        //    stdoutput += s+"\n";
+        //}
+        // Truth be told, i should prolly have seperate stdout and stderr
+        // but I don't really mind combining it into one message.
+        while ((s = stdError.readLine()) != null) {
+            stdoutput += s+"\n";
+        }
+        
+        //System.out.println(stdoutput);
+      }
+      
+      //System.out.println("Exit code: "+exitCode);
+      // Done!
+      return new CmdOutput(exitCode, stdoutput);
+    }
+    // No need to do additional error checking here because I highly doubt we will get this kind
+    // of error unless we intentionally realllllllly mess up some files here.
+    catch (Exception e) {
+      console.warn("OS command exception: "+ e.getClass().getSimpleName());
+      console.warn(e.getMessage());
+      // 666 eeeeeevil number.
+      return new CmdOutput(666, e.getClass().getSimpleName());
+    }
+  }
+  
+  private PImage pdftopngnocache(String path) {
+    if (!file.exists(APPPATH+PDFTOPNG_PATH)) {
+      console.warn("pdftopng missing!");
+      return display.errorImg;
+    }
+    
+    String cachepath = generateCachePath("");
+    CmdOutput cmdout = runExecutableCommand(APPPATH+PDFTOPNG_PATH, "-f", "1", "-l", "1", "-r", "48", path, cachepath);
+    if (!cmdout.success) {
+      console.warn("pdftopng error: "+cmdout.exitCode+" "+cmdout.message);
+    }
+    
+    // Out command executable includes the ".png" file path name automatically
+    return loadImage(cachepath+"-000001.png");
+  }
+  
+  // converts png, stores in cache folder, returns cached entry
+  // if already exists, and if not, returns png after caching.
+  public PImage pdftopng(String path) {
+    PImage img = tryLoadImageCache(path, new Runnable() {
+      // Here, we gotta generate cache.
+      // Pretty easy in hindsight.
+      public void run() {
+        PImage im2 = pdftopngnocache(path);
+        setOriginalImage(im2);
+      }
+    });
+    return img;
+  }
+  
+  
+  
 
   private int updatePhase = 0;
   // 0 - Not updating at all.
@@ -5417,7 +5470,7 @@ public class TWEngine {
             //Process p = Runtime.getRuntime().exec(newVersion);
             String cmd = "start \""+APP_NAME+"\" /d \""+file.getDir(newVersion).replaceAll("/", "\\\\")+"\" \""+file.getFilename(newVersion)+"\"";
             console.log(cmd);
-            runOSCommand(cmd);
+            runExecutableCommand(cmd);
             delay(500);
             exit();
           }
@@ -5488,7 +5541,7 @@ public class TWEngine {
       console.bugWarn("restart(): Not implemented for MacOS");
       return;
     }
-    runOSCommand(cmd);
+    runExecutableCommand(cmd);
     delay(500);
     exit();
   }
@@ -6560,6 +6613,7 @@ public class TWEngine {
   
 
   public void scaleDown(PImage image, int scale) {
+    if (image == null) return;
     console.info("scaleDown: "+str(image.width)+","+str(image.height)+",scale"+str(scale));
     if ((image.width > scale || image.height > scale)) {
       // If the image is vertical, resize to 0x512
@@ -6659,10 +6713,14 @@ public class TWEngine {
   }
 
   public String generateCachePath(String ext) {
+    String extt = "";
+    if (ext.length() > 0) {
+      extt = "."+ext;
+    }
     // Get a unique idenfifier for the file
-    String cachePath = CACHE_PATH+"cache-"+str(int(random(0, 2147483646)))+"."+ext;
+    String cachePath = CACHE_PATH+"cache-"+str(int(random(0, 2147483646)))+extt;
     while (file.exists(cachePath)) {
-      cachePath = CACHE_PATH+"cache-"+str(int(random(0, 2147483646)))+"."+ext;
+      cachePath = CACHE_PATH+"cache-"+str(int(random(0, 2147483646)))+extt;
     }
     return cachePath;
   }
@@ -9167,6 +9225,7 @@ public enum PowerMode {
 public enum FileType {
   FILE_TYPE_UNKNOWN, 
     FILE_TYPE_IMAGE, 
+    FILE_TYPE_PDF,
     FILE_TYPE_VIDEO, 
     FILE_TYPE_MUSIC, 
     FILE_TYPE_MODEL, 

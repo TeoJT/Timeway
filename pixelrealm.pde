@@ -1955,6 +1955,10 @@ public class PixelRealm extends Screen {
       }
       
       public void load(JSONObject json) {
+        this.fileLoad(json);
+      }
+      
+      public void fileLoad(JSONObject json) {
         // We expect the engine to have already loaded a JSON object.
         // Every 3d object has x y z position.
         
@@ -2100,6 +2104,18 @@ public class PixelRealm extends Screen {
                     img.setLarge(im);
                   }
                 }
+                else if (ext.equals("pdf")) {
+                  im = engine.pdftopng(path);
+                  if (im != null) {
+                    img = new RealmTexture();
+                    img.setLarge(im);
+                  }
+                }
+                else if ((ext.equals("mp4")
+                  || ext.equals("m4v")
+                  || ext.equals("mov"))) {
+                  
+                }
                 else {
                   im = engine.tryLoadImageCache(path, new Runnable() {
                     public void run() {
@@ -2152,7 +2168,7 @@ public class PixelRealm extends Screen {
       }
       
       public void load(JSONObject json) {
-        super.load(json);
+        super.fileLoad(json);
         // TODO: load in seperate thread.
         model = app.loadShape(dir);
         //console.log("vertex count: "+model.getVertexCount());
@@ -2457,7 +2473,7 @@ public class PixelRealm extends Screen {
       }
       
       public void load(JSONObject json) {
-        super.load(json);
+        super.fileLoad(json);
   
         this.rot = json.getFloat("rot", random(-PI, PI));
         
@@ -2497,6 +2513,123 @@ public class PixelRealm extends Screen {
         return PRObject;
       }
     }
+    
+  
+  
+  
+  
+  
+    private int totalVideosLoaded = 0;
+  
+    class VideoFileObject extends ImageFileObject {
+      private boolean movieEnabled = false;
+      private Movie movie = null;
+      
+      public VideoFileObject(float x, float y, float z, String dir) {
+        super(x, y, z, dir);
+      }
+  
+      public VideoFileObject(String dir) {
+        super(dir);
+      }
+      
+      public void load(JSONObject json) {
+        super.fileLoad(json);
+  
+        this.rot = json.getFloat("rot", random(-PI, PI));
+        
+        Movie video = new Movie(app, dir);
+        movie = video;
+        video.volume(0f);
+        
+        // Determine if the video should load or not.
+        if (
+          (video.sourceWidth <= 512 || video.sourceHeight <= 512) &&  // Small enough to play without much lag, even if one dimension isn't stupidly big.
+          (video.sourceWidth < 1536 && video.sourceHeight < 1536) && // Avoid weird ass files that were probably designed to throw off Timeway and make it crash.
+          (totalVideosLoaded < 1)) 
+        {
+          this.img = new RealmTexture(video);
+          //this.img.getD().pimage = video;
+          movieEnabled = true;
+        }
+        else {
+          this.img = new RealmTexture(display.systemImages.get("video_nothumb").pimage);
+          movieEnabled = false;
+        }
+        totalVideosLoaded++;
+      }
+      
+      public void display() {
+        if (visible) {
+          // Extra code for the big movies
+          if (!movieEnabled) {
+            super.display();
+            return;
+          }
+          
+          if (this.img != null) {
+              
+              //setSize(1.);
+              
+              if (this.img.getD().pimage instanceof Movie) {
+                Movie video = (Movie)this.img.getD().pimage;
+                if (!video.isPlaying()) {
+                  video.loop();
+                  video.volume(0f);
+                }
+                if (video.available()) {
+                  video.read(); 
+                }
+                this.wi = (float)video.sourceWidth*size;
+                this.hi = (float)video.sourceHeight*size;
+              }
+              
+              float y1 = y-hi;
+              // There's no y2 huehue.
+              
+              
+              // Half width
+              float hwi = wi/2;
+              
+              // TODO: cache and optimise
+              float sin_d = sin(rot)*(hwi);
+              float cos_d = cos(rot)*(hwi);
+              float x1 = x + sin_d;
+              float z1 = z + cos_d;
+              float x2 = x - sin_d;
+              float z2 = z - cos_d;
+              
+              
+              displayQuad(this.img.getD(), x1, y1, z1, x2, y1+hi, z2);
+          }
+        }
+        // Reset tint
+        this.tint = color(255);
+      }
+      
+      
+      public void finalize() {
+        // Loads of obsessive checks
+        if (this.img != null
+        &&  this.img.getD() != null
+        &&  this.img.getD().pimage != null
+        &&  this.img.getD().pimage instanceof Movie)
+        {
+          // Stop the hidden video
+          ((Movie)this.img.getD().pimage).stop();
+        }
+      }
+    }
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
     
     public String createShortcut() {
       String dir = stateDirectory;
@@ -3013,6 +3146,10 @@ public class PixelRealm extends Screen {
   
   
           scene.beginShape();
+          float uvx = 0.;
+          float uvy = 0.;
+          float uvxx = 0.999;
+          float uvyy = 0.999;
           if (!dontRender) {
             scene.textureMode(NORMAL);
             scene.textureWrap(REPEAT);
@@ -3022,20 +3159,28 @@ public class PixelRealm extends Screen {
             }
             else if (im.mode == 1) {
               scene.texture(im.pimage);
+              //uvx = 0.;
+              //uvy = 0.;
+              //uvxx = im.width;
+              //uvyy = im.height;
             }
           }
           
-          float r1 = 0.;
-          float r2 = 0.999;
           if (flippedTexture) {
-            r1 = 0.999;
-            r2 = 0.;
+            float tmp = uvx;
+            uvx = uvxx;
+            uvxx = tmp;
           }
           
-          scene.vertex(x1, y1, z1, r1, 0);           // Bottom left
-          scene.vertex(x2, y1, z2, r2, 0);    // Bottom right
-          scene.vertex(x2, y2, z2, r2, 0.999); // Top right
-          scene.vertex(x1, y2, z1, r1, 0.999);  // Top left
+          //if (im.mode == 1) {
+          //  scene.resetShader();
+          //  scene.fill(255, 0, 0);
+          //}
+          
+          scene.vertex(x1, y1, z1, uvx, uvy);           // Bottom left
+          scene.vertex(x2, y1, z2, uvxx, uvy);    // Bottom right
+          scene.vertex(x2, y2, z2, uvxx, uvyy); // Top right
+          scene.vertex(x1, y2, z1, uvx, uvyy);  // Top left
           if (useFinder) scene.vertex(x1, y1, z1, 0, 0);  // Extra vertex to render a complete square if finder is enabled.
           // Not necessary if just rendering the quad without the line.
           scene.noTint();
@@ -3442,6 +3587,12 @@ public class PixelRealm extends Screen {
           break;
         case FILE_TYPE_IMAGE:
           fileobject = new ImageFileObject(path);
+          break;
+        case FILE_TYPE_PDF:
+          fileobject = new ImageFileObject(path);
+          break;
+        case FILE_TYPE_VIDEO:
+          fileobject = new VideoFileObject(path);
           break;
         case FILE_TYPE_TIMEWAYENTRY:
           fileobject = new EntryFileObject(path, true);
