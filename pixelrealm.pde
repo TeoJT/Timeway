@@ -28,6 +28,8 @@ public class PixelRealm extends Screen {
   final static float  MIN_PORTAL_LIGHT_THRESHOLD = 19600.;   // 140 ^ 2
   final static int    CHUNK_SIZE = 8;
   final static int    MAX_CHUNKS_XZ = 32768;
+  final static int    MAX_VIDEOS_ALLOWED = 0;
+  final static String BREADCRUMBS_PATH = "history.txt";
   
   // Movement/player constants.
   final static float BOB_SPEED = 0.4;
@@ -139,6 +141,8 @@ public class PixelRealm extends Screen {
   protected float fovx = PI/3.0;
   protected float fovy = 0.;
   private int slippingJumpsAllowed = 2;
+  private ArrayList<String> realmBreadcrumbs = new ArrayList<String>();
+  private int breadcrumbIndex = 0;
   
   private AtomicBoolean refreshRealm = new AtomicBoolean(false);
   private AtomicInteger refresherCommand = new AtomicInteger(0);
@@ -235,6 +239,15 @@ public class PixelRealm extends Screen {
     // Start the refresher thread (to automatically refresh realms when files have been changed)
     refresherFilesList[0] = startRealm;
     startRefresherThread();
+    
+    // Load the breadcrumbs/history
+    if (file.exists(engine.APPPATH+BREADCRUMBS_PATH)) {
+      String[] history = app.loadStrings(engine.APPPATH+BREADCRUMBS_PATH);
+      for (String s : history) {
+        realmBreadcrumbs.add(s);
+      }
+    }
+    
     
     currRealm = new PixelRealmState(dir, startRealm);
     sound.streamMusicWithFade(currRealm.musicPath);
@@ -2523,7 +2536,6 @@ public class PixelRealm extends Screen {
   
     class VideoFileObject extends ImageFileObject {
       private boolean movieEnabled = false;
-      private Movie movie = null;
       
       public VideoFileObject(float x, float y, float z, String dir) {
         super(x, y, z, dir);
@@ -2539,14 +2551,13 @@ public class PixelRealm extends Screen {
         this.rot = json.getFloat("rot", random(-PI, PI));
         
         Movie video = new Movie(app, dir);
-        movie = video;
         video.volume(0f);
         
         // Determine if the video should load or not.
         if (
           (video.sourceWidth <= 512 || video.sourceHeight <= 512) &&  // Small enough to play without much lag, even if one dimension isn't stupidly big.
           (video.sourceWidth < 1536 && video.sourceHeight < 1536) && // Avoid weird ass files that were probably designed to throw off Timeway and make it crash.
-          (totalVideosLoaded < 1)) 
+          (totalVideosLoaded < MAX_VIDEOS_ALLOWED)) 
         {
           this.img = new RealmTexture(video);
           //this.img.getD().pimage = video;
@@ -2684,6 +2695,22 @@ public class PixelRealm extends Screen {
         loadShortcut();
       }
       
+      public JSONObject save() {
+        // Imagine we move a shortcut into a different dir.
+        // Suddenly, the relative path will be incorrect.
+        // So we need to update it each time to ensure it's correct.
+      
+        if (file.exists(this.dir)) {
+          JSONObject sh = app.loadJSONObject(this.dir);
+          String relative = file.getRelativeDir(stateDirectory, shortcutDir);
+          sh.setString("relative_dir", relative);
+          app.saveJSONObject(sh, this.dir);
+        }
+        
+        // We actually return an entirely different json so ignore this line lmaoao
+        return super.save();
+      }
+      
       public void loadShortcut() {
         // Open our own file and get the shortcut
         if (file.exists(this.dir)) {
@@ -2701,19 +2728,45 @@ public class PixelRealm extends Screen {
               console.warn("Corrupted shortcut "+file.getFilename(this.filename));
               return;
             }
+            
+            boolean exists = false;
             // Check shortcut exists.
             if (!file.exists(shortcutDir)) {
               //console.warn("Shortcut to "+file.getFilename(this.filename)+" doesn't exist!");
-              return;
+              
+              // If not, try to get the relative path
+              if (!sh.isNull("relative_dir")) {
+                shortcutDir = file.relativeToAbsolute(file.getDir(this.dir), sh.getString("relative_dir"));
+                if (file.exists(shortcutDir)) {
+                  // If found, update shortcut's path
+                  sh.setString("shortcut_dir", shortcutDir);
+                  app.saveJSONObject(sh, this.dir);
+                  exists = true;
+                }
+                else {
+                  //console.log("Couldn't find relative dir: "+shortcutDir);
+                }
+              }
+              // If we can't get anything that's fine, just means we will be bump'd back when
+              // we try to enter the portal
             }
-            // If at this point we should have the shortcut dir.
-            requestRealmSky(shortcutDir);
+            else exists = true;
             
             shortcutName = sh.getString("shortcut_name", "[corrupted]");
             
             // Yup, shortcut_name is unnecessary. But hey might as well self-fix if broken.
             if (shortcutName.equals("[corrupted]")) {
               shortcutName = file.getFilename(shortcutDir);
+            }
+            
+            if (exists) {
+              // If at this point we should have the shortcut dir.
+              requestRealmSky(shortcutDir);
+              
+              // Speaking of self-fix, old shortcuts won't have relative_dir. Let's calculate a relative_dir if it don't exist already.
+              String relative = file.getRelativeDir(file.getDir(this.dir), shortcutDir);
+              sh.setString("relative_dir", relative);
+              app.saveJSONObject(sh, this.dir);
             }
           }
           catch (RuntimeException e) {
@@ -2754,6 +2807,7 @@ public class PixelRealm extends Screen {
           sound.playSound("shift");
           //prevRealm = currRealm;
           stats.increase("shortcut_portals_entered", 1);
+          addBreadcrumb(stateDirectory);
           gotoRealm(this.shortcutDir);
         }
       }
@@ -2842,6 +2896,7 @@ public class PixelRealm extends Screen {
           sound.playSound("shift");
           // Perfectly optimised. Creating a new state instead of a new screen
           stats.increase("directory_portals_entered", 1);
+          addBreadcrumb(stateDirectory);
           gotoRealm(this.dir, stateDirectory);
         }
       }
@@ -3091,6 +3146,9 @@ public class PixelRealm extends Screen {
       }
       
       protected void displayQuad(DImage im, float x1, float y1, float z1, float x2, float y2, float z2) {
+        // An exception is known to happen here
+        if (im == null) return;
+        
         //boolean selected = lineLine(x1,z1,x2,z2,beamX1,beamZ1,beamX2,beamZ2);
         //color selectedColor = color(255);
         //if (hovering()) {
@@ -4479,6 +4537,7 @@ public class PixelRealm extends Screen {
         //sound.fadeAndStopMusic();
         //requestScreen(new Explorer(engine, stateDirectory));
         if (!file.atRootDir(stateDirectory)) {
+          addBreadcrumb(stateDirectory);
           gotoRealm(file.getPrevDir(stateDirectory), stateDirectory);
           stats.increase("previous_directory_traversals", 1);
         }
@@ -5818,6 +5877,11 @@ public class PixelRealm extends Screen {
     currRealm.yvel = 5.;
   }
   
+  public void addBreadcrumb(String dir) {
+    realmBreadcrumbs.add(dir);
+    breadcrumbIndex = realmBreadcrumbs.size()-1;
+  }
+  
   public void gotoRealm(String to) {
     gotoRealm(to, "");
   }
@@ -5959,7 +6023,9 @@ public class PixelRealm extends Screen {
     currRealm.refreshFiles();
     // so that our currently holding item doesn't disappear when we go into the next realm.
     currRealm.updateHoldingItem(globalHoldingObjectSlot);
+    
   }
+  
   
   // This took bloody ages to figure out so it better work 100% of the timeee
   // Update: turns out I didn't need to use this function but I'm gonna leave it here
@@ -6167,6 +6233,24 @@ public class PixelRealm extends Screen {
           break;
         }
       }
+      
+      if (input.upOnce && realmBreadcrumbs.size() > 0) {
+        sound.playSound("swish");
+        gotoRealm(realmBreadcrumbs.get(breadcrumbIndex));
+        breadcrumbIndex--;
+        if (breadcrumbIndex < 0) {
+          breadcrumbIndex = realmBreadcrumbs.size()-1;
+        }
+      }
+      
+      if (input.downOnce && realmBreadcrumbs.size() > 0) {
+        sound.playSound("swish");
+        gotoRealm(realmBreadcrumbs.get(breadcrumbIndex));
+        breadcrumbIndex++;
+        if (breadcrumbIndex >= realmBreadcrumbs.size()) {
+          breadcrumbIndex = 0;
+        }
+      }
     }
     
     timeInRealm++;
@@ -6198,6 +6282,29 @@ public class PixelRealm extends Screen {
     //if (!power.getPowerSaver()) {
     //  doBackgroundCaching(1);
     //}
+  }
+  
+  // Save our breadcrumbs
+  public void shutdown() {
+    int MAX_BREADCRUMBS = 128;
+    String[] strs = new String[min(realmBreadcrumbs.size(), MAX_BREADCRUMBS)];
+    int i = 0;
+    for (String s : realmBreadcrumbs) {
+      if (i < MAX_BREADCRUMBS) {
+        strs[i++] = s;
+      }
+      else break;
+    }
+    
+    //int MAX_BREADCRUMBS = 1024;
+    //String[] strs = new String[max(realmBreadcrumbs.size(), MAX_BREADCRUMBS)];
+    //int count = 0;
+    //for (int i = realmBreadcrumbs.size(); i > 0; i--) {
+    //  strs[count++] = realmBreadcrumbs.get(i);
+    //  if (count > MAX_BREADCRUMBS-1) break;
+    //}
+    
+    app.saveStrings(engine.APPPATH+BREADCRUMBS_PATH, strs);
   }
   
   // TODO: no longer used
@@ -6481,6 +6588,7 @@ public class PixelRealm extends Screen {
         String path = args[0].trim().replaceAll("\\\\", "/");
         if (file.exists(path) && file.isDirectory(path)) {
           console.log("Transported to realm "+path+".");
+          addBreadcrumb(currRealm.stateDirectory);
           gotoRealm(path);
         }
         else {

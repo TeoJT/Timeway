@@ -106,8 +106,14 @@ void settings() {
 }
 
 void shutdown() {
+  // TODO: Make this much better designed
   timewayEngine.stats.save();
   timewayEngine.stats.set("last_closed", (int)(System.currentTimeMillis() / 1000L));
+  
+  if (timewayEngine.currScreen instanceof PixelRealmWithUI) {
+    PixelRealmWithUI pr = (PixelRealmWithUI)timewayEngine.currScreen;
+    pr.shutdown();
+  }
 }
 
 

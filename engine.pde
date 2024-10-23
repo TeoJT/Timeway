@@ -3935,6 +3935,102 @@ public class TWEngine {
       return dir.substring(0, i);
     }
     
+    //C:/mydata/notebook/
+    //C:/mydata/notebook/hazy_era/recovery/006
+    
+    //hazy_era/recovery/006
+    
+    //C:/mydata/notebook/hazy_era/a/directory/of/thing
+    //C:/mydata/notebook/hazy_era/homen/002
+    
+    //C:/mydata/notebook/hazy_era/a/directory/of/   ../
+    //C:/mydata/notebook/hazy_era/a/directory/      ../../
+    //C:/mydata/notebook/hazy_era/a/                ../../../
+    //C:/mydata/notebook/hazy_era/                  ../../../../
+    //C:/mydata/notebook/hazy_era/homen/            ../../../../homen/
+    //C:/mydata/notebook/hazy_era/homen/002         ../../../../homen/002/
+    public String getRelativeDir(String from, String to) {
+      if (from == null || to == null) return "";
+      
+      try {
+        // Paranoid code.
+        from = directorify(from.replaceAll("\\\\", "/"));
+        to = directorify(to.replaceAll("\\\\", "/"));
+        
+        // We gonna construct a relative path starting with no string
+        String relative = "";
+        // Used for second step
+        int commonPathLength = 0;
+        int count = 0;
+        
+        // STEP 1: Backtrack paths.
+        // Condition to ensure we don't loop forever in case something goes terribly wrong
+        while (count < 999) {
+          // Before we (possibly) break, set commonPathLength for step 2.
+          // Remember we're processing from variable "from"
+          commonPathLength = from.length();
+          
+          // Can't go any further back if at root dir
+          if (atRootDir(from)) {
+            break;
+          }
+          // This condition checks for paths in common between from and to.
+          // For example, C:/mydata/notebook/hazy_era/homen/006 and C:/mydata/notebook/cool_summer/090623
+          // both have C:/mydata/notebook/ in their paths.
+          if (from.substring(0, PApplet.min(from.length(), to.length())).equals( to.substring(0, PApplet.min(from.length(), to.length())) )) {
+            break;
+          }
+          
+          // If common path not found yet, take a dir away and iterate again.
+          from = directorify(getPrevDir(from));
+          relative += "../"; // Ofc we're going back one dir
+          count++;  // Looplock prevention
+        }
+        if (count < 999 == false) {
+          console.bugWarn("getRelativeDir: Loop lock prevention for "+from+", "+to);
+          return "";
+        }
+        
+        // STEP 2: 
+        // Slap on the directories leading to "to"
+        // Take out the common path in "to" and append to relative.
+        relative += to.substring(commonPathLength);
+        return relative;
+      }
+      catch (Exception e) {
+        console.bugWarn("getRelativeDir: "+e.getMessage());
+        return "";
+      }
+      
+    }
+    
+    // Converts a path (created from getRelativeDir) back to absolute path given a starting path
+    public String relativeToAbsolute(String start, String relative) {
+      try {
+        String path = start;
+        // Turn into list
+        String[] elements = relative.split("/");
+        for (String s : elements) {
+          // Consume elements.
+          // .. means go back
+          // anything else means append to path.
+          //console.log(s);
+          if (s.equals("..")) {
+            path = directorify(getPrevDir(path));
+          }
+          else {
+            path += s;
+            path = directorify(path);
+          }
+        }
+        return path;
+      }
+      catch (Exception e) {
+        console.bugWarn("relativeToAbsolute: "+e.getMessage());
+        return DEFAULT_DIR;
+      }
+    }
+    
     public String directorify(String dir) {
       if (dir.charAt(dir.length()-1) != '/')  dir += "/";
       return dir;
@@ -3960,6 +4056,7 @@ public class TWEngine {
     
     // Yes.
     public boolean exists(String path) {
+      if (path == null) return false;
       boolean exists = (new File(path)).exists();
       return isAndroid() ? exists || everything.contains(path) : exists;
     }
@@ -5719,6 +5816,15 @@ public class TWEngine {
       power.allowMinimizedMode = !power.allowMinimizedMode;
       console.log("Minimized mode "+(power.allowMinimizedMode ? "enabled" : "disabled"));
     }
+    //else if (commandEquals(command, "/testrelative")) {
+    //  String fro = "C:/mydata/notebook/hazy_era/homen/006";
+    //  String to = "C:/mydata/notebook/hazy_era/homen/007";
+    //  String relative = file.getRelativeDir("C:/mydata/notebook/cold_summer/homen/006", to);
+      
+    //  console.log(fro + ", " + to);
+    //  console.log(relative);
+    //  console.log(file.relativeToAbsolute(fro, relative));
+    //}
     
     // No commands
     else if (command.length() <= 1) {

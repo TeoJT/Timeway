@@ -785,31 +785,7 @@ public class PixelRealmWithUI extends PixelRealm {
         String realmDir = file.directorify(templates.get(tempIndex));
         File realmfile = new File(realmDir);
         String dest = file.directorify(currRealm.stateDirectory);
-        boolean conflict = false;
         
-        // I've commented about it so many times at this point that, do you really need to know?
-        // Actually for all I know this might be the first time you read this.
-        // Basically, can't list files in our own files on Android.
-        //if (isAndroid()) {
-        //  currRealm.img_grass.get().save(dest+REALM_GRASS+".png");
-          
-        //  for (int i = 0; i < currRealm.img_sky.length(); i++) {
-        //    currRealm.img_sky.get(i).save(dest+REALM_SKY+"-"+str(i+1)+".png");
-        //  }
-          
-        //  for (int i = 0; i < currRealm.img_tree.length(); i++) {
-        //    currRealm.img_tree.get(i).save(dest+REALM_TREE+"-"+str(i+1)+".png");
-        //  }
-          
-        //  JSONObject json = null; 
-        //  if (file.exists(realmDir+REALM_TURF)) {
-        //    json = loadJSONObject(realmDir+REALM_TURF);
-        //  }
-        //  else if (file.exists(file.unhide(realmDir+REALM_TURF))) {
-        //    json = loadJSONObject(file.unhide(realmDir+REALM_TURF));
-        //  }
-        //  if (json != null) saveJSONObject(json, dest+REALM_TURF);
-        //}
         
         if (isAndroid()) {
           String[] files = loadStrings(realmDir+"load_list.txt");
@@ -820,10 +796,10 @@ public class PixelRealmWithUI extends PixelRealm {
             if (name.equals(TEMPLATE_METADATA_FILENAME))
               continue;
   
-            if (file.exists(dest+name)) {
-              conflict = true;
-              break;
-            }
+            //if (file.exists(dest+name)) {
+            //  conflict = true;
+            //  break;
+            //}
   
             movefiles.add(src);
           }
@@ -837,37 +813,33 @@ public class PixelRealmWithUI extends PixelRealm {
             if (name.equals(TEMPLATE_METADATA_FILENAME) || name.equals("load_list.txt"))
               continue;
   
-            if (file.exists(dest+name)) {
-              conflict = true;
-              break;
-            }
+            //if (file.exists(dest+name)) {
+            //  conflict = true;
+            //  break;
+            //}
   
             movefiles.add(src);
           }
         }
         
         issueRefresherCommand(REFRESHER_PAUSE);
-        if (!conflict) {
-          for (String src : movefiles) {
-            // Make it hidden
-            String filename = file.getFilename(src);
-            if (filename.charAt(0) != '.') filename = "."+filename;
-            
-            
-            if (!file.copy(src, dest+filename)) {
-              prompt("Copy error", "An error occured while copying realm template files. Maybe permissions are denied?");
-              // Return here so the menu stays open.
-              return;
-            }
+        for (String src : movefiles) {
+          // Make it hidden
+          String filename = file.getFilename(src);
+          if (filename.charAt(0) != '.') filename = "."+filename;
+          
+          
+          if (!file.copy(src, dest+filename)) {
+            prompt("Copy error", "An error occured while copying realm template files. Maybe permissions are denied?");
+            // Return here so the menu stays open.
+            return;
           }
-
-          // Successful so we can close the menu.
-          menuShown = false;
-          menu = null;
-          stats.increase("realm_templates_created", 1);
-        } else {
-          prompt("Can't copy template", "You already have realm asset files in this folder.");
         }
+
+        // Successful so we can close the menu.
+        menuShown = false;
+        menu = null;
+        stats.increase("realm_templates_created", 1);
       }
 
       // Bug fix: immediately pausing movement causes cached sin and cos directions to be outdated
