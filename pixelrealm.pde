@@ -83,6 +83,8 @@ public class PixelRealm extends Screen {
   private PImage REALM_SKY_DEFAULT;
   private PImage REALM_TREE_DEFAULT;
   
+  private PShape CASSETTE_OBJ;
+  
   
   // --- Cache (sort of) ---
   private float cache_flatSinDirection;
@@ -102,6 +104,9 @@ public class PixelRealm extends Screen {
   private float lastXBlockGetHeightAction = 0.;
   private float lastZBlockGetHeightAction = 0.;
   private boolean playingWarpingSound = false;
+  
+  
+  private boolean weirdmode = false;
   
   
   // --- Legacy backward-compatibility stuff & easter eggs ---
@@ -205,6 +210,8 @@ public class PixelRealm extends Screen {
     REALM_SKY_DEFAULT = display.systemImages.get("pixelrealm-sky").pimage;
     REALM_TREE_DEFAULT = display.systemImages.get("pixelrealm-terrain_object").pimage;
     REALM_GRASS_DEFAULT = display.systemImages.get("pixelrealm-grass").pimage;
+    
+    CASSETTE_OBJ = app.loadShape(engine.APPPATH+"engine/other/cassette.obj");
     
     REALM_SKY_DEFAULT_LEGACY = display.systemImages.get("pixelrealm-sky-legacy").pimage;
     REALM_TREE_DEFAULT_LEGACY = display.systemImages.get("pixelrealm-terrain_object-legacy").pimage;
@@ -2230,6 +2237,73 @@ public class PixelRealm extends Screen {
         setSize(size-amount*BACKWARD_COMPAT_SCALE);
       }
     }
+    
+    
+    
+    
+    
+    
+    class MusicFileObject extends FileObject {
+      
+      // TODO: scale each axis...?
+      public float rotX = 0.;
+      public float rotY = 0.;
+      public float rotZ = 0.;
+      
+      
+      public MusicFileObject(float x, float y, float z, String dir) {
+        super(x, y, z, dir);
+      }
+  
+      public MusicFileObject(String dir) {
+        super(dir);
+      }
+      
+      {
+        
+        this.wi = 300;
+        this.hi = 300;
+        this.size = 1f;
+      }
+      
+      public void load(JSONObject json) {
+        super.fileLoad(json);
+      }
+      
+      
+      public void setSize(float size) {
+        this.size = size;
+      }
+      
+      public void display() {
+        
+        final float SIZE = 50f;
+        
+        super.display();
+        display.recordRendererTime();
+        scene.pushMatrix();
+        scene.translate(this.x, this.y, this.z);
+        scene.scale(-SIZE);
+        //scene.rotateX(rotX);
+        
+        scene.rotateY(rotY);
+        //scene.rotateZ(rotZ);
+        scene.shape(CASSETTE_OBJ);
+        scene.popMatrix();
+        display.recordLogicTime();
+      }
+      
+      public void scaleUp(float amount) {
+        setSize(size+amount*BACKWARD_COMPAT_SCALE);
+      }
+      
+      public void scaleDown(float amount) {
+        setSize(size-amount*BACKWARD_COMPAT_SCALE);
+      }
+    }
+    
+    
+    
   
     class UnknownTypeFileObject extends FileObject {
   
@@ -3654,6 +3728,9 @@ public class PixelRealm extends Screen {
           break;
         case FILE_TYPE_VIDEO:
           fileobject = new VideoFileObject(path);
+          break;
+        case FILE_TYPE_MUSIC:
+          fileobject = new MusicFileObject(path);
           break;
         case FILE_TYPE_TIMEWAYENTRY:
           fileobject = new EntryFileObject(path, true);
@@ -6618,6 +6695,9 @@ public class PixelRealm extends Screen {
       }
       return true;
     }
+    //else if (engine.commandEquals(command, "/weirdmode")) {
+    //  weirdmode = true;
+    //}
     else if (engine.commandEquals(command, "/fov")) {
       String[] args = getArgs(command);
       int i = 0;

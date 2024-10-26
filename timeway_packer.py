@@ -322,6 +322,9 @@ if (os.path.isdir("timeway_windows_"+version)):
     if (os.path.isdir(new_name_windows+"/data/pocket")):
         shutil.rmtree(new_name_windows+"/data/pocket")
         print("Removed pocket folder.")
+    if (os.path.isdir(new_name_windows+"/data/recyclebin")):
+        shutil.rmtree(new_name_windows+"/data/recyclebin")
+        print("Removed recyclebin folder.")
 
     # Also recursively search and remove any files beginning with .pixelrealm from the folders
     files_to_remove = []
