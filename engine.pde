@@ -3676,8 +3676,25 @@ public class TWEngine {
           everything.add(path.trim());
         }
       }
+      
+      // Recycle bin
+      if (!exists(APPPATH+RECYCLE_BIN_INFO)) {
+        recycleJson = new JSONArray();
+      }
+      else {
+        try {
+          recycleJson = loadJSONArray(APPPATH+RECYCLE_BIN_INFO);
+        }
+        catch (RuntimeException e) {
+          console.warn("Something went wrong with loading recycling bin info: "+e.getMessage());
+          recycleJson = new JSONArray();
+        }
+      }
     }
     
+    public final String RECYCLE_BIN_PATH = "recyclebin/";
+    public final String RECYCLE_BIN_INFO = RECYCLE_BIN_PATH+"recycle.json";
+    private JSONArray recycleJson = null;
     
     public boolean loading = false;
     public int MAX_DISPLAY_FILES = 2048; 
@@ -3757,6 +3774,39 @@ public class TWEngine {
         console.warn(e.getMessage());
         return false;
       }
+      return true;
+    }
+    
+    
+    public void mkdirIfUnpresent(String path) {
+      File f = new File(path);
+      if (!f.exists() || !f.isDirectory()) {
+        if (!f.mkdir()) {
+          console.warn("Couldn't remake directory "+getFilename(path));
+          return;
+        }
+      }
+    }
+    
+    
+    public boolean recycle(String oldLocation) {
+      String newName = nf(random(0, 99999999), 8, 0);
+      while (exists(APPPATH+RECYCLE_BIN_PATH+newName)) {
+        newName = nf(random(0, 99999999), 8, 0);
+      }
+      
+      mkdirIfUnpresent(APPPATH+RECYCLE_BIN_PATH);
+      
+      if (!mv(oldLocation, APPPATH+RECYCLE_BIN_PATH+newName)) {
+        console.warn("Could not recycle "+getFilename(oldLocation)+", maybe file permissions denied?");
+        return false;
+      }
+      
+      JSONObject entry = new JSONObject();
+      entry.setString("name", newName);
+      entry.setString("old_location", oldLocation);
+      recycleJson.setJSONObject(recycleJson.size(), entry);
+      app.saveJSONArray(recycleJson, APPPATH+RECYCLE_BIN_INFO);
       return true;
     }
     
@@ -8038,7 +8088,7 @@ public final class SpriteSystemPlaceholder {
         public SpriteSystemPlaceholder(TWEngine engine, String path) {
             this.engine = engine;
             spriteNames = new HashMap<String, Integer>();
-            selectedSprites = new Stack<Sprite>(8192);
+            selectedSprites = new Stack<Sprite>(32768);
             sprites = new ArrayList<Sprite>();
             spritesStack = new Stack<Sprite>(128);
             unusedSprite = new Sprite("UNUSED");

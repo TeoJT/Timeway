@@ -506,6 +506,49 @@ public class PixelRealmWithUI extends PixelRealm {
       }
     }
   }
+  
+  
+  class FileOptionsMenu extends TitleMenu {
+    private String filename = "";
+    private PixelRealmState.FileObject probject = null;
+    
+    public FileOptionsMenu(PixelRealmState.FileObject o) {
+      super("", "back-fileoptionsmenu");
+      this.probject = o;
+      this.filename = file.getFilename(probject.dir);
+      this.title = this.filename;
+    }
+    
+    public void display() {
+      super.display();
+      if (ui.buttonVary("op-delete", "notool_128", "Delete")) {
+        sound.playSound("menu_select");
+        
+        issueRefresherCommand(REFRESHER_PAUSE);
+        if (file.recycle(probject.dir)) {
+          probject.destroy();
+          console.log(filename+" moved to recycle bin.");
+        }
+        
+        closeMenu();
+      }
+      if (ui.buttonVary("op-rename", "command_256", "Rename")) {
+        sound.playSound("menu_select");
+        
+        closeMenu();
+      }
+      if (ui.buttonVary("op-duplicate", "cuber_tool_128", "Duplicate")) {
+        sound.playSound("menu_select");
+        
+        closeMenu();
+      }
+    }
+    
+    public void close() {
+      optionHighlightedItem = null;
+    }
+  }
+  
 
   class CreatorMenu extends Menu {
     public CreatorMenu() {
@@ -1069,13 +1112,19 @@ public class PixelRealmWithUI extends PixelRealm {
     menuShown = true;
   }
 
-
   protected void promptNewRealm() {
     if (gui == null) return;
     if (!file.exists(engine.APPPATH+engine.TEMPLATES_PATH)) return;
     menu = new NewRealmMenu();
     menuShown = true;
   }
+  
+  protected void promptFileOptions(PixelRealmState.FileObject probject) {
+    sound.playSound("menu_select");
+    menu = new FileOptionsMenu(probject);
+    menuShown = true;
+  }
+  
 
 
 

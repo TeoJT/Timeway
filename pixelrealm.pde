@@ -143,6 +143,7 @@ public class PixelRealm extends Screen {
   private int slippingJumpsAllowed = 2;
   private ArrayList<String> realmBreadcrumbs = new ArrayList<String>();
   private int breadcrumbIndex = 0;
+  protected PixelRealmState.PRObject optionHighlightedItem = null;
   
   private AtomicBoolean refreshRealm = new AtomicBoolean(false);
   private AtomicInteger refresherCommand = new AtomicInteger(0);
@@ -823,6 +824,8 @@ public class PixelRealm extends Screen {
   protected void promptNewRealm() {}
   protected void promptPickedUpItem() {}
   protected void promptPlonkedDownItem() {}
+  @SuppressWarnings("unused")
+  protected void promptFileOptions(PixelRealmState.FileObject probject) {}
   
   @SuppressWarnings("unused")
   protected void prompt(String title, String text, int appearDelay) {}
@@ -5564,6 +5567,9 @@ public class PixelRealm extends Screen {
       closestObject = null;
       for (FileObject f : files) {
         f.checkHovering();
+        if (currentTool == TOOL_NORMAL && optionHighlightedItem == f) {
+          f.tint = color(255, 200, 200);
+        }
       }
       // Also check for pocket items
       for (PRObject f : pocketObjects) {
@@ -5581,6 +5587,18 @@ public class PixelRealm extends Screen {
             break;
             case TOOL_NORMAL:
             p.interationAction();
+            break;
+            default:
+            break;
+          }
+        }
+        
+        if (secondaryAction) {
+          switch (currentTool) {
+            case TOOL_NORMAL:
+            // Bring up menu
+            optionHighlightedItem = p;
+            promptFileOptions(p);
             break;
             default:
             break;
