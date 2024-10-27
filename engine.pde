@@ -1042,6 +1042,7 @@ public class TWEngine {
     public final float BASE_FRAMERATE = 60.;
     public final int CLEARLIST_SIZE = 4096;
     private float delta = 0.;
+    private float forcedDelta = -1f;
     
     private boolean showFPS = false;
     
@@ -1771,7 +1772,12 @@ public class TWEngine {
       time += delta;
     }
     
+    public void forceDelta(float forcedDelta) {
+      this.forcedDelta = forcedDelta;
+    }
+    
     public float getDelta() {
+      if (forcedDelta > 0f) return forcedDelta;
       return delta;
     }
     
@@ -7764,6 +7770,8 @@ public class TWEngine {
     
     stats.recordTime("total_time_in_timeway");
     stats.increase("total_frames_timeway", 1);
+    
+    display.forceDelta(-1f);
   }
   
 }

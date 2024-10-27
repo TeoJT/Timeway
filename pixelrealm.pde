@@ -217,7 +217,7 @@ public class PixelRealm extends Screen {
     REALM_TREE_DEFAULT_LEGACY = display.systemImages.get("pixelrealm-terrain_object-legacy").pimage;
     REALM_GRASS_DEFAULT_LEGACY = display.systemImages.get("pixelrealm-grass-legacy").pimage;
   
-    String[] COINS = { "coin_0", "coin_1", "coin_2", "coin_3", "coin_4", "coin_5"};;
+    String[] COINS = { "coin_0", "coin_1", "coin_2", "coin_3", "coin_4", "coin_5"};
     IMG_COIN = new RealmTexture(COINS);
     
     // --- Sounds and music ---
@@ -3048,6 +3048,40 @@ public class PixelRealm extends Screen {
         }
       }
     }
+    
+    
+    
+    
+    
+    
+    class PRWeirdo extends PRObject {
+      
+      public PRWeirdo(float x, float y, float z) {
+        super(x,y,z);
+        
+        String[] frames = { "nael1", "nael1", "nael2", "nael2", "nael3", "nael3"};
+        
+        this.img = new RealmTexture(frames);
+        setSize(0.37);
+        this.hitboxWi = wi;
+      }
+      
+      public void display() {
+        super.display();
+      }
+      
+      public void run() {
+        
+      }
+    }
+    
+    
+    
+    
+    
+    
+    
+    
   
     class PRObject {
       public int id;
@@ -5776,6 +5810,13 @@ public class PixelRealm extends Screen {
       prevPlayerZ = z;
     }
     
+  PRWeirdo nael = null;
+    
+    public void spawnNael() {
+      if (nael != null) nael.destroy();
+      nael = new PRWeirdo(playerX, playerY, playerZ);
+    }
+    
     // That "effect" is just the portal glow.
     public void renderEffects() {
       scene.perspective(PI/3.0, (float)scene.width/scene.height, 10., 1000000.);
@@ -6210,10 +6251,20 @@ public class PixelRealm extends Screen {
   boolean beginBackgroundCaching = true;
     
     
+  float weirdModeCameraX = 0f;
+  float weirdModeCameraY = 0f;
+  float weirdModeCameraZ = 0f;
+    
+  float weirdmodetime = 0f;
+    
   // Finally, the most important code of all
-  
+  int weirdmodeFrame = 0;
   // ----- Pixel Realm logic code -----
   private void runPixelRealm() {
+    if (weirdmode) {
+      display.forceDelta(1f);
+    }
+    
     // Pre-rendering stuff.
     portalCoolDown -= display.getDelta();
     animationTick += display.getDelta();
@@ -6254,7 +6305,7 @@ public class PixelRealm extends Screen {
     usingFadeShader = false;
     
     // Now begin all the drawing!
-    display.recordRendererTime();
+    display.recordRendererTime(); 
     scene.beginDraw();
     display.recordLogicTime();
     currRealm.renderSky();
@@ -6265,7 +6316,25 @@ public class PixelRealm extends Screen {
     display.recordLogicTime();
 
     //scene.translate(-xpos+(scene.width / 2), ypos+(sin(bob)*3)+(scene.height / 2)+80, -zpos+(scene.width / 2));
-    {
+    if (weirdmode) {
+      float x = weirdModeCameraX;
+      float y = weirdModeCameraY-PLAYER_HEIGHT;
+      float z = weirdModeCameraZ;
+      float LOOK_DIST = 250.;
+      
+      currRealm.direction = sin(weirdmodetime*0.007f)*4f;
+      weirdmodetime += display.getDelta();
+      
+      currRealm.playerX = x+sin(currRealm.direction)*LOOK_DIST;
+      currRealm.playerY = y-50f;
+      currRealm.playerZ = z+cos(currRealm.direction)*LOOK_DIST;
+      
+      scene.camera(currRealm.playerX, currRealm.playerY, currRealm.playerZ,
+        x, y, z,
+        0., 1., 0.);
+    }
+    
+    else {
       float x = currRealm.playerX;
       float y = currRealm.playerY+(sin(bob)*3)-PLAYER_HEIGHT;
       float z = currRealm.playerZ;
@@ -6296,7 +6365,33 @@ public class PixelRealm extends Screen {
     scene.endDraw();
     float wi = scene.width*DISPLAY_SCALE;
     float hi = this.height;
+    
+    
+    
+    if (weirdmode) {
+      scene.loadPixels();
+      for (int y = 0; y < scene.height; y++) {
+        for (int x = 0; x < scene.width; x++) {
+          float xx = (float(x)/float(scene.width))*PI;
+          float yy = (float(y)/float(scene.height))*PI;
+          
+          if ((sin(xx)*sin(yy)) < random(0.02f, 0.5f)) {
+            
+            scene.pixels[y*scene.width+x] = color(0,0,0);
+          }
+        }
+      }
+      scene.updatePixels();
+    }
+    
     image(scene, (WIDTH/2)-wi/2, (HEIGHT/2)-hi/2, wi, hi);
+    flush();
+    
+    if (weirdmode) {
+      //saveFrame(engine.APPPATH+"frames/"+nf(weirdmodeFrame++, 5)+".tiff");
+      saveFrame(engine.APPPATH+"frames/#####.tiff");
+    }
+    
     display.recordLogicTime();
     
     
@@ -6603,7 +6698,6 @@ public class PixelRealm extends Screen {
   
   
   
-  
   public boolean customCommands(String command) {
     if (command.equals("/refresh")) {
       console.log("Refreshing dir...");
@@ -6695,9 +6789,18 @@ public class PixelRealm extends Screen {
       }
       return true;
     }
-    //else if (engine.commandEquals(command, "/weirdmode")) {
-    //  weirdmode = true;
-    //}
+    else if (engine.commandEquals(command, "/weirdmode")) {
+      weirdmode = !weirdmode;
+      weirdModeCameraX = currRealm.playerX;
+      weirdModeCameraY = currRealm.playerY;
+      weirdModeCameraZ = currRealm.playerZ;
+      weirdmodeFrame = 0;
+      return true;
+    }
+    else if (engine.commandEquals(command, "/spawnnael")) {
+      currRealm.spawnNael();
+      return true;
+    }
     else if (engine.commandEquals(command, "/fov")) {
       String[] args = getArgs(command);
       int i = 0;
