@@ -5439,7 +5439,7 @@ public class TWEngine {
     }
     
     String cachepath = generateCachePath("");
-    CmdOutput cmdout = runExecutableCommand(APPPATH+PDFTOPNG_PATH, "-f", "1", "-l", "1", "-r", "48", path, cachepath);
+    CmdOutput cmdout = runExecutableCommand(APPPATH+PDFTOPNG_PATH, "-f", "1", "-l", "1", "-r", "24", path, cachepath);
     if (!cmdout.success) {
       console.warn("pdftopng error: "+cmdout.exitCode+" "+cmdout.message);
     }
@@ -8096,9 +8096,9 @@ public final class SpriteSystemPlaceholder {
         public SpriteSystemPlaceholder(TWEngine engine, String path) {
             this.engine = engine;
             spriteNames = new HashMap<String, Integer>();
-            selectedSprites = new Stack<Sprite>(32768);
+            selectedSprites = new Stack<Sprite>(1024);
             sprites = new ArrayList<Sprite>();
-            spritesStack = new Stack<Sprite>(128);
+            spritesStack = new Stack<Sprite>(32768);
             unusedSprite = new Sprite("UNUSED");
             generalClick = new Click();
             selectedSprite = null;

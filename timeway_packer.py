@@ -316,6 +316,9 @@ if (os.path.isdir("timeway_windows_"+version)):
     if (os.path.isfile(new_name_windows+"/data/stats.json")):
         os.remove(new_name_windows+"/data/stats.json")
         print("Removed stats.json.")
+    if (os.path.isfile(new_name_windows+"/data/history.txt")):
+        os.remove(new_name_windows+"/data/history.txt")
+        print("Removed history.txt.")
     if (os.path.isfile(new_name_windows+"/data/error_log.txt")):
         os.remove(new_name_windows+"/data/error_log.txt")
         print("Removed error_log.txt.")

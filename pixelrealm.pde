@@ -106,8 +106,6 @@ public class PixelRealm extends Screen {
   private boolean playingWarpingSound = false;
   
   
-  private boolean weirdmode = false;
-  
   
   // --- Legacy backward-compatibility stuff & easter eggs ---
   protected float height = HEIGHT-myUpperBarWeight-myLowerBarWeight;
@@ -1754,7 +1752,12 @@ public class PixelRealm extends Screen {
         // In modifyTerrain mode, terrain is re-generated every frame (slow but dynamic, used for previewing custom terrain)
         // In non-modifyTerrain mode, terrain uses PShapes stored in GPU memory (fast but rigid, to change tile data you must re-generate entire chunk)
         if (!modifyTerrain) {
-          scene.shape(pshapeChunk);
+          try {
+            scene.shape(pshapeChunk);
+          }
+          catch (RuntimeException e) {
+            console.warn("Chunk rendering GL error.");
+          }
         }
         else {
           PVector[][] temp = new PVector[CHUNK_SIZE+1][CHUNK_SIZE+1];
@@ -3759,6 +3762,7 @@ public class PixelRealm extends Screen {
           break;
         case FILE_TYPE_PDF:
           fileobject = new ImageFileObject(path);
+          ((ImageFileObject)fileobject).allowTexFlipping = true;
           break;
         case FILE_TYPE_VIDEO:
           fileobject = new VideoFileObject(path);
@@ -6250,20 +6254,11 @@ public class PixelRealm extends Screen {
     
   boolean beginBackgroundCaching = true;
     
-    
-  float weirdModeCameraX = 0f;
-  float weirdModeCameraY = 0f;
-  float weirdModeCameraZ = 0f;
-    
-  float weirdmodetime = 0f;
-    
+        
   // Finally, the most important code of all
-  int weirdmodeFrame = 0;
+  
   // ----- Pixel Realm logic code -----
   private void runPixelRealm() {
-    if (weirdmode) {
-      display.forceDelta(1f);
-    }
     
     // Pre-rendering stuff.
     portalCoolDown -= display.getDelta();
@@ -6316,25 +6311,7 @@ public class PixelRealm extends Screen {
     display.recordLogicTime();
 
     //scene.translate(-xpos+(scene.width / 2), ypos+(sin(bob)*3)+(scene.height / 2)+80, -zpos+(scene.width / 2));
-    if (weirdmode) {
-      float x = weirdModeCameraX;
-      float y = weirdModeCameraY-PLAYER_HEIGHT;
-      float z = weirdModeCameraZ;
-      float LOOK_DIST = 250.;
-      
-      currRealm.direction = sin(weirdmodetime*0.007f)*4f;
-      weirdmodetime += display.getDelta();
-      
-      currRealm.playerX = x+sin(currRealm.direction)*LOOK_DIST;
-      currRealm.playerY = y-50f;
-      currRealm.playerZ = z+cos(currRealm.direction)*LOOK_DIST;
-      
-      scene.camera(currRealm.playerX, currRealm.playerY, currRealm.playerZ,
-        x, y, z,
-        0., 1., 0.);
-    }
-    
-    else {
+    {
       float x = currRealm.playerX;
       float y = currRealm.playerY+(sin(bob)*3)-PLAYER_HEIGHT;
       float z = currRealm.playerZ;
@@ -6366,31 +6343,7 @@ public class PixelRealm extends Screen {
     float wi = scene.width*DISPLAY_SCALE;
     float hi = this.height;
     
-    
-    
-    if (weirdmode) {
-      scene.loadPixels();
-      for (int y = 0; y < scene.height; y++) {
-        for (int x = 0; x < scene.width; x++) {
-          float xx = (float(x)/float(scene.width))*PI;
-          float yy = (float(y)/float(scene.height))*PI;
-          
-          if ((sin(xx)*sin(yy)) < random(0.02f, 0.5f)) {
-            
-            scene.pixels[y*scene.width+x] = color(0,0,0);
-          }
-        }
-      }
-      scene.updatePixels();
-    }
-    
     image(scene, (WIDTH/2)-wi/2, (HEIGHT/2)-hi/2, wi, hi);
-    flush();
-    
-    if (weirdmode) {
-      //saveFrame(engine.APPPATH+"frames/"+nf(weirdmodeFrame++, 5)+".tiff");
-      saveFrame(engine.APPPATH+"frames/#####.tiff");
-    }
     
     display.recordLogicTime();
     
@@ -6401,7 +6354,7 @@ public class PixelRealm extends Screen {
     // Quickwarp controls (outside of player controls because we need non-state
     // class to run it)
     // TODO: This should really be in runPlayer yet it's here for some reason?
-    if (!movementPaused) {
+    if (!movementPaused && !engine.commandPromptShown) {
       for (int i = 0; i < 10; i++) {
         // Go through all the keys 0-9 and check if it's being pressed
         if (input.keyActionOnce("quickWarp"+str(i)) && usePortalAllowed) {
@@ -6789,15 +6742,8 @@ public class PixelRealm extends Screen {
       }
       return true;
     }
-    else if (engine.commandEquals(command, "/weirdmode")) {
-      weirdmode = !weirdmode;
-      weirdModeCameraX = currRealm.playerX;
-      weirdModeCameraY = currRealm.playerY;
-      weirdModeCameraZ = currRealm.playerZ;
-      weirdmodeFrame = 0;
-      return true;
-    }
-    else if (engine.commandEquals(command, "/spawnnael")) {
+    else if (engine.commandEquals(command, "/nael")) {
+      console.log("Metamorphosynthesis");
       currRealm.spawnNael();
       return true;
     }
