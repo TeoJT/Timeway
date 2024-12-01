@@ -59,6 +59,7 @@ public String sketchPath() {
 
 protected PSurface initSurface() {
     PSurface s = super.initSurface();
+    s.setResizable(true);
     
     // Windows is annoying with maximised screens
     // So let's do this hack to make the screen maximised.
@@ -81,8 +82,6 @@ protected PSurface initSurface() {
         }
       }
     }
-    s.setTitle(TWEngine.APP_NAME);
-    s.setResizable(true);
     return s;
 }
 
@@ -189,7 +188,7 @@ public void openErrorLog() {
 }
 
 public void minimalErrorDialog(String mssg) {
-  JOptionPane.showMessageDialog(null,mssg,TWEngine.APP_NAME,1);
+  JOptionPane.showMessageDialog(null, mssg, "Timeway Engine", 1);
 }
 
 public void requestAndroidPermissions() {

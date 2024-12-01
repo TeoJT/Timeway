@@ -23,9 +23,6 @@ import java.io.PrintWriter;
 * 
 * Here's a quick rundown of what the other .pde files contain:
 *
-* messy.pde: Contains messy imported code from Sketchiepad that includes the sprite
-* system (used for UI and draggable text and images in the editor).
-*
 * pixelrealm_ui: Simply adds UI functionality to the base PixelRealm class since
 * having it all in one class would make it bloated and extremely difficult to 
 * maintain.
@@ -46,8 +43,6 @@ import java.io.PrintWriter;
 * Anyways, I have no idea who's reading this or who would delve into the code of Timeway,
 * but if you're here reading this, then have fun!
 *
-*
-*
 * 
 **/
 
@@ -65,6 +60,7 @@ import java.io.PrintWriter;
 
 
 TWEngine timewayEngine;
+
 boolean sketch_showCrashScreen = false;
 String sketch_ERR_LOG_PATH;
 
@@ -137,8 +133,7 @@ void sketch_openErrorLog(Exception e) {
   String sStackTrace = sw.toString();
   
   String errMsg = 
-  "Sorry! "+TWEngine.APP_NAME+" crashed :(\n"+
-  "Please provide Teo Taylor with this error log, thanks <3\n\n\n"+
+  "The Timeway engine experienced an unrecoverable problem and had to close the application :(\n\n\n"+
   e.getClass().toString()+"\nMessage: \""+
   e.getMessage()+"\"\nStack trace:\n"+
   sStackTrace;
@@ -160,15 +155,30 @@ void setup() {
     // Are we running in Processing or as an exported application?
     File f1 = new File(sketchPath()+"/lib");
     sketch_showCrashScreen = f1.exists();
-    println("ShowcrashScreen: ", sketch_showCrashScreen);
+    //println("ShowcrashScreen: ", sketch_showCrashScreen);
     sketch_ERR_LOG_PATH = sketchPath()+"/data/error_log.txt";
+    
+    // Create the engine.
     timewayEngine = new TWEngine(this);
+    
+    // Set the starting point for the engine.
     timewayEngine.startScreen(new Startup(timewayEngine));
+    
+    // Engine is ready and going, set title.
+    surface.setTitle(timewayEngine.getAppName());
+    
+    // Print a lil information to the terminal as a bonus :P
+    println("\n***** "+timewayEngine.getAppName()+" "+timewayEngine.getVersion()+" *****");
+    println("by Teo Taylor\n\n");
+    
+    // Self-explainatory.
     requestAndroidPermissions();
 }
 
+// The magical draw() method that runs it all. Be amazed :o
 void draw() {
   if (timewayEngine == null) {
+    // This shouldn't ever run but let's have it here to be safe
     timewayEngine = new TWEngine(this);
   }
   else {
@@ -180,7 +190,8 @@ void draw() {
           timewayEngine.engine();
         }
         catch (java.lang.OutOfMemoryError outofmem) {
-          sketch_openErrorLog(TWEngine.APP_NAME+" has run out of memory.");
+          // Woops
+          sketch_openErrorLog("Timeway has run out of memory.");
           exit();
         }
         catch (Exception e) {

@@ -2,7 +2,7 @@ public class Updater extends Screen {
   String updateName = "";
   String headerText = "An update is available!";
   String displayMessage = "This update contains the following additions, changes, and/or fixes:\n";
-  String footerMessage = "Downloading and installing will run in the background as "+TWEngine.APP_NAME+" runs, so please leave Timeway running until the update completes. Don't worry, none of your personal data will be modified.";
+  String footerMessage = "Downloading and installing will run in the background as "+engine.getAppName()+" runs, so please leave Timeway running until the update completes. Don't worry, none of your personal data will be modified.";
   String patchNotes = "";
   boolean startedMusic = false;
   JSONObject updateInfo;
@@ -141,7 +141,7 @@ public class Benchmark extends Screen {
   public Benchmark(TWEngine e) {
     super(e);
     textFont(engine.DEFAULT_FONT);
-    gui = new SpriteSystemPlaceholder(engine, engine.APPPATH+engine.PATH_SPRITES_ATTRIB+"gui/benchmark/");
+    gui = new SpriteSystemPlaceholder(engine, engine.APPPATH+engine.PATH_SPRITES_ATTRIB()+"gui/benchmark/");
     ui.useSpriteSystem(gui);
     myUpperBarColor = color(100);
     gui.interactable = false;
@@ -232,7 +232,7 @@ public class Explorer extends Screen {
         super(engine);
         
         file.openDirInNewThread(engine.DEFAULT_DIR);
-        gui = new SpriteSystemPlaceholder(engine, engine.APPPATH+engine.PATH_SPRITES_ATTRIB+"gui/explorer/");
+        gui = new SpriteSystemPlaceholder(engine, engine.APPPATH+engine.PATH_SPRITES_ATTRIB()+"gui/explorer/");
         gui.repositionSpritesToScale();
         gui.interactable = false;
         
@@ -246,7 +246,7 @@ public class Explorer extends Screen {
         super(engine);
         
         file.openDirInNewThread(dir);
-        gui = new SpriteSystemPlaceholder(engine, engine.APPPATH+engine.PATH_SPRITES_ATTRIB+"gui/explorer/");
+        gui = new SpriteSystemPlaceholder(engine, engine.APPPATH+engine.PATH_SPRITES_ATTRIB()+"gui/explorer/");
         gui.repositionSpritesToScale();
         gui.interactable = false;
         
@@ -280,7 +280,7 @@ public class Explorer extends Screen {
             app.fill(100, 0, 255);
             app.tint(100, 0, 255);
             // if mouse is hovering over text and left click is pressed, go to this directory/open the file
-            if (input.primaryClick) {
+            if (input.primaryOnce) {
               if (file.currentFiles[i].isDirectory())
                 input.scrollOffset = 0.;
                 
@@ -348,7 +348,7 @@ public class Explorer extends Screen {
         gui.suppressSpriteWarning = false;
 
         // Only when the button is actually clicked.
-        return hover && input.primaryClick;
+        return hover && input.primaryOnce;
     }
     
   

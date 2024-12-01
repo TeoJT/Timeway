@@ -630,7 +630,7 @@ public class Editor extends Screen {
         super(engine);
         this.entryPath = entryPath;
         if (c == null) {
-          gui = new SpriteSystemPlaceholder(engine, engine.APPPATH+engine.PATH_SPRITES_ATTRIB+"gui/editor/");
+          gui = new SpriteSystemPlaceholder(engine, engine.APPPATH+engine.PATH_SPRITES_ATTRIB()+"gui/editor/");
           gui.repositionSpritesToScale();
           gui.interactable = false;
           
@@ -1488,7 +1488,7 @@ public class Editor extends Screen {
           prevReset =  false;
         }
         
-        if (input.primaryClick && !mouseInUpperbar) {
+        if (input.primaryOnce && !mouseInUpperbar) {
           scrolling = true;
         }
         
@@ -1505,7 +1505,7 @@ public class Editor extends Screen {
         // 1. If the minimenu is open
         // 2. GUI element is clicked (we just check the mouse is in the upper bar
         // to check that condition)
-        if (input.primaryClick) {
+        if (input.primaryOnce) {
             if(!ui.miniMenuShown() && !mouseInUpperbar) {
 
                 if (editingPlaceable != null) {
@@ -1787,7 +1787,7 @@ public class ReadOnlyEditor extends Editor {
     readOnly = true;
     input.scrollOffset = -UPPER_BAR_DROP_WEIGHT;
     
-    readonlyEditorUI = new SpriteSystemPlaceholder(engine, engine.APPPATH+engine.PATH_SPRITES_ATTRIB+"gui/readonlyeditor/");
+    readonlyEditorUI = new SpriteSystemPlaceholder(engine, engine.APPPATH+engine.PATH_SPRITES_ATTRIB()+"gui/readonlyeditor/");
     readonlyEditorUI.repositionSpritesToScale();
     readonlyEditorUI.interactable = false;
   }

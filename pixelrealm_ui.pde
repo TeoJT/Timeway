@@ -21,7 +21,7 @@ public class PixelRealmWithUI extends PixelRealm {
 
 
   private String[] dm_welcome = {
-    "Welcome to "+TWEngine.APP_NAME+".",
+    "Welcome to "+engine.getAppName()+".",
     "Your folders are your realms.",
     "Your computer is your universe.",
     "But first, let me show you the ropes.",
@@ -67,7 +67,7 @@ public class PixelRealmWithUI extends PixelRealm {
     "Remember, all the items you see in your realms are files on your computer.",
     "Portals resemble folders. Walk into them to go to enter the folder, or \"realm\".",
     "You should be able to figure out the rest yourself, it's not too complicated.",
-    TWEngine.APP_NAME+" is an ongoing project. There may be bugs and missing features.",
+    engine.getAppName()+" is an ongoing project. There may be bugs and missing features.",
     "But there are many more things to come.",
     "In the meantime, I hope you enjoy this demo."
   };
@@ -95,14 +95,14 @@ public class PixelRealmWithUI extends PixelRealm {
       touchControlsEnabled = true;
     }
 
-    gui = new SpriteSystemPlaceholder(engine, engine.APPPATH+engine.PATH_SPRITES_ATTRIB+"gui/pixelrealm/");
+    gui = new SpriteSystemPlaceholder(engine, engine.APPPATH+engine.PATH_SPRITES_ATTRIB()+"gui/pixelrealm/");
     gui.suppressSpriteWarning = true;
     gui.interactable = false;
     ui.useSpriteSystem(gui);
 
     // Indicates first time running, run the tutorial.
     boolean statsExists = false;
-    statsExists = isAndroid() ? file.exists(getAndroidWriteableDir()+engine.STATS_FILE) : file.exists(engine.APPPATH+engine.STATS_FILE);
+    statsExists = isAndroid() ? file.exists(getAndroidWriteableDir()+engine.STATS_FILE()) : file.exists(engine.APPPATH+engine.STATS_FILE());
     
     if (!statsExists) {
       this.requestTutorial();
@@ -305,7 +305,7 @@ public class PixelRealmWithUI extends PixelRealm {
 
       boolean enterPressed = input.enterOnce;
       if (touchControlsEnabled) {
-        enterPressed |= input.primaryClick && time > 4;
+        enterPressed |= input.primaryOnce && time > 4;
       }
 
       if (enterPressed) {
@@ -1414,7 +1414,7 @@ public class PixelRealmWithUI extends PixelRealm {
       display.imgCentre("music", x-wi-30, y, 40, 40);
       app.noTint();
 
-      if (musicURL.length() > 0 && engine.mouseY() > y && input.primaryClick) {
+      if (musicURL.length() > 0 && engine.mouseY() > y && input.primaryOnce) {
         app.link(musicURL);
       }
     } else {
