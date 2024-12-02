@@ -85,8 +85,12 @@ public class PixelRealmWithUI extends PixelRealm {
   // --- Constructors ---
   public PixelRealmWithUI(TWEngine engine, String dir) {
     super(engine, dir);
+    
+    myUpperBarColor = color(130);
+    myLowerBarColor = color(130);
+    
+    
     // Ugh. whatever.
-
     IMG_BORDER_TILE = display.systemImages.get("menuborder").pimage;
 
     touchControlsEnabled = settings.getBoolean("touch_controls");
@@ -525,7 +529,11 @@ public class PixelRealmWithUI extends PixelRealm {
         sound.playSound("menu_select");
         
         issueRefresherCommand(REFRESHER_PAUSE);
-        if (file.recycle(probject.dir)) {
+        if (cassettePlaying.equals(this.filename)) {
+          prompt("File in use.", this.filename+" is currently playing. Stop music from playing then try deleting again.");
+          return;
+        }
+        else if (file.recycle(probject.dir)) {
           probject.destroy();
           console.log(filename+" moved to recycle bin.");
         }
@@ -535,10 +543,14 @@ public class PixelRealmWithUI extends PixelRealm {
       if (ui.buttonVary("op-rename", "command_256", "Rename")) {
         sound.playSound("menu_select");
         
+        console.log("Not functional yet!");
+        
         closeMenu();
       }
       if (ui.buttonVary("op-duplicate", "cuber_tool_128", "Duplicate")) {
         sound.playSound("menu_select");
+        
+        console.log("Not functional yet!");
         
         closeMenu();
       }
@@ -1391,9 +1403,28 @@ public class PixelRealmWithUI extends PixelRealm {
     this.runTutorial();
     gui.updateSpriteSystem();
   }
+  
+  
+  
+  private float cassetteTextScroll = 0f;
+  private String playingBefore = "";
 
   protected void lowerBar() {
     super.lowerBar();
+    
+    if (engine.playWhileUnfocused) tint(255);
+    else tint(200);
+    boolean backmusicClicked = ui.buttonImg("music_time_128", 10f, HEIGHT-myLowerBarWeight, myLowerBarWeight, myLowerBarWeight);
+    app.noTint();
+    
+    if (backmusicClicked) {
+      engine.toggleUnfocusedMusic();
+      if (engine.playWhileUnfocused) 
+        sound.playSound("select_bigger");
+      else
+        sound.playSound("select_smaller");
+    }
+    
     if (musicInfo.length() > 0 && menuShown && menu != null && menu instanceof NewRealmMenu) {
       app.textFont(engine.DEFAULT_FONT, 30);
       app.textAlign(RIGHT, CENTER);
@@ -1417,7 +1448,123 @@ public class PixelRealmWithUI extends PixelRealm {
       if (musicURL.length() > 0 && engine.mouseY() > y && input.primaryOnce) {
         app.link(musicURL);
       }
-    } else {
+    } 
+    else if (cassettePlaying()) {
+      float SCROLL_SPEED = 2f;
+      
+      float MUSIC_TEXT_X = WIDTH*0.15f;
+      float MUSIC_TEXT_WI = WIDTH*0.2f;
+      float MUSIC_TEXT_X_END = MUSIC_TEXT_X+MUSIC_TEXT_WI;
+      float STOP_BUTTON_X = MUSIC_TEXT_X_END+10f;
+      float PLAY_PAUSE_BUTTON_X = STOP_BUTTON_X+myLowerBarWeight+10f;
+      float BAR_X_START = PLAY_PAUSE_BUTTON_X+myLowerBarWeight+10f;
+      float BAR_X_LENGTH = WIDTH*0.8f-BAR_X_START;
+      
+        
+      {
+      // Display "now playing" menu
+      app.textFont(engine.DEFAULT_FONT, 30);
+      app.textAlign(LEFT, CENTER);
+      float x = MUSIC_TEXT_X;
+      float y = HEIGHT-myLowerBarWeight/2;
+      app.fill(0);
+      
+      // Clip to scroll text
+      float clipwi = MUSIC_TEXT_WI;
+      display.clip(x, HEIGHT-myLowerBarWeight, clipwi, myLowerBarWeight);
+      
+      // Funky way of resetting cassettteTextScroll if music is changed
+      if (playingBefore != cassettePlaying) {
+        playingBefore = cassettePlaying;
+        cassetteTextScroll = clipwi;
+      }
+      
+      float textwi = app.textWidth(cassettePlaying)+clipwi+15f;
+      float textx = x-(cassetteTextScroll%textwi)+clipwi;
+      app.text(cassettePlaying, textx, y);
+      // Glowing text
+      color c = color(255, 200, 192.+sin(display.getTime()*0.1)*64. );
+      app.fill(c);
+      app.text(cassettePlaying, textx-2, y-2);
+      display.noClip();
+
+      // Music icon.
+      app.tint(0);
+      display.imgCentre("music", x-30+2, y+2, 40, 40);
+      app.tint(c);
+      display.imgCentre("music", x-30, y, 40, 40);
+      app.noTint();
+      
+      
+      }
+      
+      {
+      
+        // Display timeline
+        // bar
+        float y = HEIGHT-myLowerBarWeight;
+        app.fill(50);
+        app.noStroke();
+        app.rect(BAR_X_START, y+(myLowerBarWeight/2)-2, BAR_X_LENGTH, 4);
+        
+        // Times
+        app.textAlign(LEFT, CENTER);
+        app.fill(255);
+        app.textFont(engine.DEFAULT_FONT, 22);
+        
+        float time = sound.getTime();
+        float dur = sound.getCurrentMusicDuration();
+        int minutes = (int)(time/60f);
+        int seconds = (int)(time%60f);
+        int minutesDur = (int)(dur/60f);
+        int secondsDur = (int)(dur%60f);
+        String disp = nf(minutes, 2)+":"+nf(seconds, 2)+"/"+nf(minutesDur, 2)+":"+nf(secondsDur, 2);
+        fill(0);
+        app.text(disp, BAR_X_START+BAR_X_LENGTH+10-2, y+(myLowerBarWeight/2)-2);
+        fill(255);
+        app.text(disp, BAR_X_START+BAR_X_LENGTH+10, y+(myLowerBarWeight/2));
+        
+        float percent = time/dur;
+        float timeNotchPos = BAR_X_START+BAR_X_LENGTH*percent;
+        
+        // Notch
+        app.fill(255);
+        app.rect(timeNotchPos-4, y+(myLowerBarWeight/2)-25, 8, 50); 
+        
+        // Play/pause button
+        boolean playpauseClicked = ui.buttonImg(sound.musicIsPlaying() ? "pause_128" : "play_128", PLAY_PAUSE_BUTTON_X, y, myLowerBarWeight, myLowerBarWeight);
+        boolean stopClicked = ui.buttonImg("stop_128", STOP_BUTTON_X, y, myLowerBarWeight, myLowerBarWeight);
+        
+        // Buttons
+        if (playpauseClicked) {
+          sound.playSound("select_any");
+          if (sound.musicIsPlaying()) {
+            sound.pauseMusic();
+          }
+          else {
+            sound.continueMusic();
+          }
+        }
+        
+        if (stopClicked) {
+          sound.playSound("select_any");
+          sound.streamMusicWithFade(currRealm.musicPath);
+          cassettePlaying = "";
+        }
+        
+        
+        // Bar input control (seek time)
+        if (input.mouseX() > BAR_X_START && input.mouseX() < BAR_X_START+BAR_X_LENGTH && input.mouseY() > HEIGHT-myLowerBarWeight && input.primaryDown) {
+          float notchPercent = min(max((input.mouseX()-BAR_X_START)/BAR_X_LENGTH, 0.), 1.);
+          sound.syncMusic(notchPercent*dur);
+        }
+        
+      }
+      
+      
+      cassetteTextScroll += display.getDelta()*SCROLL_SPEED;
+    }
+    else {
       musicInfo = "";
       musicURL = "";
     }

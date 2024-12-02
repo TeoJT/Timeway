@@ -149,6 +149,7 @@ public class PixelRealm extends Screen {
   private int breadcrumbIndex = 0;
   protected PixelRealmState.PRObject optionHighlightedItem = null;
   private boolean loadFromCache = false;
+  protected String cassettePlaying = "";   // Empty string for realm bgm.
   
   private AtomicBoolean refreshRealm = new AtomicBoolean(false);
   private AtomicInteger refresherCommand = new AtomicInteger(0);
@@ -840,6 +841,10 @@ public class PixelRealm extends Screen {
   protected void prompt(String title, String text) {}
     
   private Thread refresherThread;
+  
+  protected boolean cassettePlaying() {
+    return !cassettePlaying.equals("");
+  }
   
   // Use by the refresher thread only, to check each file to see if it's been refreshed, and if so,
   // signal a file change.
@@ -2291,6 +2296,14 @@ public class PixelRealm extends Screen {
       
       public void load(JSONObject json) {
         super.fileLoad(json);
+      }
+      
+      
+      public void interationAction() {
+        sound.stopMusic();
+        sound.streamMusic(this.dir);
+        cassettePlaying = this.filename;
+        console.log("Now playing "+this.filename);
       }
       
       
@@ -4140,9 +4153,9 @@ public class PixelRealm extends Screen {
       // Load chunks
       JSONArray chunksArray = jsonFile.getJSONArray("chunks");
       
-      if (engine.cacheExists(stateDirectory+"terrain_cache.tmp")) {
-        byte[] bytedata = app.loadBytes(engine.tryGetCachePath(stateDirectory+"terrain_cache.tmp"));
-        chunks = decodeTerrainCache(bytedata);
+      //if (engine.cacheExists(stateDirectory+"terrain_cache.tmp")) {
+      if (false) {
+        chunks = decodeTerrainCache(engine.tryGetCachePath(stateDirectory+"terrain_cache.tmp"));
         console.log("Cache load!");
         loadFromCache = true;
       }
@@ -4395,7 +4408,7 @@ public class PixelRealm extends Screen {
     }
     
     public int getInt(byte[] byteArray, int offset) {
-    
+      
       // Reading the integer from the byte array
       return ((byteArray[offset+0] & 0xFF) << 24) |
         ((byteArray[offset+1] & 0xFF) << 16) |
@@ -4540,40 +4553,55 @@ public class PixelRealm extends Screen {
     private HashMap<Integer, Integer> rowLengths = null;
     private RandomAccessFile chunkCacheBlock = null;
     
-    private HashMap<Integer, TerrainChunkV2> decodeTerrainCache(byte[] bytes) {
+    private HashMap<Integer, TerrainChunkV2> decodeTerrainCache(String path) {
       HashMap<Integer, TerrainChunkV2> chunks = new HashMap<Integer, TerrainChunkV2>();
       
-      RandomAccessFile raf = new RandomAccessFile("your_file.txt", "r")
-      chunkCacheBlock = bytes;
-    
-    
-      // get header info
-      int version = getInt(bytes, 0);
-      int headerSize = getInt(bytes, 4);
-    
-      if (version != TERRAIN_CACHE_VERSION) {
-        // TODO: error handling code here.
-        return null;
-      }
-    
-      // converted ypos
-      rowPointers = new HashMap<Integer, Integer>();
-      rowLengths  = new HashMap<Integer, Integer>();
-    
-      // Get the pointers to each row.
-      // TODO: change to 12 if you need an extra pointer.
-    
-      {
-        int y = 0;
-        for (int i = 8; i < headerSize; i+=8) {
-          int ptr = getInt(bytes, i);
-          if (ptr != -1) {
-            rowPointers.put(denumerate(y), ptr);
-            rowLengths.put(denumerate(y), getInt(bytes, i+4));
-          }
-          y++;
+      try {
+        chunkCacheBlock = new RandomAccessFile(path, "r");
+      
+        chunkCacheBlock.seek(0);
+        byte[] bytes = new byte[16];
+        chunkCacheBlock.read(bytes);
+        // get header info
+        int version = getInt(bytes, 0);
+        int headerSize = getInt(bytes, 4);
+      
+        if (version != TERRAIN_CACHE_VERSION) {
+          // TODO: error handling code here.
+          return null;
         }
+      
+        // converted ypos
+        rowPointers = new HashMap<Integer, Integer>();
+        rowLengths  = new HashMap<Integer, Integer>();
+      
+        // Get the pointers to each row.
+        // TODO: change to 12 if you need an extra pointer.
+        int HEADER_START = 8;
+        
+        chunkCacheBlock.seek(HEADER_START);
+        bytes = new byte[headerSize];
+        chunkCacheBlock.read(bytes);
+      
+        {
+          int y = 0;
+          for (int i = HEADER_START; i < headerSize; i+=8) {
+            int ptr = getInt(bytes, i);
+            if (ptr != -1) {
+              rowPointers.put(denumerate(y), ptr);
+              rowLengths.put(denumerate(y), getInt(bytes, i+4));
+            }
+            y++;
+          }
+        }
+        
+      
+      
       }
+      catch (IOException e) {
+        console.warn("decodeTerrainCache: "+e.getMessage());
+      }
+    
     
       return chunks;
     }
@@ -4594,10 +4622,18 @@ public class PixelRealm extends Screen {
       }
     
       boolean missingData = true;
+      
+      
+      try {
+        chunkCacheBlock.seek((long)(rowPointer+xindex));
+        chunkCacheBlock.read(bytes);
+      }
+      catch (IOException e) {
+        console.warn("getChunkCache: "+e.getMessage());
+      }
+      
       for (int i = 0; i < CHUNK_BYTES_SIZE; i++) {
-        byte b = chunkCacheBlock[rowPointer+xindex+i];
-        if (b != 0) missingData = false;
-        bytes[i] = b;
+        if (bytes[i] != 0) missingData = false;
       }
       if (missingData) return null;
       return bytes;
@@ -5742,9 +5778,9 @@ public class PixelRealm extends Screen {
           TerrainChunkV2 chunk = chunks.get(hashIndex);
           
           if (chunk == null) {
+            chunk = new TerrainChunkV2(chunkx, chunkz);
             if (loadFromCache) {
               byte[] chunkbytes = getChunkCache(chunkx, chunkz);
-              chunk = new TerrainChunkV2(chunkx, chunkz);
               if (chunkbytes != null) {
                 chunk.loadFromBytes(chunkbytes);
                 chunk.updatePShape();
@@ -5753,8 +5789,8 @@ public class PixelRealm extends Screen {
             }
             else {
               chunk = new TerrainChunkV2(chunkx, chunkz);
-              chunks.put(hashIndex, chunk);
             }
+            chunks.put(hashIndex, chunk);
           }
           
           chunk.renderChunk();
@@ -6049,6 +6085,10 @@ public class PixelRealm extends Screen {
           if (holdingObject instanceof ImageFileObject) {
             ImageFileObject imgobject = (ImageFileObject)holdingObject;
             imgobject.rot = direction+HALF_PI;
+          }
+          else if (holdingObject instanceof MusicFileObject) {
+            MusicFileObject imgobject = (MusicFileObject)holdingObject;
+            imgobject.rotY = direction;
           }
         }
       }
@@ -6424,10 +6464,12 @@ public class PixelRealm extends Screen {
     backgroundRealm = null;
     realmsToVisit.clear();
     //visitedBackgroundRealms.add(to);
-        
+    
     
     // Creating a new realm won't start the music automatically cus we like manual bug-free control.
-    sound.streamMusicWithFade(currRealm.musicPath);
+    if (!cassettePlaying()) {
+      sound.streamMusicWithFade(currRealm.musicPath);
+    }
       
     // so that our currently holding item doesn't disappear when we go into the next realm.
     if (currentTool == TOOL_GRABBER) {
@@ -6455,9 +6497,12 @@ public class PixelRealm extends Screen {
     }
     currRealm.saveRealmJson();
     
-    //tilesCache.clear();
+    //cassettePlaying = "";
     
-    sound.streamMusicWithFade(r.musicPath);
+    if (!cassettePlaying()) {
+      sound.streamMusicWithFade(r.musicPath);
+    }
+    
     portalCoolDown = 10.;
     currRealm = r;
     currRealm.refreshFiles();

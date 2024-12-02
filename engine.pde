@@ -510,7 +510,7 @@ public class TWEngine {
     private boolean forcePowerModeEnabled = false;
     private PowerMode forcedPowerMode = PowerMode.HIGH;
     private PowerMode powerModeBefore = PowerMode.NORMAL;
-    public boolean allowMinimizedMode = false;
+    public boolean allowMinimizedMode = true;
   
     // The score that seperates the stable fps from the unstable fps.
     // If you've got half a brain, it would make the most sense to keep it at 0.
@@ -1234,6 +1234,20 @@ public class TWEngine {
       return displayScale;
     }
     
+    public void clip(float x, float y, float wi, float hi) {
+      currentPG.imageMode(CORNER);
+      if (currentPG == g) {
+        app.clip(x*displayScale, y*displayScale, wi*displayScale, hi*displayScale);
+      }
+      else {
+        currentPG.clip(x, y, wi, hi);
+      }
+    }
+    
+    public void noClip() {
+      currentPG.noClip();
+    }
+    
     // Since loading essential content only really takes place at the beginning,
     // we can free some memory by clearing the temp info in loadedcontent.
     // Just make sure not to load all content again!
@@ -1870,11 +1884,6 @@ public class TWEngine {
       display.recordLogicTime();
     }
     
-    public void clip(float x, float y, float wi, float hi) {
-      float s = getScale();
-      app.clip(x*s, y*s, wi*s, hi*s);
-    }
-    
     public void update() {
       // Reset so that a new texture can be uploaded to gpu
       uploadGPUOnce = true;
@@ -2342,6 +2351,12 @@ public class TWEngine {
       this.currentSpritePlaceholderSystem = system;
       this.spriteSystemClickable = true;
       this.guiFade = 255.;
+    }
+    
+    public boolean buttonImg(String img, float x, float y, float w, float h) {
+      display.img(img, x, y, w, h);
+      
+      return (input.mouseX() > x && input.mouseX() < x+w && input.mouseY() > y && input.mouseY() < y+h && input.primaryOnce);
     }
     
     public boolean buttonHoverVary(String name) {
@@ -3549,6 +3564,14 @@ public class TWEngine {
       if (!customTime) {
         
       }
+    }
+    
+    public boolean musicIsPlaying() {
+      if (streamerMusic != null) {
+        // TODO: getting time is slow for some reason.
+        return streamerMusic.isPlaying();
+      }
+      return false;
     }
   
     public void processSound() {
@@ -5884,6 +5907,13 @@ public class TWEngine {
     }
     return (input.substring(0, ind).equals(expected));
   }
+  
+  
+  public void toggleUnfocusedMusic() {
+    playWhileUnfocused = !playWhileUnfocused;
+    if (playWhileUnfocused) console.log("Background music (while focused) enabled.");
+    else console.log("Background music (while focused) disabled.");
+  }
 
 
   public void runCommand(String command) throws RuntimeException {
@@ -5954,9 +5984,7 @@ public class TWEngine {
       restart();
     }
     else if (commandEquals(command, "/backgroundmusic") || commandEquals(command, "/backmusic")) {
-      playWhileUnfocused = !playWhileUnfocused;
-      if (playWhileUnfocused) console.log("Background music (while focused) enabled.");
-      else console.log("Background music (while focused) disabled.");
+      toggleUnfocusedMusic();
     }
     else if (commandEquals(command, "/enablebackgroundmusic") || commandEquals(command, "/enablebackmusic")) {
       playWhileUnfocused = true;
