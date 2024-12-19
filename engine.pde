@@ -38,6 +38,7 @@ import java.io.OutputStream;
 import java.io.InputStreamReader;
 import java.util.Iterator;   // Used by the stack class at the bottom
 import java.util.Arrays;   // Used by the stack class at the bottom
+import java.util.Collections;
 
 
 // Timeway's engine code.
@@ -145,7 +146,8 @@ public class TWEngine {
   public ClipboardModule clipboard;
   public UIModule ui;
   public InputModule input;
-  public TWEngine.PluginModule plugins;
+  public PluginModule plugins;
+  public IndexerModule indexer;
 
 
   
@@ -398,6 +400,7 @@ public class TWEngine {
         defaultKeybindings.putIfAbsent("prevDirectory", char(8));
         defaultKeybindings.putIfAbsent("nextSubTool", ']');
         defaultKeybindings.putIfAbsent("prevSubTool", '[');
+        defaultKeybindings.putIfAbsent("search", '\n');
         for (int i = 0; i < 10; i++) defaultKeybindings.putIfAbsent("quickWarp"+str(i), str(i).charAt(0));
       }
       
@@ -4901,6 +4904,218 @@ public class TWEngine {
   
   
   
+  public class IndexerModule {
+    public final String INDEXER_PATH = "index.txt";
+    
+    class Leaf {
+      String content = "";
+      String name = "";
+      String path = "";
+      int score = 0;
+      
+      public Leaf(String name, String path, String content, int score) {
+        this.name = name;
+        this.path = path;
+        this.content = content;
+        this.score = score;
+      }
+    }
+    
+    private class SlowIndexer {
+    
+      
+      public SlowIndexer() {
+        
+      }
+      
+      private HashMap<String, Leaf> entries = new HashMap<String, Leaf>();
+      
+      public void insertString(String st) {
+        insertString(st, st);
+      }
+      
+      public void insertString(String path, String st, int score) {
+        String name = file.getFilename(path);
+        entries.putIfAbsent(name, new Leaf(name, path, cleanString(st), score));
+      }
+      
+      public void insertString(String path, String st) {
+        String name = file.getFilename(path);
+        entries.put(name, new Leaf(name, path, cleanString(st), 0));
+      }
+      
+      public void removeString(String name, String st) {
+        entries.remove(name);
+      }
+      
+      public void save() {
+        try (FileWriter fileWriter = new FileWriter("string_set.txt")) {
+            for (Leaf leaf : entries.values()) {
+                fileWriter.write(leaf.path+"\n");
+                fileWriter.write(leaf.content+"\n");
+                fileWriter.write(leaf.score+"\n");
+            }
+        } catch (IOException e) {
+            System.err.println("Error writing to file: " + e.getMessage());
+        }
+      }
+      
+      public void load() {
+        
+      }
+      
+      public void increaseScore(String name, int increaseValue) {
+        entries.get(name).score += increaseValue;
+      }
+      
+      public ArrayList<Leaf> search(String st) {
+        st = cleanString(st);
+        ArrayList<Leaf> results = new ArrayList<Leaf>();
+        
+        if (st.length() == 0 || st.equals(" ")) {
+          return results;
+        }
+        
+        
+        String[] keywords = st.split(" ");
+        
+        int i = 0;
+        for (Leaf leaf : entries.values()) {
+          boolean contains = true;
+          for (String s : keywords) {
+            contains &= (leaf.content.contains(s));
+          }
+          if (contains) {
+            results.add(leaf);
+          }
+          i++;
+        }
+        println(i);
+        
+        
+        Collections.sort(results, (o1, o2) -> o2.score - o1.score);
+        
+        //println(results.size()+" results");
+        //if (results.size() == 0) {
+        //  println("0 slow search results for \""+st+"\".");
+        //}
+        //else {
+        //  println("Slow search results for \""+st+"\":");
+          
+        //  //int count = 1;
+        //  //for (Leaf leaf : results) {
+        //  //  println(count+". "+leaf.name+" [score: "+leaf.score+"]");
+        //  //  count++;
+        //  //  if (count > 16) break;
+        //  //}
+        //}
+        return results;
+      }
+    }
+    
+    private String cleanString(String st) {
+      st = st.toLowerCase().replaceAll("[!\"£%\\^&\\*\\(\\)<>?,.\\/#'\\[\\]:;#~@{}\\-=_+\\$\\n]", " ");
+      while (st.contains("  ")) {
+        st = st.replaceAll("  ", " ");;
+      }
+      return st;
+    }
+    
+    private SlowIndexer indexer; 
+    private AtomicBoolean lock = new AtomicBoolean(false);
+    
+    public IndexerModule() {
+      indexer = new SlowIndexer();
+      startIndexingThread(DEFAULT_DIR);
+    }
+    
+    public void insert(String path, String st) {
+      indexer.insertString(path, st, 1);
+    }
+    
+    public void insert(String path) {
+      indexer.insertString(path, cleanString(path), 5);
+    }
+    
+    public void insert(String path, int score) {
+      indexer.insertString(path, cleanString(path), score);
+    }
+    
+    public void insert(String path, String st, int score) {
+      indexer.insertString(path, st, score);
+    }
+    
+    
+    public ArrayList<String> search(String query) {
+      while (!lock.compareAndSet(false, true)) { }
+      
+      ArrayList<String> filenames = new ArrayList<String>();
+      ArrayList<Leaf> results = indexer.search(query);
+      for (Leaf leaf : results) {
+        filenames.add(leaf.path);
+      }
+      lock.set(false);
+      return filenames;
+    }
+    
+    public void load() {
+      // TODO
+    }
+    
+    private void traverse(String path, int depth) {
+      //if (depth > 15) {
+      //  return;
+      //}
+      
+      if (file.exists(path) && file.isDirectory(path)) {
+        File fff = new File(path);
+        File[] files = fff.listFiles();
+        for (File f : files) {
+          while (!lock.compareAndSet(false, true)) {
+            try {
+              Thread.sleep(100);
+            }
+            catch (InterruptedException e) {
+              
+            }
+          }
+          String fpath = f.getAbsolutePath().replaceAll("\\\\", "/");
+          
+          if (file.isDirectory(fpath)) {
+            insert(fpath, file.getFilename(fpath), 10);
+            lock.set(false);
+            traverse(fpath, depth+1);
+          }
+          else {
+            insert(fpath, 5);
+            lock.set(false);
+          }
+        }
+      }
+    }
+    
+    public void startIndexingThread(final String path) {
+      Thread t1 = new Thread(new Runnable() {
+        public void run() {
+          traverse(path, 0);
+        }
+      });
+      t1.start();
+    }
+  }
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
   
   
   
@@ -5268,6 +5483,7 @@ public class TWEngine {
     sound = new AudioModule();
     clipboard = new ClipboardModule();
     plugins = new PluginModule();
+    indexer = new IndexerModule();
     
     power.putFPSSystemIntoGraceMode();
     
@@ -6727,8 +6943,8 @@ public class TWEngine {
           cacheInfoJSON = loadJSONObject(CACHE_PATH+CACHE_INFO());
         }
         catch (RuntimeException e) {
-          console.warn("Cache file is curroupted. Cache will be erased and regenerated.");
-          createNewInfoFile = true;
+          console.warn("Cache info read failure.");
+          //createNewInfoFile = true;
           return;
         }
         // Make sure this cached file is compatible.
@@ -8027,6 +8243,7 @@ public abstract class Screen {
   protected TWEngine.ClipboardModule clipboard;
   protected TWEngine.UIModule ui;
   protected TWEngine.PluginModule plugins;
+  protected TWEngine.IndexerModule indexer;
   
   protected float screenx = 0;
   protected float screeny = 0;
@@ -8058,6 +8275,7 @@ public abstract class Screen {
     this.clipboard = engine.clipboard;
     this.stats = engine.stats;
     this.plugins = engine.plugins;
+    this.indexer = engine.indexer;
     
     this.WIDTH = engine.display.WIDTH;
     this.HEIGHT = engine.display.HEIGHT;

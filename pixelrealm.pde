@@ -4921,14 +4921,15 @@ public class PixelRealm extends Screen {
     
     
     public void runPlayer() {
-      primaryAction = input.keyActionOnce("primaryAction");
-      secondaryAction = input.keyActionOnce("secondaryAction");
       
       prevPlayerX = playerX;
       prevPlayerY = playerY;
       prevPlayerZ = playerZ;
       
       if (!movementPaused) {
+        
+      primaryAction = input.keyActionOnce("primaryAction");
+      secondaryAction = input.keyActionOnce("secondaryAction");
         
       isWalking = false;
       float speed = WALK_ACCELERATION;
@@ -6475,6 +6476,8 @@ public class PixelRealm extends Screen {
     if (currentTool == TOOL_GRABBER) {
       currRealm.updateHoldingItem(globalHoldingObjectSlot);
     }
+    
+    indexer.startIndexingThread(to);
     
     System.gc();
   }

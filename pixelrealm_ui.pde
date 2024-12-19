@@ -1072,6 +1072,100 @@ public class PixelRealmWithUI extends PixelRealm {
       runCustomNodes(currRealm.lightingUINodes);
     }
   }
+  
+  
+  
+  
+  
+  
+  
+  class SearchPromptMenu extends TitleMenu {
+    
+    ArrayList<String> results = null;
+    
+    int timeout = 10;
+    
+    public SearchPromptMenu() {
+      super("", "back-search");
+      input.keyboardMessage = "";
+      input.cursorX = 0;
+    }
+    
+    private void open(String path) {
+      String ext = file.getExt(path);
+      if (file.exists(path)) {
+        if (file.isDirectory(path)) {
+          gotoRealm(path);
+        }
+        else if (ext.equals("mp3") || ext.equals("ogg") || ext.equals("wav") || ext.equals("flac")) {
+          sound.stopMusic();
+          sound.streamMusic(path);
+          cassettePlaying = file.getFilename(path);
+        }
+        else {
+          file.open(path);
+        }
+      }
+    }
+    
+    public void close() {
+      searchMenuTimeout = 10;
+      menu = null;
+      menuShown = false;
+    }
+    
+    public void display() {
+      setTitle("-- Search --");
+      super.display();
+      
+      display.clip(getX(), getY(), getWidth(), getHeight());
+      
+      app.fill(255);
+      app.textSize(40);
+      app.textAlign(CENTER, TOP);
+      app.text(input.keyboardMessageDisplay(), getXmid(), getY()+100f);
+      
+      if (input.keyOnce) {
+        results = indexer.search(input.keyboardMessage);
+      }
+      
+      if (input.enterOnce && searchMenuTimeout <= 0) {
+        if (results != null && results.size() > 0) {
+          open(results.get(0));
+        }
+        close();
+      }
+      
+      if (results != null) {
+        app.textSize(20);
+        app.text(results.size()+" results.", getXmid(), getY()+160f);
+        
+        app.textSize(30);
+        float y = getY()+190f;
+        int count = 0;
+        for (String result : results) {
+          
+          if (input.mouseY() > y && input.mouseY() < y+30f) {
+            app.fill(255, 200, 0);
+            if (input.primaryOnce) {
+              open(result);
+              close();
+            }
+          }
+          else {
+            app.fill(255);
+          }
+          app.text(file.getFilename(result), getXmid(), y);
+          
+          y += 30f;
+          count++;
+          if (count > 6) break;
+        }
+      }
+      
+      display.noClip();
+    }
+  }
 
 
 
@@ -1358,7 +1452,7 @@ public class PixelRealmWithUI extends PixelRealm {
     }
   }
 
-
+  int searchMenuTimeout = 0;
   public void controls() {
     // Tab pressed.
     // Hacky way of allowing an exception for our input prompt menu's
@@ -1387,6 +1481,14 @@ public class PixelRealmWithUI extends PixelRealm {
       if (menuShown)
         sound.playSound("menu_appear");
     }
+    
+    searchMenuTimeout--;
+    if (input.keyActionOnce("search") && !engine.commandPromptShown && searchMenuTimeout <= 0 && !menuShown) {
+      menuShown = true;
+      menu = new SearchPromptMenu();
+      searchMenuTimeout = 10;
+    }
+    
     engine.inputPromptShown = tmp;
     // Allow the command prompt to be shown only if the menu isn't displayed.
     engine.allowShowCommandPrompt = !menuShown;
