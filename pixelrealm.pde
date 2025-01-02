@@ -5263,6 +5263,10 @@ public class PixelRealm extends Screen {
             }
           }
       }
+      else {
+        primaryAction = false;
+        secondaryAction = false;
+      }
       
       if (modifyTerrain) {
         playerY = onSurface(playerX, playerZ);
@@ -6049,8 +6053,10 @@ public class PixelRealm extends Screen {
           switch (currentTool) {
             case TOOL_NORMAL:
             // Bring up menu
-            optionHighlightedItem = p;
-            promptFileOptions(p);
+            if (p != exitPortal) {
+              optionHighlightedItem = p;
+              promptFileOptions(p);
+            }
             break;
             default:
             break;

@@ -112,6 +112,11 @@ public class PixelRealmWithUI extends PixelRealm {
       this.requestTutorial();
     }
   }
+  
+  private void beginInputPrompt(String text, Runnable r) {
+    engine.beginInputPrompt(text, r);
+    menu = new InputPromptMenu();
+  }
 
 
   // --- UI classes ---
@@ -523,6 +528,7 @@ public class PixelRealmWithUI extends PixelRealm {
       this.title = this.filename;
     }
     
+    
     public void display() {
       super.display();
       if (ui.buttonVary("op-delete", "notool_128", "Delete")) {
@@ -530,12 +536,18 @@ public class PixelRealmWithUI extends PixelRealm {
         
         issueRefresherCommand(REFRESHER_PAUSE);
         if (cassettePlaying.equals(this.filename)) {
-          prompt("File in use.", this.filename+" is currently playing. Stop music from playing then try deleting again.");
-          return;
+          sound.stopMusic();
+          sound.streamMusic(currRealm.musicPath);
+          cassettePlaying = "";
+          delay(100);  // Don't care about the delay you won't notice a thing (probably)
         }
-        else if (file.recycle(probject.dir)) {
+        
+        if (file.recycle(probject.dir)) {
           probject.destroy();
           console.log(filename+" moved to recycle bin.");
+        }
+        else {
+          console.warn("Failed to recycle item. File might be in use.");
         }
         
         closeMenu();
@@ -543,14 +555,110 @@ public class PixelRealmWithUI extends PixelRealm {
       if (ui.buttonVary("op-rename", "command_256", "Rename")) {
         sound.playSound("menu_select");
         
-        console.log("Not functional yet!");
-        
-        closeMenu();
+  
+        Runnable r = new Runnable() {
+          public void run() {
+            if (input.keyboardMessage.length() == 0) {
+              return;
+            }
+            String newFilename = input.keyboardMessage;
+            
+            String newPath = file.getDir(probject.dir)+"/"+newFilename;
+            
+            if (file.exists(newPath)) {
+              //prompt("Can't rename file", newFilename+" already exists. Please choose a different name.");
+              
+              Runnable rno = new Runnable() {
+                public void run() {
+                  closeMenu();
+                }
+              };
+
+              Runnable ryes = new Runnable() {
+                public void run() {
+                  issueRefresherCommand(REFRESHER_PAUSE);
+                  
+                  String oldpath = probject.dir;
+                  
+                  boolean successful = true;
+                  
+                  // Rename existing item to temp name so we don't replace it
+                  successful &= file.mv(newPath, newPath+"-tempname");
+                  
+                  // Rename current item
+                  if (successful) successful &= file.mv(oldpath, newPath);
+                  
+                  // Rename existing item to old name
+                  if (successful) successful &= file.mv(newPath+"-tempname", oldpath);
+                  
+                  if (successful) {
+                    // Need to refresh cus too lazy to get the right PRObjects.
+                    currRealm.saveRealmJson();
+                    currRealm.refreshFiles();
+                    console.log("Swapped file names "+file.getFilename(oldpath)+" and "+file.getFilename(newPath));
+                  }
+                  else {
+                    console.warn("Couldn't swap file names, maybe files in use?");
+                  }
+                  closeMenu();
+                }
+              };
+              menu = new YesNoMenu("Can't rename file", newFilename+" already exists. Want to swap the file names?", ryes, rno);
+              
+              return;
+            }
+            
+            
+            issueRefresherCommand(REFRESHER_PAUSE);
+            if (file.mv(probject.dir, newPath)) {
+              probject.dir = newPath;
+              probject.filename = file.getFilename(newPath);
+              console.log("File renamed to "+file.getFilename(newPath));
+            }
+            else {
+              console.warn("Couldn't rename item. File might be in use.");
+            }
+            
+            sound.playSound("menu_select");
+            
+            closeMenu();
+          }
+        };
+  
+        beginInputPrompt("Rename to:", r);
+        if (probject.filename.contains(".")) {
+          input.keyboardMessage = "."+file.getExt(probject.filename);
+          input.cursorX = 0;
+        }
+        //closeMenu();
       }
       if (ui.buttonVary("op-duplicate", "cuber_tool_128", "Duplicate")) {
         sound.playSound("menu_select");
         
-        console.log("Not functional yet!");
+        String ext = "";
+        if (probject.filename.contains(".")) ext = "."+file.getExt(probject.filename);
+        
+        String dir = file.directorify(file.getDir(probject.dir));
+        String name = file.getIsolatedFilename(probject.filename);
+        String copyPath = dir+name+" - copy";
+        while (file.exists(copyPath+ext)) {
+          copyPath += " - copy";
+        }
+        copyPath += ext;
+        
+        // TODO: Files may take a while to copy. Run this in a separate thread.
+        issueRefresherCommand(REFRESHER_PAUSE);
+        if (file.copy(probject.dir, copyPath)) {
+          console.log("Duplicated "+probject.filename+".");
+
+          currRealm.createPRObjectAndPickup(copyPath);
+          currentTool = TOOL_GRABBER;
+        }
+        else {
+          console.warn("Failed to duplicate file.");
+        }
+        
+        console.log(copyPath);
         
         closeMenu();
       }
@@ -616,8 +724,7 @@ public class PixelRealmWithUI extends PixelRealm {
         }
       };
 
-      engine.beginInputPrompt("Folder name:", r);
-      menu = new InputPromptMenu();
+      beginInputPrompt("Folder name:", r);
     }
 
     public void newEntry() {
@@ -663,8 +770,7 @@ public class PixelRealmWithUI extends PixelRealm {
         }
       };
 
-      engine.beginInputPrompt("Entry name:", r);
-      menu = new InputPromptMenu();
+      beginInputPrompt("Entry name:", r);
     }
   }
 

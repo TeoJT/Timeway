@@ -4249,6 +4249,13 @@ public class TWEngine {
       return dir;
     }
     
+    public String undirectorify(String path) {
+      if (path.charAt(path.length()-1) == '/') {
+        return path.substring(0, path.length()-1);
+      }
+      return path;
+    }
+    
     public String getMyDir() {
       String dir = getDir(APPPATH);
       return directorify(dir);
