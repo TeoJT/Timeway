@@ -38,12 +38,12 @@ import java.io.OutputStream;
 import java.io.InputStreamReader;
 import java.util.Iterator;   // Used by the stack class at the bottom
 import java.util.Arrays;   // Used by the stack class at the bottom
-import java.util.Collections;
+
+
 
 
 // Timeway's engine code.
 // TODO: add documentation lmao.
-
 public class TWEngine {
   //*****************CONSTANTS SETTINGS**************************
   // Info and versioning
@@ -146,8 +146,7 @@ public class TWEngine {
   public ClipboardModule clipboard;
   public UIModule ui;
   public InputModule input;
-  public PluginModule plugins;
-  public IndexerModule indexer;
+  public TWEngine.PluginModule plugins;
 
 
   
@@ -400,7 +399,6 @@ public class TWEngine {
         defaultKeybindings.putIfAbsent("prevDirectory", char(8));
         defaultKeybindings.putIfAbsent("nextSubTool", ']');
         defaultKeybindings.putIfAbsent("prevSubTool", '[');
-        defaultKeybindings.putIfAbsent("search", '\n');
         for (int i = 0; i < 10; i++) defaultKeybindings.putIfAbsent("quickWarp"+str(i), str(i).charAt(0));
       }
       
@@ -1048,7 +1046,7 @@ public class TWEngine {
     private float displayScale = 2.0;
     public PImage errorImg;
     public PShader errShader;
-    private HashMap<String, PImage> systemImages = new HashMap<String, PImage>();
+    private HashMap<String, DImage> systemImages = new HashMap<String, DImage>();;
     public HashMap<String, PFont> fonts = new HashMap<String, PFont>();;
     private HashMap<String, PShaderEntry> shaders = new HashMap<String, PShaderEntry>();;
     public  float WIDTH = 0, HEIGHT = 0;
@@ -1061,7 +1059,7 @@ public class TWEngine {
     public boolean showCPUBenchmarks = false;
     public PGraphics currentPG;
     private boolean allAtOnce = false;
-    private PImage white;
+    private LargeImage white;
     private IntBuffer clearList;
     private int clearListIndex = 0;
     public boolean showMemUsage = false;
@@ -1296,7 +1294,7 @@ public class TWEngine {
       }
     }
   
-    public PImage getImg(String name) {
+    public DImage getImg(String name) {
       if (systemImages.get(name) != null) {
         return systemImages.get(name);
       } else {
@@ -1327,8 +1325,141 @@ public class TWEngine {
       }
     }
     
+    public void largeImg(LargeImage largeimg, float x, float y, float w, float h) {
+      largeImg(g, largeimg, x, y, w, h);
+    }
+    
+    public void bind(LargeImage img) {
+      bind(g, img);
+    }
+    
     public void uploadAllAtOnce(boolean tf) {
       allAtOnce = tf;
+    }
+    
+    public void bind(PGraphics currentPG, LargeImage img) {
+      if (img == null) {
+        return;
+      }
+      
+      pgl = currentPG.beginPGL();
+      // If image data is in GPU, we can just bind it and continue about our day.
+      if (img.inGPU) {
+        // Bind the texture
+        pgl.activeTexture(PGL.TEXTURE0);
+        pgl.bindTexture(PGL.TEXTURE_2D, img.glTexID);
+      }
+      // Otherwise, creation of the LargeImage hasn't put the GPU into GPU mem yet (because of multithreading issues)
+      // so we must generate the buffers and put em on the GPU.
+      else if (uploadGPUOnce || allAtOnce) {
+        // Create the texture buffer and put data into gpu mem.
+        IntBuffer intBuffer = IntBuffer.allocate(1);
+        pgl.genTextures(1, intBuffer);
+        img.glTexID = intBuffer.get(0);
+        pgl.activeTexture(PGL.TEXTURE0);
+        pgl.bindTexture(PGL.TEXTURE_2D, img.glTexID);
+        pgl.texImage2D(PGL.TEXTURE_2D, 0, PGL.RGBA, (int)img.width, (int)img.height, 0, PGL.RGBA, PGL.UNSIGNED_BYTE, img.texData);
+        img.inGPU = true;
+        uploadGPUOnce = false;
+        
+        //pgl.texParameteri(PGL.TEXTURE_2D, PGL.TEXTURE_MAG_FILTER, PGL.LINEAR);
+        //pgl.texParameteri(PGL.TEXTURE_2D, PGL.TEXTURE_MIN_FILTER, PGL.LINEAR_MIPMAP_LINEAR);
+      }
+      else {
+        // uploadGPUOnce is false which means a LargeImage has taken our turn to upload our shiz into the GPU
+        // and we must wait for a chance next frame.
+        // For now, just render white
+        if (white == null && systemImages.get("white") != null) {
+          white = createLargeImage(systemImages.get("white").pimage);
+        }
+        
+        if (white != null) {
+          pgl.activeTexture(PGL.TEXTURE0);
+          pgl.bindTexture(PGL.TEXTURE_2D, white.glTexID);
+        }
+      }
+      
+      pgl.texParameteri(PGL.TEXTURE_2D, PGL.TEXTURE_MAG_FILTER, PGL.NEAREST);
+      pgl.texParameteri(PGL.TEXTURE_2D, PGL.TEXTURE_MIN_FILTER, PGL.NEAREST);
+      currentPG.endPGL();
+    }
+    
+    public void largeImg(PGraphics currentPG, LargeImage img, float x, float y, float w, float h) {
+      
+      bind(currentPG, img);
+      
+      display.shader(currentPG, "largeimg");
+      currentPG.beginShape(QUADS);
+      currentPG.vertex(x, y, 0, 0);
+      currentPG.vertex(x+w, y, 1, 0);
+      currentPG.vertex(x+w, y+h, 1, 1);
+      currentPG.vertex(x, y+h, 0, 1);
+      currentPG.endShape();
+      
+      currentPG.flush();
+      
+      
+      // TODO: Figure out a way to not have to switch shaders so much.
+      currentPG.resetShader();
+    }
+    
+    
+    
+    LargeImage createLargeImage(PImage img) {
+      
+      try {
+        IntBuffer data = IntBuffer.allocate(img.width*img.height);
+        
+        // Copy pimage data to the intbuffer.
+        data.rewind();
+        int l = img.width*img.height;
+        img.loadPixels();
+        for (int i = 0; i < l; i++) {
+          int c = img.pixels[i];
+          int a = c >> 24 & 0xFF;
+          int r = c >> 16 & 0xFF;
+          int g = c >> 8 & 0xFF;
+          int b = c & 0xFF;
+          data.put(i, ( a << 24 |  b << 16 | g << 8 | r));
+        }
+        data.rewind();
+        
+        // At this rate the LargeImage class is more like a data container than an object that does stuff.  
+        // You may notice we haven't done any OpenGL operations to upload the texture to the GPU.
+        // That's becauses this method could very well be (and most definitely is) running in a seperate thread
+        // to the OpenGL thread which is baaaaaad. So we will upload it to the GPU later in the main thread.
+        // For now let's set up the LargeImage object, because that's something we're allowed to do in seperate threads
+        // at least.
+        LargeImage largeimg = new LargeImage(data);
+        
+        // Lets skip creating a shape for now cus who's gonna use it.
+        //largeimg.shape = currentPG.createShape();
+        
+        //largeimg.shape.beginShape(QUADS);
+        //largeimg.shape.noStroke();
+        //largeimg.shape.fill(255);
+        //largeimg.shape.vertex(0, 0, largeimg.uvx1, largeimg.uvy1);
+        //largeimg.shape.vertex(1, 0, largeimg.uvx2, largeimg.uvx1);
+        //largeimg.shape.vertex(1, 1, largeimg.uvx2, largeimg.uvy2);
+        //largeimg.shape.vertex(0, 1, largeimg.uvx1, largeimg.uvy2);
+        //largeimg.shape.endShape();
+        
+        largeimg.width = img.width;
+        largeimg.height = img.height;
+        return largeimg;
+      }
+      catch (RuntimeException e) {
+        return createLargeImage(systemImages.get("white").pimage);
+      }
+    }
+    
+    public void destroyImage(LargeImage im) {
+      // We have a potential memory leak here :(
+      if (clearListIndex+1 > CLEARLIST_SIZE-1) return;
+      
+      // Add it to the list so it will be cleared by the main thread.
+      clearList.put(clearListIndex++, im.glTexID);
+      clearList.rewind();
     }
     
     public void initShader(String name) {
@@ -1451,19 +1582,23 @@ public class TWEngine {
     }
     
     
-    public void img(PImage img, float vx1, float vy1, float vx2, float vy2, float vx3, float vy3, float vx4, float vy4) {
+    public void img(DImage image, float vx1, float vy1, float vx2, float vy2, float vx3, float vy3, float vx4, float vy4) {
+      PImage img = null;
       
-      if (img == null) {
+      if (image == null) {
         console.warnOnce("Image listed as 'loaded' but image doesn't seem to exist.");
         return;
       }
-      else if (img.width == -1 || img.height == -1) {
+      else if (image.width == -1 || image.height == -1) {
         img = errorImg;
         console.warnOnce("Corrupted image.");
       }
+      else {
+        img = image.pimage;
+      }
       
       
-      if (img.width > 0 && img.height > 0) {
+      if (image.width > 0 && image.height > 0) {
         
         
       
@@ -1529,7 +1664,9 @@ public class TWEngine {
     
     
     
-    public void img(PImage image, float x, float y, float w, float h) {
+    public void img(DImage image, float x, float y, float w, float h) {
+      
+      
       if (image == null) {
         currentPG.image(errorImg, x, y, w, h);
         recordLogicTime();
@@ -1547,14 +1684,19 @@ public class TWEngine {
       
       // If image is loaded render.
       if (image.width > 0 && image.height > 0) {
-        // For some reason an occasional exception occures here
-        try {
-          currentPG.image(image, x, y, w, h);
+        if (image.mode == 1) {
+          // For some reason an occasional exception occures here
+          try {
+            currentPG.image(image.pimage, x, y, w, h);
+          }
+          catch (IndexOutOfBoundsException e) {
+            // Doesn't matter if we don't render an image for one frame
+            // if a serious error occures
+            return;
+          }
         }
-        catch (IndexOutOfBoundsException e) {
-          // Doesn't matter if we don't render an image for one frame
-          // if a serious error occures
-          return;
+        else if (image.mode == 2) {
+          largeImg(currentPG, image.largeImage, x, y, w, h);
         }
         
         // Annnnd a wireframe
@@ -1598,7 +1740,7 @@ public class TWEngine {
     }
   
     public void img(String name, float x, float y) {
-      PImage image = systemImages.get(name);
+      DImage image = systemImages.get(name);
       if (image != null) {
         img(systemImages.get(name), x, y, image.width, image.height);
       } else {
@@ -1611,7 +1753,7 @@ public class TWEngine {
   
   
     public void imgCentre(String name, float x, float y, float w, float h) {
-      PImage image = systemImages.get(name);
+      DImage image = systemImages.get(name);
       if (image == null) {
         //img(errorImg, x-errorImg.width/2, y-errorImg.height/2, w, h);
       } else {
@@ -1620,7 +1762,7 @@ public class TWEngine {
     }
   
     public void imgCentre(String name, float x, float y) {
-      PImage image = systemImages.get(name);
+      DImage image = systemImages.get(name);
       if (image == null) {
         //img(errorImg, x-errorImg.width/2, y-errorImg.height/2, errorImg.width, errorImg.height);
       } else {
@@ -2215,6 +2357,7 @@ public class TWEngine {
     public boolean buttonImg(String img, float x, float y, float w, float h) {
       display.img(img, x, y, w, h);
       
+      if (miniMenuShown()) return false;
       return (input.mouseX() > x && input.mouseX() < x+w && input.mouseY() > y && input.mouseY() < y+h && input.primaryOnce);
     }
     
@@ -2282,6 +2425,8 @@ public class TWEngine {
       // Don't have "the boy who called wolf", situation, turn back on warnings
       // for genuine troubleshooting.
       currentSpritePlaceholderSystem.suppressSpriteWarning = false;
+      
+      if (ui.miniMenuShown()) return false;
   
       // Only when the button is actually clicked.
       return hover && input.primaryOnce;
@@ -3372,6 +3517,12 @@ public class TWEngine {
       else return 0f;
     }
     
+    public float framesPerBeat() {
+      float beatspersecond = 60f/bpm;
+      float framesPerBeat = (display.BASE_FRAMERATE*beatspersecond);
+      return framesPerBeat;
+    }
+    
     public float beatSaw(int beatoffset, int everyxbeat) {
       return beatSaw(beatoffset, 0, everyxbeat);
     }
@@ -4105,13 +4256,6 @@ public class TWEngine {
       return dir;
     }
     
-    public String undirectorify(String path) {
-      if (path.charAt(path.length()-1) == '/') {
-        return path.substring(0, path.length()-1);
-      }
-      return path;
-    }
-    
     public String getMyDir() {
       String dir = getDir(APPPATH);
       return directorify(dir);
@@ -4767,227 +4911,12 @@ public class TWEngine {
   
   
   
-  public class IndexerModule {
-    public final String INDEXER_PATH = "index.txt";
-    
-    class Leaf {
-      String content = "";
-      String name = "";
-      String path = "";
-      int score = 0;
-      
-      public Leaf(String name, String path, String content, int score) {
-        this.name = name;
-        this.path = path;
-        this.content = content;
-        this.score = score;
-      }
-    }
-    
-    private class SlowIndexer {
-    
-      
-      public SlowIndexer() {
-        
-      }
-      
-      private HashMap<String, Leaf> entries = new HashMap<String, Leaf>();
-      
-      public void insertString(String st) {
-        insertString(st, st);
-      }
-      
-      public void insertString(String path, String st, int score) {
-        String name = file.getFilename(path);
-        entries.putIfAbsent(name, new Leaf(name, path, cleanString(st), score));
-      }
-      
-      public void insertString(String path, String st) {
-        String name = file.getFilename(path);
-        entries.put(name, new Leaf(name, path, cleanString(st), 0));
-      }
-      
-      public void removeString(String name, String st) {
-        entries.remove(name);
-      }
-      
-      public void save() {
-        try (FileWriter fileWriter = new FileWriter("string_set.txt")) {
-            for (Leaf leaf : entries.values()) {
-                fileWriter.write(leaf.path+"\n");
-                fileWriter.write(leaf.content+"\n");
-                fileWriter.write(leaf.score+"\n");
-            }
-        } catch (IOException e) {
-            System.err.println("Error writing to file: " + e.getMessage());
-        }
-      }
-      
-      public void load() {
-        
-      }
-      
-      public void increaseScore(String name, int increaseValue) {
-        entries.get(name).score += increaseValue;
-      }
-      
-      public ArrayList<Leaf> search(String st) {
-        st = cleanString(st);
-        ArrayList<Leaf> results = new ArrayList<Leaf>();
-        
-        if (st.length() == 0 || st.equals(" ")) {
-          return results;
-        }
-        
-        
-        String[] keywords = st.split(" ");
-        
-        int i = 0;
-        for (Leaf leaf : entries.values()) {
-          boolean contains = true;
-          for (String s : keywords) {
-            contains &= (leaf.content.contains(s));
-          }
-          if (contains) {
-            results.add(leaf);
-          }
-          i++;
-        }
-        println(i);
-        
-        
-        Collections.sort(results, (o1, o2) -> o2.score - o1.score);
-        
-        //println(results.size()+" results");
-        //if (results.size() == 0) {
-        //  println("0 slow search results for \""+st+"\".");
-        //}
-        //else {
-        //  println("Slow search results for \""+st+"\":");
-          
-        //  //int count = 1;
-        //  //for (Leaf leaf : results) {
-        //  //  println(count+". "+leaf.name+" [score: "+leaf.score+"]");
-        //  //  count++;
-        //  //  if (count > 16) break;
-        //  //}
-        //}
-        return results;
-      }
-    }
-    
-    private String cleanString(String st) {
-      st = st.toLowerCase().replaceAll("[!\"£%\\^&\\*\\(\\)<>?,.\\/#'\\[\\]:;#~@{}\\-=_+\\$\\n]", " ");
-      while (st.contains("  ")) {
-        st = st.replaceAll("  ", " ");;
-      }
-      return st;
-    }
-    
-    private SlowIndexer indexer; 
-    private AtomicBoolean lock = new AtomicBoolean(false);
-    
-    public IndexerModule() {
-      indexer = new SlowIndexer();
-      startIndexingThread(DEFAULT_DIR);
-    }
-    
-    public void insert(String path, String st) {
-      indexer.insertString(path, st, 1);
-    }
-    
-    public void insert(String path) {
-      indexer.insertString(path, cleanString(path), 5);
-    }
-    
-    public void insert(String path, int score) {
-      indexer.insertString(path, cleanString(path), score);
-    }
-    
-    public void insert(String path, String st, int score) {
-      indexer.insertString(path, st, score);
-    }
-    
-    
-    public ArrayList<String> search(String query) {
-      while (!lock.compareAndSet(false, true)) { }
-      
-      ArrayList<String> filenames = new ArrayList<String>();
-      ArrayList<Leaf> results = indexer.search(query);
-      for (Leaf leaf : results) {
-        filenames.add(leaf.path);
-      }
-      lock.set(false);
-      return filenames;
-    }
-    
-    public void load() {
-      // TODO
-    }
-    
-    private void traverse(String path, int depth) {
-      //if (depth > 15) {
-      //  return;
-      //}
-      
-      if (file.exists(path) && file.isDirectory(path)) {
-        File fff = new File(path);
-        File[] files = fff.listFiles();
-        for (File f : files) {
-          while (!lock.compareAndSet(false, true)) {
-            try {
-              Thread.sleep(100);
-            }
-            catch (InterruptedException e) {
-              
-            }
-          }
-          String fpath = f.getAbsolutePath().replaceAll("\\\\", "/");
-          
-          if (file.isDirectory(fpath)) {
-            insert(fpath, file.getFilename(fpath), 10);
-            lock.set(false);
-            traverse(fpath, depth+1);
-          }
-          else {
-            insert(fpath, 5);
-            lock.set(false);
-          }
-        }
-      }
-    }
-    
-    public void startIndexingThread(final String path) {
-      Thread t1 = new Thread(new Runnable() {
-        public void run() {
-          traverse(path, 0);
-        }
-      });
-      t1.start();
-    }
-  }
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
   
   
   
   
   
   public class PluginModule {
-    
-    private String pluginBoilerplateCode_1 = "";
-    private String pluginBoilerplateCode_2 = "";
     private String exepath;
     private String javapath;
     private int cacheEntry = 0;
@@ -4995,18 +4924,6 @@ public class TWEngine {
     public PluginModule() {
       // Load the boilerplate for plugin code.
       if (file.exists(APPPATH+BOILERPLATE_PATH)) {
-        String[] txts = app.loadStrings(APPPATH+BOILERPLATE_PATH);
-        boolean secondPart = false;
-        for (String s : txts) {
-          if (!secondPart && s.trim().equals("[plugin_code]")) {
-            // Don't add [plugin_code] line, initiate the second part.
-            secondPart = true;
-          }
-          else if (!secondPart)
-            pluginBoilerplateCode_1 += s+"\n";
-          else
-            pluginBoilerplateCode_2 += s+"\n";
-        }
       }
       else {
         console.warn(APPPATH+BOILERPLATE_PATH+" not found! Plugins will not work.");
@@ -5139,6 +5056,30 @@ public class TWEngine {
         compiled = false;
         
         console.log("Compiling plugin...");
+        
+        String pluginBoilerplateCode_1 = "";
+        String pluginBoilerplateCode_2 = "";
+        
+        
+        // Moved here instead of setup because we want to be able to modify the boilerplate file too without having to restart
+        // the program each time.
+        if (file.exists(APPPATH+BOILERPLATE_PATH)) {
+          String[] txts = app.loadStrings(APPPATH+BOILERPLATE_PATH);
+          boolean secondPart = false;
+          for (String s : txts) {
+            if (!secondPart && s.trim().equals("[plugin_code]")) {
+              // Don't add [plugin_code] line, initiate the second part.
+              secondPart = true;
+            }
+            else if (!secondPart)
+              pluginBoilerplateCode_1 += s+"\n";
+            else
+              pluginBoilerplateCode_2 += s+"\n";
+          }
+        }
+        else {
+          console.warn(APPPATH+BOILERPLATE_PATH+" not found! Plugins will not work.");
+        }
         
         // We don't actually need the cache info, but calling this method will
         // create the cache folder if it doesn't already exist, which is wayyyy
@@ -5346,7 +5287,6 @@ public class TWEngine {
     sound = new AudioModule();
     clipboard = new ClipboardModule();
     plugins = new PluginModule();
-    indexer = new IndexerModule();
     
     power.putFPSSystemIntoGraceMode();
     
@@ -6637,7 +6577,7 @@ public class TWEngine {
     if (ext.equals("png") || ext.equals("jpg") || ext.equals("gif") || ext.equals("bmp")) {
       // load image and add it to the systemImages hashmap.
       if (display.systemImages.get(name) == null) {
-        display.systemImages.put(name, app.loadImage(path));
+        display.systemImages.put(name, new DImage(app.loadImage(path)));
         loadedContent.add(name);
       } else {
         console.warn("Image "+name+" already exists, skipping.");
@@ -7890,7 +7830,7 @@ public class TWEngine {
     public PImage getImage() {
       if (!isImage()) {
         console.bugWarn("getImage: clipboard doesn't contain an image, make sure to check first with isImage()!");
-        return display.systemImages.get("white");
+        return display.systemImages.get("white").pimage;
       }
       
       PImage ret = (PImage)cachedClipboardObject;
@@ -8106,7 +8046,6 @@ public abstract class Screen {
   protected TWEngine.ClipboardModule clipboard;
   protected TWEngine.UIModule ui;
   protected TWEngine.PluginModule plugins;
-  protected TWEngine.IndexerModule indexer;
   
   protected float screenx = 0;
   protected float screeny = 0;
@@ -8138,7 +8077,6 @@ public abstract class Screen {
     this.clipboard = engine.clipboard;
     this.stats = engine.stats;
     this.plugins = engine.plugins;
-    this.indexer = engine.indexer;
     
     this.WIDTH = engine.display.WIDTH;
     this.HEIGHT = engine.display.HEIGHT;
@@ -8261,6 +8199,52 @@ public abstract class Screen {
 
 
 
+public class DImage {
+  public float width = 0;
+  public float height = 0;
+  public int mode = 0;
+  public PImage pimage;         // 1
+  public LargeImage largeImage; // 2
+  
+  private void setDimensions(float w, float h) {
+    this.width = w;
+    this.height = h;
+  }
+  
+  public DImage(PImage pimage) {
+    setDimensions(pimage.width, pimage.height);
+    this.pimage = pimage;
+    mode = 1;
+  }
+  public DImage(LargeImage largeImage, PImage p) {
+    setDimensions(largeImage.width, largeImage.height);
+    this.pimage = p;
+    this.largeImage = largeImage;
+    mode = 2;
+  }
+}
+
+
+
+public class LargeImage {
+  public float width = 0, height = 0;
+  public int glTexID = -1;
+  public PShape shape;
+  public IntBuffer texData;
+  public boolean inGPU = false;
+  
+  public LargeImage(IntBuffer texData) {
+    super();
+    this.texData = texData;
+  }
+  
+  public void finalize() {
+    if (timewayEngine != null && timewayEngine.display != null) {
+      timewayEngine.display.destroyImage(this);
+    }
+  }
+}
+
 
 
 
@@ -8317,6 +8301,7 @@ public final class SpriteSystemPlaceholder {
         public float mouseOffsetY = 0.0;
         public float myDelta = 0.; 
         private boolean customDelta = false;
+        private boolean mouseInputEnabled = true;
 
         public String PATH_SPRITES_ATTRIB;
         public String APPPATH; 
@@ -8336,7 +8321,7 @@ public final class SpriteSystemPlaceholder {
         }
         
         private boolean mouseDown() {
-          return engine.input.primaryDown && !engine.ui.miniMenuShown();
+          return engine.input.primaryDown && !engine.ui.miniMenuShown() && mouseInputEnabled;
         }
         
         public void setDelta(float del) {
@@ -8580,7 +8565,7 @@ public final class SpriteSystemPlaceholder {
                 return lock;
             }
             public void setImg(String name) {
-                PImage im = engine.display.getImg(name);
+                DImage im = engine.display.getImg(name);
                 if (im == null) {
                   engine.console.warn("sprite setImg(): "+name+" doesn't exist");
                   imgName = "white";
@@ -8608,20 +8593,22 @@ public final class SpriteSystemPlaceholder {
                 
                 //Vertex position
                 for (int i = 0; i < 4; i++) {
-                vertex.v[i].add(x-oldX, y-oldY);
+                  vertex.v[i].add(xpos-oldX, ypos-oldY);
+                  defvertex.v[i].add(xpos-oldX, ypos-oldY);
                 }
             }
             
             public void offmove(float x, float y) {
-                float oldX = xpos;
-                float oldY = ypos;
+                //float oldX = xpos;
+                //float oldY = ypos;
                 offxpos = x;
                 offypos = y;
                 xpos = defxpos+x;
                 ypos = defypos+y;
                 
                 for (int i = 0; i < 4; i++) {
-                vertex.v[i].add(xpos-oldX, ypos-oldY);
+                  //vertex.v[i].add(xpos-oldX, ypos-oldY);
+                  offvertex(i, x, y);
                 }
             }
             
@@ -9200,8 +9187,9 @@ public final class SpriteSystemPlaceholder {
                 }
                 
                 for (int i = 0; i < 4; i++) {
-                    s.vertex.v[i].set(att.getInt("vx"+str(i)), att.getInt("vy"+str(i)));
-                    s.defvertex.v[i].set(att.getInt("vx"+str(i)), att.getInt("vy"+str(i)));
+                    //s.vertex.v[i].set(att.getInt("vx"+str(i)), att.getInt("vy"+str(i)));
+                    //s.defvertex.v[i].set(att.getInt("vx"+str(i)), att.getInt("vy"+str(i)));
+                    s.vertex(i, att.getInt("vx"+str(i)), att.getInt("vy"+str(i)));
                 }
             }
         }
