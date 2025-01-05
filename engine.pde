@@ -1048,7 +1048,7 @@ public class TWEngine {
     private float displayScale = 2.0;
     public PImage errorImg;
     public PShader errShader;
-    private HashMap<String, DImage> systemImages = new HashMap<String, DImage>();;
+    private HashMap<String, PImage> systemImages = new HashMap<String, PImage>();
     public HashMap<String, PFont> fonts = new HashMap<String, PFont>();;
     private HashMap<String, PShaderEntry> shaders = new HashMap<String, PShaderEntry>();;
     public  float WIDTH = 0, HEIGHT = 0;
@@ -1061,7 +1061,7 @@ public class TWEngine {
     public boolean showCPUBenchmarks = false;
     public PGraphics currentPG;
     private boolean allAtOnce = false;
-    private LargeImage white;
+    private PImage white;
     private IntBuffer clearList;
     private int clearListIndex = 0;
     public boolean showMemUsage = false;
@@ -1296,7 +1296,7 @@ public class TWEngine {
       }
     }
   
-    public DImage getImg(String name) {
+    public PImage getImg(String name) {
       if (systemImages.get(name) != null) {
         return systemImages.get(name);
       } else {
@@ -1327,141 +1327,8 @@ public class TWEngine {
       }
     }
     
-    public void largeImg(LargeImage largeimg, float x, float y, float w, float h) {
-      largeImg(g, largeimg, x, y, w, h);
-    }
-    
-    public void bind(LargeImage img) {
-      bind(g, img);
-    }
-    
     public void uploadAllAtOnce(boolean tf) {
       allAtOnce = tf;
-    }
-    
-    public void bind(PGraphics currentPG, LargeImage img) {
-      if (img == null) {
-        return;
-      }
-      
-      pgl = currentPG.beginPGL();
-      // If image data is in GPU, we can just bind it and continue about our day.
-      if (img.inGPU) {
-        // Bind the texture
-        pgl.activeTexture(PGL.TEXTURE0);
-        pgl.bindTexture(PGL.TEXTURE_2D, img.glTexID);
-      }
-      // Otherwise, creation of the LargeImage hasn't put the GPU into GPU mem yet (because of multithreading issues)
-      // so we must generate the buffers and put em on the GPU.
-      else if (uploadGPUOnce || allAtOnce) {
-        // Create the texture buffer and put data into gpu mem.
-        IntBuffer intBuffer = IntBuffer.allocate(1);
-        pgl.genTextures(1, intBuffer);
-        img.glTexID = intBuffer.get(0);
-        pgl.activeTexture(PGL.TEXTURE0);
-        pgl.bindTexture(PGL.TEXTURE_2D, img.glTexID);
-        pgl.texImage2D(PGL.TEXTURE_2D, 0, PGL.RGBA, (int)img.width, (int)img.height, 0, PGL.RGBA, PGL.UNSIGNED_BYTE, img.texData);
-        img.inGPU = true;
-        uploadGPUOnce = false;
-        
-        //pgl.texParameteri(PGL.TEXTURE_2D, PGL.TEXTURE_MAG_FILTER, PGL.LINEAR);
-        //pgl.texParameteri(PGL.TEXTURE_2D, PGL.TEXTURE_MIN_FILTER, PGL.LINEAR_MIPMAP_LINEAR);
-      }
-      else {
-        // uploadGPUOnce is false which means a LargeImage has taken our turn to upload our shiz into the GPU
-        // and we must wait for a chance next frame.
-        // For now, just render white
-        if (white == null && systemImages.get("white") != null) {
-          white = createLargeImage(systemImages.get("white").pimage);
-        }
-        
-        if (white != null) {
-          pgl.activeTexture(PGL.TEXTURE0);
-          pgl.bindTexture(PGL.TEXTURE_2D, white.glTexID);
-        }
-      }
-      
-      pgl.texParameteri(PGL.TEXTURE_2D, PGL.TEXTURE_MAG_FILTER, PGL.NEAREST);
-      pgl.texParameteri(PGL.TEXTURE_2D, PGL.TEXTURE_MIN_FILTER, PGL.NEAREST);
-      currentPG.endPGL();
-    }
-    
-    public void largeImg(PGraphics currentPG, LargeImage img, float x, float y, float w, float h) {
-      
-      bind(currentPG, img);
-      
-      display.shader(currentPG, "largeimg");
-      currentPG.beginShape(QUADS);
-      currentPG.vertex(x, y, 0, 0);
-      currentPG.vertex(x+w, y, 1, 0);
-      currentPG.vertex(x+w, y+h, 1, 1);
-      currentPG.vertex(x, y+h, 0, 1);
-      currentPG.endShape();
-      
-      currentPG.flush();
-      
-      
-      // TODO: Figure out a way to not have to switch shaders so much.
-      currentPG.resetShader();
-    }
-    
-    
-    
-    LargeImage createLargeImage(PImage img) {
-      
-      try {
-        IntBuffer data = IntBuffer.allocate(img.width*img.height);
-        
-        // Copy pimage data to the intbuffer.
-        data.rewind();
-        int l = img.width*img.height;
-        img.loadPixels();
-        for (int i = 0; i < l; i++) {
-          int c = img.pixels[i];
-          int a = c >> 24 & 0xFF;
-          int r = c >> 16 & 0xFF;
-          int g = c >> 8 & 0xFF;
-          int b = c & 0xFF;
-          data.put(i, ( a << 24 |  b << 16 | g << 8 | r));
-        }
-        data.rewind();
-        
-        // At this rate the LargeImage class is more like a data container than an object that does stuff.  
-        // You may notice we haven't done any OpenGL operations to upload the texture to the GPU.
-        // That's becauses this method could very well be (and most definitely is) running in a seperate thread
-        // to the OpenGL thread which is baaaaaad. So we will upload it to the GPU later in the main thread.
-        // For now let's set up the LargeImage object, because that's something we're allowed to do in seperate threads
-        // at least.
-        LargeImage largeimg = new LargeImage(data);
-        
-        // Lets skip creating a shape for now cus who's gonna use it.
-        //largeimg.shape = currentPG.createShape();
-        
-        //largeimg.shape.beginShape(QUADS);
-        //largeimg.shape.noStroke();
-        //largeimg.shape.fill(255);
-        //largeimg.shape.vertex(0, 0, largeimg.uvx1, largeimg.uvy1);
-        //largeimg.shape.vertex(1, 0, largeimg.uvx2, largeimg.uvx1);
-        //largeimg.shape.vertex(1, 1, largeimg.uvx2, largeimg.uvy2);
-        //largeimg.shape.vertex(0, 1, largeimg.uvx1, largeimg.uvy2);
-        //largeimg.shape.endShape();
-        
-        largeimg.width = img.width;
-        largeimg.height = img.height;
-        return largeimg;
-      }
-      catch (RuntimeException e) {
-        return createLargeImage(systemImages.get("white").pimage);
-      }
-    }
-    
-    public void destroyImage(LargeImage im) {
-      // We have a potential memory leak here :(
-      if (clearListIndex+1 > CLEARLIST_SIZE-1) return;
-      
-      // Add it to the list so it will be cleared by the main thread.
-      clearList.put(clearListIndex++, im.glTexID);
-      clearList.rewind();
     }
     
     public void initShader(String name) {
@@ -1584,23 +1451,19 @@ public class TWEngine {
     }
     
     
-    public void img(DImage image, float vx1, float vy1, float vx2, float vy2, float vx3, float vy3, float vx4, float vy4) {
-      PImage img = null;
+    public void img(PImage img, float vx1, float vy1, float vx2, float vy2, float vx3, float vy3, float vx4, float vy4) {
       
-      if (image == null) {
+      if (img == null) {
         console.warnOnce("Image listed as 'loaded' but image doesn't seem to exist.");
         return;
       }
-      else if (image.width == -1 || image.height == -1) {
+      else if (img.width == -1 || img.height == -1) {
         img = errorImg;
         console.warnOnce("Corrupted image.");
       }
-      else {
-        img = image.pimage;
-      }
       
       
-      if (image.width > 0 && image.height > 0) {
+      if (img.width > 0 && img.height > 0) {
         
         
       
@@ -1666,9 +1529,7 @@ public class TWEngine {
     
     
     
-    public void img(DImage image, float x, float y, float w, float h) {
-      
-      
+    public void img(PImage image, float x, float y, float w, float h) {
       if (image == null) {
         currentPG.image(errorImg, x, y, w, h);
         recordLogicTime();
@@ -1686,19 +1547,14 @@ public class TWEngine {
       
       // If image is loaded render.
       if (image.width > 0 && image.height > 0) {
-        if (image.mode == 1) {
-          // For some reason an occasional exception occures here
-          try {
-            currentPG.image(image.pimage, x, y, w, h);
-          }
-          catch (IndexOutOfBoundsException e) {
-            // Doesn't matter if we don't render an image for one frame
-            // if a serious error occures
-            return;
-          }
+        // For some reason an occasional exception occures here
+        try {
+          currentPG.image(image, x, y, w, h);
         }
-        else if (image.mode == 2) {
-          largeImg(currentPG, image.largeImage, x, y, w, h);
+        catch (IndexOutOfBoundsException e) {
+          // Doesn't matter if we don't render an image for one frame
+          // if a serious error occures
+          return;
         }
         
         // Annnnd a wireframe
@@ -1742,7 +1598,7 @@ public class TWEngine {
     }
   
     public void img(String name, float x, float y) {
-      DImage image = systemImages.get(name);
+      PImage image = systemImages.get(name);
       if (image != null) {
         img(systemImages.get(name), x, y, image.width, image.height);
       } else {
@@ -1755,7 +1611,7 @@ public class TWEngine {
   
   
     public void imgCentre(String name, float x, float y, float w, float h) {
-      DImage image = systemImages.get(name);
+      PImage image = systemImages.get(name);
       if (image == null) {
         //img(errorImg, x-errorImg.width/2, y-errorImg.height/2, w, h);
       } else {
@@ -1764,7 +1620,7 @@ public class TWEngine {
     }
   
     public void imgCentre(String name, float x, float y) {
-      DImage image = systemImages.get(name);
+      PImage image = systemImages.get(name);
       if (image == null) {
         //img(errorImg, x-errorImg.width/2, y-errorImg.height/2, errorImg.width, errorImg.height);
       } else {
@@ -6781,7 +6637,7 @@ public class TWEngine {
     if (ext.equals("png") || ext.equals("jpg") || ext.equals("gif") || ext.equals("bmp")) {
       // load image and add it to the systemImages hashmap.
       if (display.systemImages.get(name) == null) {
-        display.systemImages.put(name, new DImage(app.loadImage(path)));
+        display.systemImages.put(name, app.loadImage(path));
         loadedContent.add(name);
       } else {
         console.warn("Image "+name+" already exists, skipping.");
@@ -8034,7 +7890,7 @@ public class TWEngine {
     public PImage getImage() {
       if (!isImage()) {
         console.bugWarn("getImage: clipboard doesn't contain an image, make sure to check first with isImage()!");
-        return display.systemImages.get("white").pimage;
+        return display.systemImages.get("white");
       }
       
       PImage ret = (PImage)cachedClipboardObject;
@@ -8405,52 +8261,6 @@ public abstract class Screen {
 
 
 
-public class DImage {
-  public float width = 0;
-  public float height = 0;
-  public int mode = 0;
-  public PImage pimage;         // 1
-  public LargeImage largeImage; // 2
-  
-  private void setDimensions(float w, float h) {
-    this.width = w;
-    this.height = h;
-  }
-  
-  public DImage(PImage pimage) {
-    setDimensions(pimage.width, pimage.height);
-    this.pimage = pimage;
-    mode = 1;
-  }
-  public DImage(LargeImage largeImage, PImage p) {
-    setDimensions(largeImage.width, largeImage.height);
-    this.pimage = p;
-    this.largeImage = largeImage;
-    mode = 2;
-  }
-}
-
-
-
-public class LargeImage {
-  public float width = 0, height = 0;
-  public int glTexID = -1;
-  public PShape shape;
-  public IntBuffer texData;
-  public boolean inGPU = false;
-  
-  public LargeImage(IntBuffer texData) {
-    super();
-    this.texData = texData;
-  }
-  
-  public void finalize() {
-    if (timewayEngine != null && timewayEngine.display != null) {
-      timewayEngine.display.destroyImage(this);
-    }
-  }
-}
-
 
 
 
@@ -8770,7 +8580,7 @@ public final class SpriteSystemPlaceholder {
                 return lock;
             }
             public void setImg(String name) {
-                DImage im = engine.display.getImg(name);
+                PImage im = engine.display.getImg(name);
                 if (im == null) {
                   engine.console.warn("sprite setImg(): "+name+" doesn't exist");
                   imgName = "white";
