@@ -397,7 +397,7 @@ public class Editor extends Screen {
           
         if (editingPlaceable != null && editingPlaceable instanceof ImagePlaceable) {
           ImagePlaceable im = (ImagePlaceable)editingPlaceable;
-          file.selectOutput("Save image...", im.getImage().pimage);
+          file.selectOutput("Save image...", im.getImage());
         }
           
       }};
@@ -586,19 +586,18 @@ public class Editor extends Screen {
             
             // I feel so bad using systemImages because it was only ever intended
             // for images loaded by the engine only >.<
-            LargeImage largeimg = display.createLargeImage(img);
-            display.systemImages.put(name, new DImage(largeimg, img));
+            display.systemImages.put(name, img);
             imagesInEntry.add(name);
         }
         
-        public void setImage(DImage img, String imgName) {
+        public void setImage(PImage img, String imgName) {
           this.imageName = imgName;
           display.systemImages.put(imgName, img);
           //app.image(img,0,0);
           imagesInEntry.add(imgName);
         }
         
-        public DImage getImage() {
+        public PImage getImage() {
           return display.systemImages.get(this.imageName);
         }
         
@@ -753,7 +752,7 @@ public class Editor extends Screen {
     private void saveImagePlaceable(Placeable p, JSONArray array) {
         // First, we need the png image data.
         ImagePlaceable imgPlaceable = (ImagePlaceable)p;
-        DImage image = display.systemImages.get(imgPlaceable.sprite.imgName);
+        PImage image = display.systemImages.get(imgPlaceable.sprite.imgName);
         if (image == null) {
           console.bugWarn("Trying to save image placeable, and image doesn't exist in memory?? Possible bug??");
           return;
@@ -764,7 +763,7 @@ public class Editor extends Screen {
         engine.setCachingShrink(0,0);
         
         
-        String cachePath = engine.saveCacheImage(entryPath+"_"+str(numImages++), image.pimage);
+        String cachePath = engine.saveCacheImage(entryPath+"_"+str(numImages++), image);
         
         byte[] cacheBytes = loadBytes(cachePath);
         
@@ -968,9 +967,8 @@ public class Editor extends Screen {
           }
         };
         PImage img = engine.tryLoadImageCache(this.entryPath+"_"+str(i), loadFromEntry);
-        LargeImage largeimg = display.createLargeImage(img);
         
-        im.setImage(new DImage(largeimg, img), imageName);
+        im.setImage(img, imageName);
         
         
         placeableset.add(im);
