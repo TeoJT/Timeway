@@ -13,7 +13,7 @@ public class PixelRealmWithUI extends PixelRealm {
   private String musicInfo = "";
   private String musicURL = "";
 
-  private boolean menuShown = false;
+  public boolean menuShown = false;
   private boolean showPlayerPos = false;
   private SpriteSystemPlaceholder gui = null;
   private Menu menu = null;
@@ -107,7 +107,7 @@ public class PixelRealmWithUI extends PixelRealm {
     // Indicates first time running, run the tutorial.
     boolean statsExists = false;
     statsExists = isAndroid() ? file.exists(getAndroidWriteableDir()+engine.STATS_FILE()) : file.exists(engine.APPPATH+engine.STATS_FILE());
-    
+
     if (!statsExists) {
       this.requestTutorial();
     }
@@ -135,49 +135,53 @@ public class PixelRealmWithUI extends PixelRealm {
     String cache_backgroundName = "";
 
     protected float getX() {
-      if (!cached || gui.interactable) return gui.getSprite(cache_backgroundName).getX();
+      if (!cached || ui.getInUseSpriteSystem().interactable) return ui.getInUseSpriteSystem().getSprite(cache_backgroundName).getX();
       return cache_backX;
+    }
+    
+    private SpriteSystemPlaceholder gui() {
+      return ui.getInUseSpriteSystem();
     }
 
     protected float getY() {
-      if (!cached || gui.interactable) return gui.getSprite(cache_backgroundName).getY();
+      if (!cached || gui().interactable) return gui().getSprite(cache_backgroundName).getY();
       return cache_backY;
     }
 
     protected float getWidth() {
-      if (!cached || gui.interactable) return (float)gui.getSprite(cache_backgroundName).getWidth();
+      if (!cached || gui().interactable) return (float)gui().getSprite(cache_backgroundName).getWidth();
       else return cache_backWi;
     }
 
     protected float getHeight() {
-      if (!cached || gui.interactable) return (float)gui.getSprite(cache_backgroundName).getHeight();
+      if (!cached || gui().interactable) return (float)gui().getSprite(cache_backgroundName).getHeight();
       else return cache_backHi;
     }
 
     protected float getXmid() {
-      if (!cached || gui.interactable) return gui.getSprite(cache_backgroundName).getX()+(float)gui.getSprite(cache_backgroundName).getWidth()*0.5;
+      if (!cached || gui().interactable) return gui().getSprite(cache_backgroundName).getX()+(float)gui().getSprite(cache_backgroundName).getWidth()*0.5;
       return cache_backX+cache_backWi*0.5;
     }
 
     protected float getYmid() {
-      if (!cached || gui.interactable) return gui.getSprite(cache_backgroundName).getY()+(float)gui.getSprite(cache_backgroundName).getHeight()*0.5;
+      if (!cached || gui().interactable) return gui().getSprite(cache_backgroundName).getY()+(float)gui().getSprite(cache_backgroundName).getHeight()*0.5;
       return cache_backY+cache_backHi*0.5;
     }
 
     protected float getYbottom() {
-      if (!cached || gui.interactable) return gui.getSprite(cache_backgroundName).getY()+(float)gui.getSprite(cache_backgroundName).getHeight();
+      if (!cached || gui().interactable) return gui.getSprite(cache_backgroundName).getY()+(float)gui().getSprite(cache_backgroundName).getHeight();
       return cache_backY+cache_backHi;
     }
 
     protected void displayBackground(String backgroundName) {
-      gui.spriteVary(backgroundName, "black");
+      gui().spriteVary(backgroundName, "black");
       if (display.phoneMode) backgroundName += "-phone";
-      if (!cached || gui.interactable) {
+      if (!cached || gui().interactable) {
         cache_backgroundName = backgroundName;
-        cache_backX = gui.getSprite(backgroundName).getX();
-        cache_backY = gui.getSprite(backgroundName).getY();
-        int wi   = gui.getSprite(backgroundName).getWidth();
-        int hi   = gui.getSprite(backgroundName).getHeight();
+        cache_backX = gui().getSprite(backgroundName).getX();
+        cache_backY = gui().getSprite(backgroundName).getY();
+        int wi   = gui().getSprite(backgroundName).getWidth();
+        int hi   = gui().getSprite(backgroundName).getHeight();
         cache_backWi = (float)wi;
         cache_backHi = (float)hi;
 
@@ -1272,6 +1276,33 @@ public class PixelRealmWithUI extends PixelRealm {
       display.noClip();
     }
   }
+  
+  // To be used by TWIT.
+  class CustomMenu extends TitleMenu {
+    private Runnable displayRunnable = null;
+    
+    public CustomMenu(String title, String name) {
+      super(title, name);
+    }
+    
+    public void display() {
+      super.display();
+      
+      if (displayRunnable != null) displayRunnable.run();
+    }
+    
+    public void setDisplayRunnable(Runnable r) {
+      displayRunnable = r;
+    }
+  }
+  
+  
+  public void createCustomMenu(String title, String backname, Runnable displayRunnable) {
+    CustomMenu m = new CustomMenu(title, backname);
+    m.setDisplayRunnable(displayRunnable);
+    menu = m;
+    menuShown = true;
+  }
 
 
 
@@ -1352,7 +1383,19 @@ public class PixelRealmWithUI extends PixelRealm {
   public void runMenu() {
     modifyTerrain = false;
     if (menuShown && menu != null) {
-      ui.useSpriteSystem(gui);
+      // Custom menus means that it's being used by a TWIT plugin.
+      // Users will most likely use their own custom sprite system in these scenarios
+      if (menu instanceof CustomMenu) {
+        // May not be using custom sprite system, in which case use our normal sprite system
+        // (not recommended for programmer but they'll be sent a warning)
+        if (!ui.usingTWITSpriteSystem) {
+          console.warnOnce("You aren't using your own sprite system. It is highly recommended to use your own sprite system with custom menus.");
+          ui.useSpriteSystem(gui);
+        }
+      }
+      else {
+        ui.useSpriteSystem(gui);
+      }
       menu.display();
     }
   }
@@ -1609,6 +1652,7 @@ public class PixelRealmWithUI extends PixelRealm {
     this.runMenu();
     this.runGUI();
     this.runTutorial();
+    if (tutorialStage == 0) runPlugin(MODE_UI);
     gui.updateSpriteSystem();
   }
   

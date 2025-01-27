@@ -293,7 +293,6 @@ public class Editor extends Screen {
     private ArrayList<String> imagesInEntry;  // This is so that we can know what to remove when we exit this screen.
     private Placeable editingPlaceable = null;
     private EditorCapture camera;
-    private PGraphics cameraDisplay;
     private String entryName;
     private String entryPath;
     private String entryDir;
@@ -644,11 +643,6 @@ public class Editor extends Screen {
           }
           // In android we use our own camera.
         
-          // Because of the really annoying delay thing, we wanna create a canvas that uses the cpu to draw the frame instead
-          // of the P2D renderer struggling to draw things. In the future, we can implement this into the engine so that it can
-          // be used in other places and not just for the camera.
-          int SIZE_DIVIDER = 2;
-          cameraDisplay = createGraphics(int(WIDTH)/SIZE_DIVIDER, int(HEIGHT)/SIZE_DIVIDER);
         }
         
         if (isAndroid()) {
@@ -1200,10 +1194,6 @@ public class Editor extends Screen {
       textSize(30);
       textAlign(CENTER, CENTER);
       text("Starting camera display...", WIDTH/2, HEIGHT/2+120);
-      cameraDisplay.beginDraw();
-      cameraDisplay.clear();
-      cameraDisplay.endDraw();
-      app.image(cameraDisplay, 0, 0, WIDTH, HEIGHT);
       
       // Start up the camera.
       Thread t = new Thread(new Runnable() {
@@ -1654,10 +1644,7 @@ public class Editor extends Screen {
         if (pic != null && pic.width > 0 && pic.height > 0) {
           
           float aspect = float(pic.height)/float(pic.width);
-          cameraDisplay.beginDraw();
-          cameraDisplay.image(pic, 0, 0, float(cameraDisplay.width), float(cameraDisplay.width)*aspect);
-          cameraDisplay.endDraw();
-          app.image(cameraDisplay, 0, 0, WIDTH, HEIGHT);
+          app.image(pic, 0, 0, WIDTH, WIDTH*aspect);
           if (takePhoto) {
             app.blendMode(ADD);
             app.noStroke();
@@ -1734,7 +1721,7 @@ public class Editor extends Screen {
     }
     
     public void finalize() {
-      free();
+      //free();
     }
     
     public void free() {

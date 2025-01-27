@@ -68,6 +68,13 @@ public class PixelRealm extends Screen {
   protected final static int MORPHER_PIT     = 4;
   protected final static int MORPHER_RESTORE = 5;
   
+  // For API
+  public final int MODE_PRESCENE = 1;
+  public final int MODE_SCENE = 2;
+  public final int MODE_POSTSCENE = 3;
+  public final int MODE_UI = 4;
+  protected int apiMode = 1;
+  
   
   
   // File names without an extension accept various file types (png, jpeg, gif)
@@ -78,6 +85,7 @@ public class PixelRealm extends Screen {
   public final static String REALM_BGM   = ".pixelrealm-bgm";
   public final static String REALM_TURF  = ".pixelrealm-turf.json";
   public final static String REALM_BGM_DEFAULT = "engine/music/pixelrealm_default_bgm.wav";
+  public final static String REALM_PLUGIN = ".pixelrealm-plugin.java";
   
   // Defaults (Loaded on constructor)
   private PImage REALM_GRASS_DEFAULT;
@@ -157,7 +165,8 @@ public class PixelRealm extends Screen {
   public static final int REFRESHER_PAUSE = 1;          // Force pauses for 100ms. This allows us to update the list.
   public static final int REFRESHER_TERMINATE = 2;      // Stops and kills the thread.
   public static final int REFRESHER_RESTART = 3;        // Tells the thread to refresh its lastmodified list, use this when you're switching realms to prevent an unintended realm refresh.
-  
+  public static final int REFRESHER_LONGPAUSE = 4;
+  public static final int REFRESHER_EXITLONGPAUSE = 5;
       
   
   
@@ -771,6 +780,17 @@ public class PixelRealm extends Screen {
                   // Then we need to update our lastmodified list.
                   needsUpdate = true;
                   break;
+                  case REFRESHER_LONGPAUSE:
+                  try {
+                    // Wait until interrupt called.
+                    Thread.sleep(99999999);
+                  }
+                  catch (InterruptedException e2) {
+                    
+                  }
+                  // Then we need to update our lastmodified list.
+                  needsUpdate = true;
+                  break;
                   case REFRESHER_TERMINATE:
                   console.log("REFRESHER_TERMINATE");
                   active = false;
@@ -845,6 +865,12 @@ public class PixelRealm extends Screen {
     private DirectoryPortal exitPortal = null;
     private String musicPath = engine.APPPATH+REALM_BGM_DEFAULT;
     private boolean loadMinimal = false;
+    
+    private TWEngine.PluginModule.Plugin realmPlugin;
+    public String realmPluginPath = "";
+    private AtomicBoolean successfulCompile = new AtomicBoolean();
+    private AtomicBoolean pluginCompiled = new AtomicBoolean();
+    private boolean showDebugMessageOnce = true;
     
     public HashMap<Integer, TerrainChunkV2> chunks = new HashMap<Integer, TerrainChunkV2>();
     
@@ -3801,6 +3827,22 @@ public class PixelRealm extends Screen {
       loadRealmTerrain(this.stateDirectory);
     }
     
+    private void runPlugin() {
+      if (realmPlugin != null && pluginCompiled.get() && successfulCompile.get()) {
+        realmPlugin.run();
+      }
+      
+      if (pluginCompiled.get() && showDebugMessageOnce) {
+        showDebugMessageOnce = false;
+        if (successfulCompile.get()) {
+          console.log("Successful plugin compilation!");
+        }
+        else {
+          console.log("Compilation error: "+realmPlugin.errorOutput);
+        }
+      }
+    }
+    
     public void loadRealmTerrain(String dir) {
       // Find out if the directory has a turf file.
       JSONObject jsonFile = null;
@@ -4762,11 +4804,36 @@ public class PixelRealm extends Screen {
           musicPath = file.unhide(dir+REALM_BGM+ext);
         }
       }
-  
+      
       // If none found use default bgm
       if (!found) {
         musicPath = engine.APPPATH+DEFAULT_BGM;
       }
+      
+      // And finally, the pixelrealm-plugin
+      if (file.exists(dir+REALM_PLUGIN)) {
+        // load the code,
+        realmPluginPath = dir+REALM_PLUGIN;
+        String[] lines = app.loadStrings(dir+REALM_PLUGIN);
+        String ccode = "";
+        for (String line : lines) {
+          ccode += line+"\n";
+        }
+        final String code = ccode;
+        
+        
+        realmPlugin = plugins.createPlugin();
+        pluginCompiled.set(false);
+        showDebugMessageOnce = true;
+        Thread t1 = new Thread(new Runnable() {
+          public void run() {
+            successfulCompile.set(realmPlugin.compile(code));
+            pluginCompiled.set(true);
+          }
+        });
+        t1.start();
+      }
+  
     }
     
     
@@ -6469,6 +6536,11 @@ public class PixelRealm extends Screen {
     
     
   boolean beginBackgroundCaching = true;
+  
+  protected void runPlugin(int mode) {
+    apiMode = mode;
+    currRealm.runPlugin();
+  }
     
         
   // Finally, the most important code of all
@@ -6518,6 +6590,7 @@ public class PixelRealm extends Screen {
     // Now begin all the drawing!
     display.recordRendererTime(); 
     scene.beginDraw();
+    if (currRealm.realmPlugin != null) currRealm.realmPlugin.sketchioGraphics = scene;
     display.recordLogicTime();
     currRealm.renderSky();
     setPerspective();
@@ -6543,6 +6616,7 @@ public class PixelRealm extends Screen {
     currRealm.renderTerrain();
     currRealm.runMorpherTool();
     currRealm.renderPRObjects(); 
+    runPlugin(MODE_SCENE);
     scene.resetShader();
     
     // Pop the camera.
@@ -6553,13 +6627,15 @@ public class PixelRealm extends Screen {
     display.recordRendererTime();
     scene.hint(DISABLE_DEPTH_TEST);
     currRealm.renderEffects();
+    runPlugin(MODE_POSTSCENE);
     
     display.recordRendererTime();
     scene.endDraw();
+    if (currRealm.realmPlugin != null) currRealm.realmPlugin.sketchioGraphics = app.g;
     float wi = scene.width*DISPLAY_SCALE;
     float hi = this.height;
     
-    image(scene, (WIDTH/2)-wi/2, (HEIGHT/2)-hi/2, wi, hi);
+    app.image(scene, (WIDTH/2)-wi/2, (HEIGHT/2)-hi/2, wi, hi);
     
     display.recordLogicTime();
     
@@ -6593,6 +6669,7 @@ public class PixelRealm extends Screen {
         }
       }
       
+      // TODO: Disable this
       if (input.upOnce && realmBreadcrumbs.size() > 0) {
         sound.playSound("swish");
         gotoRealm(realmBreadcrumbs.get(breadcrumbIndex));

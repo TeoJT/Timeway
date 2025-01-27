@@ -39,6 +39,7 @@ import java.io.InputStreamReader;
 import java.util.Iterator;   // Used by the stack class at the bottom
 import java.util.Arrays;   // Used by the stack class at the bottom
 import java.util.Collections;
+import java.lang.reflect.InvocationTargetException;
 
 
 
@@ -50,8 +51,7 @@ public class TWEngine {
   // Info and versioning
   private static final String VERSION     = "0.1.4";
   public static final String VERSION_DESCRIPTION = 
-    "- Recycle bin added\n"+
-    "- Performance improvements\n";
+    "";
   
   public String getAppName() {
     return "Timeway";
@@ -1814,6 +1814,10 @@ public class TWEngine {
     public boolean spriteSystemClickable = false;
     public MiniMenu currMinimenu = null;
     
+    // To be used by API.
+    public HashMap<String, SpriteSystemPlaceholder> spriteSystems;
+    public boolean usingTWITSpriteSystem = false;
+    
     
     
     
@@ -2202,6 +2206,7 @@ public class TWEngine {
       this.currentSpritePlaceholderSystem = system;
       this.spriteSystemClickable = true;
       this.guiFade = 255.;
+      usingTWITSpriteSystem = false;
     }
     
     public boolean buttonImg(String img, float x, float y, float w, float h) {
@@ -2330,6 +2335,39 @@ public class TWEngine {
     
     public boolean miniMenuShown() {
       return (currMinimenu != null);
+    }
+    
+    public void addSpriteSystem(TWEngine engine, String name, String path) {
+      if (spriteSystems == null) {
+        spriteSystems = new HashMap<String, SpriteSystemPlaceholder>();
+      }
+      spriteSystems.put(name, new SpriteSystemPlaceholder(engine, path));
+    }
+        
+    public SpriteSystemPlaceholder getSpriteSystem(String name) {
+      if (!spriteSystems.containsKey(name)) {
+        console.warn("Sprite system "+name+" doesn't exist!");
+        // TODO: Return a blank spritesystem so that we don't crash.
+        return null;
+      }
+      else {
+        return spriteSystems.get(name);
+      }
+    }
+    
+    public SpriteSystemPlaceholder getInUseSpriteSystem() {
+      if (currentSpritePlaceholderSystem == null) {
+        // TODO: Return a blank spritesystem so that we don't crash.
+        console.warn("No sprite system currently in use!");
+        return null;
+      }
+      return currentSpritePlaceholderSystem;
+    }
+    
+    public void updateSpriteSystems() {
+      for (SpriteSystemPlaceholder system : spriteSystems.values()) {
+        system.updateSpriteSystem();
+      }
     }
     
   }
@@ -4419,6 +4457,11 @@ public class TWEngine {
   
     // NOTE: Only opens files, NOT directories (yet).
     public void open(String filePath) {
+      if (!exists(filePath)) {
+        console.warn(filePath+" doesn't exist!");
+        return;
+      }
+      
       String ext = getExt(filePath);
       // Stuff to open with our own app (timeway)
       if (ext.equals(ENTRY_EXTENSION)) {
@@ -4445,6 +4488,22 @@ public class TWEngine {
         openDirInNewThread(path);
       } else {
         desktopOpen(path);
+      }
+    }
+    
+    public void openEntryReadonly(String path) {
+      if (!exists(path)) {
+        console.warn(path+" doesn't exist!");
+        return;
+      }
+      
+      String ext = getExt(path);
+      // Stuff to open with our own app (timeway)
+      if (ext.equals(ENTRY_EXTENSION)) {
+        twengineRequestEditor(path);
+      }
+      else {
+        console.warn("openEntryReadonly: "+ext+" is not a timewayentry");
       }
     }
   
@@ -5055,8 +5114,16 @@ public class TWEngine {
           try {
             pluginRunPoint.invoke(pluginIntance);
           }
-          catch (Exception e) {
-            console.warnOnce("Run plugin exception: "+ e.getClass().getSimpleName() + " " + e.getMessage());
+          catch (InvocationTargetException ite) {
+              // This exception wraps the actual exception thrown by the invoked method
+              Throwable cause = ite.getCause(); // Get the underlying exception
+              console.warnOnce("Run plugin exception: " + ite.getClass().getSimpleName() + 
+                                " | Cause: " + (cause != null ? cause.getClass().getSimpleName() + " - " + cause.getMessage() : "No cause"));
+              cause.printStackTrace(); // Print the stack trace of the underlying exception
+          } catch (IllegalAccessException iae) {
+              console.warnOnce("Run plugin exception: " + iae.getClass().getSimpleName() + " - " + iae.getMessage());
+          } catch (Exception e) {
+              console.warnOnce("Run plugin exception: " + e.getClass().getSimpleName() + " - " + e.getMessage());
           }
         }
       }
@@ -5138,6 +5205,7 @@ public class TWEngine {
         
         // Moved here instead of setup because we want to be able to modify the boilerplate file too without having to restart
         // the program each time.
+        
         if (file.exists(APPPATH+BOILERPLATE_PATH)) {
           String[] txts = app.loadStrings(APPPATH+BOILERPLATE_PATH);
           boolean secondPart = false;
@@ -5165,11 +5233,23 @@ public class TWEngine {
         // Now remember, we go
         // raw code -> java file (combined with boilerplate) -> class file -> jar file.
         final String javaFileOut = CACHE_PATH+"CustomPlugin.java";
-        final String classFileOut = CACHE_PATH+"CustomPlugin.class";
+        final String classFileOut = CACHE_PATH+"compiled/CustomPlugin.class";
+        
+        file.mkdir(CACHE_PATH+"compiled");
         
         // raw code -> java file
         String fullCode = pluginBoilerplateCode_1+code+pluginBoilerplateCode_2;
         app.saveStrings(javaFileOut, fullCode.split("\n"));
+        
+        
+        // Delete all .class files in the cache directory
+        //File[] cacheFiles = (new File(CACHE_PATH)).listFiles();
+        //for (File f : cacheFiles) {
+        //  if (file.getExt(f.getName()).equals("class")) {
+        //    f.delete();
+        //  }
+        //}
+        
         
         // java file -> class file
         CmdOutput cmd = toClassFile(javaFileOut);
@@ -5184,11 +5264,15 @@ public class TWEngine {
         }
         this.errorOutput = "";
         
+        
         // class file -> executable jar
         String executableJarFile = toJarFile(classFileOut);
         
+        
         // Finally, load the plugin!
         loadPlugin(executableJarFile);
+        
+        
         return true;
       }
       
@@ -5269,12 +5353,14 @@ public class TWEngine {
       
       
       // Stored in the cache folder.
-      final String pluginPath = CACHE_PATH;
+      final String pluginPath = CACHE_PATH+"compiled/";
       
       // run as if we've opened up cmd/terminal and are running our command.
       CmdOutput cmd = null;
       if (isWindows()) {
-        cmd = runExecutableCommand(javacPath, "-cp", processingCorePath+";"+pluginPath, inputFile);
+        cmd = runExecutableCommand(javacPath, "-d", pluginPath, "-cp", processingCorePath+";"+pluginPath, inputFile);
+        //println(javacPath, "-d", pluginPath, "-cp", processingCorePath+";"+pluginPath, inputFile);
+        //cmd = runExecutableCommand(javacPath, "-cp", processingCorePath+";"+pluginPath, inputFile);
       }
       else {
         //cmd = runOSCommand("\""+javacPath+"\" -cp \""+processingCorePath+";"+pluginPath+"\" \""+inputFile+"\"");
@@ -5299,11 +5385,21 @@ public class TWEngine {
       
       // We need the class path because the command line argument is weird,
       // (that might be an issue if we have tons of other items in our cache folder but oh well)
+      // TODO: Shouldn't we be using our own custom file class here????
       final String classPath = (new File(classFile)).getParent().toString();
-      final String className = (new File(classFile)).getName();
+      //final String className = (new File(classFile)).getName();
+      
+      //File[] cacheFiles = (new File(CACHE_PATH)).listFiles();
+      //String classfiles = "";
+      //for (File f : cacheFiles) {
+      //  if (file.getExt(f.getName()).equals("class")) {
+      //    classfiles += f.getName()+" ";
+      //  }
+      //}
       
       // And boom. It is then done.
-      runExecutableCommand(jarExePath, "cvf", out, "-C", classPath, className);
+      //runExecutableCommand(jarExePath, "cvf", out, "-C", classPath, className);
+      runExecutableCommand(jarExePath, "cvf", out, "-C", classPath, ".");
       
       return out;
     }
@@ -8615,7 +8711,7 @@ public final class SpriteSystemPlaceholder {
                 hi = (int)im.height;
                 defhi = hi;
                 }
-                aspect = (im.height)/(im.width);
+                aspect = float(im.height)/float(im.width);
             }
 
             public void move(float x, float y) {

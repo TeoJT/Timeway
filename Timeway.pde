@@ -266,6 +266,10 @@ void twengineRequestEditor(String path) {
   timewayEngine.requestScreen(new Editor(timewayEngine, path));
 }
 
+void twengineRequestReadonlyEditor(String path) {
+  timewayEngine.requestScreen(new ReadOnlyEditor(timewayEngine, path));
+}
+
 //@SuppressWarnings("unused")
 void twengineRequestUpdater(JSONObject json) {
   timewayEngine.requestScreen(new Updater(timewayEngine, json));

@@ -232,7 +232,12 @@ if (os.path.isdir("timeway_windows_"+version)):
             if (not found):
                 # Go to C:/Users/ and find which folder we have permission to access
                 for folder in os.listdir("/mnt/c/Users/"):
-                    if (os.path.isdir("/mnt/c/Users/"+folder)):
+                    if (os.path.isdir("/mnt/c/Users/"+folder)
+                        and folder.lower() != "all users"
+                        and folder.lower() != "public"
+                        and folder.lower() != "default"
+                        and folder.lower() != "default user"
+                        ):
                         try:
                             os.listdir("/mnt/c/Users/"+folder)
                             usr_folder_path = "/mnt/c/Users/"+folder
