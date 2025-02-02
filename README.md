@@ -30,7 +30,7 @@ Open Processing and the open Timeway from the File>Open menu. You can test run t
 
 *NOTE:* This repo doesn't include the realm templates. If you really want to have realm templates installed, please extract it from a [release](https://teojt.github.io/timeway.html#download) of Timeway. This will be located under `data/engine/realmtemplates`.
 
-### Building an official release.
+### Building Timeway
 In Processing, go to File>Export application and select the OS's to export to. Ensure "Include Java with build" is checked.
 
 Once the export has been complete, open the terminal, go to the Timeway directory, and run `python3 timeway_packer.py`. Wait for the script to finish the packing process. If you don't intend to ship your build publicly, you may cancel (CTRL+C) the script when it reaches the zipping process. The final build will be timeway\_\[OS\]\_\[VERSION\].zip, or located in \timeway_\[OS\] if you cancel the zipping process.
