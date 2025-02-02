@@ -1088,9 +1088,6 @@ public class TWEngine {
     
     private PGL pgl;
     
-    // This variable limits LargeImages uploading to the GPU to one LargeImage upload/frame.
-    private boolean uploadGPUOnce = true;
-    
     class PShaderEntry {
       public PShaderEntry(PShader s, String p) {
         shader = s;
@@ -1736,8 +1733,6 @@ public class TWEngine {
     }
     
     public void update() {
-      // Reset so that a new texture can be uploaded to gpu
-      uploadGPUOnce = true;
       
       if (clearListIndex > 0) {
         pgl = app.beginPGL();
@@ -2365,6 +2360,7 @@ public class TWEngine {
     }
     
     public void updateSpriteSystems() {
+      if (spriteSystems == null) return;
       for (SpriteSystemPlaceholder system : spriteSystems.values()) {
         system.updateSpriteSystem();
       }
@@ -4500,7 +4496,7 @@ public class TWEngine {
       String ext = getExt(path);
       // Stuff to open with our own app (timeway)
       if (ext.equals(ENTRY_EXTENSION)) {
-        twengineRequestEditor(path);
+        twengineRequestReadonlyEditor(path);
       }
       else {
         console.warn("openEntryReadonly: "+ext+" is not a timewayentry");
@@ -5162,6 +5158,7 @@ public class TWEngine {
         // TODO: extended error-catching.
         catch (Exception e) {
           console.warn("LoadPlugin Exception: "+ e.getClass().getSimpleName());
+          e.printStackTrace();
         }
         
         // here we call setup(). Maybe TODO: perhaps we should have an onLoad() then an actual setup()?

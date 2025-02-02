@@ -431,6 +431,10 @@ public class CustomPlugin {
       call(3004, title, text, 0);
   }
   
+  public void prPrompt(String text) {
+      call(3004, "", text, 0);
+  }
+  
   public boolean prMenuShown() {
       return getBool(3005);
   }
@@ -438,6 +442,128 @@ public class CustomPlugin {
   public void prCreateCustomMenu(String title, String backname, Runnable displayRunnable) {
       call(3006, title, backname, displayRunnable);
   }
+
+  public void prCloseMenu() {
+      call(3007);
+  }
+
+  public void soundPlay(String name, float vol) {
+      call(4000, name, vol);
+  }
+  
+  public void soundPlay(String name) {
+      call(4000, name, 1f);
+  }
+
+  public void soundPlayOnce(String name) {
+      call(4001, name);
+  }
+
+  public void soundPause(String name) {
+      call(4002, name);
+  }
+
+  public void soundStop(String name) {
+      call(4003, name);
+  }
+
+  public void soundLoop(String name) {
+      call(4004, name);
+  }
+
+  public void soundSetVolume(String name, float vol) {
+      call(4005, name, vol);
+  }
+
+  public void soundSetMasterVolume(float vol) {
+      call(4006, vol);
+  }
+
+  public void soundSetMusicVolume(float vol) {
+      call(4007, vol);
+  }
+
+  public void soundStreamMusic(String path) {
+      call(4008, path);
+  }
+
+  public void soundStreamMusicWithFade(String path) {
+      call(4009, path);
+  }
+
+  public void soundStopMusic() {
+      call(4010);
+  }
+
+  public void soundPauseMusic() {
+      call(4011);
+  }
+
+  public void soundContinueMusic() {
+      call(4012);
+  }
+
+  public void soundFadeAndStopMusic() {
+      call(4013);
+  }
+
+  public void soundSyncMusic(float pos) {
+      call(4014, pos);
+  }
+
+  public float soundGetMusicDuration() {
+      return getFloat(4015);
+  }
+
+  // Display functions
+  public float displayWidth() {
+      return getFloat(5000);
+  }
+  
+  public float displayHeight() {
+      return getFloat(5001);
+  }
+  
+  public float displayDelta() {
+      return getFloat(5002);
+  }
+  
+  public float displayTime() {
+      return getFloat(5003);
+  }
+  
+  public float displayTimeSeconds() {
+      return getFloat(5004);
+  }
+  
+  public float displayGetUpperBarY() {
+      return getFloat(5005);
+  }
+
+  public float displayGetLowerBarY() {
+      return getFloat(5006);
+  }
+  
+  public float displayLiveFPS() {
+      return getFloat(5007);
+  }
+  
+  public float displayImg(String name, float x, float y, float wi, float hi) {
+      return getFloat(5008, name, x, y, wi, hi);
+  }
+  
+  public float displayWidth(String name, float x, float y) {
+      return getFloat(5009, name, x, y);
+  }
+  
+  public float imgCentre(String name, float x, float y, float wi, float hi) {
+      return getFloat(5010);
+  }
+  
+  public float imgCentre(String name, float x, float y) {
+      return getFloat(5011, name, x, y);
+  }
+  
   
 
   
@@ -1424,5 +1550,24 @@ public class CustomPlugin {
   }
   public float tan(float d) {
       return app.tan(d);
+  }
+
+  public int hour() {
+      return PApplet.hour();
+  }
+  public int minute() {
+      return PApplet.minute();
+  }
+  public int second() {
+      return PApplet.second();
+  }
+  public int day() {
+      return PApplet.day();
+  }
+  public int month() {
+      return PApplet.month();
+  }
+  public int year() {
+      return PApplet.year();
   }
 }

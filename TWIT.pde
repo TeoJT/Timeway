@@ -182,7 +182,7 @@ Object runTWIT(int opcode, Object[] args)  {
         timewayEngine.ui.loadingIcon((float)args[0], (float)args[1], (float)args[2]);
         break;
         
-        // uiLoadingIcon
+        // uiUpdateSpriteSystems
         case 2008:        
         timewayEngine.ui.updateSpriteSystems();
         break;
@@ -263,7 +263,7 @@ Object runTWIT(int opcode, Object[] args)  {
         timewayEngine.sound.loopSound((String)args[0]);
         break;
         
-        // soundStop()
+        // soundLoop()
         case 4004:
         timewayEngine.sound.loopSound((String)args[0]);
         break;
@@ -321,6 +321,63 @@ Object runTWIT(int opcode, Object[] args)  {
         // soundGetMusicDuration()
         case 4015:
         return timewayEngine.sound.getCurrentMusicDuration();
+        
+        // displayWidth()
+        case 5000:
+        return timewayEngine.display.WIDTH;
+        
+        // displayHeight()
+        case 5001:
+        return timewayEngine.display.HEIGHT;
+        
+        // displayDelta();
+        case 5002:
+        return timewayEngine.display.getDelta();
+        
+        // displayTime()
+        case 5003:
+        return timewayEngine.display.getTime();
+        
+        // displayTimeSeconds()
+        case 5004:
+        return timewayEngine.display.getTimeSeconds();
+        
+        // displayGetUpperBarY()
+        case 5005:
+        return timewayEngine.currScreen.myUpperBarWeight;
+        
+        // displayGetLowerBarY()
+        case 5006:
+        return timewayEngine.display.HEIGHT-timewayEngine.currScreen.myLowerBarWeight;
+        
+        // displayLiveFPS()
+        case 5007:
+        return timewayEngine.display.getLiveFPS();
+        
+        // displayImg(String name, float x, float y, float w, float h)
+        case 5008:
+        timewayEngine.display.img((String)args[0], (float)args[1], (float)args[2], (float)args[3], (float)args[4]);
+        break;
+        
+        // displayImg(String name, float x, float y)
+        case 5009:
+        timewayEngine.display.img((String)args[0], (float)args[1], (float)args[2]);
+        break;
+        
+        // imgCentre(String name, float x, float y, float w, float h)
+        case 5010:
+        timewayEngine.display.imgCentre((String)args[0], (float)args[1], (float)args[2], (float)args[3], (float)args[4]);
+        break;
+        
+        // imgCentre(String name, float x, float y)
+        case 5011:
+        timewayEngine.display.imgCentre((String)args[0], (float)args[1], (float)args[2]);
+        break;
+        
+        
+        
+        
+        
         
         
         
