@@ -93,7 +93,7 @@ public class PixelRealmWithUI extends PixelRealm {
     // Ugh. whatever.
     IMG_BORDER_TILE = display.systemImages.get("menuborder");
 
-    touchControlsEnabled = settings.getBoolean("touch_controls");
+    touchControlsEnabled = settings.getBoolean("touch_controls", false);
     // Obviously needed on phones, regardless of settings.
     if (isAndroid()) {
       touchControlsEnabled = true;
@@ -465,14 +465,10 @@ public class PixelRealmWithUI extends PixelRealm {
         }
       }
       
-      // -- Credits --
-      if (ui.buttonVary("credits", "credits_128", "Credits")) {
-        if (file.exists(engine.APPPATH+CreditsScreen.CREDITS_PATH)) {
-          requestScreen(new CreditsScreen(engine));
-        }
-        else {
-          console.warn("Credits file is missing.");
-        }
+      // -- Home screen --
+      if (ui.buttonVary("credits", "credits_128", "Home screen")) {
+        requestScreen(new HomeScreen(engine));
+        sound.stopMusic();
         menu = null;
         menuShown = false;
       }
@@ -535,7 +531,7 @@ public class PixelRealmWithUI extends PixelRealm {
     
     public void display() {
       super.display();
-      if (ui.buttonVary("op-delete", "notool_128", "Delete")) {
+      if (ui.buttonVary("op-delete", "recycle_256", "Delete")) {
         sound.playSound("menu_select");
         
         issueRefresherCommand(REFRESHER_PAUSE);
@@ -556,7 +552,7 @@ public class PixelRealmWithUI extends PixelRealm {
         
         closeMenu();
       }
-      if (ui.buttonVary("op-rename", "command_256", "Rename")) {
+      if (ui.buttonVary("op-rename", "rename_256", "Rename")) {
         sound.playSound("menu_select");
         
   
@@ -636,7 +632,7 @@ public class PixelRealmWithUI extends PixelRealm {
         }
         //closeMenu();
       }
-      if (ui.buttonVary("op-duplicate", "cuber_tool_128", "Duplicate")) {
+      if (ui.buttonVary("op-duplicate", "copy_256", "Duplicate")) {
         sound.playSound("menu_select");
         
         String ext = "";
@@ -662,9 +658,15 @@ public class PixelRealmWithUI extends PixelRealm {
           console.warn("Failed to duplicate file.");
         }
         
-        console.log(copyPath);
-        
         closeMenu();
+      }
+      
+      if (this.probject instanceof PixelRealmState.EntryFileObject) {
+        if (ui.buttonVary("op-openreadonly", "cuber_tool_128", "Read only")) {
+          sound.playSound("menu_select");
+          timewayEngine.file.openEntryReadonly(this.probject.dir);
+          closeMenu();
+        }
       }
     }
     
@@ -917,7 +919,7 @@ public class PixelRealmWithUI extends PixelRealm {
       boolean allow = (sound.loadingMusic() && tempIndex > 0) || !sound.loadingMusic();
       
       if (allow) {
-        if ((input.keyActionOnce("inventorySelectLeft")
+        if ((input.keyActionOnce("inventory_select_left", ',')
           || ui.buttonVary("newrealm-prev", "back_arrow_128", ""))
           && coolDown == 0) {
           tempIndex--;
@@ -926,7 +928,7 @@ public class PixelRealmWithUI extends PixelRealm {
         }
       }
       
-      if ((input.keyActionOnce("inventorySelectRight")
+      if ((input.keyActionOnce("inventory_select_right", '.')
         || ui.buttonVary("newrealm-next", "forward_arrow_128", ""))
         && coolDown == 0) {
         tempIndex++;
@@ -1033,7 +1035,7 @@ public class PixelRealmWithUI extends PixelRealm {
     }
     
     
-    protected void runCustomNodes(ArrayList<PixelRealmState.CustomNode> customNodes) {
+    protected void runCustomNodes(ArrayList<TWEngine.UIModule.CustomNode> customNodes) {
       
 
       // Display all parameters for the specified generator that is selected.
@@ -1048,11 +1050,10 @@ public class PixelRealmWithUI extends PixelRealm {
       mouseDown &= input.primaryDown;
 
       if (!mouseDown) {
-        for (PixelRealmState.CustomNode n : customNodes) {
-          n.x = x;
+        for (TWEngine.UIModule.CustomNode n : customNodes) {
           n.wi = cache_backWi-100.;
 
-          n.display(y);
+          n.display(x, y);
 
           y += n.getHeight();
         }
@@ -1224,6 +1225,28 @@ public class PixelRealmWithUI extends PixelRealm {
       menuShown = false;
     }
     
+    // Physically teleports the player to the item if in the same dir,
+    // or if not in the same dir, goes to that dir and then physicially teleports the player.
+    public void gotoFile(String path) {
+      String stateDir = file.directorify(currRealm.stateDirectory);
+      
+      // If we're in same realm as file, simply teleport
+      console.log(file.getDir(path)+" "+(stateDir));
+      String parent = file.directorify(file.getDir(path));
+      if (!parent.equals(stateDir)) {
+        gotoRealm(parent);
+      }
+      
+      
+      PixelRealmState.FileObject fobject = currRealm.findFileObjectByName(file.getFilename(path));
+      if (fobject == null) {
+        console.warn("Couldn't locate "+file.getFilename(path));
+      }
+      else {
+        currRealm.tp(fobject.x-200, fobject.y, fobject.z, HALF_PI);
+      }
+    }
+    
     public void display() {
       setTitle("-- Search --");
       super.display();
@@ -1236,12 +1259,12 @@ public class PixelRealmWithUI extends PixelRealm {
       app.text(input.keyboardMessageDisplay(), getXmid(), getY()+100f);
       
       if (input.keyOnce) {
-        results = indexer.search(input.keyboardMessage);
+        results = indexer.search(input.keyboardMessage, currRealm.stateDirectory);
       }
       
       if (input.enterOnce && searchMenuTimeout <= 0) {
         if (results != null && results.size() > 0) {
-          open(results.get(0));
+          gotoFile(results.get(0));
         }
         close();
       }
@@ -1257,7 +1280,11 @@ public class PixelRealmWithUI extends PixelRealm {
           
           if (input.mouseY() > y && input.mouseY() < y+30f) {
             app.fill(255, 200, 0);
-            if (input.primaryOnce) {
+            if (input.primaryDown) {
+              gotoFile(result);
+              close();
+            }
+            if (input.secondaryDown) {
               open(result);
               close();
             }
@@ -1421,15 +1448,15 @@ public class PixelRealmWithUI extends PixelRealm {
       
       // Buttons on the top-right
       if (ui.buttonVary("touch-menu", "touch_menu", "")) {
-        input.setAction("menu");
+        input.setAction("menu", '\t');
         click = true;
       }
       if (ui.buttonVary("touch-prevrealm", "touch_prevrealm", "")) {
-        input.setAction("prevDirectory");
+        input.setAction("prev_directory", '\b');
         click = true;
       }
       if (ui.buttonVary("touch-home", "touch_home", "")) {
-        input.setAction("quickWarp1");
+        input.setAction("quick_warp_1", '1');
         click = true;
       }
       
@@ -1476,11 +1503,11 @@ public class PixelRealmWithUI extends PixelRealm {
       
       // Buttons on the bottom-right; action buttons
       if (ui.buttonVary("touch-a", "touch_a", "")) {
-        input.setAction("primaryAction");
+        input.setAction("primary_action", 'o');
         click = true;
       }
       if (ui.buttonVary("touch-b", "touch_b", "")) {
-        input.setAction("secondaryAction");
+        input.setAction("secondary_action", 'p');
         click = true;
       }
       
@@ -1511,34 +1538,34 @@ public class PixelRealmWithUI extends PixelRealm {
       // (as well as move backwards) while still moving.
       if (touch) {
         if (dash) {
-          input.setAction("dash");
+          input.setAction("dash", 'r');
         }
         
         if (touchLeft) {
-          input.setAction("moveLeft");
+          input.setAction("move_left", 'a');
         }
         else if (touchRight) {
-          input.setAction("moveRight");
+          input.setAction("move_right", 'd');
         }
 
 
         if (ui.buttonHoverVary("touch-jump")) {
-          input.setAction("jump");
+          input.setAction("jump", ' ');
         }
         
         if (touchForward) {
           if (ui.buttonHoverVary("touch-walkback")) {
-            input.setAction("moveBackwards");
+            input.setAction("move_backward", 's');
           } else {
-            input.setAction("moveForewards");
+            input.setAction("move_forward", 'w');
           }
           
-          if (ui.buttonHoverVary("touch-look-left")) {
-            input.setAction("lookLeftTouch");
-          }
-          if (ui.buttonHoverVary("touch-look-right")) {
-            input.setAction("lookRightTouch");
-          }
+          //if (ui.buttonHoverVary("touch-look-left")) {
+          //  input.setAction("lookLeftTouch");
+          //}
+          //if (ui.buttonHoverVary("touch-look-right")) {
+          //  input.setAction("lookRightTouch");
+          //}
         }
       }
       // But if the user touches a blank space and drags,
@@ -1581,10 +1608,10 @@ public class PixelRealmWithUI extends PixelRealm {
       if (touchControlsEnabled) {
 
         if (ui.buttonVary("touch-slot-left", "touch_left", "")) {
-          input.setAction("inventorySelectLeft");
+          input.setAction("inventory_select_left", ',');
         }
         if (ui.buttonVary("touch-slot-right", "touch_right", "")) {
-          input.setAction("inventorySelectRight");
+          input.setAction("inventory_select_right", '.');
         }
       }
 
@@ -1607,7 +1634,7 @@ public class PixelRealmWithUI extends PixelRealm {
     // Hacky way of allowing an exception for our input prompt menu's
     boolean tmp = engine.inputPromptShown;
     engine.inputPromptShown = false;
-    if (input.keyActionOnce("menu") && !engine.commandPromptShown) {
+    if (input.keyActionOnce("menu", '\t') && !engine.commandPromptShown) {
       // Do not allow menu to be closed when set to be on.
       if (menuShown && doNotAllowCloseMenu) {
         engine.inputPromptShown = tmp;
@@ -1632,7 +1659,7 @@ public class PixelRealmWithUI extends PixelRealm {
     }
     
     searchMenuTimeout--;
-    if (input.keyActionOnce("search") && !engine.commandPromptShown && searchMenuTimeout <= 0 && !menuShown) {
+    if (input.keyActionOnce("search", '\n') && !engine.commandPromptShown && searchMenuTimeout <= 0 && !menuShown) {
       menuShown = true;
       menu = new SearchPromptMenu();
       searchMenuTimeout = 10;
@@ -2050,7 +2077,7 @@ public class PixelRealmWithUI extends PixelRealm {
         mssg = "Let's try moving!\nWSAD: Move, Q/E: look left/right, R: run, [space]: jump, [shift]: walk slowly.";
 
         // Let the player run around a bit, then move on to the next tutorial.
-        if (input.keyAction("moveForewards") || input.keyAction("moveBackwards") || input.keyAction("moveLeft") || input.keyAction("moveRight")) {
+        if (input.keyAction("move_forward", 'w') || input.keyAction("move_backward", 's') || input.keyAction("move_left", 'a') || input.keyAction("move_right", 'd')) {
           moveAmount += display.getDelta();
           if (moveAmount >= 350.) {
             moveAmount = 0.;

@@ -35,7 +35,7 @@ class SlowIndexer {
   }
   
   public void increaseScore(String name, int increaseValue) {
-    entries.get(name).score += increaseValue;
+    //entries.get(name).score += increaseValue;
   }
   
   public void search(String st) {

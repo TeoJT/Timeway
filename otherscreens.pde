@@ -357,9 +357,25 @@ public class Explorer extends Screen {
     
     //************NEW ENTRY************
     if (button("new_entry", "new_entry_128", "New entry")) {
-      // TODO: placeholder
-      String newName = file.currentDir+engine.appendZeros(numTimewayEntries, 5)+"."+engine.ENTRY_EXTENSION;
-      requestScreen(new Editor(engine, newName));
+      // Man this code here is ANCIENT
+      //String newName = file.currentDir+engine.appendZeros(numTimewayEntries, 5)+"."+engine.ENTRY_EXTENSION;
+      //requestScreen(new Editor(engine, newName));
+      
+      // Here's some newer code.
+      Runnable r = new Runnable() {
+        public void run() {
+          if (input.keyboardMessage.length() <= 1) {
+            console.log("Please enter a valid entry name!");
+            return;
+          }
+          String entryname = file.currentDir+input.keyboardMessage+"."+engine.ENTRY_EXTENSION;
+          new File(entryname).mkdirs();
+          refreshDir();
+          requestScreen(new Editor(engine, entryname));
+        }
+      };
+      
+      engine.beginInputPrompt("Entry name:", r);
     }
     
     //************NEW FOLDER************
@@ -381,13 +397,18 @@ public class Explorer extends Screen {
     }
     
     //***********CLOSE BUTTON***********
-    if (button("cross", "cross", "")) {
-      exit();
-    }
+    //if (button("cross", "cross", "")) {
+    //  exit();
+    //}
     
-    //***********PIXeL REALM BUTTON***********
-    if (button("world", "world_128", "Pixel Realm")) {
-      requestScreen(new PixelRealmWithUI(engine, file.currentDir));
+    //***********PixeL REALM BUTTON***********
+    //if (button("world", "world_128", "Pixel Realm")) {
+    //  requestScreen(new PixelRealmWithUI(engine, file.currentDir));
+    //}
+    
+    //***********BACK BUTTON***********
+    if (button("back", "back_arrow_128", "")) {
+      previousScreen();
     }
     
     gui.updateSpriteSystem();
@@ -410,6 +431,11 @@ public class Explorer extends Screen {
   
     
   public void lowerBar() {
+    app.fill(myBackgroundColor);
+    app.noStroke();
+    app.noStroke();
+    app.rect(0, HEIGHT-myLowerBarWeight, WIDTH, myLowerBarWeight);
+    
     display.shader("fabric", "color", 0.5,0.5,0.5,1., "intensity", 0.1);
     super.lowerBar();
     display.defaultShader();
@@ -423,12 +449,6 @@ public class Explorer extends Screen {
   
   // Let's render our stuff.
   public void content() {
-    // TODO: Should have a function with this to remove code bloat?
-      app.fill(255);
-      app.textFont(engine.DEFAULT_FONT, 50);
-      app.textSize(70);
-      app.textAlign(LEFT, TOP);
-      app.text("Explorer", 50, 80);
       
       if (file.loading) {
         ui.loadingIcon(WIDTH/2, HEIGHT/2);
@@ -438,7 +458,136 @@ public class Explorer extends Screen {
         renderDir();
       }
       
+      app.fill(myBackgroundColor);
+      app.noStroke();
+      app.rect(0, 0, WIDTH, 150);
+      
+      app.fill(255);
+      app.textFont(engine.DEFAULT_FONT, 50);
+      app.textSize(70);
+      app.textAlign(LEFT, TOP);
+      app.text("Explorer", 50, 80);
+      
       engine.displayInputPrompt();
   }
-  
+}
+
+
+
+
+
+
+
+
+
+public class HomeScreen extends Screen {
+    private SpriteSystemPlaceholder gui = null;
+
+    public HomeScreen(TWEngine engine) {
+        super(engine);
+        myBackgroundColor = color(10);
+        myUpperBarColor = color(50);
+        myLowerBarColor = color(50);
+        
+        gui = new SpriteSystemPlaceholder(engine, engine.APPPATH+engine.PATH_SPRITES_ATTRIB()+"gui/homescreen/");
+        gui.interactable = false;
+    }
+
+
+    public void transitionAnimation() {
+
+    }
+    
+    
+    protected void previousReturnAnimation() {
+      buttonOnce = true;
+    }
+    
+    private int before = 0;
+    private boolean buttonOnce = true;
+    private float floatIn = 1f;
+
+    public void content() {
+      
+        
+        //app.noStroke();
+        //app.textAlign(CENTER, CENTER);
+        //app.textFont(engine.DEFAULT_FONT, 34);
+        //app.fill(0, 255-(255*floatIn));
+        //app.text("by Teo Taylor", WIDTH/2-3, HEIGHT/2+150-3);
+        //app.fill(255, 255-(255*floatIn));
+        //app.text("by Teo Taylor", WIDTH/2, HEIGHT/2+150);
+        
+        
+        
+        // Title logo
+        app.tint(255, 255-(255*floatIn));
+        gui.spriteVary("homescreen-title");
+        app.noTint();
+        
+        //gui.getSprite("homescreen-title").move(0f, 
+        
+        SpriteSystemPlaceholder.Sprite logoSprite = gui.getSprite("homescreen-title");
+        float offY = logoSprite.getY()+logoSprite.getHeight()-60;
+        
+        app.noStroke();
+        app.textAlign(CENTER, CENTER);
+        app.textFont(engine.DEFAULT_FONT, 34);
+        app.fill(0, 255-(255*floatIn));
+        app.text("by Teo Taylor", WIDTH/2-3, offY);
+        app.fill(255, 255-(255*floatIn));
+        app.text("by Teo Taylor", WIDTH/2, offY);
+        
+        offY += 34;
+        
+        floatIn *= PApplet.pow(0.95, display.getDelta());
+        
+        // Version in bottom-right.
+        app.fill(255);
+        app.noStroke();
+        app.textAlign(LEFT, CENTER);
+        app.textFont(engine.DEFAULT_FONT, 30);
+        app.fill(0);
+        app.text(TWEngine.VERSION, 10-3, HEIGHT-myLowerBarWeight-30-3);
+        app.fill(255);
+        app.text(TWEngine.VERSION, 10, HEIGHT-myLowerBarWeight-30);
+        
+        boolean pixelrealmButton = ui.basicButton("Pixel Realm", display.WIDTH/2-400, (offY += 60), 800, 50);
+        boolean explorerButton = ui.basicButton("Explorer", display.WIDTH/2-400, (offY += 60), 800, 50);
+        boolean settingsButton = ui.basicButton("Settings", display.WIDTH/2-400, (offY += 60), 800, 50);
+        boolean creditsButton = ui.basicButton("Credits", display.WIDTH/2-400, (offY += 60), 800, 50);
+        
+        if (buttonOnce) {
+          
+        }
+        
+        if (pixelrealmButton) {
+          PixelRealmWithUI pixelrealm = new PixelRealmWithUI(engine, engine.DEFAULT_DIR);
+          requestScreen(pixelrealm);
+          buttonOnce = false;
+        }
+        
+        if (explorerButton) {
+          requestScreen(new Explorer(engine));
+          buttonOnce = false;
+        }
+        
+        if (settingsButton) {
+          requestScreen(new SettingsScreen(engine));
+          buttonOnce = false;
+        }
+        
+        if (creditsButton) {
+          if (file.exists(engine.APPPATH+CreditsScreen.CREDITS_PATH)) {
+            requestScreen(new CreditsScreen(engine));
+            buttonOnce = false;
+          }
+          else {
+            console.warn("Credits file is missing.");
+          }
+        }
+        
+        gui.updateSpriteSystem();
+        
+    }
 }

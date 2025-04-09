@@ -1,4 +1,5 @@
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.io.BufferedInputStream;
 import java.nio.file.attribute.*;
 import java.nio.file.*;
@@ -23,14 +24,13 @@ public class PixelRealm extends Screen {
   final static float  PSHAPE_SIZE_FACTOR = 100.;
   final static int    MAX_CACHE_SIZE = 512;
   final static float  BACKWARD_COMPAT_SCALE = 256./(float)MAX_CACHE_SIZE;
-  final static int    MAX_MEM_USAGE = 1024*1024*1024;   // 1GB 
+  private      long   MAX_MEM_USAGE = 1024L*1024L*1024L;   // 1GB 
                int    DISPLAY_SCALE = 4;
   final static int    FOLDER_SIZE_LIMIT = 500;  // If a folder has over this number of files, moving is restricted to prevent any potentially dangerous data moves.
   final static float  MIN_PORTAL_LIGHT_THRESHOLD = 19600.;   // 140 ^ 2
   final static int    CHUNK_SIZE = 8;
   final static int    MAX_CHUNKS_XZ = 32768;
   final static int    MAX_VIDEOS_ALLOWED = 0;
-  final static String BREADCRUMBS_PATH = "history.txt";
   
   // Movement/player constants.
   final static float BOB_SPEED = 0.4;
@@ -153,8 +153,6 @@ public class PixelRealm extends Screen {
   protected float fovx = PI/3.0;
   protected float fovy = 0.;
   private int slippingJumpsAllowed = 2;
-  private ArrayList<String> realmBreadcrumbs = new ArrayList<String>();
-  private int breadcrumbIndex = 0;
   protected PixelRealmState.PRObject optionHighlightedItem = null;
   private boolean loadFromCache = false;
   protected String cassettePlaying = "";   // Empty string for realm bgm.
@@ -185,7 +183,7 @@ public class PixelRealm extends Screen {
   private int operationCount = 0;
   
   // Memory protection (TODO: Move to engine)
-  private AtomicInteger memUsage = new AtomicInteger(0);
+  private AtomicLong memUsage = new AtomicLong(0);
   private boolean memExceeded = false;
   private boolean showMemUsage = false;
   private int loading = 0;
@@ -252,19 +250,15 @@ public class PixelRealm extends Screen {
     MAX_LOADER_THREADS = (numCores/2)-1;
     console.info("# cores reserved for loading: "+MAX_LOADER_THREADS);
     
+    if (engine.lowMemory) {
+      MAX_MEM_USAGE = 1024L*1024L*80L; // 64MB
+    }
+    
     String startRealm = file.directorify(file.getPrevDir(dir));
     
     // Start the refresher thread (to automatically refresh realms when files have been changed)
     refresherFilesList[0] = startRealm;
     startRefresherThread();
-    
-    // Load the breadcrumbs/history
-    if (file.exists(engine.APPPATH+BREADCRUMBS_PATH)) {
-      String[] history = app.loadStrings(engine.APPPATH+BREADCRUMBS_PATH);
-      for (String s : history) {
-        realmBreadcrumbs.add(s);
-      }
-    }
     
     
     currRealm = new PixelRealmState(dir, startRealm);
@@ -294,7 +288,7 @@ public class PixelRealm extends Screen {
     }
     public void set(PImage img) {
       if (img == null) {
-        console.bugWarn("set: passing a null image");
+        //console.bugWarn("set: passing a null image");
         singleImg = display.systemImages.get("white");
         width = singleImg.width;
         height = singleImg.height;
@@ -865,6 +859,7 @@ public class PixelRealm extends Screen {
     private DirectoryPortal exitPortal = null;
     private String musicPath = engine.APPPATH+REALM_BGM_DEFAULT;
     private boolean loadMinimal = false;
+    public boolean memOverload = false;
     
     private TWEngine.PluginModule.Plugin realmPlugin;
     public String realmPluginPath = "";
@@ -894,13 +889,13 @@ public class PixelRealm extends Screen {
     
     protected LinkedList<PRObject> pocketObjects = new LinkedList<PRObject>();
     
-    public ArrayList<CustomNode> lightingUINodes = new ArrayList<CustomNode>();
-    public CustomSlider ambientSlider;
-    public CustomSlider reffectSlider;
-    public CustomSlider geffectSlider;
-    public CustomSlider beffectSlider;
-    public CustomSliderInt lightDirectionSlider;
-    public CustomSliderInt lightHeightSlider;
+    public ArrayList<TWEngine.UIModule.CustomNode> lightingUINodes = new ArrayList<TWEngine.UIModule.CustomNode>();
+    public TWEngine.UIModule.CustomSlider ambientSlider;
+    public TWEngine.UIModule.CustomSlider reffectSlider;
+    public TWEngine.UIModule.CustomSlider geffectSlider;
+    public TWEngine.UIModule.CustomSlider beffectSlider;
+    public TWEngine.UIModule.CustomSliderInt lightDirectionSlider;
+    public TWEngine.UIModule.CustomSliderInt lightHeightSlider;
     
     final int[] lightDirectionsX = { -2, -1, 0, 1, 2, 2, 2, 2, 2, 1, 0, -1, -2, -2, -2, -2 };
     final int[] lightDirectionsZ = { -2, -2, -2, -2, -2, -1, 0, 1, 2, 2, 2, 2, 2, 1, 0, -1 };
@@ -937,164 +932,16 @@ public class PixelRealm extends Screen {
     }
     
     
-    public abstract class CustomNode {
-      public String label = "";
-      public float x = 0.;
-      public float wi = 100.;
-      private float y = 0;
-      public int sound = 0;
-      
-      public float valFloat = 0.;
-      public boolean valBool = false;
-      public int valInt = 0;
-      
-      public static final float CONTROL_X = 300.;
-      public CustomNode(String l) {
-        label = l;
-      }
-      
-      public float getHeight() {
-        return 100.;
-      }
-      
-      protected boolean inBox() {
-        boolean hovering = (engine.mouseX() > x+CONTROL_X-10 && engine.mouseY() > y && engine.mouseX() < x+wi+10 && engine.mouseY() < y+getHeight());
-        return hovering && !ui.miniMenuShown();
-      }
-      
-      public boolean getValBool() {
-        return false;
-      }
-      
-      public void display(float y) {
-        this.y = y;
-        y += 20;
-        
-        app.fill(255);
-        app.textFont(engine.DEFAULT_FONT, 20);
-        app.textAlign(LEFT, CENTER);
-        
-        app.text(label, x, y);
-      }
-    }
     
-    public class CustomSlider extends CustomNode {
-      public float min = 0.;
-      public float max = 100.;
-      protected String maxLabel = null;
-      protected String minLabel = null;
-      
-      
-      public CustomSlider(String l, float min, float max, float initVal, int s) {
-        super(l);
-        this.min = min;
-        this.max = max;
-        this.valFloat = initVal;
-        this.sound = s;
-      }
-      
-      @Override
-      public float getHeight() {
-        return 40.;
-      }
-      
-      protected void getSliderVal() {
-        if (inBox()) {
-          app.stroke(160);
-          if (input.primaryDown) {
-            valFloat = min+((engine.mouseX()-x-CONTROL_X)/(wi-CONTROL_X))*(max-min);
-            valFloat = min(max(valFloat, min), max);
-            nodeSound = this.sound;
-          }
-        }
-        else {
-          app.stroke(127);
-        }
-      }
-      
-      protected void showVal(float y) {
-        app.fill(255);
-        app.textFont(engine.DEFAULT_FONT, 26);
-        app.textAlign(RIGHT, CENTER);
-        
-        String disp = nf(valFloat, 0, 2);
-        if (valFloat == max && maxLabel != null) disp = maxLabel;
-        if (valFloat == min && minLabel != null) disp = minLabel;
-        app.text(disp, x+CONTROL_X-12, y);
-      }
-      
-      protected void renderSlider(float y) {
-        app.strokeWeight(5);
-        app.line(x+CONTROL_X, y, x+wi, y);
-        
-        app.noStroke();
-        app.fill(255);
-        
-        float percentage = (valFloat-min)/(max-min);
-        
-        app.rect(x+CONTROL_X+percentage*(wi-CONTROL_X)-5, y-15, 10, 30);
-      }
-      
-      public void display(float y) {
-        super.display(y);
-        y += 20;
-        getSliderVal();
-        showVal(y);
-        renderSlider(y);
-      }
-      
-      public void setWhenMax(String label) {
-        maxLabel = label;
-      }
-      
-      public void setWhenMin(String label) {
-        minLabel = label;
-      }
-    }
-    
-    
-    public class CustomSliderInt extends CustomSlider {
-      
-      public CustomSliderInt(String l, int min, int max, int initVal, int s) {
-        super(l, (float)min, (float)max, (float)initVal, s);
-        valInt = initVal;
-      }
-      
-      @Override
-      protected void showVal(float y) {
-        app.fill(255);
-        app.textFont(engine.DEFAULT_FONT, 26);
-        app.textAlign(RIGHT, CENTER);
-        
-        String disp = str((int)round(valFloat));
-        if (valFloat == max && maxLabel != null) disp = maxLabel;
-        if (valFloat == min && minLabel != null) disp = minLabel;
-        app.text(disp, x+CONTROL_X-12, y);
-      }
-      
-      @Override
-      protected void renderSlider(float y) {
-        app.strokeWeight(5);
-        app.line(x+CONTROL_X, y, x+wi, y);
-        
-        app.noStroke();
-        app.fill(255);
-        
-        valInt = round(valFloat);
-        float percentage = (round(valFloat)-min)/(max-min);
-        app.rect(x+CONTROL_X+percentage*(wi-CONTROL_X)-5, y-15, 10, 30);
-      }
-    }
     
     
     private void populateLightingUINodes() {
-        lightingUINodes.add(ambientSlider = new CustomSlider("Ambient", 0f, 1f, 1f, 4));
-        lightingUINodes.add(reffectSlider = new CustomSlider("R", -5f, 5f, 0f, 1));
-        lightingUINodes.add(geffectSlider = new CustomSlider("G", -5f, 5f, 0f, 1));
-        lightingUINodes.add(beffectSlider = new CustomSlider("B", -5f, 5f, 0f, 1));
-        lightingUINodes.add(lightDirectionSlider = new CustomSliderInt("Direction", 0, 16, 0, 4));
-        lightingUINodes.add(lightHeightSlider = new CustomSliderInt("Height", -4, 16, 1, 4));
-        
+        lightingUINodes.add(ambientSlider = ui.new CustomSlider("Ambient", 0f, 1f, 1f));
+        lightingUINodes.add(reffectSlider = ui.new CustomSlider("R", -5f, 5f, 0f));
+        lightingUINodes.add(geffectSlider = ui.new CustomSlider("G", -5f, 5f, 0f));
+        lightingUINodes.add(beffectSlider = ui.new CustomSlider("B", -5f, 5f, 0f));
+        lightingUINodes.add(lightDirectionSlider = ui.new CustomSliderInt("Direction", 0, 16, 0));
+        lightingUINodes.add(lightHeightSlider = ui.new CustomSliderInt("Height", -4, 16, 1));
     }
     
     
@@ -1104,7 +951,7 @@ public class PixelRealm extends Screen {
     // --- Realm terrain attributes ---
     
     public abstract class TerrainAttributes {
-      public ArrayList<CustomNode> customNodes = new ArrayList<CustomNode>();
+      public ArrayList<TWEngine.UIModule.CustomNode> customNodes = new ArrayList<TWEngine.UIModule.CustomNode>();
       
       private float renderDistance = 6.;
       private float groundRepeat = 2.;
@@ -1229,14 +1076,14 @@ public class PixelRealm extends Screen {
       public float hillHeight = 0.;
       public float hillFrequency = 0.5;
       
-      private CustomSlider hillHeightSlider;
-      private CustomSlider hillFrequencySlider;
+      private TWEngine.UIModule.CustomSlider hillHeightSlider;
+      private TWEngine.UIModule.CustomSlider hillFrequencySlider;
       
       
-      private CustomSliderInt renderDistSlider;
-      private CustomSliderInt chunkLimitSlider;
-      private CustomSlider waterLevelSlider;
-      private CustomSlider groundSizeSlider;
+      private TWEngine.UIModule.CustomSliderInt renderDistSlider;
+      private TWEngine.UIModule.CustomSliderInt chunkLimitSlider;
+      private TWEngine.UIModule.CustomSlider waterLevelSlider;
+      private TWEngine.UIModule.CustomSlider groundSizeSlider;
       
       public SinesinesineTerrain() {
         NAME = "Sine sine sine";
@@ -1256,14 +1103,14 @@ public class PixelRealm extends Screen {
         // terraform_3 - Sounds like you're doing something subtle/sounds like water
         // terraform_4 - Sounds like you're doing something weird
         
-        customNodes = new ArrayList<CustomNode>();
-        customNodes.add(hillHeightSlider = new CustomSlider("Height", 0., 800., hillHeight, 2));
-        customNodes.add(hillFrequencySlider = new CustomSlider("Frequency", 0.0, 3.0, hillFrequency, 1));
+        customNodes = new ArrayList<TWEngine.UIModule.CustomNode>();
+        customNodes.add(hillHeightSlider = ui.new CustomSlider("Height", 0., 800., hillHeight));
+        customNodes.add(hillFrequencySlider = ui.new CustomSlider("Frequency", 0.0, 3.0, hillFrequency));
         
-        customNodes.add(groundSizeSlider = new CustomSlider("Tile size", 20., 1000., getGroundSize(), 4));
-        customNodes.add(renderDistSlider = new CustomSliderInt("Render dist", 1, 15, (int)getRenderDistance(), 3));
-        customNodes.add(chunkLimitSlider = new CustomSliderInt("Chunk limit", 1, 50, 50, 4));
-        customNodes.add(waterLevelSlider = new CustomSlider("Water level", -300, 300, -waterLevel, 3));
+        customNodes.add(groundSizeSlider = ui.new CustomSlider("Tile size", 20., 1000., getGroundSize()));
+        customNodes.add(renderDistSlider = ui.new CustomSliderInt("Render dist", 1, 15, (int)getRenderDistance()));
+        customNodes.add(chunkLimitSlider = ui.new CustomSliderInt("Chunk limit", 1, 50, 50));
+        customNodes.add(waterLevelSlider = ui.new CustomSlider("Water level", -300, 300, -waterLevel));
         waterLevelSlider.setWhenMin("No water");
         chunkLimitSlider.setWhenMax("Unlimited");
       }
@@ -1385,16 +1232,16 @@ public class PixelRealm extends Screen {
         NOISE_SEED =            j.getInt("noise_seed");
       }
       
-      private CustomSlider maxHeightSlider;
-      private CustomSlider variSlider;
-      private CustomSlider hillFrequencySlider;
-      private CustomSlider treeSlider;
-      private CustomSliderInt octaveSlider;
+      private TWEngine.UIModule.CustomSlider maxHeightSlider;
+      private TWEngine.UIModule.CustomSlider variSlider;
+      private TWEngine.UIModule.CustomSlider hillFrequencySlider;
+      private TWEngine.UIModule.CustomSlider treeSlider;
+      private TWEngine.UIModule.CustomSliderInt octaveSlider;
       
-      private CustomSlider waterLevelSlider;
-      private CustomSliderInt renderDistSlider;
-      private CustomSliderInt chunkLimitSlider;
-      private CustomSlider groundSizeSlider;
+      private TWEngine.UIModule.CustomSlider waterLevelSlider;
+      private TWEngine.UIModule.CustomSliderInt renderDistSlider;
+      private TWEngine.UIModule.CustomSliderInt chunkLimitSlider;
+      private TWEngine.UIModule.CustomSlider groundSizeSlider;
       
       public LegacyTerrain() {
         NAME = "Legacy";
@@ -1409,25 +1256,19 @@ public class PixelRealm extends Screen {
       }
       
       private void createCustomiseNode() {
-        // Quick reminder of sounds:
-        // terraform_1 - Woopwoopwoopwoopwoopwoopwoopwoopwoopwoopwoop
-        // terraform_2 - Sounds like you're doing some good kneading to the terrain
-        // terraform_3 - Sounds like you're doing subtle/sounds like water
-        // terraform_4 - Sounds like you're doing something weird
-        
-        customNodes = new ArrayList<CustomNode>();
-        customNodes.add(maxHeightSlider  = new CustomSlider("Max height", -200., 200., -HIGHEST_MOUNTAIN, 1));
-        customNodes.add(variSlider       = new CustomSlider("Variability", 0., 0.5, VARI, 2));
-        customNodes.add(hillFrequencySlider = new CustomSlider("Hill frequency", 0., 400., MOUNTAIN_FREQUENCY, 2));
-        customNodes.add(treeSlider = new CustomSlider("Tree frequency", 0., 1.0, TREE_FREQUENCY, 4));
+        customNodes = new ArrayList<TWEngine.UIModule.CustomNode>();
+        customNodes.add(maxHeightSlider  = ui.new CustomSlider("Max height", -200., 200., -HIGHEST_MOUNTAIN));
+        customNodes.add(variSlider       = ui.new CustomSlider("Variability", 0., 0.5, VARI));
+        customNodes.add(hillFrequencySlider = ui.new CustomSlider("Hill frequency", 0., 400., MOUNTAIN_FREQUENCY));
+        customNodes.add(treeSlider = ui.new CustomSlider("Tree frequency", 0., 1.0, TREE_FREQUENCY));
         treeSlider.setWhenMin("No trees");
-        customNodes.add(octaveSlider = new CustomSliderInt("Noise Octave", 1, 4, OCTAVE, 4));
+        customNodes.add(octaveSlider = ui.new CustomSliderInt("Noise Octave", 1, 4, OCTAVE));
         
         
-        customNodes.add(groundSizeSlider = new CustomSlider("Tile size", 20., 1000., getGroundSize(), 4));
-        customNodes.add(renderDistSlider = new CustomSliderInt("Render dist", 1, 15, (int)getRenderDistance(), 3));
-        customNodes.add(chunkLimitSlider = new CustomSliderInt("Chunk limit", 1, 50, 50, 4));
-        customNodes.add(waterLevelSlider = new CustomSlider("Water level", -800, 2000, -waterLevel, 3));
+        customNodes.add(groundSizeSlider = ui.new CustomSlider("Tile size", 20., 1000., getGroundSize()));
+        customNodes.add(renderDistSlider = ui.new CustomSliderInt("Render dist", 1, 15, (int)getRenderDistance()));
+        customNodes.add(chunkLimitSlider = ui.new CustomSliderInt("Chunk limit", 1, 50, 50));
+        customNodes.add(waterLevelSlider = ui.new CustomSlider("Water level", -800, 2000, -waterLevel));
         waterLevelSlider.setWhenMin("No water");
         chunkLimitSlider.setWhenMax("Unlimited");
       }
@@ -1691,7 +1532,7 @@ public class PixelRealm extends Screen {
             scene.shape(pshapeChunk);
           }
           catch (RuntimeException e) {
-            console.warn("Chunk rendering GL error.");
+            //console.warn("Chunk rendering GL error.");
           }
         }
         else {
@@ -2010,6 +1851,7 @@ public class PixelRealm extends Screen {
         addRequestToQueue(path, -1);
       }
       
+      
       public void addRequestToQueue(final String path, final int shrink) {
         this.beginLoadFlag.set(false);
         loadQueue.add(this.beginLoadFlag);
@@ -2028,18 +1870,56 @@ public class PixelRealm extends Screen {
               }
             }
             
+            // Ram usage. When loading, we don't want to exceed the limit.
+            // Depends on our RAM settings.
+            long maxRam = TWEngine.MAX_RAM_NORMAL;
+            if (engine.lowMemory) {
+              maxRam = TWEngine.MAX_RAM_LIMITED;
+            }
+            int maxRamKB = (int)(maxRam/1024L);
+            
+            // Don't want garbage to cause an OutOfMemoryException.
+            // So if we reach the max limit, stall and beg the garbage collector to free up some memory.
+            // Only do it so many times before giving up.
+            int count = 0;
+            while (engine.getUsedMemKB() > maxRamKB) {
+              count++;
+              // Randomness since threads might give up at the same time and end up overloading the memory all at once.
+              if (count > (int)random(10, 25)) {
+                // Give up.
+                break;
+              }
+              
+              //console.log("Garbage collector beg "+maxRamKB+ " "+engine.getUsedMemKB());
+              System.gc();
+              try {
+                Thread.sleep(100);
+              }
+              catch (InterruptedException e) {
+                // we don't care.
+              }
+               
+            }
+            
             // First, we need to see if we have enough space to store stuff.
-            int size = file.getImageUncompressedSize(path);
+            long size = (long)file.getImageUncompressedSize(path);
+            //long size = 512l*512l*4l;
+            
+            
             //console.info(filename+" size: "+(size/1024)+" kb");
             // Tbh doesn't need to be specifically thread safe, it's all an
             // approximation.
             if (memUsage.get()+size > MAX_MEM_USAGE) {
-              if (!memExceeded) console.warn("Maximum allowed memory exceeded, some items/files may be missing from this realm.");
-              memExceeded = true;
+              //if (!memExceeded) 
+              //console.warn("Maximum allowed memory exceeded, some items/files may be missing from this realm.");
+              //memExceeded = true;
+              //console.warn("Maximum allowed memory exceeded, some items/files may be missing from this realm.");
+              
               //console.info(filename+" exceeds the maximum allowed memory.");
+              memOverload = true;
             }
             else {
-              incrementMemUsage(size);
+              incrementMemUsage(512*512*4);
               String ext = file.getExt(path);
               
               if (ext.equals("gif")) {
@@ -2085,6 +1965,8 @@ public class PixelRealm extends Screen {
                       engine.setOriginalImage(im2);
                       if (isImg)
                         ((ImageFileObject)me).cacheFlag = true;
+                      
+                      System.gc();
                     }
                   }
                   );
@@ -2223,17 +2105,45 @@ public class PixelRealm extends Screen {
         final float SIZE = 50f;
         
         super.display();
-        display.recordRendererTime();
-        scene.pushMatrix();
-        scene.translate(this.x, this.y, this.z);
-        scene.scale(-SIZE);
-        //scene.rotateX(rotX);
         
-        scene.rotateY(rotY);
-        //scene.rotateZ(rotZ);
-        scene.shape(CASSETTE_OBJ);
-        scene.popMatrix();
-        display.recordLogicTime();
+        boolean dontRender = false;
+        float dist = PApplet.pow((playerX-x), 2)+PApplet.pow((playerZ-z), 2);
+        if (versionCompatibility == 1) {
+          if (dist > terrain.FADE_DIST_OBJECTS) {
+            float fade = calculateFade(dist, terrain.FADE_DIST_OBJECTS);
+            if (fade > 1) {
+              scene.tint(tint, fade);
+              scene.fill(tint, fade);
+            } else {
+              dontRender = true;
+            }
+          } else {
+            scene.tint(tint, 255);
+            scene.fill(tint, 255);
+          }
+        }
+        else if (versionCompatibility == 2) {
+          float x = playerX-this.x;
+          float z = playerZ-this.z;
+          if (x*x+z*z > terrain.FADE_DIST_OBJECTS) {
+            dontRender = true;
+          }
+          scene.fill(tint, 255);
+        }
+        
+        if (!dontRender) {
+          display.recordRendererTime();
+          scene.pushMatrix();
+          scene.translate(this.x, this.y, this.z);
+          scene.scale(-SIZE);
+          //scene.rotateX(rotX);
+          
+          scene.rotateY(rotY);
+          //scene.rotateZ(rotZ);
+          scene.shape(CASSETTE_OBJ);
+          scene.popMatrix();
+          display.recordLogicTime();
+        }
       }
       
       public void scaleUp(float amount) {
@@ -2383,6 +2293,7 @@ public class PixelRealm extends Screen {
             
             // Don't care about these two anymore
             mycanvas = null;
+            renderedEntry.free();
             renderedEntry = null;
             loadFromSource = false;
             drawEntryOnce = false;
@@ -2486,7 +2397,7 @@ public class PixelRealm extends Screen {
                 float dz1 = playerZ - (z + cos_dd);
                 float dx2 = playerX - (x - sin_dd);
                 float dz2 = playerZ - (z - cos_dd);
-                flippedTexture = (abs(dx1*dx1+dz1*dz1) > abs(dx2*dx2+dz2*dz2));
+                flippedTexture = (abs(dx1*dx1+dz1*dz1) < abs(dx2*dx2+dz2*dz2));
               }
                
               app.fill(tint);
@@ -2665,7 +2576,7 @@ public class PixelRealm extends Screen {
       
       // SHORTCUT_EXTENSION[0] is the latest shortcut version.
       String folderName = file.getFilename(dir);
-      String shortcutName = folderName+"."+engine.SHORTCUT_EXTENSION[0];
+      String shortcutName = folderName+"."+engine.SHORTCUT_EXTENSION;
       String shortcutPath = dir+shortcutName;
       shortcutPath.replaceAll("\\\\", "/");
       
@@ -2673,7 +2584,7 @@ public class PixelRealm extends Screen {
       File f = new File(shortcutPath);
       int i = 1;
       while (f.exists()) {
-        shortcutName = file.getFilename(dir)+"-"+str(i++)+"."+engine.SHORTCUT_EXTENSION[0];
+        shortcutName = file.getFilename(dir)+"-"+str(i++)+"."+engine.SHORTCUT_EXTENSION;
         shortcutPath = dir+shortcutName;
         f = new File(shortcutPath);
       }
@@ -2824,7 +2735,6 @@ public class PixelRealm extends Screen {
           sound.playSound("shift");
           //prevRealm = currRealm;
           stats.increase("shortcut_portals_entered", 1);
-          addBreadcrumb(stateDirectory);
           gotoRealm(this.shortcutDir);
         }
       }
@@ -2912,7 +2822,6 @@ public class PixelRealm extends Screen {
           sound.playSound("shift");
           // Perfectly optimised. Creating a new state instead of a new screen
           stats.increase("directory_portals_entered", 1);
-          addBreadcrumb(stateDirectory);
           gotoRealm(this.dir, stateDirectory);
         }
       }
@@ -2985,32 +2894,6 @@ public class PixelRealm extends Screen {
           }
           this.destroy();
         }
-      }
-    }
-    
-    
-    
-    
-    
-    
-    class PRWeirdo extends PRObject {
-      
-      public PRWeirdo(float x, float y, float z) {
-        super(x,y,z);
-        
-        String[] frames = { "nael1", "nael1", "nael2", "nael2", "nael3", "nael3"};
-        
-        this.img = new RealmTexture(frames);
-        setSize(0.37);
-        this.hitboxWi = wi;
-      }
-      
-      public void display() {
-        super.display();
-      }
-      
-      public void run() {
-        
       }
     }
     
@@ -3254,10 +3137,10 @@ public class PixelRealm extends Screen {
   
   
           scene.beginShape();
-          float uvx = 0.;
-          float uvy = 0.;
-          float uvxx = 0.999;
-          float uvyy = 0.999;
+          float uvx = 0.999f;
+          float uvy = 0f;
+          float uvxx = 0f;
+          float uvyy = 0.999f;
           if (!dontRender) {
             scene.textureMode(NORMAL);
             scene.textureWrap(REPEAT);
@@ -3271,10 +3154,6 @@ public class PixelRealm extends Screen {
             uvxx = tmp;
           }
           
-          //if (im.mode == 1) {
-          //  scene.resetShader();
-          //  scene.fill(255, 0, 0);
-          //}
           
           scene.vertex(x1, y1, z1, uvx, uvy);           // Bottom left
           scene.vertex(x2, y1, z2, uvxx, uvy);    // Bottom right
@@ -3658,6 +3537,17 @@ public class PixelRealm extends Screen {
       return o;
     }
     
+    public FileObject findFileObjectByName(String name) {
+      for (FileObject f : files) {
+        if (f != null) {
+          if (f.filename.equals(name)) {
+            return f;
+          }
+        }
+      }
+      return null;
+    }
+    
     public FileObject createPRObject(String path) {
       if (!file.exists(path)) {
         console.bugWarn("createPRObject: "+path+" doesn't exist!");
@@ -3761,8 +3651,8 @@ public class PixelRealm extends Screen {
           if (file.currentFiles[i].filename.equals("[Prev dir]") && o instanceof DirectoryPortal) {
             exitPortal = (DirectoryPortal)o;
             // Create random position just in case it's a new realm.
-            lastPlacedPosX = app.random(-2000, 2000);
-            lastPlacedPosZ = app.random(-2000, 2000);
+            lastPlacedPosX = app.random(-800, 800);
+            lastPlacedPosZ = app.random(-800, 800);
             exitPortalX = lastPlacedPosX;
             exitPortalZ = lastPlacedPosZ;
           }
@@ -3857,15 +3747,26 @@ public class PixelRealm extends Screen {
           jsonFile = app.loadJSONObject(dir+realm_turf);
         }
         catch (RuntimeException e) {
-          console.warn("There's an error in the folder's turf file (exception). Will now act as if the turf is new.");
-          // TODO: Don't do that for template realms.
-          file.backupMove(dir+realm_turf);
+          if (!(dir+realm_turf).contains(engine.APPPATH+engine.TEMPLATES_PATH)) {
+            console.warn("There's an error in the folder's turf file (exception). Will now act as if the turf is new.");
+            file.backupMove(dir+realm_turf);
+          }
+          else {
+            console.warn("There's an error in the folder's turf file (exception).");
+          }
           //saveRealmJson();
           return;
         }
         if (jsonFile == null) {
-          console.warn("There's an error in the folder's turf file (null). Will now act as if the turf is new.");
           file.backupMove(dir+realm_turf);
+          
+          if (!(dir+realm_turf).contains(engine.APPPATH+engine.TEMPLATES_PATH)) {
+            console.warn("There's an error in the folder's turf file (null). Will now act as if the turf is new.");
+            file.backupMove(dir+realm_turf);
+          }
+          else {
+            console.warn("There's an error in the folder's turf file (null).");
+          }
           //saveRealmJson();
           return;
         }
@@ -4019,6 +3920,12 @@ public class PixelRealm extends Screen {
         // Totally. Totally doesn't affect anything.
         catch (RuntimeException e) {
         }
+      }
+      
+      // Any remaining objects must have its load method called anyways to initialise its random position.
+      JSONObject emptyJSON = new JSONObject();
+      for (FileObject o : namesToObjects.values()) {
+          o.load(emptyJSON);
       }
       
       
@@ -4627,7 +4534,7 @@ public class PixelRealm extends Screen {
         // If we're going backwards, we might as well position ourselves in the opposite direction
         // This is just a really hack'd up script.
         float additionalDir = 0;
-        if (input.keyAction("moveBackwards")) {
+        if (input.keyAction("move_backward", 's')) {
           additionalDir = PI;
           if (chosenDir >= 2)
             chosenDir -= 2;
@@ -4811,27 +4718,29 @@ public class PixelRealm extends Screen {
       }
       
       // And finally, the pixelrealm-plugin
-      if (file.exists(dir+REALM_PLUGIN)) {
-        // load the code,
-        realmPluginPath = dir+REALM_PLUGIN;
-        String[] lines = app.loadStrings(dir+REALM_PLUGIN);
-        String ccode = "";
-        for (String line : lines) {
-          ccode += line+"\n";
-        }
-        final String code = ccode;
-        
-        
-        realmPlugin = plugins.createPlugin();
-        pluginCompiled.set(false);
-        showDebugMessageOnce = true;
-        Thread t1 = new Thread(new Runnable() {
-          public void run() {
-            successfulCompile.set(realmPlugin.compile(code));
-            pluginCompiled.set(true);
+      if (settings.getBoolean("enable_plugins", false)) {
+        if (file.exists(dir+REALM_PLUGIN)) {
+          // load the code,
+          realmPluginPath = dir+REALM_PLUGIN;
+          String[] lines = app.loadStrings(dir+REALM_PLUGIN);
+          String ccode = "";
+          for (String line : lines) {
+            ccode += line+"\n";
           }
-        });
-        t1.start();
+          final String code = ccode;
+          
+          
+          realmPlugin = plugins.createPlugin();
+          pluginCompiled.set(false);
+          showDebugMessageOnce = true;
+          Thread t1 = new Thread(new Runnable() {
+            public void run() {
+              successfulCompile.set(realmPlugin.compile(code));
+              pluginCompiled.set(true);
+            }
+          });
+          t1.start();
+        }
       }
   
     }
@@ -4858,19 +4767,19 @@ public class PixelRealm extends Screen {
       
       if (!movementPaused) {
         
-      primaryAction = input.keyActionOnce("primaryAction");
-      secondaryAction = input.keyActionOnce("secondaryAction");
+      primaryAction = input.keyActionOnce("primary_action", 'o');
+      secondaryAction = input.keyActionOnce("secondary_action", 'p');
         
       isWalking = false;
       float speed = WALK_ACCELERATION;
   
-      if (input.keyAction("dash")) {
+      if (input.keyAction("dash", TWEngine.InputModule.SHIFT_KEY)) {
         speed = RUN_SPEED+runAcceleration;
         if (RUN_SPEED+runAcceleration <= MAX_SPEED) runAcceleration+=RUN_ACCELERATION;
       } else runAcceleration = 0.;
       
       // TODO: Make keybinding instead of fixed.
-      if (input.shiftDown) {
+      if (input.keyAction("move_slow", TWEngine.InputModule.ALT_KEY)) {
         speed = SNEAK_SPEED;
         runAcceleration = 0.;
       }
@@ -4878,7 +4787,7 @@ public class PixelRealm extends Screen {
       boolean splash = (!wasInWater && isInWater);
   
       // :3
-      if (input.keyAction("jump") && (onGround() || coyoteJump > 0.)) speed *= 3;
+      if (input.keyAction("jump", ' ') && (onGround() || coyoteJump > 0.)) speed *= 3;
   
       float sin_d = sin(direction);
       float cos_d = cos(direction);
@@ -4888,7 +4797,7 @@ public class PixelRealm extends Screen {
       
       // Less movement control while in the air.
       if (!onGround()) {
-        speed *= 0.1;
+        speed *= 0.1*display.getDelta();
       }
       
       if (isInWater) {
@@ -4907,11 +4816,10 @@ public class PixelRealm extends Screen {
       //  }
       //}
       
-      if (input.keyActionOnce("prevDirectory") && usePortalAllowed) {
+      if (input.keyActionOnce("prev_directory", '\b') && usePortalAllowed) {
         //sound.fadeAndStopMusic();
         //requestScreen(new Explorer(engine, stateDirectory));
         if (!file.atRootDir(stateDirectory)) {
-          addBreadcrumb(stateDirectory);
           gotoRealm(file.getPrevDir(stateDirectory), stateDirectory);
           stats.increase("previous_directory_traversals", 1);
         }
@@ -4927,7 +4835,7 @@ public class PixelRealm extends Screen {
           float ypoint1 = 0.;
           float ypoint2 = 0.;
           
-          if (input.keyAction("moveForewards")) {
+          if (input.keyAction("move_forward", 'w')) {
             movex += sin_d*speed;
             movez += cos_d*speed;
             ypoint1 = onSurface(playerX+sin_d, playerZ+cos_d);  // Front
@@ -4935,7 +4843,7 @@ public class PixelRealm extends Screen {
   
             isWalking = true;
           }
-          if (input.keyAction("moveLeft")) {
+          if (input.keyAction("move_left", 'a')) {
             movex += cos_d*speed;
             movez += -sin_d*speed;
             ypoint1 = onSurface(playerX+cos_d, playerZ-sin_d);  // Left
@@ -4943,7 +4851,7 @@ public class PixelRealm extends Screen {
   
             isWalking = true;
           }
-          if (input.keyAction("moveBackwards")) {
+          if (input.keyAction("move_backward", 's')) {
             movex += -sin_d*speed;
             movez += -cos_d*speed;
             ypoint1 = onSurface(playerX-sin_d, playerZ-cos_d);  // Behind
@@ -4951,7 +4859,7 @@ public class PixelRealm extends Screen {
   
             isWalking = true;
           }
-          if (input.keyAction("moveRight")) {
+          if (input.keyAction("move_right", 'd')) {
             movex += -cos_d*speed;
             movez += sin_d*speed;
             ypoint1 = onSurface(playerX-cos_d, playerZ+sin_d);  // Right
@@ -4969,16 +4877,16 @@ public class PixelRealm extends Screen {
           }
   
   
-          if (input.shiftDown) {
-            if (input.keyAction("lookRight")) rot = -SLOW_TURN_SPEED*display.getDelta();
-            if (input.keyAction("lookLeft")) rot =  SLOW_TURN_SPEED*display.getDelta();
+          if (input.keyAction("move_slow", TWEngine.InputModule.ALT_KEY)) {
+            if (input.keyAction("turn_right", 'e')) rot = -SLOW_TURN_SPEED*display.getDelta();
+            if (input.keyAction("turn_left", 'q')) rot =  SLOW_TURN_SPEED*display.getDelta();
           } else {
-            if (input.keyAction("lookRight")) rot = -TURN_SPEED*display.getDelta();
-            if (input.keyAction("lookLeft")) rot =  TURN_SPEED*display.getDelta();
+            if (input.keyAction("turn_right", 'e')) rot = -TURN_SPEED*display.getDelta();
+            if (input.keyAction("turn_left", 'q')) rot =  TURN_SPEED*display.getDelta();
           }
           
-          if (input.keyAction("lookRightTouch")) rot = -MEDIUM_TURN_SPEED*display.getDelta();
-          if (input.keyAction("lookLeftTouch")) rot =  MEDIUM_TURN_SPEED*display.getDelta();
+          //if (input.keyAction("look_right_touch", 'e')) rot = -MEDIUM_TURN_SPEED*display.getDelta();
+          //if (input.keyAction("look_left_touch", 'q')) rot =  MEDIUM_TURN_SPEED*display.getDelta();
   
   
           // If holding item and we're in reposition mode, move the object instead of the player.
@@ -5063,7 +4971,7 @@ public class PixelRealm extends Screen {
               timeNotMoving = 0; 
             }
             else {
-              if (!input.keyAction("lookRight") && !input.keyAction("lookLeft") && !input.keyAction("jump") && !input.keyAction("primaryAction")) {
+              if (!input.keyAction("turn_right", 'e') && !input.keyAction("turn_left", 'q') && !input.keyAction("jump", ' ') && !input.keyAction("primary_action", 'o')) {
                 timeNotMoving += display.getDelta();
               }
             }
@@ -5072,7 +4980,7 @@ public class PixelRealm extends Screen {
           cache_flatCosDirection = cos(direction-PI+HALF_PI);
           
           // --- Jump & gravity physics ---
-          if (input.keyAction("jump")) {
+          if (input.keyAction("jump", ' ')) {
             float jumpStrength = JUMP_STRENGTH;
             if (isInWater) {
               yvel = min(yvel+SWIM_UP_SPEED, UNDERWATER_TEMINAL_VEL);
@@ -5178,14 +5086,14 @@ public class PixelRealm extends Screen {
           
           // Sorry for the cluster of code but if you read it it's really simpleeeeeeeee
           if (globalHoldingObjectSlot != null) {
-            if (input.keyActionOnce("inventorySelectLeft") && globalHoldingObjectSlot.prev != null) {
+            if (input.keyActionOnce("inventory_select_left", ',') && globalHoldingObjectSlot.prev != null) {
               launchWhenPlaced = false;
               globalHoldingObjectSlot = globalHoldingObjectSlot.prev;
               updateHoldingItem(globalHoldingObjectSlot);
               sound.playSound("pickup");
             }
             
-            if (input.keyActionOnce("inventorySelectRight") && globalHoldingObjectSlot.next != null) {
+            if (input.keyActionOnce("inventory_select_right", '.') && globalHoldingObjectSlot.next != null) {
               launchWhenPlaced = false;
               globalHoldingObjectSlot = globalHoldingObjectSlot.next;
               updateHoldingItem(globalHoldingObjectSlot);
@@ -5209,12 +5117,12 @@ public class PixelRealm extends Screen {
     public void runMorpherTool() {
       if (currentTool == TOOL_MORPHER) {
         // Some keyboard actions and controls (i dont need to explain that)
-        if (input.keyAction("scaleUp")) {
+        if (input.keyAction("scale_up", '=')) {
           if (subTool == MORPHER_BULGE || subTool == MORPHER_FLAT) {
             morpherRadius *= pow(1.01, display.getDelta());
           }
           else if (subTool == MORPHER_BLOCK) {
-            if (input.shiftDown) {
+            if (input.keyAction("move_slow", TWEngine.InputModule.ALT_KEY)) {
               morpherBlockHeight -= 2.*display.getDelta();
             }
             else {
@@ -5222,12 +5130,12 @@ public class PixelRealm extends Screen {
             }
           }
         }
-        if (input.keyAction("scaleDown")) {
+        if (input.keyAction("scale_down", '-')) {
           if (subTool == MORPHER_BULGE || subTool == MORPHER_FLAT) {
             morpherRadius *= pow(0.99, display.getDelta());
           }
           else if (subTool == MORPHER_BLOCK) {
-            if (input.shiftDown) {
+            if (input.keyAction("move_slow", TWEngine.InputModule.ALT_KEY)) {
               morpherBlockHeight += 2.*display.getDelta();
             }
             else {
@@ -5235,12 +5143,12 @@ public class PixelRealm extends Screen {
             }
           }
         }
-        if (input.keyActionOnce("nextSubTool")) {
+        if (input.keyActionOnce("next_subtool", ']')) {
           subTool++;
           if (subTool > 4) subTool = 1;
           sound.playSound("switch_subtool");
         }
-        else if (input.keyActionOnce("prevSubTool")) {
+        else if (input.keyActionOnce("prev_subtool", '[')) {
           subTool--;
           if (subTool <= 0) subTool = 4;
           sound.playSound("switch_subtool");
@@ -5283,10 +5191,7 @@ public class PixelRealm extends Screen {
             for (float x = -4.; x < 4.; x+=1.0) {
               float u = (x+4.)/8.;
               float tx = px+x*size;
-              // TODO: we could perhaps add some verrrrrrrrry temporary cache to onSurface()
-              // so that it returns a cached result after each loop iteration?
-              // Eh nah.
-              // TODO: delete this TODO note.
+              
               scene.vertex(tx,      onSurface(tx, tz)-10.,           tz,      u,        v);
               scene.vertex(tx+size, onSurface(tx+size, tz)-10.,      tz,      u+uvSize, v);
               scene.vertex(tx+size, onSurface(tx+size, tz+size)-10., tz+size, u+uvSize, v+uvSize);
@@ -5345,7 +5250,7 @@ public class PixelRealm extends Screen {
         // Finish rendering
         
         // This part of the code is what actually morphs the terrain.
-        if (input.keyAction("primaryAction") || input.keyAction("secondaryAction")) {
+        if (input.keyAction("primary_action", 'o') || input.keyAction("secondary_action", 'p')) {
           // Need this hashset so that only one unique chunk is in there at a time (I think)
           HashSet<TerrainChunkV2> chunksModified = new HashSet<TerrainChunkV2>();
           
@@ -5366,7 +5271,7 @@ public class PixelRealm extends Screen {
                 
                 // Slow down morphing if shift pressed
                 float morphSpeed = 5.;
-                if (input.shiftDown) {
+                if (input.keyAction("move_slow", TWEngine.InputModule.ALT_KEY)) {
                   morphSpeed = 1.5;
                 }
                 
@@ -5381,7 +5286,7 @@ public class PixelRealm extends Screen {
                 
                 // Modify tile y-values (the actual morphing!)
                 debug = true;
-                if (input.keyAction("primaryAction"))
+                if (input.keyAction("primary_action", 'o'))
                   getTileAt(px+x, pz+z).y += bulge*morphSpeed;
                 else
                   getTileAt(px+x, pz+z).y -= bulge*morphSpeed;
@@ -5446,7 +5351,7 @@ public class PixelRealm extends Screen {
              ) {
               
              
-              if (input.keyAction("secondaryAction")) {
+              if (input.keyAction("secondary_action", 'p')) {
                 getTileAt(px, pz).y                                       = morpherBlockHeight;
                 getTileAt(px+terrain.groundSize, pz).y                    = morpherBlockHeight;
                 getTileAt(px+terrain.groundSize, pz+terrain.groundSize).y = morpherBlockHeight;
@@ -5481,7 +5386,7 @@ public class PixelRealm extends Screen {
               }
             }
             
-            if (input.keyAction("primaryAction") && subTool == MORPHER_BLOCK && (snappedx != lastXBlockGetHeightAction || snappedz != lastZBlockGetHeightAction)) {
+            if (input.keyAction("primary_action", 'o') && subTool == MORPHER_BLOCK && (snappedx != lastXBlockGetHeightAction || snappedz != lastZBlockGetHeightAction)) {
               // Let's calculate the highest point!
               // We use min because remember: up => numbers go down.
               morpherBlockHeight = min(getTileAt(px, pz).y, 
@@ -6090,12 +5995,16 @@ public class PixelRealm extends Screen {
       prevPlayerZ = z;
     }
     
-  PRWeirdo nael = null;
-    
-    public void spawnNael() {
-      if (nael != null) nael.destroy();
-      nael = new PRWeirdo(playerX, playerY, playerZ);
+    public void tp(float x, float y, float z, float dir) {
+      playerX = x;
+      playerY = y;
+      playerZ = z;
+      prevPlayerX = x;
+      prevPlayerY = y;
+      prevPlayerZ = z;
+      currRealm.direction = dir;
     }
+    
     
     // That "effect" is just the portal glow.
     public void renderEffects() {
@@ -6293,11 +6202,6 @@ public class PixelRealm extends Screen {
     currRealm.yvel = 5.;
   }
   
-  public void addBreadcrumb(String dir) {
-    realmBreadcrumbs.add(dir);
-    breadcrumbIndex = realmBreadcrumbs.size()-1;
-  }
-  
   public void gotoRealm(String to) {
     gotoRealm(to, "");
   }
@@ -6468,6 +6372,10 @@ public class PixelRealm extends Screen {
   
   // --- Memory overflow avoidance (TODO: move to engine) ---
   public void incrementMemUsage(int val) {
+    memUsage.getAndAdd((long)val);
+  }
+  
+  public void incrementMemUsage(long val) {
     memUsage.getAndAdd(val);
   }
   
@@ -6649,7 +6557,7 @@ public class PixelRealm extends Screen {
     if (!movementPaused && !engine.commandPromptShown) {
       for (int i = 0; i < 10; i++) {
         // Go through all the keys 0-9 and check if it's being pressed
-        if (input.keyActionOnce("quickWarp"+str(i)) && usePortalAllowed) {
+        if (input.keyActionOnce("quick_warp_"+str(i), str(i).charAt(0)) && usePortalAllowed) {
           // Save current realm
           quickWarpRealms[quickWarpIndex] = currRealm;
           
@@ -6669,24 +6577,6 @@ public class PixelRealm extends Screen {
         }
       }
       
-      // TODO: Disable this
-      if (input.upOnce && realmBreadcrumbs.size() > 0) {
-        sound.playSound("swish");
-        gotoRealm(realmBreadcrumbs.get(breadcrumbIndex));
-        breadcrumbIndex--;
-        if (breadcrumbIndex < 0) {
-          breadcrumbIndex = realmBreadcrumbs.size()-1;
-        }
-      }
-      
-      if (input.downOnce && realmBreadcrumbs.size() > 0) {
-        sound.playSound("swish");
-        gotoRealm(realmBreadcrumbs.get(breadcrumbIndex));
-        breadcrumbIndex++;
-        if (breadcrumbIndex >= realmBreadcrumbs.size()) {
-          breadcrumbIndex = 0;
-        }
-      }
     }
     
     timeInRealm++;
@@ -6722,25 +6612,6 @@ public class PixelRealm extends Screen {
   
   // Save our breadcrumbs
   public void shutdown() {
-    int MAX_BREADCRUMBS = 128;
-    String[] strs = new String[min(realmBreadcrumbs.size(), MAX_BREADCRUMBS)];
-    int i = 0;
-    for (String s : realmBreadcrumbs) {
-      if (i < MAX_BREADCRUMBS) {
-        strs[i++] = s;
-      }
-      else break;
-    }
-    
-    //int MAX_BREADCRUMBS = 1024;
-    //String[] strs = new String[max(realmBreadcrumbs.size(), MAX_BREADCRUMBS)];
-    //int count = 0;
-    //for (int i = realmBreadcrumbs.size(); i > 0; i--) {
-    //  strs[count++] = realmBreadcrumbs.get(i);
-    //  if (count > MAX_BREADCRUMBS-1) break;
-    //}
-    
-    app.saveStrings(engine.APPPATH+BREADCRUMBS_PATH, strs);
   }
   
   // TODO: no longer used
@@ -6908,14 +6779,19 @@ public class PixelRealm extends Screen {
     app.textFont(engine.DEFAULT_FONT, 36);
     app.text(currRealm.stateDirectory, 10, 10);
     
-    
-    if (loading > 0 || sound.loadingMusic()) {
+    if (currRealm.memOverload) {
+      display.img("error", WIDTH-myUpperBarWeight-10f, 0f, myUpperBarWeight, myUpperBarWeight);
+    }
+    else if (loading > 0 || sound.loadingMusic()) {
       ui.loadingIcon(WIDTH-myUpperBarWeight/2-10, myUpperBarWeight/2, myUpperBarWeight);
       
       // Doesn't matter too much that it's being converted to an int,
       // it doesn't need to be accurate.
       // It's simply an approximate timeout timer for the loading icon to disappear.
       loading -= (int)display.getDelta();
+      if (loading <= 0 && engine.lowMemory) {
+        System.gc();
+      }
     }
     display.recordLogicTime();
   }
@@ -6928,9 +6804,8 @@ public class PixelRealm extends Screen {
     }
   }
   
-  // TODO: might not work properly
-  public void finalize() {
-    issueRefresherCommand(REFRESHER_TERMINATE);
+  public void endScreenAnimation() {
+    //issueRefresherCommand(REFRESHER_TERMINATE);
   }
     
     
@@ -6997,8 +6872,7 @@ public class PixelRealm extends Screen {
         if (i >= xyz.length) break;
         xyz[i++] = int(arg);
       }
-      currRealm.tp(xyz[0], xyz[1], xyz[2]);
-      currRealm.direction = xyz[3];
+      currRealm.tp(xyz[0], xyz[1], xyz[2], xyz[3]);
       
       console.log("Teleported to ("+str(currRealm.playerX)+", "+str(currRealm.playerY)+", "+str(currRealm.playerZ)+").");
 
@@ -7023,7 +6897,6 @@ public class PixelRealm extends Screen {
         String path = args[0].trim().replaceAll("\\\\", "/");
         if (file.exists(path) && file.isDirectory(path)) {
           console.log("Transported to realm "+path+".");
-          addBreadcrumb(currRealm.stateDirectory);
           gotoRealm(path);
         }
         else {
@@ -7033,11 +6906,6 @@ public class PixelRealm extends Screen {
       else {
         console.log("Please provide a path where you want to go!");
       }
-      return true;
-    }
-    else if (engine.commandEquals(command, "/nael")) {
-      console.log("Metamorphosynthesis");
-      currRealm.spawnNael();
       return true;
     }
     else if (engine.commandEquals(command, "/fov")) {

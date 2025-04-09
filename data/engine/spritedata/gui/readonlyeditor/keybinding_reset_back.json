@@ -1,0 +1,17 @@
+{
+  "h": 275,
+  "vy0": 313,
+  "vx1": 531,
+  "vy2": 441,
+  "vx0": 403,
+  "vy1": 313,
+  "mode": "DOUBLE",
+  "vx3": 403,
+  "vx2": 531,
+  "vy3": 441,
+  "w": 658,
+  "name": "keybinding_reset_back",
+  "x": 403,
+  "y": 313,
+  "locked": false
+}

@@ -236,7 +236,7 @@ Object runTWIT(int opcode, Object[] args)  {
         }
         break;
         
-        // prCloseMenu
+        // prCloseMenu()
         case 3007:        
         if (timewayEngine.currScreen instanceof PixelRealmWithUI) {
           ((PixelRealmWithUI)timewayEngine.currScreen).closeMenu();

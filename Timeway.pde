@@ -11,7 +11,7 @@ import java.io.PrintWriter;
 * 
 * Here's the basics of Timeway's code:
 * Timeway is split into "screens", which you can think of as mini-apps.
-* The most significant of them all is the Pixel Realm (where all the 3d file 
+* The most significant of them all is the Pixel Realm (where all the 3D file 
 * stuff is). There is also the Editor, and other miscellaneous screens in
 * otherscreens.pde. 
 * 
@@ -43,7 +43,10 @@ import java.io.PrintWriter;
 * Anyways, I have no idea who's reading this or who would delve into the code of Timeway,
 * but if you're here reading this, then have fun!
 *
-* 
+* Oh also, if you're trying to reduce memory usage as much as possible, an empty sketch typically uses 
+* ~140MB RAM (task manager)
+* 260MB (heap size)
+* 30MB (actually used)
 **/
 
 
@@ -67,7 +70,7 @@ String sketch_ERR_LOG_PATH;
 // Set to true if you want to show the error log like in an exported build
 // rather than throw the error to processing (can be useful if you need more
 // error info)
-final boolean sketch_FORCE_CRASH_SCREEN = false;
+final boolean sketch_FORCE_CRASH_SCREEN = true;
 final boolean sketch_MAXIMISE = true;
 
 void settings() {
@@ -102,9 +105,7 @@ void settings() {
 }
 
 void shutdown() {
-  // TODO: Make this much better designed
-  timewayEngine.stats.save();
-  timewayEngine.stats.set("last_closed", (int)(System.currentTimeMillis() / 1000L));
+  timewayEngine.shutdown();
   
   if (timewayEngine.currScreen instanceof PixelRealmWithUI) {
     PixelRealmWithUI pr = (PixelRealmWithUI)timewayEngine.currScreen;
@@ -133,7 +134,7 @@ void sketch_openErrorLog(Exception e) {
   String sStackTrace = sw.toString();
   
   String errMsg = 
-  "The Timeway engine experienced an unrecoverable problem and had to close the application :(\n\n\n"+
+  "Timeway experienced a problem and had to close :(\n\n\n"+
   e.getClass().toString()+"\nMessage: \""+
   e.getMessage()+"\"\nStack trace:\n"+
   sStackTrace;
@@ -173,6 +174,7 @@ void setup() {
     
     // Self-explainatory.
     requestAndroidPermissions();
+
 }
 
 // The magical draw() method that runs it all. Be amazed :o
@@ -191,7 +193,7 @@ void draw() {
         }
         catch (java.lang.OutOfMemoryError outofmem) {
           // Woops
-          sketch_openErrorLog("Timeway has run out of memory.");
+          sketch_openErrorLog("Timeway has run out of RAM.");
           exit();
         }
         catch (Exception e) {
@@ -211,8 +213,6 @@ void draw() {
 void keyPressed() {
   if (timewayEngine != null && timewayEngine.input != null) {
     timewayEngine.input.keyboardAction(key, keyCode);
-    timewayEngine.input.lastKeyPressed     = key;
-    timewayEngine.input.lastKeycodePressed = keyCode;
 
     // Begin the timer. This will automatically increment once it's != 0.
     timewayEngine.input.keyHoldCounter = 1;

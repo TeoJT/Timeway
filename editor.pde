@@ -284,12 +284,29 @@ class DCapture extends EditorCapture implements java.beans.PropertyChangeListene
   }
 }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 public class Editor extends Screen {
     private boolean showGUI = false;
     private float upperbarExpand = 0;
-    private SpriteSystemPlaceholder gui;
-    private SpriteSystemPlaceholder placeables;
-    private HashSet<Placeable> placeableset;
+    protected SpriteSystemPlaceholder gui;
+    private SpriteSystemPlaceholder placeableSprites;
+    protected HashMap<String, Placeable> placeableset;
     private ArrayList<String> imagesInEntry;  // This is so that we can know what to remove when we exit this screen.
     private Placeable editingPlaceable = null;
     private EditorCapture camera;
@@ -366,7 +383,7 @@ public class Editor extends Screen {
       actions[1] = new Runnable() {public void run() {
           
           if (editingPlaceable != null) {
-            placeableset.remove(editingPlaceable);
+            placeableset.remove(editingPlaceable.id);
             changesMade = true;
           }
           
@@ -405,7 +422,7 @@ public class Editor extends Screen {
       actions[2] = new Runnable() {public void run() {
           
         if (editingPlaceable != null) {
-          placeableset.remove(editingPlaceable);
+          placeableset.remove(editingPlaceable.id);
           changesMade = true;
         }
           
@@ -415,34 +432,102 @@ public class Editor extends Screen {
     }
     
     
+    private void blankOptions() {
+      String[] labels = new String[6];
+      Runnable[] actions = new Runnable[6];
+      
+      labels[0] = "New input field";
+      actions[0] = new Runnable() {public void run() {
+        insertText("Input field", engine.mouseX(), engine.mouseY()-20, TYPE_INPUT_FIELD);
+      }};
+      
+      
+      labels[1] = "New boolean field";
+      actions[1] = new Runnable() {public void run() {
+        insertText("Boolean field", engine.mouseX(), engine.mouseY()-20, TYPE_BOOLEAN_FIELD);
+      }};
+      
+      labels[2] = "New slider field";
+      actions[2] = new Runnable() {public void run() {
+        insertText("Slider field", engine.mouseX(), engine.mouseY()-20, TYPE_SLIDER_FIELD);
+      }};
+      
+      
+      labels[3] = "New int slider field";
+      actions[3] = new Runnable() {public void run() {
+        insertText("Int slider field", engine.mouseX(), engine.mouseY()-20, TYPE_SLIDERINT_FIELD);
+      }};
+      
+      labels[4] = "New options menu";
+      actions[4] = new Runnable() {public void run() {
+        insertText("Options menu field", engine.mouseX(), engine.mouseY()-20, TYPE_OPTIONS_FIELD);
+      }};
+      
+      labels[5] = "New button";
+      actions[5] = new Runnable() {public void run() {
+        insertText("Button", engine.mouseX(), engine.mouseY()-20, TYPE_BUTTON);
+      }};
+      
+      ui.createOptionsMenu(labels, actions);
+    }
     
+    
+    private String generateRandomID() {
+      String id = nf(random(0, 99999999), 8, 0);
+      while (placeableset.containsKey(id)) {
+        id = nf(random(0, 99999999), 8, 0);
+      }
+      return id;
+    }
+    
+    protected Placeable get(String name) {
+      if (!placeableset.containsKey(name)) {
+        console.warn("Setting "+name+" not found.");
+        return new Placeable("null");
+      }
+      return placeableset.get(name);
+    }
+
 
     public class Placeable {
         public SpriteSystemPlaceholder.Sprite sprite;
+        public String id;
+        public boolean visible = true;
 
-        public Placeable() {
-            // Essentially get the number of placeables that already exist so we have a unique id for the placeable..
-            int id = placeables.spriteNames.size();
-
-            // I wonder if it will crash if there's over 999 objects on a page lol.
-            // A bug to look out for later.
-            String name = engine.appendZeros(id, 3);
-            placeables.placeable(name);
-            sprite = placeables.getSprite(name);
-
-            if (!placeableset.contains(this)) {
-                placeableset.add(this);
+        //public Placeable() {
+        //    String name = generateRandomID();
+        //    placeableSprites.placeable(name);
+        //    sprite = placeableSprites.getSprite(name);
+            
+        //    if (!placeableset.containsValue(this)) {
+        //        placeableset.put(name, this);
+        //    }
+        //}
+        
+        public Placeable(String id) {
+            this.id = id;
+            placeableSprites.placeable(id);
+            sprite = placeableSprites.getSprite(id);
+            
+            if (!placeableset.containsValue(this)) {
+                placeableset.put(id, this);
             }
         }
         
         
         protected boolean placeableSelected() {
           if (input.mouseY() < myUpperBarWeight) return false;
-          return (sprite.mouseWithinHitbox() && placeables.selectedSprite == sprite && input.primaryDown && !input.mouseMoved);
+          return (sprite.mouseWithinHitbox() && placeableSprites.selectedSprite == sprite && input.primaryDown && !input.mouseMoved);
         }
 
         protected boolean placeableSelectedSecondary() {
-          return (sprite.mouseWithinHitbox() && placeables.selectedSprite == sprite && input.secondaryDown && !input.mouseMoved);
+          return (sprite.mouseWithinHitbox() && placeableSprites.selectedSprite == sprite && input.secondaryDown && !input.mouseMoved);
+        }
+        
+        
+        @SuppressWarnings("unused")
+        public void save(JSONObject json) {
+            console.bugWarn("Missing code! Couldn't save unknown placeable: "+this.toString());
         }
 
         
@@ -455,8 +540,10 @@ public class Editor extends Screen {
 
         public void update() {
             sprite.offmove(0, input.scrollOffset);
-            display();
-            placeables.placeable(sprite);
+            if (visible) {
+              display();
+            }
+            placeableSprites.placeable(sprite);
         }
     }
 
@@ -469,20 +556,22 @@ public class Editor extends Screen {
         public float lineSpacing = 8;
         int newlines = 0;
 
-        public TextPlaceable() {
-            super();
+        public TextPlaceable(String name) {
+            super(name);
             sprite.allowResizing = false;
+            sprite.setImg("nothing");
             fontStyle = display.getFont(DEFAULT_FONT);
             selectedFontSize = this.fontSize;
         }
 
-        private boolean editing() {
-            if (editingPlaceable == this)
+        protected boolean editing() {
+            if (editingPlaceable == this) {
               changesMade = true;
+            }
             return editingPlaceable == this;
         }
 
-        private int countNewlines(String t) {
+        protected int countNewlines(String t) {
             int count = 0;
             for (int i = 0; i < t.length(); i++) {
                 if (t.charAt(i) == '\n') {
@@ -493,7 +582,6 @@ public class Editor extends Screen {
             return count;
         }
 
-        int testy = 0;
         public void display() {
             canvas.pushMatrix();
             canvas.scale(canvasScale);
@@ -504,17 +592,28 @@ public class Editor extends Screen {
 
             String displayText = "";
             if (editing()) {
-              displayText = input.keyboardMessageDisplay();
+                displayText = input.keyboardMessageDisplay();
             }
-              else {
-                  displayText = text;
+            else {
+                displayText = text;
             }
             canvas.text(displayText, sprite.xpos, sprite.ypos-canvas.textDescent()+EXPAND_HITBOX/2+10);
             canvas.popMatrix();
         }
         
         public void updateDimensions() {
-          placeables.hackSpriteDimensions(sprite, int(app.textWidth(text)), int((app.textAscent()+app.textDescent()+lineSpacing)*(countNewlines(text)+1) + EXPAND_HITBOX));
+          placeableSprites.hackSpriteDimensions(sprite, int(app.textWidth(text)), int((app.textAscent()+app.textDescent()+lineSpacing)*(countNewlines(text)+1) + EXPAND_HITBOX));
+        }
+        
+        public void save(JSONObject obj) {
+          this.sprite.offmove(0,0);
+          obj.setString("ID", this.sprite.name);
+          obj.setInt("type", TYPE_TEXT);
+          obj.setInt("x", int(this.sprite.getX()));
+          obj.setInt("y", int(this.sprite.getY()));
+          obj.setFloat("size", this.fontSize);
+          obj.setString("text", this.text);
+          obj.setInt("color", this.textColor);
         }
 
         public void update() {
@@ -569,13 +668,13 @@ public class Editor extends Screen {
         // this screen otherwise we'll technically create a memory leak.
         public String imageName;
 
-        public ImagePlaceable() {
-            super();
+        public ImagePlaceable(String name) {
+            super(name);
             sprite.allowResizing = true;
         }
         
-        public ImagePlaceable(PImage img) {
-            super();
+        public ImagePlaceable(String id, PImage img) {
+            super(id);
             sprite.allowResizing = true;
             
             // Ok yes I see the flaws in this, I'll figure out a more robust system later maybe.
@@ -601,7 +700,43 @@ public class Editor extends Screen {
         }
         
         public void display() {
-                                      }
+          
+        }
+        
+        
+        public void save(JSONObject obj) {
+          // First, we need the png image data.
+          PImage image = display.systemImages.get(this.sprite.imgName);
+          if (image == null) {
+            console.bugWarn("Trying to save image placeable, and image doesn't exist in memory?? Possible bug??");
+            return;
+          }
+          
+          // No multithreading please!
+          // And no shrinking please!
+          engine.setCachingShrink(0,0);
+          
+          
+          String cachePath = engine.saveCacheImage(entryPath+"_"+str(numImages++), image);
+          
+          byte[] cacheBytes = loadBytes(cachePath);
+          
+          
+          // NullPointerException
+          String encodedPng = new String(Base64.getEncoder().encode(cacheBytes));
+          
+          this.sprite.offmove(0,0);
+          
+          obj.setString("ID", this.sprite.name);
+          obj.setInt("type", TYPE_IMAGE);
+          obj.setInt("x", int(this.sprite.getX()));
+          obj.setInt("y", int(this.sprite.getY()));
+          obj.setInt("wi", int(this.sprite.wi));
+          obj.setInt("hi", int(this.sprite.hi));
+          obj.setString("imgName", this.sprite.imgName);
+          obj.setString("png", encodedPng);
+          
+        }
         
         public void update() {
             sprite.offmove(0, input.scrollOffset);
@@ -615,10 +750,466 @@ public class Editor extends Screen {
             
             canvas.pushMatrix();
             canvas.scale(canvasScale);
-            placeables.sprite(sprite.getName(), imageName);
+            placeableSprites.sprite(sprite.getName(), imageName);
             canvas.popMatrix();
         }
     }
+    
+    public class InputFieldPlaceable extends TextPlaceable {
+      
+        public InputFieldPlaceable(String name) {
+          super(name);
+        }
+      
+        protected final float MIN_FIELD_VISIBLE_SIZE = 150f;
+        public String inputText = "";
+      
+        public void display() {
+            canvas.pushMatrix();
+            canvas.scale(canvasScale);
+            canvas.textAlign(LEFT, TOP);
+            canvas.textFont(fontStyle, fontSize);
+            canvas.textLeading(fontSize+lineSpacing);
+
+            String displayText = "";
+            if (editing()) {
+                displayText = input.keyboardMessageDisplay();
+            }
+            else if (readOnly && modifyingField == this) {
+              displayText = text+" "+input.keyboardMessageDisplay();
+            }
+            else {
+                displayText = text+" "+inputText;
+            }
+            float x = sprite.xpos;
+            float y = sprite.ypos-canvas.textDescent()+EXPAND_HITBOX/2+10;
+            canvas.stroke(255f);
+            canvas.strokeWeight(1f);
+            canvas.fill(100, 60);
+            canvas.rect(x+canvas.textWidth(text+" ")-10f, y-EXPAND_HITBOX, PApplet.max(canvas.textWidth(inputText)+30f, MIN_FIELD_VISIBLE_SIZE)+EXPAND_HITBOX*2f+10f, sprite.getHeight());
+            canvas.fill(textColor);
+            canvas.text(displayText, x, y);
+            canvas.popMatrix();
+        }
+        
+        public void updateDimensions() {
+          float textww = app.textWidth(text+" ");
+          float inputfield = app.textWidth(inputText+" ");
+          float ww = PApplet.max(textww+inputfield, textww+MIN_FIELD_VISIBLE_SIZE);
+          placeableSprites.hackSpriteDimensions(sprite, int(ww), int((app.textAscent()+app.textDescent()+lineSpacing)*(countNewlines(text)+1) + EXPAND_HITBOX));
+        }
+        
+        // Need a custom click method since we can't have selected placeables in read-only mode.
+        private boolean myClick() {
+          return sprite.mouseWithinHitbox() && input.primaryOnce && !input.mouseMoved;
+        }
+        
+        public void update() {
+          super.update();
+          
+          // Select for text modifying and 
+          if (myClick() && readOnly) {
+              engine.allowShowCommandPrompt = false;
+              modifyingField = this;
+              input.keyboardMessage = inputText;
+              input.cursorX = input.keyboardMessage.length();
+          }
+          
+          if (modifyingField == this && readOnly) {
+            input.addNewlineWhenEnterPressed = false;
+            inputText = input.keyboardMessage;
+          }
+          updateDimensions();
+        }
+        
+        public void save(JSONObject obj) {
+          super.save(obj);
+          obj.setInt("type", TYPE_INPUT_FIELD);
+        }
+    }
+    
+    
+    
+    public class BooleanFieldPlaceable extends TextPlaceable {
+      
+        public BooleanFieldPlaceable(String name) {
+          super(name);
+        }
+      
+        public boolean state = false;
+        public float animationInverted = 0f;
+      
+        public void display() {
+            canvas.pushMatrix();
+            canvas.scale(canvasScale);
+            canvas.textAlign(LEFT, TOP);
+            canvas.textFont(fontStyle, fontSize);
+            canvas.textLeading(fontSize+lineSpacing);
+
+            String displayText = "";
+            if (editing()) {
+                displayText = input.keyboardMessageDisplay();
+            }
+            else {
+                displayText = text;
+            }
+            float textx = sprite.xpos;
+            float texty = sprite.ypos-canvas.textDescent()+EXPAND_HITBOX/2+10;
+            float x = textx+canvas.textWidth(text)+20f;
+            float y = texty-EXPAND_HITBOX;
+            float wi = sprite.getHeight()*1.8f;
+            float hi = sprite.getHeight();
+            
+            if (ui.buttonImg("nothing", x, y, wi, hi)) {
+              sound.playSound("select_any");
+              // Switch state and init switch animation.
+              state = !state;
+              animationInverted = 1f;
+            }
+            
+            // Mathy stuff for rendering switch and knob
+            final float KNOB_PADDING = 5f;
+            final color COLOR_OFF = color(50f, 50f, 50f);
+            final color COLOR_ON  = color(100f, 100f, 255f);
+            
+            float knobwi = hi-KNOB_PADDING*2f;
+            float knobx = x+KNOB_PADDING;
+            
+            float animation = 1f-animationInverted;
+            
+            if (state == true) {
+              knobx += (wi-knobwi-KNOB_PADDING*2f)*animation;
+              canvas.fill(app.lerpColor(COLOR_OFF, COLOR_ON, animation));
+            }
+            else {
+              knobx += (wi-knobwi-KNOB_PADDING*2f)*(1f-animation);
+              canvas.fill(app.lerpColor(COLOR_ON, COLOR_OFF, animation));
+            }
+            
+            // Draw switch
+            canvas.stroke(255f);
+            canvas.strokeWeight(2f);
+            canvas.rect(x, y, wi, hi);
+            
+            // Knob
+            canvas.noStroke();
+            canvas.fill(255f); 
+            canvas.rect(knobx, y+KNOB_PADDING, knobwi, knobwi);
+            
+            // Text
+            canvas.fill(textColor);
+            canvas.text(displayText, textx, texty);
+            canvas.popMatrix();
+            
+            animationInverted *= PApplet.pow(0.85f, display.getDelta());
+            updateDimensions();
+        }
+        
+        //public void updateDimensions() {
+        //  float textww = app.textWidth(text+" ");
+        //  float inputfield = app.textWidth(inputText+" ");
+        //  float ww = PApplet.max(textww+inputfield, textww+MIN_FIELD_VISIBLE_SIZE);
+        //  placeableSprites.hackSpriteDimensions(sprite, int(ww), int((app.textAscent()+app.textDescent()+lineSpacing)*(countNewlines(text)+1) + EXPAND_HITBOX));
+        //}
+        
+        //public void update() {
+        //  super.update();
+          
+        //  // Select for text modifying and 
+        //  if (myClick() && readOnly) {
+        //      engine.allowShowCommandPrompt = false;
+        //      modifyingField = this;
+        //      input.keyboardMessage = inputText;
+        //      input.cursorX = input.keyboardMessage.length();
+        //  }
+          
+        //  if (modifyingField == this && readOnly) {
+        //    input.addNewlineWhenEnterPressed = false;
+        //    inputText = input.keyboardMessage;
+        //  }
+        //  updateDimensions();
+        //}
+        
+        public void save(JSONObject obj) {
+          super.save(obj);
+          obj.setInt("type", TYPE_BOOLEAN_FIELD);
+        }
+    }
+    
+    
+    private boolean movingSlider = false;
+    
+    public class SliderFieldPlaceable extends TextPlaceable {
+      
+        public SliderFieldPlaceable(String name) {
+          super(name);
+        }
+        
+        // MUST be called on creation
+        public void createSlider(float min, float max, float init) {
+          slider = ui.new CustomSlider("", min, max, init);
+        }
+        
+        
+        protected TWEngine.UIModule.CustomSlider slider;
+        
+        public float getVal() {
+          if (slider == null) return 0f;
+          return slider.valFloat;
+        }
+        
+        public void setVal(float x) {
+          if (slider == null) return;
+          slider.valFloat = x;
+        }
+        
+      
+        public void display() {
+            //canvas.pushMatrix();
+            //canvas.scale(canvasScale);
+            canvas.textAlign(LEFT, TOP);
+            canvas.textFont(fontStyle, fontSize);
+            canvas.textLeading(fontSize+lineSpacing);
+
+            String displayText = "";
+            if (editing()) {
+                displayText = input.keyboardMessageDisplay();
+            }
+            else {
+                displayText = text;
+            }
+            
+            float textx = sprite.xpos;
+            float texty = sprite.ypos-canvas.textDescent()+EXPAND_HITBOX/2+10;
+            
+            if (canvas == g) {
+              slider.label = displayText;
+              slider.wi = 750f;
+              slider.display(textx, texty);
+            }
+            
+            if (!movingSlider && slider.inBox() && input.primaryOnce) {
+              movingSlider = true;
+            }
+            
+            //canvas.popMatrix();
+            updateDimensions();
+        }
+        
+        public void setMinLabel(String label) {
+          slider.setWhenMin(label);
+        }
+        
+        public void setMaxLabel(String label) {
+          slider.setWhenMax(label);
+        }
+        
+        public void save(JSONObject obj) {
+          super.save(obj);
+          obj.setFloat("min_value", slider.min);
+          obj.setFloat("max_value", slider.max);
+          obj.setInt("type", TYPE_SLIDER_FIELD);
+        }
+    }
+    
+    public class SliderIntFieldPlaceable extends SliderFieldPlaceable {
+      
+        public SliderIntFieldPlaceable(String name) {
+          super(name);
+        }
+        
+        public int getValInt() {
+          if (slider == null) return 0;
+          return slider.valInt;
+        }
+        
+        public void setVal(int x) {
+          if (slider == null) return;
+          slider.valInt = x;
+        }
+        
+        // MUST be called on creation
+        public void createSlider(int min, int max, int init) {
+          slider = ui.new CustomSliderInt("", min, max, init);
+        }
+        
+        public void save(JSONObject obj) {
+          super.save(obj);
+          // Should override the float settings from the inherited method.
+          obj.setInt("min_value", (int)slider.min);
+          obj.setInt("max_value", (int)slider.max);
+          obj.setInt("type", TYPE_SLIDERINT_FIELD);
+        }
+    }
+    
+    
+    public class OptionsFieldPlaceable extends TextPlaceable {
+      
+        public OptionsFieldPlaceable(String name) {
+          super(name);
+        }
+        
+        public String[] options;
+        public String selectedOption = "Sample option";
+        
+        private final float BOX_X_POS  = 400f;
+        private final float BOX_X_SIZE = 500f;
+        
+        public void createOptions(JSONArray array) {
+          options = new String[array.size()];
+          for (int i = 0; i < array.size(); i++) {
+            options[i] = array.getString(i, "---");
+          }
+        }
+        
+        public void createOptions(String... array) {
+          options = array;
+        }
+      
+        public void display() {
+            canvas.pushMatrix();
+            canvas.scale(canvasScale);
+            canvas.textAlign(LEFT, TOP);
+            canvas.textFont(fontStyle, fontSize);
+            canvas.textLeading(fontSize+lineSpacing);
+
+            String displayText = "";
+            if (editing()) {
+                displayText = input.keyboardMessageDisplay();
+            }
+            else {
+                displayText = text;
+            }
+            float x = sprite.xpos;
+            float y = sprite.ypos-canvas.textDescent()+EXPAND_HITBOX/2+10;
+            canvas.stroke(255f);
+            canvas.strokeWeight(1f);
+            canvas.fill(100, 60);
+            canvas.rect(x+BOX_X_POS, y-EXPAND_HITBOX, BOX_X_SIZE, sprite.getHeight());
+            display.img("down_triangle_64", x+BOX_X_POS+BOX_X_SIZE-69f, y, sprite.getHeight()-20f, sprite.getHeight()-20f);
+            
+            canvas.fill(textColor);
+            // Label text
+            canvas.text(displayText, x, y);
+            // Selected option text
+            canvas.fill(255f);
+            canvas.text(selectedOption, x+BOX_X_POS+10f, y);
+            canvas.popMatrix();
+        }
+        
+        //public void updateDimensions() {
+        //  float textww = app.textWidth(text+" ");
+        //  float inputfield = app.textWidth(inputText+" ");
+        //  float ww = PApplet.max(textww+inputfield, textww+MIN_FIELD_VISIBLE_SIZE);
+        //  placeableSprites.hackSpriteDimensions(sprite, int(ww), int((app.textAscent()+app.textDescent()+lineSpacing)*(countNewlines(text)+1) + EXPAND_HITBOX));
+        //}
+        
+        // Need a custom click method since we can't have selected placeables in read-only mode.
+        private boolean myClick() {
+          float x = sprite.xpos;
+          float y = sprite.ypos-canvas.textDescent()+EXPAND_HITBOX/2+10;
+          return ui.buttonImg("nothing", x+BOX_X_POS, y-EXPAND_HITBOX, BOX_X_SIZE, sprite.getHeight()) && input.primaryOnce && !input.mouseMoved;
+        }
+        
+        public void update() {
+          super.update();
+          
+          // Select for text modifying and 
+          if (myClick() && readOnly) {
+            Runnable[] actions = new Runnable[options.length];
+            
+            for (int i = 0; i < options.length; i++) {
+              final String finalOption = options[i];
+              actions[i] = new Runnable() {public void run() {
+                  selectedOption = finalOption;
+              }};
+            }
+            
+            ui.createOptionsMenu(options, actions);
+          }
+          
+          updateDimensions();
+        }
+        
+        public void save(JSONObject obj) {
+          super.save(obj);
+          obj.setInt("type", TYPE_OPTIONS_FIELD);
+          JSONArray array = new JSONArray();
+          
+          for (int i = 0; i < options.length; i++) {
+            array.setString(i, options[i]);
+          }
+          obj.setJSONArray("options", array);
+        }
+    }
+    
+    
+    public class ButtonPlaceable extends TextPlaceable {
+      
+        public ButtonPlaceable(String name) {
+          super(name);
+        }
+        
+        public color rgb = 0xFF614d7d;
+        public color rgbHover = 0xFF8d70b5;
+        public boolean clicked = false;
+      
+        public void display() {
+            canvas.pushMatrix();
+            canvas.scale(canvasScale);
+            canvas.textAlign(LEFT, TOP);
+            canvas.textFont(fontStyle, fontSize);
+            canvas.textLeading(fontSize+lineSpacing);
+
+            String displayText = "";
+            if (editing()) {
+                displayText = input.keyboardMessageDisplay();
+            }
+            else {
+                displayText = text;
+            }
+            
+            float PADDING = 5f;
+            float textx = sprite.xpos;
+            float texty = sprite.ypos-canvas.textDescent()+EXPAND_HITBOX/2+10;
+            float x = textx-10f-PADDING;
+            float y = texty-EXPAND_HITBOX-PADDING;
+            float wi = sprite.getWidth()+20f+PADDING*2f;
+            float hi = sprite.getHeight()+PADDING*2f;
+            
+            
+            canvas.stroke(255f);
+            canvas.strokeWeight(1f);
+            if (ui.mouseInArea(x, y, wi, hi)) {
+              canvas.fill(rgbHover); 
+            }
+            else {
+              canvas.fill(rgb); 
+            }
+            
+            canvas.rect(x, y, wi, hi);
+            clicked = readOnly && ui.buttonImg("nothing", x, y, wi, hi);
+            
+            // Text
+            canvas.fill(textColor);
+            canvas.text(displayText, textx, texty);
+            canvas.popMatrix();
+            
+            
+            updateDimensions();
+        }
+        
+        public void save(JSONObject obj) {
+          super.save(obj);
+          obj.setInt("type", TYPE_BUTTON);
+          obj.setString("button_color", hex(rgb));
+          obj.setString("button_color_hover", hex(rgbHover));
+        }
+    }
+    
+    
+    
+    
     
     //**************************************************************************************
     //**********************************EDITOR SCREEN CODE**********************************
@@ -649,10 +1240,10 @@ public class Editor extends Screen {
           DEFAULT_FONT_SIZE = 50;
         }
         
-        placeables = new SpriteSystemPlaceholder(engine);
-        placeables.allowSelectOffContentPane = false;
+        placeableSprites = new SpriteSystemPlaceholder(engine);
+        placeableSprites.allowSelectOffContentPane = false;
         imagesInEntry = new ArrayList<String>();
-        placeableset = new HashSet<Placeable>();
+        placeableset = new HashMap<String, Placeable>();
         
         // Get the path without the file name
         int lindex = entryPath.lastIndexOf('/');
@@ -665,7 +1256,7 @@ public class Editor extends Screen {
           this.entryName = entryPath.substring(lindex+1, entryPath.lastIndexOf('.'));
         }
 
-        autoScaleDown = settings.getBoolean("autoScaleDown");
+        autoScaleDown = settings.getBoolean("auto_scale_down", false);
         input.scrollOffset = 0.;
         
         if (c != null) {
@@ -697,9 +1288,15 @@ public class Editor extends Screen {
     //*****************************************************************
     //***********************PLACEABLE TYPES***************************
     //*****************************************************************
-    public final int TYPE_UNKNOWN = 0;
-    public final int TYPE_TEXT    = 1;
-    public final int TYPE_IMAGE   = 2;
+    public final int TYPE_UNKNOWN         = 0;
+    public final int TYPE_TEXT            = 1;
+    public final int TYPE_IMAGE           = 2;
+    public final int TYPE_INPUT_FIELD     = 3;
+    public final int TYPE_BOOLEAN_FIELD   = 4;
+    public final int TYPE_SLIDER_FIELD    = 5;
+    public final int TYPE_SLIDERINT_FIELD = 6;
+    public final int TYPE_OPTIONS_FIELD   = 7;
+    public final int TYPE_BUTTON          = 8;
 
     //*****************************************************************
     //**************************SAVE PAGE******************************
@@ -707,81 +1304,30 @@ public class Editor extends Screen {
     public void saveEntryJSON() {
       // Only save if any changes were made.
       if (changesMade) {
-        sound.playSound("chime");
         numImages = 0;
         //JSONObject json = new JSONObject();
         JSONArray array = new JSONArray();
-        for (Placeable p : placeableset) {
-            if (p instanceof TextPlaceable)
-                saveTextPlaceable(p, array);
-            else if (p instanceof ImagePlaceable)
-                saveImagePlaceable(p, array);
-            else {
-                console.bugWarn("Missing code! Couldn't save unknown placeable.");
-                console.log("Once: "+p.toString());
+        for (Placeable p : placeableset.values()) {
+          // Lil optimisation
+            if (p instanceof TextPlaceable) {
+              if (((TextPlaceable)p).text.length() == 0) {
+                continue;
+              }
             }
+          
+            JSONObject obj = new JSONObject();
+            p.save(obj);
+            array.append(obj);
         }
-
+        
+        
         engine.app.saveJSONArray(array, entryPath);
+        
+        sound.playSound("chime");
       }
-    }
-
-    private void saveTextPlaceable(Placeable p, JSONArray array) {
-        TextPlaceable t = (TextPlaceable)p;
-        JSONObject obj = new JSONObject();
-        t.sprite.offmove(0,0);
-        obj.setString("ID", t.sprite.name);
-        obj.setInt("type", TYPE_TEXT);
-        obj.setInt("x", int(t.sprite.getX()));
-        obj.setInt("y", int(t.sprite.getY()));
-        obj.setFloat("size", t.fontSize);
-        obj.setString("text", t.text);
-        obj.setInt("color", t.textColor);
-        array.append(obj);
     }
     
     public int numImages = 0;
-    
-    // TODO: we need to put it into a new thread, huh?
-    private void saveImagePlaceable(Placeable p, JSONArray array) {
-        // First, we need the png image data.
-        ImagePlaceable imgPlaceable = (ImagePlaceable)p;
-        PImage image = display.systemImages.get(imgPlaceable.sprite.imgName);
-        if (image == null) {
-          console.bugWarn("Trying to save image placeable, and image doesn't exist in memory?? Possible bug??");
-          return;
-        }
-        
-        // No multithreading please!
-        // And no shrinking please!
-        engine.setCachingShrink(0,0);
-        
-        
-        String cachePath = engine.saveCacheImage(entryPath+"_"+str(numImages++), image);
-        
-        byte[] cacheBytes = loadBytes(cachePath);
-        
-        // TODO: I don't like this line of code at all...
-        //File f = new File(cachePath);
-        //f.delete();
-        
-        // NullPointerException
-        String encodedPng = new String(Base64.getEncoder().encode(cacheBytes));
-        
-        imgPlaceable.sprite.offmove(0,0);
-        
-        JSONObject obj = new JSONObject();
-        obj.setString("ID", imgPlaceable.sprite.name);
-        obj.setInt("type", TYPE_IMAGE);
-        obj.setInt("x", int(imgPlaceable.sprite.getX()));
-        obj.setInt("y", int(imgPlaceable.sprite.getY()));
-        obj.setInt("wi", int(imgPlaceable.sprite.wi));
-        obj.setInt("hi", int(imgPlaceable.sprite.hi));
-        obj.setString("imgName", imgPlaceable.sprite.imgName);
-        obj.setString("png", encodedPng);
-        
-        array.append(obj);
-    }
     
     
     // Util json ancient functions moved from Engine
@@ -823,6 +1369,10 @@ public class Editor extends Screen {
       catch (Exception e) {
         return defaultValue;
       }
+      
+      if (result == null) {
+        return defaultValue;
+      }
   
       return result;
     }
@@ -855,16 +1405,15 @@ public class Editor extends Screen {
         // check if file exists
         if (!file.exists(entryPath) || file.fileSize(entryPath) <= 2) {
           // If it doesn't exist or is blank, create a new placeable for the name of the entry
-            entryNameText = new TextPlaceable();
+            entryNameText = new TextPlaceable(RENAMEABLE_NAME);
             entryNameText.sprite.move(20., UPPER_BAR_DROP_WEIGHT + 80);
             entryNameText.fontSize = 60.;
             entryNameText.textColor = color(255);
             entryNameText.text = entryName;
-            entryNameText.sprite.name = RENAMEABLE_NAME;
             entryNameText.updateDimensions();
             
             // Create date
-            TextPlaceable date = new TextPlaceable();
+            TextPlaceable date = new TextPlaceable("datetime");
             String d = engine.appendZeros(day(), 2)+"/"+engine.appendZeros(month(), 2)+"/"+year()+"\n"+engine.appendZeros(hour(), 2)+":"+engine.appendZeros(minute(), 2)+":"+engine.appendZeros(second(), 2);
             date.sprite.move(WIDTH-app.textWidth(d)*2., 250);
             date.text = d;
@@ -907,6 +1456,24 @@ public class Editor extends Screen {
                 case TYPE_IMAGE: 
                     readImagePlaceable(i);
                 break;
+                case TYPE_INPUT_FIELD:
+                    readInputFieldPlaceable(i);
+                break;
+                case TYPE_BOOLEAN_FIELD:
+                    readBooleanFieldPlaceable(i);
+                break;
+                case TYPE_SLIDER_FIELD:
+                    readSliderFieldPlaceable(i);
+                break;
+                case TYPE_SLIDERINT_FIELD:
+                    readSliderIntFieldPlaceable(i);
+                break;
+                case TYPE_OPTIONS_FIELD:
+                    readOptionsFieldPlaceable(i);
+                break;
+                case TYPE_BUTTON:
+                    readButtonPlaceable(i);
+                break;
                 default:
                     console.warn("Corrupted element, skipping.");
                 break;
@@ -914,24 +1481,71 @@ public class Editor extends Screen {
         }
         loading = false;
     }
-    private TextPlaceable readTextPlaceable(int i) {
-        TextPlaceable t = new TextPlaceable();
+    
+    // Helper function
+    private void getTextAttribs(TextPlaceable t, int i) {
         t.sprite.setX((float)getJSONArrayInt(i, "x", (int)WIDTH/2));
         t.sprite.setY((float)getJSONArrayInt(i, "y", (int)HEIGHT/2));
-        t.sprite.name = getJSONArrayString(i, "ID", "");
+        t.sprite.name = getJSONArrayString(i, "ID", t.id);
         t.text = getJSONArrayString(i, "text", "");
         t.fontSize = getJSONArrayFloat(i, "size", 12.);
         t.textColor = getJSONArrayInt(i, "color", color(255, 255, 255));
         t.updateDimensions();
-        placeableset.add(t);
+    }
+    private TextPlaceable readTextPlaceable(int i) {
+        TextPlaceable t = new TextPlaceable(getJSONArrayString(i, "ID", generateRandomID()));
+        getTextAttribs(t, i);
+        return t;
+    }
+    private InputFieldPlaceable readInputFieldPlaceable(int i) {
+        InputFieldPlaceable t = new InputFieldPlaceable(getJSONArrayString(i, "ID", generateRandomID()));
+        getTextAttribs(t, i);
+        return t;
+    }
+    private ButtonPlaceable readButtonPlaceable(int i) {
+        ButtonPlaceable t = new ButtonPlaceable(getJSONArrayString(i, "ID", generateRandomID()));
+        t.rgb = unhex(getJSONArrayString(i, "button_color", "FF614d7d"));
+        t.rgbHover = unhex(getJSONArrayString(i, "button_color_hover", "FF8d70b5"));
+        getTextAttribs(t, i);
+        return t;
+    }
+    private BooleanFieldPlaceable readBooleanFieldPlaceable(int i) {
+        BooleanFieldPlaceable t = new BooleanFieldPlaceable(getJSONArrayString(i, "ID", generateRandomID()));
+        getTextAttribs(t, i);
+        return t;
+    }
+    private SliderFieldPlaceable readSliderFieldPlaceable(int i) {
+        SliderFieldPlaceable t = new SliderFieldPlaceable(getJSONArrayString(i, "ID", generateRandomID()));
+        t.createSlider(getJSONArrayFloat(i, "min_value", 0f), getJSONArrayFloat(i, "max_value", 100f), 50f);
+        getTextAttribs(t, i);
+        return t;
+    }
+    private SliderIntFieldPlaceable readSliderIntFieldPlaceable(int i) {
+        SliderIntFieldPlaceable t = new SliderIntFieldPlaceable(getJSONArrayString(i, "ID", generateRandomID()));
+        t.createSlider(getJSONArrayInt(i, "min_value", 0), getJSONArrayInt(i, "max_value", 10), 5);
+        getTextAttribs(t, i);
+        return t;
+    }
+    private OptionsFieldPlaceable readOptionsFieldPlaceable(int i) {
+        OptionsFieldPlaceable t = new OptionsFieldPlaceable(getJSONArrayString(i, "ID", generateRandomID()));
+        
+        if (!loadedJsonArray.getJSONObject(i).isNull("options")) {
+          t.createOptions(loadedJsonArray.getJSONObject(i).getJSONArray("options"));
+        }
+        else {
+          t.createOptions("Item 1", "Item 2", "Item 3");
+        }
+        
+        getTextAttribs(t, i);
         return t;
     }
     private ImagePlaceable readImagePlaceable(final int i) {
-        ImagePlaceable im = new ImagePlaceable();
+        ImagePlaceable im = new ImagePlaceable(getJSONArrayString(i, "ID", generateRandomID()));
         im.sprite.setX((float)getJSONArrayInt(i, "x", (int)WIDTH/2));
         im.sprite.setY((float)getJSONArrayInt(i, "y", (int)HEIGHT/2));
         im.sprite.wi   = getJSONArrayInt(i, "wi", 512);
         im.sprite.hi   = getJSONArrayInt(i, "hi", 512);
+        im.sprite.name = im.id;
         String imageName = getJSONArrayString(i, "imgName", "");
         
         // If there's cache, don't bother decoding the base64 string.
@@ -964,8 +1578,6 @@ public class Editor extends Screen {
         
         im.setImage(img, imageName);
         
-        
-        placeableset.add(im);
         return im;
     }
     
@@ -990,6 +1602,15 @@ public class Editor extends Screen {
         gui.interactable = !gui.interactable;
         if (gui.interactable) console.log("GUI now interactable.");
         else  console.log("GUI is no longer interactable.");
+        return true;
+      }
+      else if (command.equals("/alignbuttons")) {
+        console.log("Align buttons to mouse.");
+        for (Placeable p : placeableset.values()) {
+          if (p instanceof ButtonPlaceable) {
+            p.sprite.setX(input.mouseX());
+          }
+        }
         return true;
       }
       else return false;
@@ -1017,9 +1638,10 @@ public class Editor extends Screen {
   
           //************BACK BUTTON************
           if (ui.button("back", "back_arrow_128", "Save & back")) {
+            try {
                saveEntryJSON();
-               if (engine.prevScreen instanceof Explorer) {
-                 Explorer prevExplorerScreen = (Explorer)engine.prevScreen;
+               if (engine.getPrevScreen() instanceof Explorer) {
+                 Explorer prevExplorerScreen = (Explorer)engine.getPrevScreen();
                  prevExplorerScreen.refreshDir();
                }
                
@@ -1033,6 +1655,11 @@ public class Editor extends Screen {
                
                closeTouchKeyboard();
                previousScreen();
+            }
+            catch (RuntimeException e) {
+              // TODO: dear god we need a proper solution for this!!!!
+              console.warn("Failed to save entry :(");
+            }
           }
   
           //************FONT COLOUR************
@@ -1221,13 +1848,30 @@ public class Editor extends Screen {
     // New name without the following path.
     // TODO: safer to move instead of delete
     public void renameEntry(String newName) {
-      File f = new File(entryPath);
-      if (f.exists()) {
-        if (!f.delete()) console.warn("Couldn't rename entry; old file couldn't be deleted.");
+      String newPath = entryDir+newName+"."+engine.ENTRY_EXTENSION;
+      boolean success = file.mv(entryPath, newPath);
+      
+      if (success) {
+        entryPath = newPath;
+        console.log("Entry renamed to "+newName+"."+engine.ENTRY_EXTENSION);
       }
-      entryPath = entryDir+newName+"."+engine.ENTRY_EXTENSION;
-      entryName = newName;
-      saveEntryJSON();
+      else {
+        console.warn("Failed to rename file.");
+      }
+      
+      //File f = new File(entryPath);
+      //if (f.exists()) {
+      //  if (!f.delete()) console.warn("Couldn't rename entry; old file couldn't be deleted.");
+      //}
+      //entryPath = entryDir+newName+"."+engine.ENTRY_EXTENSION;
+      //entryName = newName;
+      //try {
+      //  saveEntryJSON();
+      //}
+      //catch (RuntimeException e) {
+      //  // TODO: dear god we need a proper solution for this!!!!
+      //  console.warn("Failed to save entry :(");
+      //}
     }
     
     protected void fabric() {
@@ -1300,7 +1944,7 @@ public class Editor extends Screen {
             engine.scaleDown(img, SCALE_DOWN_SIZE);
           }
           
-          ImagePlaceable imagePlaceable = new ImagePlaceable(img);
+          ImagePlaceable imagePlaceable = new ImagePlaceable(generateRandomID(), img);
           if (editingPlaceable != null) {
             // Grab the position of the text that was there previously
             // so we can plonk an image in its place, but only if there was
@@ -1312,7 +1956,7 @@ public class Editor extends Screen {
               int hi = editingPlaceable.sprite.hi;
               
               if (editingTextPlaceable.text.length() == 0) {
-                  placeableset.remove(editingPlaceable);
+                  placeableset.remove(editingPlaceable.id);
                   imagePlaceable.sprite.setX(x);
                   imagePlaceable.sprite.setY(y-input.scrollOffset);
               }
@@ -1349,16 +1993,54 @@ public class Editor extends Screen {
       }
     }
     
+    // Just normal text by default.
     private void insertText(String initText, float x, float y) {
+      insertText(initText, x, y, TYPE_TEXT);
+    }
+    
+    private void insertText(String initText, float x, float y, int type) {
         // Don't do anything if readonly enabled.
         if (readOnly) return;
         
-        TextPlaceable editingTextPlaceable = new TextPlaceable();
+        TextPlaceable editingTextPlaceable;
+        if (type == TYPE_INPUT_FIELD) {
+          editingTextPlaceable = new InputFieldPlaceable(generateRandomID());
+        }
+        else if (type == TYPE_SLIDER_FIELD) {
+          SliderFieldPlaceable t = new SliderFieldPlaceable(generateRandomID());
+          t.createSlider(0f, 100f, 50f);
+          editingTextPlaceable = t;
+        }
+        else if (type == TYPE_BUTTON) {
+          ButtonPlaceable t = new ButtonPlaceable(generateRandomID());
+          editingTextPlaceable = t;
+        }
+        else if (type == TYPE_OPTIONS_FIELD) {
+          OptionsFieldPlaceable t = new OptionsFieldPlaceable(generateRandomID());
+          t.createOptions("Item 1", "Item 2", "Item 3");
+          editingTextPlaceable = t;
+        }
+        else if (type == TYPE_SLIDERINT_FIELD) {
+          SliderIntFieldPlaceable t = new SliderIntFieldPlaceable(generateRandomID());
+          t.createSlider(0, 10, 5);
+          editingTextPlaceable = t;
+        }
+        else if (type == TYPE_BOOLEAN_FIELD) {
+          editingTextPlaceable = new BooleanFieldPlaceable(generateRandomID());
+        }
+        else if (type == TYPE_TEXT) {
+          editingTextPlaceable = new TextPlaceable(generateRandomID());
+        }
+        else {
+          editingTextPlaceable = new TextPlaceable(generateRandomID());
+        }
+        
         editingTextPlaceable.textColor = selectedColor;
-        placeables.selectedSprite = editingTextPlaceable.sprite;
+        placeableSprites.selectedSprite = editingTextPlaceable.sprite;
         editingTextPlaceable.sprite.setX(x);
         editingTextPlaceable.sprite.setY(y-input.scrollOffset);
         editingPlaceable = editingTextPlaceable;
+        
         input.keyboardMessage = initText;
         input.cursorX = input.keyboardMessage.length();
         editingTextPlaceable.updateDimensions();
@@ -1366,10 +2048,10 @@ public class Editor extends Screen {
         stats.increase("text_created", 1);
     }
     
-    private void renderPlaceables() {
-        placeables.interactable = !readOnly;
+    protected void renderPlaceables() {
+        placeableSprites.interactable = !readOnly;
       
-        placeables.updateSpriteSystem();
+        placeableSprites.updateSpriteSystem();
         
         // Because every placeable is placed at a slight offset due to the ribbon bar,
         // readonly doesn't have this bar and hence we should limit scroll at where the
@@ -1382,12 +2064,12 @@ public class Editor extends Screen {
         extentX = 0;
         extentY = 0;
         // Run all placeable objects
-        for (Placeable p : placeableset) {
+        for (Placeable p : placeableset.values()) {
           try {
             p.update();
           }
           catch (RuntimeException e) {
-            console.warn("Entry rendering error, continuing.");
+            //console.warn("Entry rendering error, continuing.");
           }
             
             // Don't care I can tidy things up later.
@@ -1454,6 +2136,9 @@ public class Editor extends Screen {
     boolean scrolling = false;
     boolean prevReset = false;
     
+    // Only used in readonly mode
+    private InputFieldPlaceable modifyingField = null;
+    
     private void renderEditor() {
       //yview += engine.scroll;
         // In order to know if we clicked on an object or a blank area,
@@ -1500,14 +2185,13 @@ public class Editor extends Screen {
                   if (editingPlaceable instanceof TextPlaceable) {
                     TextPlaceable editingTextPlaceable = (TextPlaceable)editingPlaceable;
                     if (editingTextPlaceable.text.length() == 0) {
-                        placeableset.remove(editingPlaceable);
+                        placeableset.remove(editingPlaceable.id);
                     }
                   }
                   // Rename the entry if we're clicking off the title text.
                   if (editingPlaceable == entryNameText) {
                     if (entryNameText.text.matches("^[a-zA-Z0-9_ ,\\-]+$()") && entryNameText.text.length() > 0) {
                       renameEntry(entryNameText.text);
-                      console.log("Entry renamed!");
                     }
                     else {
                       console.log("Invalid characters in entry name!");
@@ -1520,10 +2204,40 @@ public class Editor extends Screen {
                   engine.allowShowCommandPrompt = true;
                   //saveEntryJSON();
                 }
+                
+                // This is ok to place here because fields are selected in renderPlaceables(), and renderPlaceables()
+                // is just below this section.
+                modifyingField = null;
 
             }
         }
         
+        // Right click menu in a blank space.
+        else if (input.secondaryOnce) {
+            if(!ui.miniMenuShown() && !mouseInUpperbar && !readOnly) {
+                // To ensure we're clicking in a blank space, make sure we're either:
+                // A. have an object selected but not right-clicking on it
+                // B. don't have an object selected and right-clicking a blank area.
+                boolean rightClickMenu = false;
+                if (editingPlaceable != null) {
+                  rightClickMenu = !editingPlaceable.placeableSelectedSecondary();
+                }
+                else {
+                  rightClickMenu = true;
+                }
+                
+                if (rightClickMenu) {
+                  blankOptions();
+                }
+            }
+        }
+        
+        if (movingSlider && !input.primaryDown) {
+          movingSlider = false;
+        }
+        
+        
+        // TODO: CTRL+C CTRL+V in Processing is broken.
         if (input.ctrlDown && input.keyDownOnce('c')) { // Ctrl+c
           this.copy();
         }
@@ -1536,7 +2250,7 @@ public class Editor extends Screen {
         
         if (input.keyDownOnce(char(127))) {
           if (editingPlaceable != null) {
-            placeableset.remove(editingPlaceable);
+            placeableset.remove(editingPlaceable.id);
             changesMade = true;
           }
         }
@@ -1564,7 +2278,7 @@ public class Editor extends Screen {
             closeTouchKeyboard();
           }
           
-          if (scrolling) {
+          if (scrolling && !movingSlider) {
             power.setAwake();
             scrollVelocity = (input.mouseY()-prevMouseY);
           }
@@ -1580,8 +2294,8 @@ public class Editor extends Screen {
         // Power stuff
         // If we're dragging a sprite, we want framerates to be smooth, so temporarily
         // set framerates higher while we're dragging around.
-        if (placeables.selectedSprite != null) {
-          if (placeables.selectedSprite.repositionDrag.isDragging() || placeables.selectedSprite.resizeDrag.isDragging()) {
+        if (placeableSprites.selectedSprite != null) {
+          if (placeableSprites.selectedSprite.repositionDrag.isDragging() || placeableSprites.selectedSprite.resizeDrag.isDragging()) {
             engine.power.setAwake();
             
             // While we're here, a sprite is being dragged which means changes to the file.
@@ -1594,7 +2308,7 @@ public class Editor extends Screen {
           // Just check for changes
           // Technically (as of now) just for images (text will never see this code)
           // but can also apply to any new future placeables in the future.
-          if (placeables.selectedSprite.resizeDrag.isDragging()) {
+          if (placeableSprites.selectedSprite.resizeDrag.isDragging()) {
             changesMade = true;
           }
         }
@@ -1628,7 +2342,7 @@ public class Editor extends Screen {
             break;
             default:
               errorMessage = "An unknown error has occured.";
-              console.bugWarn("renderPhotoTaker: Unused error code.");
+              console.bugWarnOnce("renderPhotoTaker: Unused error code.");
             break;
           }
           text(errorMessage, WIDTH/2, HEIGHT/2+120);
@@ -1716,7 +2430,7 @@ public class Editor extends Screen {
     }
     
     public void endScreenAnimation() {
-      //free();
+      free();
       engine.allowShowCommandPrompt = true;
     }
     
@@ -1754,8 +2468,7 @@ public class Editor extends Screen {
 
 
 public class ReadOnlyEditor extends Editor {
-  private SpriteSystemPlaceholder readonlyEditorUI;
-  
+  protected SpriteSystemPlaceholder readonlyEditorUI;
   
   public ReadOnlyEditor(TWEngine engine, String entryPath, PGraphics c, boolean doMultithreaded) {
     super(engine, entryPath, c, doMultithreaded);
@@ -1792,9 +2505,12 @@ public class ReadOnlyEditor extends Editor {
     if (ui.buttonVary("back-button", "back_arrow_128", "Back")) {
       // This only exists because we can only have one prev screen at a time
       // and I swear to god I hate this and this is gonna get changed sooner or later.
-      if (!(engine.prevScreen instanceof PixelRealmWithUI)) {
+      // In fact I may call this with a TODO.
+      // TODO: Please change this. A weak spot that makes the editor class non-modular.
+      if (!(engine.getPrevScreen() instanceof PixelRealmWithUI)) {
         sound.stopMusic();
-        requestScreen(new Startup(engine));
+        previousScreen();
+        //requestScreen(new Startup(engine));
       }
       else {
         previousScreen();
@@ -1818,8 +2534,8 @@ public class ReadOnlyEditor extends Editor {
 
 
 public class CreditsScreen extends ReadOnlyEditor {
-  public final static String CREDITS_PATH        = "engine/acknowledgements.timewayentry";
-  public final static String CREDITS_PATH_PHONE  = "engine/acknowledgements_phone.timewayentry";
+  public final static String CREDITS_PATH        = "engine/entryscreens/acknowledgements.timewayentry";
+  public final static String CREDITS_PATH_PHONE  = "engine/entryscreens/acknowledgements_phone.timewayentry";
   
   public CreditsScreen(TWEngine engine) {
     // Kinda overcoming an unnecessary java limitation where super must be the first statement,
@@ -1837,6 +2553,434 @@ public class CreditsScreen extends ReadOnlyEditor {
     if (command.equals("/edit") || command.equals("/editcredits")) {
       console.log("Editing acknowledgements.");
       requestScreen(new Editor(engine, display.phoneMode ? engine.APPPATH+CREDITS_PATH_PHONE : engine.APPPATH+CREDITS_PATH));
+      return true;
+    }
+    else return false;
+  }
+}
+
+
+// TODO: Add minimized setting.
+
+public class SettingsScreen extends ReadOnlyEditor {
+  public final static String SETTINGS_PATH        = "engine/entryscreens/settings.timewayentry";
+  public final static String SETTINGS_PATH_PHONE  = "engine/entryscreens/settings_phone.timewayentry";
+  
+  public SettingsScreen(TWEngine engine) {
+    // Kinda overcoming an unnecessary java limitation where super must be the first statement,
+    // we choose the phone version (for condensed screens) or the normal version.
+    //super(engine, engine.display.phoneMode ? engine.APPPATH+SETTINGS_PATH_PHONE : engine.APPPATH+SETTINGS_PATH, null, false);
+    super(engine, engine.APPPATH+SETTINGS_PATH, null, false);
+    
+    loadSettings();
+    get("invalid_path_error").visible = !(file.exists(getInputField("home_directory").inputText) && file.isDirectory(getInputField("home_directory").inputText));
+  }
+  
+  
+  
+  
+    
+  protected BooleanFieldPlaceable getBooleanField(String name) {
+    if (!placeableset.containsKey(name)) {
+      console.warn("Setting "+name+" not found.");
+      return new BooleanFieldPlaceable("null");
+    }
+    try {
+      return (BooleanFieldPlaceable)get(name);
+    }
+    catch (ClassCastException e) {
+      console.bugWarn(name+" Wrong access type (trying to access BooleanFieldPlaceable but is "+get(name).getClass().getSimpleName());
+      return new BooleanFieldPlaceable("null");
+    }
+  }
+  
+  protected ButtonPlaceable getButton(String name) {
+    if (!placeableset.containsKey(name)) {
+      console.warn("Setting "+name+" not found.");
+      return new ButtonPlaceable("null");
+    }
+    try {
+      return (ButtonPlaceable)get(name);
+    }
+    catch (ClassCastException e) {
+      console.bugWarn(name+" Wrong access type (trying to access ButtonPlaceable but is "+get(name).getClass().getSimpleName());
+      return new ButtonPlaceable("null");
+    }
+  }
+  
+  protected InputFieldPlaceable getInputField(String name) {
+    if (!placeableset.containsKey(name)) {
+      console.warn("Setting "+name+" not found.");
+      return new InputFieldPlaceable("null");
+    }
+    try {
+    return (InputFieldPlaceable)get(name);
+    }
+    catch (ClassCastException e) {
+      console.bugWarn(name+" Wrong access type (trying to access InputFieldPlaceable but is "+get(name).getClass().getSimpleName());
+      return new InputFieldPlaceable("null");
+    }
+  }
+  
+  protected SliderFieldPlaceable getSliderField(String name) {
+    if (!placeableset.containsKey(name)) {
+      console.warn("Setting "+name+" not found.");
+      return new SliderFieldPlaceable("null");
+    }
+    try {
+    return (SliderFieldPlaceable)get(name);
+    }
+    catch (ClassCastException e) {
+      console.bugWarn(name+" Wrong access type (trying to access SliderFieldPlaceable but is "+get(name).getClass().getSimpleName());
+      return new SliderFieldPlaceable("null");
+    }
+  }
+  
+  protected SliderIntFieldPlaceable getSliderIntField(String name) {
+    if (!placeableset.containsKey(name)) {
+      console.warn("Setting "+name+" not found.");
+      return new SliderIntFieldPlaceable("null");
+    }
+    try {
+      return (SliderIntFieldPlaceable)get(name);
+    }
+    catch (ClassCastException e) {
+      console.bugWarn(name+" Wrong access type (trying to access SliderIntFieldPlaceable but is "+get(name).getClass().getSimpleName());
+      return new SliderIntFieldPlaceable("null");
+    }
+  }
+
+  protected OptionsFieldPlaceable getOptionsField(String name) {
+    if (!placeableset.containsKey(name)) {
+      console.warn("Setting "+name+" not found.");
+      return new OptionsFieldPlaceable("null");
+    }
+    try {
+    return (OptionsFieldPlaceable)get(name);
+    }
+    catch (ClassCastException e) {
+      console.bugWarn(name+" Wrong access type (trying to access OptionsFieldPlaceable but is "+get(name).getClass().getSimpleName());
+      return new OptionsFieldPlaceable("null");
+    }
+  }
+  
+  
+  private void loadSettings() {
+    getBooleanField("dynamic_framerate").state = settings.getBoolean("dynamic_framerate", true);
+    getBooleanField("more_ram").state = !settings.getBoolean("low_memory", false);
+    getBooleanField("scale_down_images").state = settings.getBoolean("auto_scale_down", false);
+    getSliderField("scroll_sensitivity").setVal(settings.getFloat("scroll_sensitivity", 20f));
+    
+    String newRealmAction = settings.getString("new_realm_action", "prompt");
+    if (newRealmAction.equals("prompt")) newRealmAction = "Prompt realm templates";
+    if (newRealmAction.equals("default")) newRealmAction = "Create default realm files";
+    if (newRealmAction.equals("nothing")) newRealmAction = "Do nothing";
+    getOptionsField("new_realm").selectedOption = newRealmAction;
+    
+    getSliderIntField("pixelation_scale").setVal(settings.getInt("pixelation_scale", 4)-1);
+    getBooleanField("enable_caching").state = settings.getBoolean("caching", true);
+    
+    String powerMode = settings.getString("force_power_mode", "Auto");
+    if (powerMode.equals("HIGH")) powerMode = "60 FPS";
+    if (powerMode.equals("NORMAL")) powerMode = "30 FPS";
+    if (powerMode.equals("SLEEPY")) powerMode = "10 FPS";
+    if (powerMode.equals("AUTO")) powerMode = "Auto";
+    getOptionsField("target_framerate").selectedOption = powerMode;
+    getBooleanField("sleep_when_inactive").state = settings.getBoolean("sleep_when_inactive", true);
+    
+    String cacheMissMethod = settings.getString("music_cache_miss_method", "loading_music");
+    if (!settings.getBoolean("cache_miss_no_music", false)) cacheMissMethod = "Play loading music";
+    if (settings.getBoolean("cache_miss_no_music", false)) cacheMissMethod = "Play nothing (silence)";
+    if (settings.getBoolean("gstreamer_startup_wait", false)) cacheMissMethod = "Wait for music service to start";
+    getOptionsField("cache_miss_method").selectedOption = cacheMissMethod;
+    
+    getInputField("home_directory").inputText = settings.getString("home_directory", System.getProperty("user.home").replace('\\', '/'));
+    getBooleanField("music_caching").state = settings.getBoolean("music_caching", true);
+    getBooleanField("backup_realm_files").state = settings.getBoolean("backup_realm_files", true);
+    getSliderField("field_of_view").setVal(settings.getFloat("fov", 60f));
+    getSliderField("volume").setVal(settings.getFloat("volume_normal", 1f));
+    getSliderField("minimized_volume").setVal(settings.getFloat("volume_quiet", 0.25f));
+    getBooleanField("show_fps").state = settings.getBoolean("show_fps", false);
+    getBooleanField("enable_plugins").state = settings.getBoolean("enable_plugins", false);
+  }
+  
+  public void endScreenAnimation() {
+    super.endScreenAnimation();
+    power.setDynamicFramerate(settings.setBoolean("dynamic_framerate", getBooleanField("dynamic_framerate").state));
+    engine.setLowMemory(!getBooleanField("more_ram").state);
+    settings.setBoolean("auto_scale_down", getBooleanField("scale_down_images").state);
+    input.scrollSensitivity = settings.setFloat("scroll_sensitivity", getSliderField("scroll_sensitivity").getVal());
+    
+    String selected = getOptionsField("new_realm").selectedOption;
+    if (selected.equals("Prompt realm templates")) {
+      settings.setString("new_realm_action", "prompt");
+    }
+    else if (selected.equals("Create default realm files")) {
+      settings.setString("new_realm_action", "default");
+    }
+    else if (selected.equals("Do nothing")) {
+      settings.setString("new_realm_action", "nothing");
+    }
+    
+    settings.setInt("pixelation_scale", getSliderIntField("pixelation_scale").getValInt());
+    settings.setBoolean("caching", getBooleanField("enable_caching").state);
+    power.allowMinimizedMode = settings.setBoolean("sleep_when_inactive", getBooleanField("sleep_when_inactive").state);
+    
+    selected = getOptionsField("target_framerate").selectedOption;
+    if (selected.equals("60 FPS")) selected = settings.setString("force_power_mode", "HIGH");
+    else if (selected.equals("30 FPS")) selected = settings.setString("force_power_mode", "NORMAL");
+    else if (selected.equals("10 FPS")) selected = settings.setString("force_power_mode", "SLEEPY");
+    else if (selected.equals("Auto")) selected = settings.setString("force_power_mode", "AUTO");
+    power.setForcedPowerMode(selected);
+    
+    selected = getOptionsField("cache_miss_method").selectedOption;
+    if (selected.equals("Play loading music")) {
+      sound.WAIT_FOR_GSTREAMER_START = settings.setBoolean("gstreamer_startup_wait", false);
+      sound.CACHE_MISS_NO_MUSIC = settings.setBoolean("cache_miss_no_music", false);
+    }
+    else if (selected.equals("Play nothing (silence)")) {
+      sound.WAIT_FOR_GSTREAMER_START = settings.setBoolean("gstreamer_startup_wait", false);
+      sound.CACHE_MISS_NO_MUSIC = settings.setBoolean("cache_miss_no_music", true);
+    }
+    else if (selected.equals("Wait for music service to start")) {
+      sound.WAIT_FOR_GSTREAMER_START = settings.setBoolean("gstreamer_startup_wait", true);
+      sound.CACHE_MISS_NO_MUSIC = settings.setBoolean("cache_miss_no_music", true);
+    }
+    
+    engine.DEFAULT_DIR = settings.setString("home_directory", file.directorify(getInputField("home_directory").inputText));
+    engine.CACHE_MUSIC = settings.setBoolean("music_caching", getBooleanField("music_caching").state); 
+    settings.setBoolean("backup_realm_files", getBooleanField("backup_realm_files").state); 
+    settings.setFloat("fov", getSliderField("field_of_view").getVal());
+    sound.VOLUME_NORMAL = settings.setFloat("volume_normal", getSliderField("volume").getVal());
+    sound.VOLUME_QUIET = settings.setFloat("volume_quiet", getSliderField("minimized_volume").getVal());
+    display.showFPS = settings.setBoolean("show_fps", getBooleanField("show_fps").state);
+    settings.setBoolean("enable_plugins", getBooleanField("enable_plugins").state);
+    
+    System.gc();
+  }
+  
+  public void content() {
+    //power.setAwake();
+    super.content();
+    
+    input.scrollSensitivity = getSliderField("scroll_sensitivity").getVal();
+    
+    display.showFPS = getBooleanField("show_fps").state;
+    
+    // Update volume (once every 10 frames cus I'm scared of changing it every frame).
+    if (app.frameCount % 10 == 0) {
+      sound.setMasterVolume(getSliderField("volume").getVal());
+    }
+    power.allowMinimizedMode = getBooleanField("sleep_when_inactive").state;
+    
+    // Show "not recommended" warning when target framerate is set to SLEEPY.
+    get("target_framerate_warning").visible = getOptionsField("target_framerate").selectedOption.equals("10 FPS");
+    
+    // Show "not found" error if home dir path is not valid.
+    if (input.keyOnce) {
+      if (file.exists(getInputField("home_directory").inputText) && file.isDirectory(getInputField("home_directory").inputText)) {
+        get("invalid_path_error").visible = false;
+      }
+      else {
+        get("invalid_path_error").visible = true;
+      }
+    }
+    
+    // Show "not recommended" warning when "wait for music service to start" is selected
+    get("music_cache_miss_warning").visible = (getOptionsField("cache_miss_method").selectedOption.equals("Wait for music service to start"));
+    
+    if (getButton("keybind_settings").clicked) {
+      sound.playSound("select_any");
+      requestScreen(new KeybindSettingsScreen(engine));
+    }
+  }
+  
+  protected boolean customCommands(String command) {
+    if (command.equals("/edit")) {
+      console.log("Editing settings.");
+      requestScreen(new Editor(engine, display.phoneMode ? engine.APPPATH+SETTINGS_PATH_PHONE : engine.APPPATH+SETTINGS_PATH));
+      return true;
+    }
+    else return false;
+  }
+}
+
+
+
+
+public class KeybindSettingsScreen extends ReadOnlyEditor {
+  public final static String KEYBIND_SETTING_PATH        = "engine/entryscreens/keybindSettings.timewayentry";
+  public final static String KEYBIND_SETTING_PATH_PHONE  = "engine/entryscreens/keybindSettings_phone.timewayentry";
+  
+  // When set to true, a prompt asking the user to enter a key or click will appear,
+  // which appears when changing a keybinding.
+  private boolean enterInputPrompt = false;
+  private boolean resetPrompt = false;
+  private String settingKey = "";
+  
+  // Technically, the settings and this code is so bad because it's redundant and doing things like changing
+  // the default controls means you need to change all instances of the controls used, PLUS you need to change
+  // the code here. 
+  // Bad coding practice, but I can't really see a way around it with the current system, and quite frankly, it
+  // isn't my top priority to keep this part of the code redundant-proof.
+  // It is, somehow, my priority to type long comments like this tho.
+  private String[] keybindings = {
+      "move_forward",
+      "move_backward",
+      "move_right",
+      "move_left",
+      "turn_right",
+      "turn_left",
+      "dash",
+      "search",
+      "jump",
+      "primary_action",
+      "secondary_action",
+      "menu",
+      "inventory_select_right",
+      "inventory_select_left",
+      "next_subtool",
+      "prev_subtool",
+      "scale_up",
+      "scale_down",
+      "prev_directory",
+      "move_slow"
+  };
+  
+  private char[] defaultBindings = {
+      'w',
+      's',
+      'd',
+      'a',
+      'e',
+      'q',
+      TWEngine.InputModule.SHIFT_KEY,
+      '\n',
+      ' ',
+      'o',
+      'p',
+      '\t',
+      '.',
+      ',',
+      ']',
+      '[',
+      '=',
+      '-',
+      '\b',
+      TWEngine.InputModule.ALT_KEY
+  };
+  
+  // Duplicate code but whatever.
+  protected ButtonPlaceable getButton(String name) {
+    if (!placeableset.containsKey(name)) {
+      console.warn("Setting "+name+" not found.");
+      return new ButtonPlaceable("null");
+    }
+    try {
+      return (ButtonPlaceable)get(name);
+    }
+    catch (ClassCastException e) {
+      console.bugWarn(name+" Wrong access type (trying to access ButtonPlaceable but is "+get(name).getClass().getSimpleName());
+      return new ButtonPlaceable("null");
+    }
+  }
+  
+  public KeybindSettingsScreen(TWEngine engine) {
+    //super(engine, engine.display.phoneMode ? engine.APPPATH+CREDITS_PATH_PHONE : engine.APPPATH+CREDITS_PATH);
+    super(engine, engine.APPPATH+KEYBIND_SETTING_PATH, null, false);
+    loadSettings();
+  }
+  
+  private void loadSettings() {
+    for (int i = 0; i < keybindings.length; i++) {
+      getButton(keybindings[i]).text = input.keyTextForm(settings.getKeybinding(keybindings[i], defaultBindings[i]));
+    }
+  }
+  
+  public void content() {
+    power.setAwake();
+    super.content();
+
+    app.fill(255);
+    app.textFont(engine.DEFAULT_FONT, 24);
+    app.textAlign(CENTER, CENTER);
+    if (enterInputPrompt) {
+      ui.useSpriteSystem(readonlyEditorUI);
+      //readonlyEditorUI.interactable = true;
+      readonlyEditorUI.sprite("keybinding_prompt_back", "black");
+      float x = readonlyEditorUI.getSprite("keybinding_prompt_back").getX();
+      float y = readonlyEditorUI.getSprite("keybinding_prompt_back").getY();
+      app.text("Enter key or mouse input...", x+300f, y+80f);
+      
+      if (display.getTimeSeconds() % 1f < 0.5f) {
+        display.imgCentre("keybinding_1_128", x+300f, y+130f);
+      }
+      else {
+        display.imgCentre("keybinding_2_128", x+300f, y+130f);
+      }
+      
+      if (input.keyOnce || input.shiftOnce || input.ctrlOnce || input.altOnce) {
+        enterInputPrompt = false;
+        settings.setKeybinding(settingKey, input.getLastKeyPressed());
+        getButton(settingKey).text = input.keyTextForm(input.getLastKeyPressed());
+      }
+      else if (input.primaryOnce) {
+        enterInputPrompt = false;
+        settings.setKeybinding(settingKey, TWEngine.InputModule.LEFT_CLICK);
+        getButton(settingKey).text = "Left click";
+      }
+      else if (input.secondaryOnce) {
+        enterInputPrompt = false;
+        settings.setKeybinding(settingKey, TWEngine.InputModule.RIGHT_CLICK);
+        getButton(settingKey).text = "Right click";
+      }
+    }
+    else if (resetPrompt) {
+      ui.useSpriteSystem(readonlyEditorUI);
+      //readonlyEditorUI.interactable = true;
+      readonlyEditorUI.sprite("keybinding_reset_back", "black");
+      float x = readonlyEditorUI.getSprite("keybinding_reset_back").getX();
+      float y = readonlyEditorUI.getSprite("keybinding_reset_back").getY();
+      app.text("Are you sure you want to reset to defaults?\nThis cannot be undone.", x+315f, y+50f);
+      
+      if (ui.buttonVary("keybindings_reset_yes", "tick_128", "Yes")) {
+        sound.playSound("select_any");
+        resetPrompt = false;
+        for (int i = 0; i < keybindings.length; i++) {
+          settings.setKeybinding(keybindings[i], defaultBindings[i]);
+          getButton(keybindings[i]).text = input.keyTextForm(defaultBindings[i]);
+        }
+        console.log("Reset keybindings.");
+      }
+      if (ui.buttonVary("keybindings_reset_no", "cross_128", "No")) {
+        sound.playSound("select_any");
+        resetPrompt = false;
+      }
+    }
+    else {
+      for (int i = 0; i < keybindings.length; i++) {
+        if (getButton(keybindings[i]).clicked) {
+          sound.playSound("select_any");
+          settingKey = keybindings[i];
+          enterInputPrompt = true;
+        }
+      }
+      
+      if (getButton("reset_button").clicked) {
+        sound.playSound("select_any");
+        resetPrompt = true;
+      }
+    }
+  }
+  
+  public void endScreenAnimation() {
+    
+  }
+  
+  protected boolean customCommands(String command) {
+    if (command.equals("/edit")) {
+      console.log("Editing settings.");
+      requestScreen(new Editor(engine, display.phoneMode ? engine.APPPATH+KEYBIND_SETTING_PATH_PHONE : engine.APPPATH+KEYBIND_SETTING_PATH));
       return true;
     }
     else return false;

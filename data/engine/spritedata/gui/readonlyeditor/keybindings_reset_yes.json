@@ -1,0 +1,17 @@
+{
+  "h": 70,
+  "vy0": 464,
+  "vx1": 694,
+  "vy2": 592,
+  "vx0": 566,
+  "vy1": 464,
+  "mode": "SINGLE",
+  "vx3": 566,
+  "vx2": 694,
+  "vy3": 592,
+  "w": 70,
+  "name": "keybindings_reset_yes",
+  "x": 566,
+  "y": 464,
+  "locked": false
+}

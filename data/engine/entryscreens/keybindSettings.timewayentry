@@ -1,0 +1,409 @@
+[
+  {
+    "button_color": "FF614D7D",
+    "size": 30,
+    "color": -1,
+    "x": 706,
+    "y": 1044,
+    "ID": "move_slow",
+    "text": "Move slowly",
+    "type": 8,
+    "button_color_hover": "FF8D70B5"
+  },
+  {
+    "size": 30,
+    "color": -1,
+    "x": 180,
+    "y": 1268,
+    "ID": "42850328",
+    "text": "Primary action",
+    "type": 1
+  },
+  {
+    "size": 30,
+    "color": -1,
+    "x": 179,
+    "y": 1326,
+    "ID": "53942680",
+    "text": "Secondary action",
+    "type": 1
+  },
+  {
+    "size": 30,
+    "color": -1,
+    "x": 183,
+    "y": 1517,
+    "ID": "32570178",
+    "text": "Previous directory",
+    "type": 1
+  },
+  {
+    "size": 30,
+    "color": -1,
+    "x": 162,
+    "y": 792,
+    "ID": "69220952",
+    "text": "Jump",
+    "type": 1
+  },
+  {
+    "button_color": "FF614D7D",
+    "size": 30,
+    "color": -1,
+    "x": 706,
+    "y": 600,
+    "ID": "move_backward",
+    "text": "Backward",
+    "type": 8,
+    "button_color_hover": "FF8D70B5"
+  },
+  {
+    "size": 30,
+    "color": -1,
+    "x": 166,
+    "y": 1047,
+    "ID": "80958312",
+    "text": "Move slowly",
+    "type": 1
+  },
+  {
+    "size": 30,
+    "color": -1,
+    "x": 162,
+    "y": 726,
+    "ID": "67185720",
+    "text": "Right",
+    "type": 1
+  },
+  {
+    "button_color": "FF614D7D",
+    "size": 30,
+    "color": -1,
+    "x": 706,
+    "y": 727,
+    "ID": "move_right",
+    "text": "Right",
+    "type": 8,
+    "button_color_hover": "FF8D70B5"
+  },
+  {
+    "button_color": "FFB8797C",
+    "size": 30,
+    "color": -1,
+    "x": 175,
+    "y": 385,
+    "ID": "reset_button",
+    "text": "Reset to defaults",
+    "type": 8,
+    "button_color_hover": "FFF59398"
+  },
+  {
+    "size": 30,
+    "color": -1,
+    "x": 183,
+    "y": 1869,
+    "ID": "73608056",
+    "text": "Previous subtool",
+    "type": 1
+  },
+  {
+    "button_color": "FF614D7D",
+    "size": 30,
+    "color": -1,
+    "x": 706,
+    "y": 537,
+    "ID": "move_forward",
+    "text": "Forward",
+    "type": 8,
+    "button_color_hover": "FF8D70B5"
+  },
+  {
+    "button_color": "FF614D7D",
+    "size": 30,
+    "color": -1,
+    "x": 706,
+    "y": 917,
+    "ID": "turn_right",
+    "text": "Turn right",
+    "type": 8,
+    "button_color_hover": "FF8D70B5"
+  },
+  {
+    "button_color": "FF614D7D",
+    "size": 30,
+    "color": -1,
+    "x": 706,
+    "y": 1451,
+    "ID": "search",
+    "text": "File search",
+    "type": 8,
+    "button_color_hover": "FF8D70B5"
+  },
+  {
+    "button_color": "FF614D7D",
+    "size": 30,
+    "color": -1,
+    "x": 706,
+    "y": 1327,
+    "ID": "secondary_action",
+    "text": "Secondary",
+    "type": 8,
+    "button_color_hover": "FF8D70B5"
+  },
+  {
+    "size": 30,
+    "color": -1,
+    "x": 162,
+    "y": 598,
+    "ID": "96180776",
+    "text": "Backward",
+    "type": 1
+  },
+  {
+    "size": 30,
+    "color": -1,
+    "x": 163,
+    "y": 976,
+    "ID": "95649408",
+    "text": "Dash",
+    "type": 1
+  },
+  {
+    "button_color": "FF614D7D",
+    "size": 30,
+    "color": -1,
+    "x": 706,
+    "y": 1740,
+    "ID": "scale_down",
+    "text": "Shrink",
+    "type": 8,
+    "button_color_hover": "FF8D70B5"
+  },
+  {
+    "button_color": "FF614D7D",
+    "size": 30,
+    "color": -1,
+    "x": 706,
+    "y": 853,
+    "ID": "turn_left",
+    "text": "Turn left",
+    "type": 8,
+    "button_color_hover": "FF8D70B5"
+  },
+  {
+    "size": 30,
+    "color": -1,
+    "x": 162,
+    "y": 859,
+    "ID": "33972688",
+    "text": "Turn left",
+    "type": 1
+  },
+  {
+    "button_color": "FF614D7D",
+    "size": 30,
+    "color": -1,
+    "x": 706,
+    "y": 663,
+    "ID": "move_left",
+    "text": "Left",
+    "type": 8,
+    "button_color_hover": "FF8D70B5"
+  },
+  {
+    "button_color": "FF614D7D",
+    "size": 30,
+    "color": -1,
+    "x": 706,
+    "y": 1864,
+    "ID": "prev_subtool",
+    "text": "Prev subtool",
+    "type": 8,
+    "button_color_hover": "FF8D70B5"
+  },
+  {
+    "button_color": "FF614D7D",
+    "size": 30,
+    "color": -1,
+    "x": 706,
+    "y": 789,
+    "ID": "jump",
+    "text": "Jump",
+    "type": 8,
+    "button_color_hover": "FF8D70B5"
+  },
+  {
+    "size": 30,
+    "color": -1,
+    "x": 185,
+    "y": 1739,
+    "ID": "59343052",
+    "text": "Shrink",
+    "type": 1
+  },
+  {
+    "button_color": "FF614D7D",
+    "size": 30,
+    "color": -1,
+    "x": 706,
+    "y": 1512,
+    "ID": "prev_directory",
+    "text": "Previous directory",
+    "type": 8,
+    "button_color_hover": "FF8D70B5"
+  },
+  {
+    "size": 30,
+    "color": -1,
+    "x": 160,
+    "y": 534,
+    "ID": "14140588",
+    "text": "Forward",
+    "type": 1
+  },
+  {
+    "size": 30,
+    "color": -1,
+    "x": 181,
+    "y": 1453,
+    "ID": "05387300.5",
+    "text": "File search",
+    "type": 1
+  },
+  {
+    "size": 30,
+    "color": -1,
+    "x": 184,
+    "y": 1677,
+    "ID": "46430208",
+    "text": "Grow",
+    "type": 1
+  },
+  {
+    "size": 16,
+    "color": -7303024,
+    "x": 177,
+    "y": 1636,
+    "ID": "30680692",
+    "text": "The following are used for the morpher tool.",
+    "type": 1
+  },
+  {
+    "button_color": "FF614D7D",
+    "size": 30,
+    "color": -1,
+    "x": 706,
+    "y": 1677,
+    "ID": "scale_up",
+    "text": "Grow",
+    "type": 8,
+    "button_color_hover": "FF8D70B5"
+  },
+  {
+    "size": 30,
+    "color": -1,
+    "x": 163,
+    "y": 663,
+    "ID": "51268412",
+    "text": "Left",
+    "type": 1
+  },
+  {
+    "button_color": "FF614D7D",
+    "size": 30,
+    "color": -1,
+    "x": 706,
+    "y": 1265,
+    "ID": "primary_action",
+    "text": "Primary",
+    "type": 8,
+    "button_color_hover": "FF8D70B5"
+  },
+  {
+    "size": 30,
+    "color": -1,
+    "x": 162,
+    "y": 917,
+    "ID": "91565624",
+    "text": "Turn right",
+    "type": 1
+  },
+  {
+    "button_color": "FF614D7D",
+    "size": 30,
+    "color": -1,
+    "x": 706,
+    "y": 1389,
+    "ID": "menu",
+    "text": "Menu",
+    "type": 8,
+    "button_color_hover": "FF8D70B5"
+  },
+  {
+    "size": 40,
+    "color": -7303024,
+    "x": 152,
+    "y": 1205,
+    "ID": "10058612",
+    "text": "Control keys",
+    "type": 1
+  },
+  {
+    "button_color": "FF614D7D",
+    "size": 30,
+    "color": -1,
+    "x": 706,
+    "y": 1802,
+    "ID": "next_subtool",
+    "text": "Next subtool",
+    "type": 8,
+    "button_color_hover": "FF8D70B5"
+  },
+  {
+    "size": 30,
+    "color": -1,
+    "x": 179,
+    "y": 1386,
+    "ID": "81209168",
+    "text": "Open menu",
+    "type": 1
+  },
+  {
+    "size": 70,
+    "color": -1,
+    "x": 117,
+    "y": 272,
+    "ID": "76649048",
+    "text": "Keybindings",
+    "type": 1
+  },
+  {
+    "size": 40,
+    "color": -7303024,
+    "x": 144,
+    "y": 473,
+    "ID": "47999108",
+    "text": "Movement keys",
+    "type": 1
+  },
+  {
+    "size": 30,
+    "color": -1,
+    "x": 183,
+    "y": 1807,
+    "ID": "49817808",
+    "text": "Next subtool",
+    "type": 1
+  },
+  {
+    "button_color": "FF614D7D",
+    "size": 30,
+    "color": -1,
+    "x": 706,
+    "y": 980,
+    "ID": "dash",
+    "text": "Dash",
+    "type": 8,
+    "button_color_hover": "FF8D70B5"
+  }
+]

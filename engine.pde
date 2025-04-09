@@ -42,6 +42,10 @@ import java.util.Collections;
 import java.lang.reflect.InvocationTargetException;
 
 
+//Garbage Collection Tuning: While you can't change the heap size dynamically, you can tune garbage collection behavior using JVM options such as:
+
+//-XX:MaxHeapFreeRatio: Controls the maximum percentage of heap that can be free after garbage collection.
+//-XX:MinHeapFreeRatio: Controls the minimum percentage of heap that should be free after garbage collection.
 
 
 // Timeway's engine code.
@@ -49,9 +53,7 @@ import java.lang.reflect.InvocationTargetException;
 public class TWEngine {
   //*****************CONSTANTS SETTINGS**************************
   // Info and versioning
-  private static final String VERSION     = "0.1.4";
-  public static final String VERSION_DESCRIPTION = 
-    "";
+  private static final String VERSION     = "0.1.5";
   
   public String getAppName() {
     return "Timeway";
@@ -78,22 +80,14 @@ public class TWEngine {
   public       String DEFAULT_UPDATE_PATH = "";  // Set up by setup()
   public final String BOILERPLATE_PATH    = "engine/plugindata/plugin_boilerplate.java";
   public final String PDFTOPNG_PATH       = "engine/bin/windows/pdftopng.exe";
+  public final String LOW_MEM_EXE         = "engine/other/run_low_mem.exe";
+  public final String NORMAL_MEM_EXE      = "engine/other/run_normal.exe";
   
-  public String CONSOLE_FONT() {
-    return "engine/font/SourceCodePro-Regular.ttf";
-  }
-  public String IMG_PATH() {
-    return "engine/img/";
-  }
-  public String FONT_PATH() {
-    return "engine/font/";
-  }
-  public String DEFAULT_FONT_PATH() {
-    return "engine/font/Typewriter.vlw";
-  }
-  public String SHADER_PATH() {
-    return "engine/shaders/";
-  }
+  public String CONSOLE_FONT() {return "engine/font/SourceCodePro-Regular.ttf";}
+  public String IMG_PATH() {return "engine/img/";}
+  public String FONT_PATH() {return "engine/font/";}
+  public String DEFAULT_FONT_PATH() {return "engine/font/Typewriter.vlw";}
+  public String SHADER_PATH() {return "engine/shaders/";}
   public String SOUND_PATH() { return "engine/sounds/"; }
   public String CONFIG_PATH() { return "config.json"; }
   public String KEYBIND_PATH() { return "keybindings.json"; }
@@ -114,7 +108,10 @@ public class TWEngine {
   public static final int     POWER_CHECK_INTERVAL = 5000;
   public static final String  CACHE_COMPATIBILITY_VERSION = "0.3";
   public static final String  CACHE_FILE_TYPE = "png";
-  public static final boolean CACHE_MUSIC = true;
+  public static final int     MAX_RAM_NORMAL = 1024*1024*1024; // 1GB
+  public static final int     MAX_RAM_LIMITED = 1024*1024*200; // 200MB
+  
+  public boolean CACHE_MUSIC = false;
   
 
   // Dynamic constants (changes based on things like e.g. configuration file)
@@ -125,7 +122,7 @@ public class TWEngine {
   
   public final String SKETCHIO_EXTENSION = "sketchio";
   public final String ENTRY_EXTENSION = "timewayentry";
-  public final String[] SHORTCUT_EXTENSION = {"timewayshortcut"};
+  public final String SHORTCUT_EXTENSION = "timewayshortcut";
 
 
   //*************************************************************
@@ -137,7 +134,7 @@ public class TWEngine {
   
   // Modules
   public Console console;
-  public SharedResourcesModule sharedResources;
+  public SharedResourcesModule sharedResources;  // TODO: Unused module, remove shared resources.
   public SettingsModule settings;
   public DisplayModule display;
   public PowerModeModule power;
@@ -157,27 +154,24 @@ public class TWEngine {
 
   // Screens
   public Screen currScreen;
-  public Screen prevScreen;
+  public Screen prevScreenTransition;
+  public Stack<Screen> screenStack = new Stack(64);
+  private DummyScreen dummyScreen;
   public boolean transitionScreens = false;
-  public float transition = 0;
+  public float transition = 0f;
   public int transitionDirection = RIGHT;
   public boolean initialScreen = true;
 
 
-  // Settings & config
-  public boolean devMode = false;
-
   // Other / doesn't fit into any categories.
-  public boolean wireframe;
-  public SpriteSystemPlaceholder spriteSystemPlaceholder;
   public long lastTimestamp;
   public String lastTimestampName = null;
   public int timestampCount = 0;
   public boolean allowShowCommandPrompt = true;
   public boolean playWhileUnfocused = true;
   public HashMap<Long, Float> noiseCache = new HashMap<Long, Float>();
-  public HashSet<Float> noiseCacheConflicts = new HashSet<Float>();
   public boolean focusedMode = true;
+  public boolean lowMemory = true;
   
   
   
@@ -268,188 +262,150 @@ public class TWEngine {
   public class SettingsModule {
       private JSONObject settings;
       private JSONObject keybindings;
-      private HashMap<String, Object> defaultSettings = new HashMap<String, Object>();
-      private HashMap<String, Character> defaultKeybindings = new HashMap<String, Character>();
+      public int saveSettingsTimeout = 0;
       
       public SettingsModule() {
-        loadDefaultSettings();
         if (!isAndroid()) {
           // Normal you expect it.
-          settings = loadConfig(APPPATH+CONFIG_PATH(), defaultSettings);
-          keybindings = loadConfig(APPPATH+KEYBIND_PATH(), defaultKeybindings);
+          settings = loadConfig(APPPATH+CONFIG_PATH());
+          keybindings = loadConfig(APPPATH+KEYBIND_PATH());
         }
         else {
           // However, in android, we're not allowed to write to the usual place.
           // Android gives you a specific variable dir to write to, so we must use that instead.
-          settings = loadConfig(getAndroidWriteableDir()+CONFIG_PATH(), defaultSettings);
-          keybindings = loadConfig(getAndroidWriteableDir()+KEYBIND_PATH(), defaultKeybindings);
+          settings = loadConfig(getAndroidWriteableDir()+CONFIG_PATH());
+          keybindings = loadConfig(getAndroidWriteableDir()+KEYBIND_PATH());
         }
       }
       
-      public char getKeybinding(String keybindName) {
-        String s = keybindings.getString(keybindName);
-        char k;
-        if (s == null) {
-          if (defaultKeybindings.get(keybindName) != null) k = defaultKeybindings.get(keybindName);
-          else { console.bugWarnOnce("getKeybinding: unknown keyaction "+keybindName);
-          return 0; }
+      public void saveSettings() {
+        if (saveSettingsTimeout <= 0) {
+          saveJSONObject(settings, APPPATH+CONFIG_PATH());
+          saveJSONObject(keybindings, APPPATH+KEYBIND_PATH());
+          saveSettingsTimeout = 60;
         }
-        else k = s.charAt(0);
-        return k;
       }
       
-      public boolean getBoolean(String setting) {
-        boolean b = false;
-        try {
-          b = settings.getBoolean(setting);
-        }
-        catch (NullPointerException e) {
-          if (defaultSettings.containsKey(setting)) {
-            b = (boolean)defaultSettings.get(setting);
-          } else {
-            console.warnOnce("Setting "+setting+" does not exist.");
-            return false;
+      public void update() {
+        if (saveSettingsTimeout > 0) {
+          saveSettingsTimeout--;
+          if (saveSettingsTimeout == 0) {
+            saveSettings();
+            saveSettingsTimeout = 0;
           }
         }
-        return b;
       }
-    
-      public float getFloat(String setting) {
-        float f = 0.0;
-        try {
-          f = settings.getFloat(setting);
-        }
-        catch (RuntimeException e) {
-          if (defaultSettings.containsKey(setting)) {
-            f = (float)defaultSettings.get(setting);
-          } else {
-            console.warnOnce("Setting "+setting+" does not exist.");
-            return 0.;
-          }
-        }
-        return f;
-      }
-    
-      public String getString(String setting) {
-        String s = "";
-        s = settings.getString(setting);
-        if (s == null) {
-          if (defaultSettings.containsKey(setting)) {
-            s = (String)defaultSettings.get(setting);
-          } else {
-            console.warnOnce("Setting "+setting+" does not exist.");
-            return "";
-          }
-        }
-        return s;
-      }
-    
-      public final int LEFT_CLICK = 1;
-      public final int RIGHT_CLICK = 2;
       
-      // BIG TODO: we really need to isolate this into seperate screen objects rather than the engine.
-      public void loadDefaultSettings() {
-        defaultSettings = new HashMap<String, Object>();
-        defaultSettings.putIfAbsent("fullscreen", false);
-        defaultSettings.putIfAbsent("scrollSensitivity", 20.0);
-        defaultSettings.putIfAbsent("dynamicFramerate", true);
-        defaultSettings.putIfAbsent("lowBatteryPercent", 50.0);
-        defaultSettings.putIfAbsent("autoScaleDown", false);
-        defaultSettings.putIfAbsent("defaultSystemFont", "Typewriter");
-        if (isAndroid()) {
-          defaultSettings.putIfAbsent("homeDirectory", "/storage/emulated/0/");
+      public void forceSaveSettings() {
+        saveJSONObject(settings, APPPATH+CONFIG_PATH());
+        saveJSONObject(keybindings, APPPATH+KEYBIND_PATH());
+      }
+      
+      public void setKeybinding(String keybindName, char kkey) {
+        keybindings.setString(keybindName, ""+Character.toLowerCase(kkey));
+        saveSettings();
+      }
+      
+      public char getKeybinding(String keybindName, char defaultChar) {
+        
+        if (keybindings.isNull(keybindName)) {
+          keybindings.setString(keybindName, ""+defaultChar);
+          saveSettings();
+          return defaultChar;
         }
         else {
-          defaultSettings.putIfAbsent("homeDirectory", System.getProperty("user.home").replace('\\', '/'));
+          String s = keybindings.getString(keybindName);
+          if (s.length() == 0) {
+            keybindings.setString(keybindName, ""+defaultChar);
+            return defaultChar;
+          }
+          return s.charAt(0);
         }
-        defaultSettings.putIfAbsent("forcePowerMode", "NONE");
-        defaultSettings.putIfAbsent("volumeNormal", 1.0);
-        defaultSettings.putIfAbsent("volumeQuiet", 0.0);
-        defaultSettings.putIfAbsent("fasterImageImport", false);
-        defaultSettings.putIfAbsent("waitForGStreamerStartup", true);
-        defaultSettings.putIfAbsent("enableExperimentalGifs", false);
-        defaultSettings.putIfAbsent("cache_miss_no_music", true);
-        defaultSettings.putIfAbsent("touch_controls", false);
-        defaultSettings.putIfAbsent("text_cursor_char", "_");
-    
-        defaultKeybindings = new HashMap<String, Character>();
-        defaultKeybindings.putIfAbsent("CONFIG_VERSION", char(1));
-        defaultKeybindings.putIfAbsent("moveForewards", 'w');
-        defaultKeybindings.putIfAbsent("moveBackwards", 's');
-        defaultKeybindings.putIfAbsent("moveLeft", 'a');
-        defaultKeybindings.putIfAbsent("moveRight", 'd');
-        defaultKeybindings.putIfAbsent("lookLeft", 'q');
-        defaultKeybindings.putIfAbsent("lookRight", 'e');
-        defaultKeybindings.putIfAbsent("lookLeftTouch", char(253));
-        defaultKeybindings.putIfAbsent("lookRightTouch", char(254));
-        defaultKeybindings.putIfAbsent("menu", '\t');
-        defaultKeybindings.putIfAbsent("menuSelect", '\t');
-        defaultKeybindings.putIfAbsent("jump", ' ');
-        defaultKeybindings.putIfAbsent("playPause", ' ');
-        defaultKeybindings.putIfAbsent("sneak", char(0x0F));
-        defaultKeybindings.putIfAbsent("dash", 'r');
-        defaultKeybindings.putIfAbsent("scaleUp", '=');
-        defaultKeybindings.putIfAbsent("scaleDown", '-');
-        defaultKeybindings.putIfAbsent("scaleUpSlow", '+');
-        defaultKeybindings.putIfAbsent("scaleDownSlow", '_');
-        defaultKeybindings.putIfAbsent("primaryAction", 'o');
-        defaultKeybindings.putIfAbsent("secondaryAction", 'p');
-        defaultKeybindings.putIfAbsent("inventorySelectLeft", ',');
-        defaultKeybindings.putIfAbsent("inventorySelectRight", '.');
-        defaultKeybindings.putIfAbsent("scaleDownSlow", '_');
-        defaultKeybindings.putIfAbsent("showCommandPrompt", '/');
-        defaultKeybindings.putIfAbsent("prevDirectory", char(8));
-        defaultKeybindings.putIfAbsent("nextSubTool", ']');
-        defaultKeybindings.putIfAbsent("prevSubTool", '[');
-        defaultKeybindings.putIfAbsent("search", '\n');
-        for (int i = 0; i < 10; i++) defaultKeybindings.putIfAbsent("quickWarp"+str(i), str(i).charAt(0));
       }
       
-      public JSONObject loadConfig(String configPath, HashMap defaultConfig) {
-      File f = new File(configPath);
-      JSONObject returnSettings = null;
-      boolean newConfig = false;
-      if (!f.exists()) {
-        newConfig = true;
-      } else {
-        try {
-          returnSettings = loadJSONObject(configPath);
+      public boolean getBoolean(String setting, boolean defaultSetting) {
+        if (settings.isNull(setting)) {
+          settings.setBoolean(setting, defaultSetting);
+          saveSettings();
+          return defaultSetting;
         }
-        catch (RuntimeException e) {
-          console.warn("There's an error in the config file. Loading default settings.");
-          newConfig = true;
+        else {
+          return settings.getBoolean(setting);
         }
       }
-  
-      // New config
-      if (newConfig) {
-        console.log("Config file not found, creating one.");
-        returnSettings = new JSONObject();
-  
-  
-        for (String k : (Iterable<String>)defaultConfig.keySet()) {
-          if (defaultConfig.get(k) instanceof Boolean)
-            returnSettings.setBoolean(k, (boolean)defaultConfig.get(k));
-          else if (defaultConfig.get(k) instanceof String)
-            returnSettings.setString(k, (String)defaultConfig.get(k));
-          else if (defaultConfig.get(k) instanceof Float)
-            returnSettings.setFloat(k, (float)defaultConfig.get(k));
-          else if (defaultConfig.get(k) instanceof Character) {
-            String s = "";
-            s += defaultConfig.get(k);
-            returnSettings.setString(k, s);
+    
+      public float getFloat(String setting, float defaultSetting) {
+        if (settings.isNull(setting)) {
+          settings.setFloat(setting, defaultSetting);
+          saveSettings();
+          return defaultSetting;
+        }
+        else {
+          return settings.getFloat(setting);
+        }
+      }
+    
+      public String getString(String setting, String defaultSetting) {
+        if (settings.isNull(setting)) {
+          settings.setString(setting, defaultSetting);
+          saveSettings();
+          return defaultSetting;
+        }
+        else {
+          return settings.getString(setting);
+        }
+      }
+      
+      public int getInt(String setting, int defaultSetting) {
+        if (settings.isNull(setting)) {
+          settings.setInt(setting, defaultSetting);
+          saveSettings();
+          return defaultSetting;
+        }
+        else {
+          return settings.getInt(setting);
+        }
+      }
+      
+      public boolean setBoolean(String setting, boolean value) {
+        settings.setBoolean(setting, value);
+        saveSettings();
+        return value;
+      }
+    
+      public float setFloat(String setting, float value) {
+        settings.setFloat(setting, value);
+        saveSettings();
+        return value;
+      }
+    
+      public String setString(String setting, String value) {
+        settings.setString(setting, value);
+        saveSettings();
+        return value;
+      }
+      
+      public int setInt(String setting, int value) {
+        settings.setInt(setting, value);
+        saveSettings();
+        return value;
+      }
+      
+      
+      public JSONObject loadConfig(String configPath) {
+        File f = new File(configPath);
+        if (!f.exists()) {
+          return new JSONObject();
+        } else {
+          try {
+            return loadJSONObject(configPath);
+          }
+          catch (RuntimeException e) {
+            console.warn("There's an error in the config file. Loading default settings.");
+            return new JSONObject();
           }
         }
-  
-        try {
-          saveJSONObject(returnSettings, configPath);
-        }
-        catch (RuntimeException e) {
-          console.warn("Failed to save config.");
-        }
       }
-      return returnSettings;
-    }
   }
   
   
@@ -540,7 +496,8 @@ public class TWEngine {
     private final int RECOVERY_PHASE_2_FRAMES = 120;   // 2 seconds
     
     public PowerModeModule() {
-      setForcedPowerMode(settings.getString("forcePowerMode"));
+      setForcedPowerMode(settings.getString("force_power_mode", "AUTO"));
+      allowMinimizedMode = settings.getBoolean("sleep_when_inactive", true);
     }
     
     public void setDynamicFramerate(boolean b) {
@@ -684,7 +641,7 @@ public class TWEngine {
           //console.log("Power mode SLEEPY");
           break;
         case MINIMAL:
-          frameRate(1); //idk for now
+          frameRate(2); //idk for now
           //console.log("Power mode MINIMAL");
           break;
         }
@@ -1072,8 +1029,9 @@ public class TWEngine {
     public final int CLEARLIST_SIZE = 4096;
     private float delta = 0.;
     private float forcedDelta = -1f;
+    public boolean wireframe;
     
-    private boolean showFPS = false;
+    public boolean showFPS = false;
     
     public long rendererTime = 0;
     public long logicTime  = 0;
@@ -1186,6 +1144,8 @@ public class TWEngine {
         generateErrorImg();
         generateErrorShader();
         currentPG = g;
+        
+        showFPS = settings.getBoolean("show_fps", false);
         
         resetTimes();
     }
@@ -1506,6 +1466,7 @@ public class TWEngine {
         //  currentPG.noStroke();
           
         //}
+        image.pixels = null;
         
         return;
       } else {
@@ -1545,6 +1506,9 @@ public class TWEngine {
           // if a serious error occures
           return;
         }
+        catch (NullPointerException e2) {
+          return;
+        }
         
         // Annnnd a wireframe
         if (wireframe) {
@@ -1565,9 +1529,6 @@ public class TWEngine {
         } else {
           currentPG.noStroke();
         }
-        
-        
-        
         return;
       } else {
         app.noStroke();
@@ -1681,14 +1642,13 @@ public class TWEngine {
       
       if (transitionScreens) {
         power.setAwake();
-        transition = ui.smoothLikeButter(transition);
   
         // Sorry for the code duplication!
         switch (transitionDirection) {
           case RIGHT:
             app.pushMatrix();
-            prevScreen.screenx = ((WIDTH*transition)-WIDTH)*displayScale;
-            prevScreen.display();
+            getPrevScreen().screenx = ((WIDTH*transition)-WIDTH)*displayScale;
+            getPrevScreen().display();
             app.popMatrix();
     
     
@@ -1699,8 +1659,8 @@ public class TWEngine {
             break;
           case LEFT:
             app.pushMatrix();
-            prevScreen.screenx = ((WIDTH-(WIDTH*transition))*displayScale);
-            prevScreen.display();
+            prevScreenTransition.screenx = ((WIDTH-(WIDTH*transition))*displayScale);
+            prevScreenTransition.display();
             app.popMatrix();
     
     
@@ -1710,11 +1670,19 @@ public class TWEngine {
             app.popMatrix();
             break;
         }
+        transition = ui.smoothLikeButter(transition);
+            //console.log("currScreen: "+currScreen.getClass().getSimpleName());
+            //console.log("prevScreen: "+getPrevScreen().getClass().getSimpleName());
   
         if (transition < 0.001) {
           transitionScreens = false;
           currScreen.startupAnimation();
-          prevScreen.endScreenAnimation();
+          if (prevScreenTransition != null) {
+            prevScreenTransition.endScreenAnimation();
+            prevScreenTransition = null;
+          }
+          
+          //console.log("END");
   
           // If we're just getting started, we need to get a feel for the framerate since we don't want to start
           // slow and choppy. Once we're done transitioning to the first (well, after the startup) screen, go into
@@ -2180,7 +2148,177 @@ public class TWEngine {
     }
     
     
+    ///////////////////////////////////////////////////////
+    // CUSTOM SLIDERS
     
+    // When the user is clicking and dragging a node, the occupied node is set here so that it can continue to be scrolled and
+    // other scrollNodes don't intervene.
+    private CustomNode usingNode = null;
+    
+    public abstract class CustomNode {
+      public String label = "";
+      public float x = 0.;
+      public float wi = 100.;
+      private float y = 0;
+      
+      public float valFloat = 0.;
+      public boolean valBool = false;
+      public int valInt = 0;
+      
+      public static final float CONTROL_X = 300.;
+      public CustomNode(String l) {
+        label = l;
+      }
+      
+      public float getHeight() {
+        return 100.;
+      }
+      
+      public boolean inBox() {
+        boolean hovering = (mouseX() > x+CONTROL_X-10 && mouseY() > y && mouseX() < x+wi+10 && mouseY() < y+getHeight());
+        return hovering && !miniMenuShown();
+      }
+      
+      public boolean getValBool() {
+        return false;
+      }
+      
+      public void detectUserInput() {
+        if (usingNode == null && inBox() && input.primaryOnce) {
+          usingNode = this;
+        }
+        if (usingNode != null && !input.primaryDown) {
+          usingNode = null;
+        }
+      }
+      
+      public void display(float x, float y) {
+        this.x = x;
+        this.y = y;
+        y += 20;
+        
+        detectUserInput();
+        
+        app.fill(255);
+        app.textFont(DEFAULT_FONT, 20);
+        app.textAlign(LEFT, CENTER);
+        
+        app.text(label, x, y);
+      }
+    }
+    
+    public class CustomSlider extends CustomNode {
+      public float min = 0.;
+      public float max = 100.;
+      protected String maxLabel = null;
+      protected String minLabel = null;
+      
+      
+      public CustomSlider(String l, float min, float max, float initVal) {
+        super(l);
+        this.min = min;
+        this.max = max;
+        this.valFloat = initVal;
+      }
+      
+      @Override
+      public float getHeight() {
+        return 40.;
+      }
+      
+      protected void getSliderVal() {
+        if (usingNode == this) {
+          app.stroke(160);
+          valFloat = min+((mouseX()-x-CONTROL_X)/(wi-CONTROL_X))*(max-min);
+          valFloat = min(max(valFloat, min), max);
+          power.setAwake();
+        }
+        else if (usingNode == null) {
+          if (inBox()) {
+            app.stroke(160);
+          }
+          else {
+            app.stroke(127);
+          }
+        }
+        else {
+          app.stroke(127);
+        }
+      }
+      
+      protected void showVal(float y) {
+        app.fill(255);
+        app.textFont(DEFAULT_FONT, 26);
+        app.textAlign(RIGHT, CENTER);
+        
+        String disp = nf(valFloat, 0, 2);
+        if (valFloat == max && maxLabel != null) disp = maxLabel;
+        if (valFloat == min && minLabel != null) disp = minLabel;
+        app.text(disp, x+CONTROL_X-12, y);
+      }
+      
+      protected void renderSlider(float y) {
+        app.strokeWeight(5);
+        app.line(x+CONTROL_X, y, x+wi, y);
+        
+        app.noStroke();
+        app.fill(255);
+        
+        float percentage = (valFloat-min)/(max-min);
+        
+        app.rect(x+CONTROL_X+percentage*(wi-CONTROL_X)-5, y-15, 10, 30);
+      }
+      
+      public void display(float x, float y) {
+        super.display(x, y);
+        y += 20;
+        getSliderVal();
+        showVal(y);
+        renderSlider(y);
+      }
+      
+      public void setWhenMax(String label) {
+        maxLabel = label;
+      }
+      
+      public void setWhenMin(String label) {
+        minLabel = label;
+      }
+    }
+    
+    
+    public class CustomSliderInt extends CustomSlider {
+      
+      public CustomSliderInt(String l, int min, int max, int initVal) {
+        super(l, (float)min, (float)max, (float)initVal);
+        valInt = initVal;
+      }
+      
+      @Override
+      protected void showVal(float y) {
+        app.fill(255);
+        app.textFont(DEFAULT_FONT, 26);
+        app.textAlign(RIGHT, CENTER);
+        
+        String disp = str((int)round(valFloat));
+        if (valFloat == max && maxLabel != null) disp = maxLabel;
+        if (valFloat == min && minLabel != null) disp = minLabel;
+        app.text(disp, x+CONTROL_X-12, y);
+      }
+      
+      @Override
+      protected void renderSlider(float y) {
+        app.strokeWeight(5);
+        app.line(x+CONTROL_X, y, x+wi, y);
+        
+        app.noStroke();
+        app.fill(255);
+        
+        valInt = round(valFloat);
+        float percentage = (round(valFloat)-min)/(max-min);
+        app.rect(x+CONTROL_X+percentage*(wi-CONTROL_X)-5, y-15, 10, 30);
+      }
+    }
     
     
     
@@ -2208,7 +2346,12 @@ public class TWEngine {
       display.img(img, x, y, w, h);
       
       if (miniMenuShown()) return false;
-      return (input.mouseX() > x && input.mouseX() < x+w && input.mouseY() > y && input.mouseY() < y+h && input.primaryOnce);
+      return (mouseInArea(x, y, w, h) && input.primaryOnce);
+    }
+    
+    public boolean mouseInArea(float x, float y, float w, float h) {
+      if (miniMenuShown()) return false;
+      return (input.mouseX() > x && input.mouseX() < x+w && input.mouseY() > y && input.mouseY() < y+h);
     }
     
     public boolean buttonHoverVary(String name) {
@@ -2276,7 +2419,7 @@ public class TWEngine {
       // for genuine troubleshooting.
       currentSpritePlaceholderSystem.suppressSpriteWarning = false;
       
-      if (ui.miniMenuShown()) return false;
+      if (miniMenuShown()) return false;
   
       // Only when the button is actually clicked.
       return hover && input.primaryOnce;
@@ -2300,7 +2443,7 @@ public class TWEngine {
     }
     
     public void loadingIcon(float x, float y, float widthheight) {
-      display.imgCentre("load-"+appendZeros(counter(max(display.loadingFramesLength, 1), 3), 4), x, y, widthheight, widthheight);
+      display.imgCentre("load-"+appendZeros(counter(max(display.loadingFramesLength-1, 1), 3), 4), x, y, widthheight, widthheight);
     }
   
     public void loadingIcon(float x, float y) {
@@ -2315,7 +2458,14 @@ public class TWEngine {
       // Max it at 4 because that was the minimum framerate we could do in SLEEPY mode,
       // 15fps!
       float d = min(display.getDelta(), 4.);
-      i *= pow(0.9, d);
+      
+      //if (input.shiftDown) {
+      //  i *= pow(0.995f, d);
+      //}
+      //else {
+      //  i *= pow(0.9f, d);
+      //}
+      i *= pow(0.9f, d);
       
       
       // LMAO REALLY FUNNY GLITCH, COMMENT THE LINE ABOVE AND UNCOMMENT THIS ONE BELOW!!
@@ -2403,7 +2553,7 @@ public class TWEngine {
     public       float  VOLUME_NORMAL = 1.;
     public       float  VOLUME_QUIET = 0.;
     public boolean CACHE_MISS_NO_MUSIC = false;
-    public boolean WAIT_FOR_GSTREAMER_START = true;
+    public boolean WAIT_FOR_GSTREAMER_START = false;
     private HashMap<String, SoundFile> cachedMusicMap;   // Used as an alternative if gstreamer is still starting up.
     
     public final String MUSIC_CACHE_FILE = "music_cache.json";
@@ -2641,10 +2791,11 @@ public class TWEngine {
       
       sounds = new HashMap<String, SoundFile>();
       cachedMusicMap = new HashMap<String, SoundFile>();
-      VOLUME_NORMAL = settings.getFloat("volumeNormal");
-      VOLUME_QUIET = settings.getFloat("volumeQuiet");
-      CACHE_MISS_NO_MUSIC = settings.getBoolean("cache_miss_no_music");
-      WAIT_FOR_GSTREAMER_START = settings.getBoolean("waitForGStreamerStartup");
+      CACHE_MUSIC = settings.getBoolean("music_caching", true);
+      VOLUME_NORMAL = settings.getFloat("volume_normal", 1f);
+      VOLUME_QUIET = settings.getFloat("volume_quiet", 0.25f);
+      CACHE_MISS_NO_MUSIC = settings.getBoolean("cache_miss_no_music", false);
+      WAIT_FOR_GSTREAMER_START = settings.getBoolean("gstreamer_startup_wait", false);
       setMasterVolume(VOLUME_NORMAL);
       startupGStreamer = true;
     }
@@ -2756,7 +2907,7 @@ public class TWEngine {
     // This increases ever-so steadily.
     private float cacheTime = 0.;
     private final float MAX_CACHE_TIME = 60.*60.;
-    private final int MAX_CACHE_SIZE = 1024*1024*50;   // Let's go with 50mb ram usage.
+    private final int MAX_CACHE_SIZE = 1024*1024;   // Let's go with 50mb ram usage.
     private AtomicBoolean caching = new AtomicBoolean(false);
     
     // Pass forceScore = -1 to disable force score.
@@ -3074,9 +3225,15 @@ public class TWEngine {
           for (CachedEntry c : loadMusic) {
             // If this passes then we can load this file
             
-            SoundFile music = new SoundFile(app, c.cachedpath, false); //tryLoadSoundCache(c.path, null);
-            // If cache exists of the music.
-            cachedMusicMap.put(c.originalpath, music);
+            try {
+              SoundFile music = new SoundFile(app, c.cachedpath, false); //tryLoadSoundCache(c.path, null);
+              // If cache exists of the music.
+              cachedMusicMap.put(c.originalpath, music);
+            }
+            catch (Exception e) {
+              //console.warn("Cache music load ("+c.cachedpath+") failed.");
+              //(new File(c.cachedpath)).delete();
+            }
             //console.log(c.originalpath);
           }
           
@@ -3314,13 +3471,13 @@ public class TWEngine {
     }
     
     public void fadeAndStopMusic() {
-      if (musicFadeOut < 1.) {
-        if (streamerMusicFadeTo != null) {
-          streamerMusicFadeTo.stop();
-          streamerMusicFadeTo = null;
-        }
-        return;
-      }
+      //if (musicFadeOut < 1.) {
+      //  if (streamerMusicFadeTo != null) {
+      //    streamerMusicFadeTo.stop();
+      //    streamerMusicFadeTo = null;
+      //  }
+      //  return;
+      //}
       musicFadeOut = 0.99;
     }
     
@@ -3497,8 +3654,9 @@ public class TWEngine {
         if (musicFadeOut > 0.005 && !useNewLibraryVersion) {
           // Fade the old music out
           float vol = musicFadeOut *= PApplet.pow(MUSIC_FADE_SPEED, display.getDelta());
-          if (streamerMusic != null)
+          if (streamerMusic != null) {
             streamerMusic.playbinSetVolume(vol);
+          }
 
 
           // Fade the new music in.
@@ -3511,8 +3669,10 @@ public class TWEngine {
           //else 
           //  console.bugWarnOnce("streamMusicFadeTo shouldn't be null here.");
         } else {
-          if (streamerMusic != null)
+          if (streamerMusic != null) {
             streamerMusic.stop();
+            streamerMusic = null;
+          }
           if (streamerMusicFadeTo != null) streamerMusic = streamerMusicFadeTo;
           if (useNewLibraryVersion) streamerMusic.play();
           musicFadeOut = 1.;
@@ -3593,17 +3753,22 @@ public class TWEngine {
     HashMap<String, Float> befores = new HashMap<String, Float>();
     
     public StatsModule() {
-      if (isAndroid()) {
-        String path = file.directorify(getAndroidWriteableDir())+STATS_FILE();
-        if (file.exists(path))
-          json = loadJSONObject(path);
-        else json = new JSONObject();
+      try {
+        if (isAndroid()) {
+          String path = file.directorify(getAndroidWriteableDir())+STATS_FILE();
+          if (file.exists(path))
+            json = loadJSONObject(path);
+          else json = new JSONObject();
+        }
+        else {
+          String path = APPPATH+STATS_FILE();
+          if (file.exists(path))
+            json = loadJSONObject(path);
+          else json = new JSONObject();
+        }
       }
-      else {
-        String path = APPPATH+STATS_FILE();
-        if (file.exists(path))
-          json = loadJSONObject(path);
-        else json = new JSONObject();
+      catch (Exception e) {
+        json = new JSONObject();
       }
     }
     
@@ -3665,6 +3830,7 @@ public class TWEngine {
         path = APPPATH+STATS_FILE();
       }
       if (onlyIfExists && !file.exists(path)) return;
+      
       saveJSONObject(json, path);
     }
     
@@ -3702,7 +3868,7 @@ public class TWEngine {
   public class FilemanagerModule {
     public FilemanagerModule() {
       
-      DEFAULT_DIR  = settings.getString("homeDirectory");
+      DEFAULT_DIR  = settings.getString("home_directory", System.getProperty("user.home").replace('\\', '/'));
       {
         File f = new File(DEFAULT_DIR);
         if (!f.exists()) {
@@ -4311,10 +4477,7 @@ public class TWEngine {
         
       if (ext.equals("obj")) return FileType.FILE_TYPE_MODEL;
       
-      // For backwards compat, we may have different portal shortcut extensions.
-      for (String s : SHORTCUT_EXTENSION) {
-        if (ext.equals(s)) return FileType.FILE_TYPE_SHORTCUT;
-      }
+      if (ext.equals(SHORTCUT_EXTENSION)) return FileType.FILE_TYPE_SHORTCUT;
   
       return FileType.FILE_TYPE_UNKNOWN;
     }
@@ -4845,7 +5008,7 @@ public class TWEngine {
         
       }
       
-      private HashMap<String, Leaf> entries = new HashMap<String, Leaf>();
+      public HashMap<String, Leaf> entries = new HashMap<String, Leaf>();
       
       public void insertString(String st) {
         insertString(st, st);
@@ -4873,7 +5036,7 @@ public class TWEngine {
                 fileWriter.write(leaf.score+"\n");
             }
         } catch (IOException e) {
-            System.err.println("Error writing to file: " + e.getMessage());
+            //System.err.println("Error writing to file: " + e.getMessage());
         }
       }
       
@@ -4885,8 +5048,9 @@ public class TWEngine {
         entries.get(name).score += increaseValue;
       }
       
-      public ArrayList<Leaf> search(String st) {
+      public ArrayList<Leaf> search(String st, String favouredPath) {
         st = cleanString(st);
+        favouredPath = favouredPath.toLowerCase();
         ArrayList<Leaf> results = new ArrayList<Leaf>();
         
         if (st.length() == 0 || st.equals(" ")) {
@@ -4899,18 +5063,50 @@ public class TWEngine {
         int i = 0;
         for (Leaf leaf : entries.values()) {
           boolean contains = true;
+          
+          leaf.score = 0;
+          
           for (String s : keywords) {
             contains &= (leaf.content.contains(s));
+            leaf.score++;
           }
+          
           if (contains) {
+            // Scoring parameters
+            if (cleanString(leaf.name).equals(st)) {
+              leaf.score += 20;
+              //console.log(leaf.name+" exact match");
+            }
+            //println((file.directorify(file.getDir(leaf.path))), favouredPath);
+            if (leaf.path.toLowerCase().contains(favouredPath)) {
+              leaf.score += 3;
+              
+              if (file.getDir(leaf.path).toLowerCase().equals(favouredPath)) {
+                //println(leaf.name+"Super favoured path");
+              }
+              
+              if (file.isDirectory(leaf.path)) {
+                leaf.score += 5;
+                //println(leaf.name+" directory");
+              }
+            }
+            //println(leaf.path, file.isDirectory(leaf.path));
+            
+            
+            
+            // Finally
             results.add(leaf);
           }
           i++;
+          
+          //if (i > 2000) {
+          //  break;
+          //}
         }
-        println(i);
+        //println(i);
         
         
-        Collections.sort(results, (o1, o2) -> o2.score - o1.score);
+        Collections.sort(results, (o1, o2) -> o2.score-o1.score);
         
         //println(results.size()+" results");
         //if (results.size() == 0) {
@@ -4919,12 +5115,17 @@ public class TWEngine {
         //else {
         //  println("Slow search results for \""+st+"\":");
           
-        //  //int count = 1;
-        //  //for (Leaf leaf : results) {
-        //  //  println(count+". "+leaf.name+" [score: "+leaf.score+"]");
-        //  //  count++;
-        //  //  if (count > 16) break;
-        //  //}
+          //int count = 1;
+          //for (int j = 0; j < results.size(); j++) {
+          //  try {
+          //    println(count+". "+results.get(j).name+" [score: "+results.get(j).score+"]");
+          //    count++;
+          //    if (count > 16) break;
+          //  }
+          //  catch (IndexOutOfBoundsException e) {
+              
+          //  }
+          //}
         //}
         return results;
       }
@@ -4951,7 +5152,7 @@ public class TWEngine {
     }
     
     public void insert(String path) {
-      indexer.insertString(path, cleanString(path), 5);
+      indexer.insertString(path, cleanString(file.getFilename(path)), 5);
     }
     
     public void insert(String path, int score) {
@@ -4963,11 +5164,11 @@ public class TWEngine {
     }
     
     
-    public ArrayList<String> search(String query) {
+    public ArrayList<String> search(String query, String favouredPath) {
       while (!lock.compareAndSet(false, true)) { }
       
       ArrayList<String> filenames = new ArrayList<String>();
-      ArrayList<Leaf> results = indexer.search(query);
+      ArrayList<Leaf> results = indexer.search(query, favouredPath);
       for (Leaf leaf : results) {
         filenames.add(leaf.path);
       }
@@ -4979,39 +5180,54 @@ public class TWEngine {
       // TODO
     }
     
+    
     private void traverse(String path, int depth) {
       //if (depth > 15) {
       //  return;
       //}
       
+      if (depth > 6) return;
+      
       if (file.exists(path) && file.isDirectory(path)) {
         File fff = new File(path);
         File[] files = fff.listFiles();
-        for (File f : files) {
-          while (!lock.compareAndSet(false, true)) {
-            try {
-              Thread.sleep(100);
+        try {
+          for (File f : files) {
+            while (!lock.compareAndSet(false, true)) {
+              try {
+                Thread.sleep(100);
+              }
+              catch (InterruptedException e) {
+                
+              }
             }
-            catch (InterruptedException e) {
-              
+            String fpath = f.getAbsolutePath().replaceAll("\\\\", "/");
+            
+            if (file.isDirectory(fpath)) {
+              insert(fpath, file.getFilename(fpath));
+              lock.set(false);
+              traverse(fpath, depth+1);
+            }
+            else {
+              insert(fpath);
+              lock.set(false);
             }
           }
-          String fpath = f.getAbsolutePath().replaceAll("\\\\", "/");
+        }
+        catch (NullPointerException e) {
           
-          if (file.isDirectory(fpath)) {
-            insert(fpath, file.getFilename(fpath), 10);
-            lock.set(false);
-            traverse(fpath, depth+1);
-          }
-          else {
-            insert(fpath, 5);
-            lock.set(false);
-          }
         }
       }
     }
     
     public void startIndexingThread(final String path) {
+      if (lowMemory && indexer.entries.size() > 10000) {
+        while (!lock.compareAndSet(false, true)) { }
+        //console.log("Indexer cleanout");
+        indexer.entries.clear();
+        System.gc();
+      }
+      
       Thread t1 = new Thread(new Runnable() {
         public void run() {
           traverse(path, 0);
@@ -5461,7 +5677,7 @@ public class TWEngine {
     
     // First, load the essential stuff.
     
-    loadAsset(APPPATH+SOUND_PATH()+"intro.wav");
+    //loadAsset(APPPATH+SOUND_PATH()+"intro.wav");
     loadAsset(APPPATH+IMG_PATH()+"logo.png");
     loadAllAssets(APPPATH+IMG_PATH()+"loadingmorph/");
     // We need to load shaders on the main thread.
@@ -5479,6 +5695,7 @@ public class TWEngine {
     loadAsset(APPPATH+DEFAULT_FONT_PATH());
     
     stats.increase("started_up", 1);
+    
     // Huh, "Timeaway" sounds strangely familiar, huh?
     int lastClosed = stats.getInt("last_closed") > 1000 ? stats.getInt("last_closed") : ((int)(System.currentTimeMillis() / 1000L));
     int timeAway = ((int)(System.currentTimeMillis() / 1000L))-lastClosed;
@@ -5490,6 +5707,7 @@ public class TWEngine {
       public void run() {
           loadEverything();
           loadedEverything.set(true);
+          System.gc();
         }
       }
     );
@@ -5499,15 +5717,18 @@ public class TWEngine {
     // Config file
     getUpdateInfo();
     
+    lowMemory = settings.getBoolean("low_memory", false);
 
-
-    power.setDynamicFramerate(settings.getBoolean("dynamicFramerate"));
-    DEFAULT_FONT_NAME = settings.getString("defaultSystemFont");
+    power.setDynamicFramerate(settings.getBoolean("dynamic_framerate", true));
+    DEFAULT_FONT_NAME = settings.getString("default_system_font", "Typewriter");
     
     DEFAULT_FONT = display.getFont(DEFAULT_FONT_NAME);
   }
   
   public void startScreen(Screen screen) {
+    // Create dummy screen
+    dummyScreen = new DummyScreen(this);
+    
     // Init loading screen.
     currScreen = screen;
   }
@@ -5544,7 +5765,7 @@ public class TWEngine {
       }
       
       float buttonwi = 200;
-      boolean button = ui.basicButton("Enter", display.WIDTH/2-buttonwi/2, display.HEIGHT/2+50, buttonwi, 50);
+      boolean button = ui.basicButton("Enter", display.WIDTH/2-buttonwi/2, display.HEIGHT/2+50, buttonwi, 50f);
 
       if (input.enterOnce || button) {
         inputPromptShown = false;
@@ -5689,6 +5910,36 @@ public class TWEngine {
     }
   }
   
+  
+  
+  public boolean devMode() {
+    return !file.exists(sketchPath()+"/lib");
+  }
+    
+  public int getUsedMemKB() {
+    long used = (Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory());
+    return (int)(used/1024L);
+  }
+  
+  public void setLowMemory(boolean enable) {
+    settings.setBoolean("low_memory", enable);
+    
+    // We don't copy exe's if we're running it in the Processing IDE because there is no exe.
+    if (devMode()) return;
+    
+    boolean success = false;
+    if (enable) {
+      success = file.copy(APPPATH+LOW_MEM_EXE, sketchPath().replaceAll("/", "\\\\")+"/Timeway.exe");
+    }
+    else {
+      success = file.copy(APPPATH+NORMAL_MEM_EXE, sketchPath().replaceAll("/", "\\\\")+"/Timeway.exe");
+    }
+    
+    if (!success) {
+      console.warn("Unable to set low memory (copy error) ");
+    }
+  }
+    
   
 
     
@@ -6219,6 +6470,10 @@ public class TWEngine {
       power.allowMinimizedMode = !power.allowMinimizedMode;
       console.log("Minimized mode "+(power.allowMinimizedMode ? "enabled" : "disabled"));
     }
+    else if (commandEquals(command, "/gc")) {
+      console.log("Garbage collector called.");
+      System.gc();
+    }
     //else if (commandEquals(command, "/testrelative")) {
     //  String fro = "C:/mydata/notebook/hazy_era/homen/006";
     //  String to = "C:/mydata/notebook/hazy_era/homen/007";
@@ -6614,10 +6869,10 @@ public class TWEngine {
       this.consolePrint(message, color(255));
     }
     public void warn(String message) {
-      this.consolePrint("WARNING "+message, color(255, 200, 30));
-      if (enableBasicUI) {
-        this.basicui.showWarningWindow(message);
-      }
+      //this.consolePrint("WARNING "+message, color(255, 200, 30));
+      //if (enableBasicUI) {
+      //  this.basicui.showWarningWindow(message);
+      //}
     }
     public void bugWarn(String message) {
       this.consolePrint("BUG WARNING "+message, color(255, 102, 102));
@@ -6818,6 +7073,7 @@ public class TWEngine {
     return (int)((counter)/interval) % (max);
   }
 
+// TODO: There is literally a function in Processing which does exactly what this function does. Remove it.
   public String appendZeros(int num, int length) {
     String str = str(num);
     while (str.length() < length) {
@@ -6846,8 +7102,8 @@ public class TWEngine {
       // we have no choice but to wait (or start with silence but this isn't desireable so lets just report that its still loading) 
       
       
-      if (sound.loadingMusic() && !pixelrealmCache())
-        return true;
+      //if (sound.loadingMusic() && !pixelrealmCache())
+      //  return true;
     }
     
     return false;
@@ -6897,6 +7153,7 @@ public class TWEngine {
 
     File cacheFolder = new File(CACHE_PATH);
     if ((cacheFolder.exists() && cacheFolder.isDirectory()) == false) {
+      createNewInfoFile = true;
       console.info("openCacheInfo: cache folder gone, regenerating folder.");
       if (!cacheFolder.mkdir()) {
         console.warn("Couldn't remake the cache directory for whatever reason...");
@@ -7066,68 +7323,74 @@ public class TWEngine {
     console.info("tryLoadImageCache: "+originalPath);
     // TODO: Worryingly bad threading issues here.
     openCacheInfo();
-
-    JSONObject cachedItem = cacheInfoJSON.getJSONObject(originalPath);
-
-    // If the object is null here, then there's no info therefore we cannot
-    // perform the checksum, so continue to load original instead.
-    if (cachedItem != null) {
-      console.info("tryLoadImageCache: Found cached entry from info file");
-      // First, load the actual image using the actual file path (the one above is a lie lol)
-      String actualPath = cachedItem.getString("actual", "");
-
-
-      // TODO: shouldn't take long loading a small image, but maybe we should probably use requestImage()
-      if (actualPath.length() > 0) {
-        console.info("tryLoadImageCache: loading cached image");
-        PImage loadedImage = loadImage(actualPath);
-        if (loadedImage != null) {
-          console.info("tryLoadImageCache: Found cached image");
-
-          File f = new File(originalPath);
-          String lastModified = "[null]";
-          if (f.exists()) lastModified = file.getLastModified(originalPath);
-
-          if (cachedItem.getString("lastModified", "").equals(lastModified)) {
-            console.info("tryLoadImageCache: No modifications");
-
-            // Perform a checksum which determines if the image can properly be loaded.
-            int checksum = calculateChecksum(loadedImage);
-            // Return -1 by default if for some reason the checksum is abscent because checksums shouldn't be negative
-            if (checksum == cachedItem.getInt("checksum", -1)) {
-              console.info("tryLoadImageCache: checksums match");
-              return loadedImage;
-            } else console.info("tryLoadImageCache: Checksums don't match "+str(checksum)+" "+str(cachedItem.getInt("checksum", -1)));
-
-            // After this point something happened to the original image (or cache in unusual circumstances)
-            // and must not be used.
-            // We continue to load original and recreate the cache.
+    
+    try {
+      JSONObject cachedItem = cacheInfoJSON.getJSONObject(originalPath);
+  
+      // If the object is null here, then there's no info therefore we cannot
+      // perform the checksum, so continue to load original instead.
+      if (cachedItem != null) {
+        console.info("tryLoadImageCache: Found cached entry from info file");
+        // First, load the actual image using the actual file path (the one above is a lie lol)
+        String actualPath = cachedItem.getString("actual", "");
+  
+        if (actualPath.length() > 0) {
+          console.info("tryLoadImageCache: loading cached image");
+          PImage loadedImage = loadImage(actualPath);
+          if (loadedImage != null) {
+            console.info("tryLoadImageCache: Found cached image");
+  
+            File f = new File(originalPath);
+            String lastModified = "[null]";
+            if (f.exists()) lastModified = file.getLastModified(originalPath);
+  
+            if (cachedItem.getString("lastModified", "").equals(lastModified)) {
+              console.info("tryLoadImageCache: No modifications");
+  
+              // Perform a checksum which determines if the image can properly be loaded.
+              int checksum = calculateChecksum(loadedImage);
+              // Return -1 by default if for some reason the checksum is abscent because checksums shouldn't be negative
+              if (checksum == cachedItem.getInt("checksum", -1)) {
+                console.info("tryLoadImageCache: checksums match");
+                return loadedImage;
+              } else console.info("tryLoadImageCache: Checksums don't match "+str(checksum)+" "+str(cachedItem.getInt("checksum", -1)));
+  
+              // After this point something happened to the original image (or cache in unusual circumstances)
+              // and must not be used.
+              // We continue to load original and recreate the cache.
+            }
+          }
+          else {
+            console.warn("what");
           }
         }
       }
+  
+      // We should only reach this point if no cache exists or is corrupted
+      console.info("tryLoadImageCache: loading original instead");
+      readOriginalOperation.run();
+      console.info("tryLoadImageCache: done loading");
+  
+      // At this point we *should* have an image in cachedImage
+      if (originalImage == null) {
+        //console.bugWarn("tryLoadImageCache: Your runnable must store your loaded image using setOriginalImage(PImage image)");
+        return null;
+      }
+  
+      // Once we read the original image, we now need to cache the file.
+      // Only save to cache if we didn't use requestImage();
+      // TODO: remove...?
+      //if (originalImage.width != 0 && originalImage.height != 0)
+      //saveCacheImage(originalPath, originalImage, true);
+  
+      PImage returnImage = originalImage;
+      // Set it to null to catch programming errors next time.
+      originalImage = null;
+      return returnImage;
     }
-
-    // We should only reach this point if no cache exists or is corrupted
-    console.info("tryLoadImageCache: loading original instead");
-    readOriginalOperation.run();
-    console.info("tryLoadImageCache: done loading");
-
-    // At this point we *should* have an image in cachedImage
-    if (originalImage == null) {
-      //console.bugWarn("tryLoadImageCache: Your runnable must store your loaded image using setOriginalImage(PImage image)");
-      return null;
+    catch (RuntimeException e) {
+      return display.errorImg;
     }
-
-    // Once we read the original image, we now need to cache the file.
-    // Only save to cache if we didn't use requestImage();
-    // TODO: remove...?
-    //if (originalImage.width != 0 && originalImage.height != 0)
-    //saveCacheImage(originalPath, originalImage, true);
-
-    PImage returnImage = originalImage;
-    // Set it to null to catch programming errors next time.
-    originalImage = null;
-    return returnImage;
   }
 
   public void moveCache(String oldPath, String newPath) {
@@ -7218,8 +7481,13 @@ public class TWEngine {
       scaleDown(image, max(resizeByX, resizeByY));
 
     console.info("saveCacheImage: saving...");
-    image.save(savePath);
-    console.info("saveCacheImage: saved");
+    try {
+      image.save(savePath);
+      console.info("saveCacheImage: saved");
+    }
+    catch (RuntimeException e) {
+      console.warn("Image caching failed.");
+    }
 
     properties.setString("actual", cachePath);
     properties.setInt("checksum", calculateChecksum(image));
@@ -7294,6 +7562,8 @@ public class TWEngine {
     //4420.0825
     //32760.305
     //519930
+    
+    if (!lowMemory) return app.noise(x, y);
     
     long k = (long)(x*4420.0825) + (long)(y*32760.305)*519930 + (long)noise_octave*1048576 + (long)(noise_falloff*1048576.) + (long)noise_seed;
     Float val = noiseCache.get(k);
@@ -7449,10 +7719,16 @@ public class TWEngine {
     public boolean upOnce = false;
     public boolean downOnce = false;
     
+    public static final char LEFT_CLICK = 1;
+    public static final char RIGHT_CLICK = 2;
+    public static final char SHIFT_KEY = 3;
+    public static final char CTRL_KEY = 4;
+    public static final char ALT_KEY = 5;
+    
     
     public InputModule() {
-      scrollSensitivity = settings.getFloat("scrollSensitivity");
-      CURSOR_CHAR = settings.getString("text_cursor_char");
+      scrollSensitivity = settings.getFloat("scroll_sensitivity", 20f);
+      CURSOR_CHAR = settings.getString("text_cursor_char", "_");
     }
     
       
@@ -7667,6 +7943,10 @@ public class TWEngine {
           && c != '['
           && c != ']';
     }
+    
+    public char getLastKeyPressed() {
+      return lastKeyPressed;
+    }
   
     // To be called by base sketch code.
     public void releaseKeyboardAction(char kkey, int kkeyCode) {
@@ -7762,34 +8042,46 @@ public class TWEngine {
     }
     
   
-    public boolean keyAction(String keybindName) {
-      char k = settings.getKeybinding(keybindName);
+    public boolean keyAction(String keybindName, char defaultKey) {
+      char k = settings.getKeybinding(keybindName, defaultKey);
       
       // Special keys/buttons
-      if (int(k) == settings.LEFT_CLICK)
-        return this.primaryOnce;
-      else if (int(k) == settings.RIGHT_CLICK)
-        return this.secondaryOnce;
+      if (k == LEFT_CLICK)
+        return this.primaryDown;
+      else if (k == RIGHT_CLICK)
+        return this.secondaryDown;
+      else if (k == SHIFT_KEY)
+        return this.shiftDown;
+      else if (k == CTRL_KEY)
+        return this.ctrlDown;
+      else if (k == ALT_KEY)
+        return this.altDown;
       else 
         // Otherwise just tell us if the key is down or not
         return keyDown(k);
     }
     
-    public void setAction(String keybindName) {
-      char k = settings.getKeybinding(keybindName);
+    public void setAction(String keybindName, char defaultKey) {
+      char k = settings.getKeybinding(keybindName, defaultKey);
       int val = int(Character.toLowerCase(k));
       keys[val] = 1;
       robotKeys[val] = 1;
     }
   
-    public boolean keyActionOnce(String keybindName) {
-      char k = settings.getKeybinding(keybindName);
+    public boolean keyActionOnce(String keybindName, char defaultKey) {
+      char k = settings.getKeybinding(keybindName, defaultKey);
       
       // Special keys/buttons
-      if (int(k) == settings.LEFT_CLICK)
+      if (k == LEFT_CLICK)
         return this.primaryOnce;
-      else if (int(k) == settings.RIGHT_CLICK)
+      else if (k == RIGHT_CLICK)
         return this.secondaryOnce;
+      else if (k == SHIFT_KEY)
+        return this.shiftOnce;
+      else if (k == ALT_KEY)
+        return this.altOnce;
+      else if (k == CTRL_KEY)
+        return this.ctrlOnce;
       else {
         // Otherwise just tell us if the key is down or not
         return keyDownOnce(k);
@@ -7811,6 +8103,50 @@ public class TWEngine {
       return cache_mouseY;
     }
     
+    
+    public String keyTextForm(char c) {
+      String text;
+      switch (c) {
+        case ' ':
+        text = "Space";
+        break;
+        case '\t':
+        text = "Tab";
+        break;
+        case '\n':
+        if (isMacOS()) {
+          text = "Return";
+        }
+        else {
+          text = "Enter";
+        }
+        break;
+        case '\b':
+        text = "Backspace";
+        break;
+        case LEFT_CLICK:
+        text = "Left click";
+        break;
+        case RIGHT_CLICK:
+        text = "Left click";
+        break;
+        case SHIFT_KEY:
+        text = "Shift";
+        break;
+        case ALT_KEY:
+        text = "Alt";
+        break;
+        case CTRL_KEY:
+        text = "Ctrl";
+        break;
+        default:
+        text = ""+Character.toUpperCase(c);
+        break;
+      }
+      
+      return text;
+    }
+  
     
     // TODO: This is old code. Need I say more?
     // It's also broken af.
@@ -7882,16 +8218,22 @@ public class TWEngine {
     }
     
     public void keyboardAction(char kkey, int kkeyCode) {
+      lastKeyPressed     = kkey;
+      lastKeycodePressed = kkeyCode;
+      
       if (kkey == CODED) {
         switch (kkeyCode) {
           case CONTROL:
             ctrlDown = true;
+            lastKeyPressed = CTRL_KEY;
             return;
           case SHIFT:
             shiftDown = true;
+            lastKeyPressed = SHIFT_KEY;
             break;
           case ALT:
             altDown = true;
+            lastKeyPressed = ALT_KEY;
             return;
           case LEFT:
             leftDownCounter = 0;
@@ -8044,6 +8386,13 @@ public class TWEngine {
   
   
   
+  public Screen getPrevScreen() {
+    if (screenStack.isEmpty()) {
+      //console.bugWarn("No more prev screens.");
+      return dummyScreen;
+    }
+    return screenStack.peek(0);
+  }
 
   public void processCaching() {
     if (cacheInfoTimeout > 0) {
@@ -8061,6 +8410,12 @@ public class TWEngine {
       cacheInfoTimeout = 0;
       stats.increase("total_cache_info_saves", 1);
     }
+  }
+  
+  public void shutdown() {
+    stats.save();
+    stats.set("last_closed", (int)(System.currentTimeMillis() / 1000L));
+    settings.forceSaveSettings();
   }
 
   
@@ -8089,10 +8444,12 @@ public class TWEngine {
     power.updatePowerMode();
 
     processCaching();
+    settings.update();
 
-    if ((int)app.frameCount % 2000 == 0) {
-      stats.save();
-    }
+    // Trully an awful piece of code.
+    //if ((int)app.frameCount % 2000 == 0) {
+    //  stats.save();
+    //}
 
     if (display != null) display.recordRendererTime();
     // This should be run at all times because apparently (for some stupid reason)
@@ -8117,7 +8474,12 @@ public class TWEngine {
       display.displayMemUsageBar();
     }
     
-    
+    if (lowMemory) {
+      // If the memory is past its 512mb limit, call the garbage collector. Get that mem usage down.
+      if (Runtime.getRuntime().totalMemory() > 536870912l) {
+        System.gc();
+      }
+    }
     
     // If Timeway is updating, a little notice and progress
     // bar will appear in front of the screen.
@@ -8125,7 +8487,7 @@ public class TWEngine {
 
 
     // Allow command prompt to be shown.
-    if (input.keyActionOnce("showCommandPrompt") && allowShowCommandPrompt)
+    if (input.keyActionOnce("command_prompt", '/') && allowShowCommandPrompt)
       showCommandPrompt();
 
 
@@ -8195,7 +8557,6 @@ public abstract class Screen {
   protected final color UPPER_BAR_DEFAULT_COLOR = color(200);
   protected final color LOWER_BAR_DEFAULT_COLOR = color(200);
   protected final color DEFAULT_BACKGROUND_COLOR = color(50);
-  protected final float DEFAULT_ANIMATION_SPEED = 0.1;
 
   protected final int NONE = 0;
   protected final int START = 1;
@@ -8224,9 +8585,6 @@ public abstract class Screen {
   protected color myBackgroundColor = DEFAULT_BACKGROUND_COLOR;
   protected float myUpperBarWeight = UPPER_BAR_WEIGHT;
   protected float myLowerBarWeight = LOWER_BAR_WEIGHT;
-  protected float myAnimationSpeed = DEFAULT_ANIMATION_SPEED;
-  protected int transitionState = NONE;
-  protected float transitionTick = 0;
   
   protected float WIDTH = 0.;
   protected float HEIGHT = 0.;
@@ -8255,25 +8613,25 @@ public abstract class Screen {
 
   protected void upperBar() {
     display.recordRendererTime();
-    fill(myUpperBarColor);
-    noStroke();
-    rect(0, 0, WIDTH, myUpperBarWeight);
+    app.fill(myUpperBarColor);
+    app.noStroke();
+    app.rect(0, 0, WIDTH, myUpperBarWeight);
     display.recordLogicTime();
   }
 
   protected void lowerBar() {
     display.recordRendererTime();
-    fill(myLowerBarColor);
-    noStroke();
-    rect(0, HEIGHT-myLowerBarWeight, WIDTH, myLowerBarWeight);
+    app.fill(myLowerBarColor);
+    app.noStroke();
+    app.rect(0, HEIGHT-myLowerBarWeight, WIDTH, myLowerBarWeight);
     display.recordLogicTime();
   }
 
   protected void backg() {
     display.recordRendererTime();
-    fill(myBackgroundColor);
-    noStroke();
-    rect(0, myUpperBarWeight, WIDTH, HEIGHT-myUpperBarWeight-myLowerBarWeight);
+    app.fill(myBackgroundColor);
+    app.noStroke();
+    app.rect(0, myUpperBarWeight, WIDTH, HEIGHT-myUpperBarWeight-myLowerBarWeight);
     display.recordLogicTime();
   }
   
@@ -8288,7 +8646,6 @@ public abstract class Screen {
   protected void startScreenTransition() {
     engine.transitionScreens = true;
     engine.transition = 1.0;
-    engine.transitionDirection = RIGHT;   // Right by default, you can change it to left or anything else
     // right after calling startScreenTransition().
   }
   
@@ -8302,26 +8659,46 @@ public abstract class Screen {
   protected void previousReturnAnimation() {
   }
 
+  private void printStack() {
+    for (int i = 0; i < engine.screenStack.size(); i++) {
+      console.log(engine.screenStack.peek(i).getClass().getSimpleName());
+    }
+    console.log("------------------");
+  }
 
   protected void requestScreen(Screen screen) {
     if (engine.currScreen == this && engine.transitionScreens == false) {
-      engine.prevScreen = this;
+      engine.screenStack.push(this);
       engine.currScreen = screen;
       screen.startScreenTransition();
       engine.power.resetFPSSystem();
       engine.allowShowCommandPrompt = true;
+      engine.transitionDirection = RIGHT;
       //engine.setAwake();
     }
+    //printStack();
   }
 
   protected void previousScreen() {
-    if (this.engine.prevScreen == null) engine.console.bugWarn("No previous screen to go back to!");
+    if (this.engine.screenStack.isEmpty()) engine.console.bugWarn("No previous screen to go back to!");
     else {
-      engine.prevScreen.previousReturnAnimation();
-      requestScreen(this.engine.prevScreen);
+      engine.getPrevScreen().previousReturnAnimation();
+      
+      // Request screen but without stack pushing
+      Screen prevScreen = this.engine.screenStack.pop();
+      if (engine.currScreen == this && engine.transitionScreens == false) {
+        engine.prevScreenTransition = engine.currScreen;
+        engine.currScreen = prevScreen;
+        prevScreen.startScreenTransition();
+        engine.power.resetFPSSystem();
+        engine.allowShowCommandPrompt = true;
+        //engine.setAwake();
+      }
+      
       engine.transitionDirection = LEFT;
       engine.power.setAwake();
     }
+    //printStack();
   }
 
 
@@ -8369,7 +8746,15 @@ public abstract class Screen {
 }
 
 
-
+// Sometimes, problems can occure.
+// Better to have something than let the application completely crash.
+// So we use this dummy screen when we try to access a screen that does not exist.
+// This screen literally does nothing.
+public class DummyScreen extends Screen {
+  public DummyScreen(TWEngine engine) {
+    super(engine);
+  }
+}
 
 
 
@@ -8467,9 +8852,9 @@ public final class SpriteSystemPlaceholder {
         public SpriteSystemPlaceholder(TWEngine engine, String path) {
             this.engine = engine;
             spriteNames = new HashMap<String, Integer>();
-            selectedSprites = new Stack<Sprite>(32768);
+            selectedSprites = new Stack<Sprite>(256);
             sprites = new ArrayList<Sprite>();
-            spritesStack = new Stack<Sprite>(128);
+            spritesStack = new Stack<Sprite>(32768);
             unusedSprite = new Sprite("UNUSED");
             generalClick = new Click();
             selectedSprite = null;
@@ -9387,7 +9772,7 @@ public final class SpriteSystemPlaceholder {
 
         private void renderSprite(Sprite s) {
             if (s.isSelected() || (showAllWireframes && keyPressAllowed)) {
-                engine.wireframe = true;
+                engine.display.wireframe = true;
                 if (engine.input.ctrlDown && engine.input.altDown && engine.input.shiftDown) {
                   if (engine.input.keyDownOnce('d')) {
                     s.mode = DOUBLE;
@@ -9440,7 +9825,7 @@ public final class SpriteSystemPlaceholder {
               }
             }
             
-            engine.wireframe = false;
+            engine.display.wireframe = false;
             s.poke(app.frameCount);
         }
 
@@ -9740,8 +10125,9 @@ public final class SpriteSystemPlaceholder {
       }
   
       public void push(T e){
-          if(size() == capacity)
-          throw new StackException("stack is full");
+          if(size() == capacity) {
+            throw new StackException("stack is full");
+          }
           S[++top] = e;
       }
       
