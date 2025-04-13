@@ -68,7 +68,7 @@
     "x": 131,
     "y": 3779,
     "ID": "more_ram",
-    "text": "Use more RAM to increase performance",
+    "text": "Use more RAM for better performance",
     "type": 4
   },
   {
@@ -173,7 +173,7 @@
     "x": 171,
     "y": 1057,
     "ID": "74239664",
-    "text": "When minimized or not in focus, Timeway will enter sleep, saving CPU (and battery if on laptop).",
+    "text": "When minimized or not in focus, Timeway will enter sleep, saving CPU and battery.",
     "type": 1
   },
   {

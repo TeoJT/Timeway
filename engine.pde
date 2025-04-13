@@ -7563,7 +7563,7 @@ public class TWEngine {
     //32760.305
     //519930
     
-    if (!lowMemory) return app.noise(x, y);
+    if (lowMemory) return app.noise(x, y);
     
     long k = (long)(x*4420.0825) + (long)(y*32760.305)*519930 + (long)noise_octave*1048576 + (long)(noise_falloff*1048576.) + (long)noise_seed;
     Float val = noiseCache.get(k);

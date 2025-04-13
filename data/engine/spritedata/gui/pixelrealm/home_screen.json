@@ -1,17 +1,17 @@
 {
   "h": 153,
   "vy0": 256,
-  "vx1": 783,
+  "vx1": 1013,
   "vy2": 384,
-  "vx0": 655,
+  "vx0": 885,
   "vy1": 256,
   "mode": "SINGLE",
-  "vx3": 655,
-  "vx2": 783,
+  "vx3": 885,
+  "vx2": 1013,
   "vy3": 384,
   "w": 153,
-  "name": "terraform_menu",
-  "x": 655,
+  "name": "home_screen",
+  "x": 885,
   "y": 256,
   "locked": false
 }

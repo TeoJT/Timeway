@@ -398,15 +398,6 @@ public class PixelRealmWithUI extends PixelRealm {
       //}
       
       // Lighting menu
-      if (ui.buttonVary("lighting_button", "new_entry_128", "Lighting")) {
-        if (currRealm.versionCompatibility == 1) {
-          menu = new DialogMenu("Can't use morpher", "back-newrealm", "You can't customise lighting in older 1.x versions. Please upgrade realm via the terraformer.");
-        }
-        else {
-          sound.playSound("menu_select");
-          menu = new CustomiseLightingMenu();
-        }
-      }
       
       // --- Command menu (for phone) ---
       if (display.phoneMode) {
@@ -418,27 +409,17 @@ public class PixelRealmWithUI extends PixelRealm {
       }
 
       // --- Edit terrain menu ---
-      if (ui.buttonVary("terraform_menu", "new_entry_128", "Terraform")) {
-        sound.playSound("menu_select");
-
-        Runnable ryes = new Runnable() {
-          public void run() {
-            menu = new CustomiseTerrainMenu();
-            menuShown = true;
-            currRealm.terraformWarning = false;
-          }
-        };
-
-        Runnable rno = new Runnable() {
-          public void run() {
-            menuShown = true;
-            menu = new MainMenu();
-          }
-        };
-
+      if (ui.buttonVary("terraform_menu", "terrain_128", "Terrain")) {
         if (currRealm.versionCompatibility == 1 || currRealm.versionCompatibility != 2) {
+          Runnable rno = new Runnable() {
+            public void run() {
+              menuShown = true;
+              menu = new MainMenu();
+            }
+          };
+          
           // Additional functionality for upgrading the realm.
-          ryes = new Runnable() {
+          Runnable ryes = new Runnable() {
             public void run() {
               if (!COMPATIBILITY_VERSION.equals("2.0") && !COMPATIBILITY_VERSION.equals("2.1")) {
                 menuShown = false;
@@ -450,23 +431,22 @@ public class PixelRealmWithUI extends PixelRealm {
               currRealm.version = COMPATIBILITY_VERSION;
               currRealm.versionCompatibility = 2;
 
-              menu = new CustomiseTerrainMenu();
+              menu = new TerrainMenu();
               menuShown = true;
               currRealm.terraformWarning = false;
             }
           };
           menu = new YesNoMenu("Old version", "This realm uses version "+currRealm.version+" and needs to be upgraded to "+COMPATIBILITY_VERSION+" to be terraformed. Upgrade now and continue?", ryes, rno);
-        } else if (currRealm.terraformWarning) {
-          menu = new YesNoMenu("Warning", "Modifying the terrain generator will reset all terrain data in this realm.\nContinue?", ryes, rno);
-        } else {
-          menu = new CustomiseTerrainMenu();
-          menuShown = true;
-          currRealm.terraformWarning = false;
         }
+        else {
+          sound.playSound("menu_select");
+          menu = new TerrainMenu();
+        }
+        
       }
       
       // -- Home screen --
-      if (ui.buttonVary("credits", "credits_128", "Home screen")) {
+      if (ui.buttonVary("home_screen", "home_128", "Home screen")) {
         requestScreen(new HomeScreen(engine));
         sound.stopMusic();
         menu = null;
@@ -779,6 +759,61 @@ public class PixelRealmWithUI extends PixelRealm {
       beginInputPrompt("Entry name:", r);
     }
   }
+  
+  
+
+  class TerrainMenu extends Menu {
+    public TerrainMenu() {
+    }
+    public void display() {
+      displayBackground("back-terrainmenu");
+      if (ui.buttonVary("lighting", "lightbulb_128", "Lighting")) {
+        sound.playSound("menu_select");
+        lighting();
+      }
+
+
+      if (ui.buttonVary("terraformer", "terraformer_128", "Terraform")) {
+        sound.playSound("menu_select");
+        terraformer();
+      }
+    }
+    
+    private void lighting() {
+        if (currRealm.versionCompatibility == 1) {
+          menu = new DialogMenu("Can't use lighting", "back-newrealm", "You can't customise lighting in older 1.x versions. Please upgrade realm via the terraformer.");
+        }
+        else {
+          menu = new CustomiseLightingMenu();
+        }
+    }
+    
+    private void terraformer() {
+        Runnable ryes = new Runnable() {
+          public void run() {
+            menu = new CustomiseTerrainMenu();
+            menuShown = true;
+            currRealm.terraformWarning = false;
+          }
+        };
+
+        Runnable rno = new Runnable() {
+          public void run() {
+            menuShown = true;
+            menu = new MainMenu();
+          }
+        };
+
+        if (currRealm.terraformWarning) {
+          menu = new YesNoMenu("Warning", "Modifying the terrain generator will reset all terrain data in this realm.\nContinue?", ryes, rno);
+        } else {
+          menu = new CustomiseTerrainMenu();
+          menuShown = true;
+          currRealm.terraformWarning = false;
+        }
+    }
+  }
+  
 
   class PocketMenu extends Menu {
 
