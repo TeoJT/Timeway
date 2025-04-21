@@ -33,4 +33,10 @@ macos-amd64
 macos-arm64
 buildPackage
 *.apk
-
+timeway_password.txt
+pdftopng.exe
+pdftopng
+xpdfrc
+recyclebin
+history.txt
+data/frames
