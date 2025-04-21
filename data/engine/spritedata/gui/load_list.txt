@@ -1,5 +1,6 @@
 engine/spritedata/gui/benchmark/
 engine/spritedata/gui/editor/
 engine/spritedata/gui/explorer/
+engine/spritedata/gui/homescreen/
 engine/spritedata/gui/pixelrealm/
 engine/spritedata/gui/readonlyeditor/

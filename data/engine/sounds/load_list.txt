@@ -26,7 +26,6 @@ engine/sounds/shift.wav
 engine/sounds/shrink.wav
 engine/sounds/small_click.wav
 engine/sounds/splash.wav
-engine/sounds/splash_2.wav
 engine/sounds/step.wav
 engine/sounds/swimming.wav
 engine/sounds/swish.wav

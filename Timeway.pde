@@ -5,7 +5,7 @@ import java.io.PrintWriter;
 
 /**
 *********************************** Timeway ***********************************
-*                      Your computer is your universe.
+*                       Your computer is your universe.                        
 * 
 * Visit https://teojt.github.io/timeway.html for more info on Timeway.
 * 
@@ -43,10 +43,6 @@ import java.io.PrintWriter;
 * Anyways, I have no idea who's reading this or who would delve into the code of Timeway,
 * but if you're here reading this, then have fun!
 *
-* Oh also, if you're trying to reduce memory usage as much as possible, an empty sketch typically uses 
-* ~140MB RAM (task manager)
-* 260MB (heap size)
-* 30MB (actually used)
 **/
 
 
@@ -278,30 +274,10 @@ void twengineRequestUpdater(JSONObject json) {
 //@SuppressWarnings("unused")
 void twengineRequestBenchmarks() {
   //timewayEngine.requestScreen(new Updater(timewayEngine, json));
-  //timewayEngine.requestScreen(new Benchmark(this));
+  timewayEngine.requestScreen(new Benchmark(timewayEngine));
 }
 
 @SuppressWarnings("unused")
 void twengineRequestSketch(String path) {
   
-}
-
-//@SuppressWarnings("unused")
-boolean hasPixelrealm() {
-  return false;
-}
-
-
-//@SuppressWarnings("unused")
-boolean pixelrealmCache() {
-  boolean cacheHit = false;
-  cacheHit |= timewayEngine.sound.cacheHit(timewayEngine.DEFAULT_DIR+"/"+PixelRealm.REALM_BGM+".wav");
-  cacheHit |= timewayEngine.sound.cacheHit(timewayEngine.DEFAULT_DIR+"/"+PixelRealm.REALM_BGM+".ogg");
-  cacheHit |= timewayEngine.sound.cacheHit(timewayEngine.DEFAULT_DIR+"/"+PixelRealm.REALM_BGM+".mp3");
-  cacheHit |= timewayEngine.sound.cacheHit(timewayEngine.DEFAULT_DIR+"/"+timewayEngine.file.unhide(PixelRealm.REALM_BGM+".wav"));
-  cacheHit |= timewayEngine.sound.cacheHit(timewayEngine.DEFAULT_DIR+"/"+timewayEngine.file.unhide(PixelRealm.REALM_BGM+".ogg"));
-  cacheHit |= timewayEngine.sound.cacheHit(timewayEngine.DEFAULT_DIR+"/"+timewayEngine.file.unhide(PixelRealm.REALM_BGM+".mp3"));
-  cacheHit |= timewayEngine.sound.cacheHit(timewayEngine.APPPATH+PixelRealm.REALM_BGM_DEFAULT);
-  cacheHit |= timewayEngine.sound.cacheHit(timewayEngine.APPPATH+PixelRealm.REALM_BGM_DEFAULT_LEGACY);
-  return cacheHit;
 }

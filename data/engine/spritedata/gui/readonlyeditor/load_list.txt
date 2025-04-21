@@ -1,1 +1,5 @@
 engine/spritedata/gui/readonlyeditor/back-button.json
+engine/spritedata/gui/readonlyeditor/keybindings_reset_no.json
+engine/spritedata/gui/readonlyeditor/keybindings_reset_yes.json
+engine/spritedata/gui/readonlyeditor/keybinding_prompt_back.json
+engine/spritedata/gui/readonlyeditor/keybinding_reset_back.json

@@ -2056,7 +2056,7 @@ public class PixelRealmWithUI extends PixelRealm {
           // premade cache will eventually get cleared out when cache is full, it's 
           // big enough to evict any larger cache music files that may be there
           // for whatever reason.
-          sound.updateMusicCache(path, 10000);
+          sound.updateMusicCache(path);
           
           
           

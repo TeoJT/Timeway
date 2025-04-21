@@ -1,7 +1,7 @@
 engine/shaders/default.glsl
 engine/shaders/fabric.glsl
-engine/shaders/largeimg.frag
-engine/shaders/largeimg.vert
+engine/shaders/lit_fog.frag
+engine/shaders/lit_fog.vert
 engine/shaders/portal.glsl
 engine/shaders/portal_plus.frag
 engine/shaders/portal_plus.vert

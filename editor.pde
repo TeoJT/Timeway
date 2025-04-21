@@ -2688,11 +2688,6 @@ public class SettingsScreen extends ReadOnlyEditor {
     getOptionsField("target_framerate").selectedOption = powerMode;
     getBooleanField("sleep_when_inactive").state = settings.getBoolean("sleep_when_inactive", true);
     
-    String cacheMissMethod = settings.getString("music_cache_miss_method", "loading_music");
-    if (!settings.getBoolean("cache_miss_no_music", false)) cacheMissMethod = "Play loading music";
-    if (settings.getBoolean("cache_miss_no_music", false)) cacheMissMethod = "Play nothing (silence)";
-    if (settings.getBoolean("gstreamer_startup_wait", false)) cacheMissMethod = "Wait for music service to start";
-    getOptionsField("cache_miss_method").selectedOption = cacheMissMethod;
     
     getInputField("home_directory").inputText = settings.getString("home_directory", System.getProperty("user.home").replace('\\', '/'));
     getBooleanField("music_caching").state = settings.getBoolean("music_caching", true);
@@ -2733,19 +2728,6 @@ public class SettingsScreen extends ReadOnlyEditor {
     else if (selected.equals("Auto")) selected = settings.setString("force_power_mode", "AUTO");
     power.setForcedPowerMode(selected);
     
-    selected = getOptionsField("cache_miss_method").selectedOption;
-    if (selected.equals("Play loading music")) {
-      sound.WAIT_FOR_GSTREAMER_START = settings.setBoolean("gstreamer_startup_wait", false);
-      sound.CACHE_MISS_NO_MUSIC = settings.setBoolean("cache_miss_no_music", false);
-    }
-    else if (selected.equals("Play nothing (silence)")) {
-      sound.WAIT_FOR_GSTREAMER_START = settings.setBoolean("gstreamer_startup_wait", false);
-      sound.CACHE_MISS_NO_MUSIC = settings.setBoolean("cache_miss_no_music", true);
-    }
-    else if (selected.equals("Wait for music service to start")) {
-      sound.WAIT_FOR_GSTREAMER_START = settings.setBoolean("gstreamer_startup_wait", true);
-      sound.CACHE_MISS_NO_MUSIC = settings.setBoolean("cache_miss_no_music", true);
-    }
     
     engine.DEFAULT_DIR = settings.setString("home_directory", file.directorify(getInputField("home_directory").inputText));
     engine.CACHE_MUSIC = settings.setBoolean("music_caching", getBooleanField("music_caching").state); 
@@ -2786,8 +2768,6 @@ public class SettingsScreen extends ReadOnlyEditor {
       }
     }
     
-    // Show "not recommended" warning when "wait for music service to start" is selected
-    get("music_cache_miss_warning").visible = (getOptionsField("cache_miss_method").selectedOption.equals("Wait for music service to start"));
     
     if (getButton("keybind_settings").clicked) {
       sound.playSound("select_any");

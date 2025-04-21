@@ -1296,7 +1296,6 @@ public class PixelRealm extends Screen {
       }
       
       private float rand(float x, float y, float min, float max) { 
-          engine.timestamp("noise");
         return engine.noise(x, y)*(max-min)+min;
       } 
       
@@ -2297,7 +2296,10 @@ public class PixelRealm extends Screen {
             renderedEntry = null;
             loadFromSource = false;
             drawEntryOnce = false;
-            engine.saveCacheImage(this.dir, img.get());
+            if (engine.enableCaching) {
+              engine.saveCacheImage(this.dir, img.get());
+            }
+            
             drawnEntries++;
           }
         }
@@ -2361,9 +2363,11 @@ public class PixelRealm extends Screen {
                 // the image hasn't been cached, so let's create some to reduce load times
                 // and ram usage in the future.
                 if (cacheFlag) {
-                  engine.setCachingShrink(MAX_CACHE_SIZE, 0);
-                  //this.img = engine.experimentalScaleDown(img);
-                  engine.saveCacheImage(this.dir, img.get());
+                  if (engine.enableCaching) {
+                    engine.setCachingShrink(MAX_CACHE_SIZE, 0);
+                    //this.img = engine.experimentalScaleDown(img);
+                    engine.saveCacheImage(this.dir, img.get());
+                  }
                   cacheFlag = false;
                 }
   
@@ -2441,8 +2445,10 @@ public class PixelRealm extends Screen {
             PImage im2 = loadImage(dir);
             engine.scaleDown(im2, MAX_CACHE_SIZE);
             engine.setOriginalImage(im2);
-            engine.setCachingShrink(MAX_CACHE_SIZE, 0);
-            engine.saveCacheImage(dir, im2);
+            if (engine.enableCaching) {
+              engine.setCachingShrink(MAX_CACHE_SIZE, 0);
+              engine.saveCacheImage(dir, im2);
+            }
           }
         }
         );
@@ -4165,7 +4171,7 @@ public class PixelRealm extends Screen {
       jsonFile.setInt("light_height", lightHeightSlider.valInt);
       
       // Save the cache
-      app.saveBytes(engine.saveCacheEntry(stateDirectory+"terrain_cache.tmp", 6942), encodeTerrainCache(chunksSet));
+      //app.saveBytes(engine.saveCacheEntry(stateDirectory+"terrain_cache.tmp", 6942), encodeTerrainCache(chunksSet));
       
       // And we're done already!
       //console.log("Saved realm");
@@ -5942,12 +5948,15 @@ public class PixelRealm extends Screen {
       // time clobbering up the fps.
       drawEntryOnce = true;
       
+      // Run all the PRObjects.
       for (PRObject o : ordering) {
         o.run();
         o.calculateVal();
         //console.log(o.getClass().getSimpleName());
       }
+      engine.timestamp("PRObjects logic");
       ordering.insertionSort();
+      engine.timestamp("PRObjects sorting");
     }
     
     public void regenerateTrees() {
@@ -6488,19 +6497,23 @@ public class PixelRealm extends Screen {
     //This function assumes you have not called portal.beginDraw().
     if (legacy_portalEasteregg) evolvingGatewayRenderPortal();
     
+    engine.timestamp("start");
+    
     // Do all non-display logic (for stuff that is displayed)
     // Stuff that is currently on-screen is stored in ordering list.
     currRealm.runPlayer();
+    engine.timestamp("Player");
     currRealm.runPRObjects();
     scene.resetShader();
     usingFadeShader = false;
-    
     // Now begin all the drawing!
     display.recordRendererTime(); 
     scene.beginDraw();
     if (currRealm.realmPlugin != null) currRealm.realmPlugin.sketchioGraphics = scene;
     display.recordLogicTime();
+    engine.timestamp("uhoh shader");
     currRealm.renderSky();
+    engine.timestamp("sky");
     setPerspective();
     display.recordRendererTime();
     // Make us see really really farrrrrrr
@@ -6520,11 +6533,16 @@ public class PixelRealm extends Screen {
       if (currRealm.lights) scene.pointLight(255, 245, 245, x, y, z);
       display.recordLogicTime();
     }
+    engine.timestamp("perspective");
 
     currRealm.renderTerrain();
+    engine.timestamp("terrain");
     currRealm.runMorpherTool();
+    engine.timestamp("morpher");
     currRealm.renderPRObjects(); 
+    engine.timestamp("PRObjects render");
     runPlugin(MODE_SCENE);
+    engine.timestamp("plugin");
     scene.resetShader();
     
     // Pop the camera.
@@ -6535,7 +6553,9 @@ public class PixelRealm extends Screen {
     display.recordRendererTime();
     scene.hint(DISABLE_DEPTH_TEST);
     currRealm.renderEffects();
+    engine.timestamp("effects");
     runPlugin(MODE_POSTSCENE);
+    engine.timestamp("MODE_POSTSCENE plugin");
     
     display.recordRendererTime();
     scene.endDraw();
@@ -6544,6 +6564,7 @@ public class PixelRealm extends Screen {
     float hi = this.height;
     
     app.image(scene, (WIDTH/2)-wi/2, (HEIGHT/2)-hi/2, wi, hi);
+    engine.timestamp("display scene");
     
     display.recordLogicTime();
     
@@ -6582,6 +6603,9 @@ public class PixelRealm extends Screen {
     timeInRealm++;
     stats.recordTime("time_in_pixelrealm");
     stats.recordTime("REALMTIME_"+currRealm.stateFilename);
+    
+    engine.timestamp("done");
+    
   }
   
   
@@ -6789,7 +6813,7 @@ public class PixelRealm extends Screen {
       // it doesn't need to be accurate.
       // It's simply an approximate timeout timer for the loading icon to disappear.
       loading -= (int)display.getDelta();
-      if (loading <= 0 && engine.lowMemory) {
+      if (loading <= 0 && !sound.loadingMusic() && engine.lowMemory) {
         System.gc();
       }
     }

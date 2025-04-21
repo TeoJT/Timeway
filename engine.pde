@@ -72,13 +72,13 @@ public class TWEngine {
   // a, b, and c can go well over 10, 100, it can be any positive integer.
 
   // Paths
-  public final String WINDOWS_CMD         = "engine/shell/mywindowscommand.bat";
+  //public final String WINDOWS_CMD         = "engine/shell/mywindowscommand.bat";
   public final String POCKET_PATH         = "pocket/";
   public final String TEMPLATES_PATH      = "engine/realmtemplates/";
   public final String EVERYTHING_TXT_PATH = "engine/everything.txt";
   public final String DEFAULT_MUSIC_PATH  = "engine/music/default.wav";
   public       String DEFAULT_UPDATE_PATH = "";  // Set up by setup()
-  public final String BOILERPLATE_PATH    = "engine/plugindata/plugin_boilerplate.java";
+  public final String BOILERPLATE_PATH    = "engine/other/plugin_boilerplate.java";
   public final String PDFTOPNG_PATH       = "engine/bin/windows/pdftopng.exe";
   public final String LOW_MEM_EXE         = "engine/other/run_low_mem.exe";
   public final String NORMAL_MEM_EXE      = "engine/other/run_normal.exe";
@@ -171,7 +171,8 @@ public class TWEngine {
   public boolean playWhileUnfocused = true;
   public HashMap<Long, Float> noiseCache = new HashMap<Long, Float>();
   public boolean focusedMode = true;
-  public boolean lowMemory = true;
+  public boolean lowMemory = false;
+  public boolean enableCaching = true;
   
   
   
@@ -2554,10 +2555,8 @@ public class TWEngine {
     public       float  VOLUME_QUIET = 0.;
     public boolean CACHE_MISS_NO_MUSIC = false;
     public boolean WAIT_FOR_GSTREAMER_START = false;
-    private HashMap<String, SoundFile> cachedMusicMap;   // Used as an alternative if gstreamer is still starting up.
     
-    public final String MUSIC_CACHE_FILE = "music_cache.json";
-    public final int MAX_MUSIC_CACHE_SIZE_KB = 1024*256;  // 256 MB
+    public final String MUSIC_CACHE_FILE = "music_cache_02.json";
     
     // For when porting to other platforms which don't support gstreamer (*ahem* android *ahem*) 
     public boolean DISABLE_GSTREAMER = false;
@@ -2584,9 +2583,20 @@ public class TWEngine {
         if (loadingMusic()) {
           //console.log("Cache music mode");
           mode = CACHED;
-          SoundFile m = cachedMusicMap.get(path);
+          
+          String cachePath = tryGetMusicCache(path);
+          SoundFile m = null;
+          if (cachePath.equals(path)) {
+            // Cache doesn't exist.
+          }
+          else {
+            m = new SoundFile(app, cachePath);
+            // TODO: Load in separate thread.
+          }
+          
+          
+          
           if (m != null) {
-            //console.log("Cache hit "+path);
             cachedMusic = m;
             cachedMusic.amp(1.0);
           }
@@ -2594,20 +2604,23 @@ public class TWEngine {
           else {
             // 3 cases here:
             // - Don't play any music while gstreamer is still starting up
-            // - Load music if gstreamer is starting up (slow, only if file is small enough)
+            // - Load compressed if gstreamer is starting up (slow, only if file is small enough)
             // - Play loading music if gstreamer is still starting up and file in question is too long.
-            if (CACHE_MISS_NO_MUSIC) {
-              mode = NONE;
-            }
-            else {
+            {
               // Perform size approximation.
               // FLAC files not in this list due to them not being supported by soundfile
               // therefore loading music will play in place.
               final String ext = file.getExt(path);
               boolean playDefaultLoadingMusic = true;
               
-              final int COMPRESSED_MAX_SIZE = 1048576; // 1mb
-              final int UNCOMPRESSED_MAX_SIZE = 15728640; // 15mb
+              int COMPRESSED_MAX_SIZE = 1048576*5; // 5mb
+              int UNCOMPRESSED_MAX_SIZE = 1048576*50; // 50mb
+              
+              // We are very careful with our memory.
+              if (lowMemory) {
+                COMPRESSED_MAX_SIZE = 1048576*1; // 1mb
+                UNCOMPRESSED_MAX_SIZE = 1048576*10; // 10mb
+              }
               
               // Compressed file formats can take long to decompress,
               // so we'll only allow a minute or two at most.
@@ -2616,28 +2629,31 @@ public class TWEngine {
                 // Fits compressed size
                 //console.log("Is compressed file "+f.length());
                 playDefaultLoadingMusic = (f.length() > COMPRESSED_MAX_SIZE);
+                //if (playDefaultLoadingMusic) console.log("EXCEEDS max file size");
               }
               
               // Uncompressed files are much faster to load.
               // Therefore we can have a much higher threashold for wav files
               else if (ext.equals("wav")) {
                 File f = new File(path);
+                //console.log("Is uncompressed file "+f.length());
                 playDefaultLoadingMusic = (f.length() > UNCOMPRESSED_MAX_SIZE);
+                //if (playDefaultLoadingMusic) console.log("EXCEEDS max file size");
               }
               
               // Determinining default music done
               // Load default music if it's available.
               if (playDefaultLoadingMusic) {
-                //console.log("Playing default loading music");
-                if (sounds.containsKey("loadingmusic")) {
+                if (sounds.containsKey("loadingmusic") && !CACHE_MISS_NO_MUSIC) {
                   cachedMusic = sounds.get("loadingmusic");
                   mode = CACHED;
                 }
+                // Otherwise don't play any music.
                 else mode = NONE;
               }
               // Load and play the music.
               else {
-                //console.log("Trying to directly load music ohno");
+                //console.log("Cache miss, direct load");
                 cachedMusic = new SoundFile(app, path, false);  // Yes, on the main thread.
                 mode = CACHED;
               }
@@ -2768,9 +2784,11 @@ public class TWEngine {
               // If cachedmusic exists then cachedmusic.isplaying = streammusic.isplaying
               // Otherwise mode must be NONE so we just kickstart the streamMusic.
               if (cachedMusic != null) {
-                if (cachedMusic.isPlaying())
+                if (cachedMusic.isPlaying()) {
                   streamMusic.play();
-                streamMusic.jump(cachedMusic.position());
+                  delay(10);
+                  streamMusic.jump(cachedMusic.position());
+                }
               }
               else streamMusic.play();
               
@@ -2790,18 +2808,13 @@ public class TWEngine {
       }
       
       sounds = new HashMap<String, SoundFile>();
-      cachedMusicMap = new HashMap<String, SoundFile>();
-      CACHE_MUSIC = settings.getBoolean("music_caching", true);
+      CACHE_MUSIC = settings.getBoolean("music_caching", true) && enableCaching;
       VOLUME_NORMAL = settings.getFloat("volume_normal", 1f);
       VOLUME_QUIET = settings.getFloat("volume_quiet", 0.25f);
       CACHE_MISS_NO_MUSIC = settings.getBoolean("cache_miss_no_music", false);
       WAIT_FOR_GSTREAMER_START = settings.getBoolean("gstreamer_startup_wait", false);
       setMasterVolume(VOLUME_NORMAL);
       startupGStreamer = true;
-    }
-    
-    public boolean cacheHit(String path) {
-      return cachedMusicMap.containsKey(path);
     }
     
     public void setNormalVolume() {
@@ -2812,19 +2825,6 @@ public class TWEngine {
       setMasterVolume(VOLUME_QUIET);
     }
     
-    // Not including the size because we don't wanna overengineer it.
-    class CachedEntry {
-      public CachedEntry(String cpa, String opa, int pri, int s) {
-        cachedpath = cpa;
-        originalpath = opa;
-        priority = pri;
-        sizekb = s;
-      }
-      public int sizekb = 0;
-      public String cachedpath = "";
-      public String originalpath = "";
-      public int priority = 0;
-    }
     
     //@SuppressWarnings("unused")
     public void saveAsWav(SoundFile s, int sampleRate, String path) {
@@ -2882,14 +2882,9 @@ public class TWEngine {
     
     
     
-    private void updateMusicCache(final String path) {
-      // When we pass -1 we don't force the score.
-      updateMusicCache(path, -1);
-    }
-    
     // Basically checks for paths beginning with ?/ which means it's relative path
     // aka append "/path/to/Timeway/data/" at "?/"
-    private String processPath(String path) {
+    private String fromPossibleRelative(String path) {
       if (path == null) return null;
       
       if (path.length() > 1) {
@@ -2902,105 +2897,111 @@ public class TWEngine {
       return path;
     }
     
+    // Converts "C:/path/to/cache/data/" to "?/cache/data/"
+    private String toPossibleRelative(String path) {
+      
+      path = path.replaceAll("\\\\", "/");
+      // We want our cached paths to be relative
+      if (path.contains(APPPATH)) {
+        return "?/"+path.substring(APPPATH.length());
+      }
+      else {
+        // Otherwise return path as is
+        return path;
+      }
+    }
     
     
-    // This increases ever-so steadily.
-    private float cacheTime = 0.;
-    private final float MAX_CACHE_TIME = 60.*60.;
-    private final int MAX_CACHE_SIZE = 1024*1024;   // Let's go with 50mb ram usage.
+    // We don't wanna cache music files that are too small cus that will just use up unnecessary cache space.
+    // At the same time, we don't wanna go over the max limit otherwise we could end up with a outofmemory exception.
+    // Remember,
+    // 10MB uncompressed = ~1 minute music
+    private final int MIN_CACHE_SIZE = 1024*1024*6;
+    private final int MAX_CACHE_SIZE = 1024*1024*60;   // Let's go with 60mb ram usage.
+    private final int MAX_CACHE_SIZE_LOW_MEM = 1024*1024*20;
     private AtomicBoolean caching = new AtomicBoolean(false);
     
     // Pass forceScore = -1 to disable force score.
-    private void updateMusicCache(String ppath, int forceScore) {
+    private void updateMusicCache(final String ppath) {
+      if (DISABLE_GSTREAMER) return;
+      
+      if ((!CACHE_MUSIC || isAndroid())) return;
+      
       final String path = ppath.replaceAll("\\\\", "/");
       
-        // Bug fix to avoid outofmemoryexception, find the size now, not later.
-        // Because we're still loading up the sound file in the background, best we can do here is
-        // make an estimate on how large the file will be.
-        // Here's the rules:
-        // wav: filesize*2
-        // mp3: filesize*10
-        // ogg: filesize*10
-        // flac: filesize*(10/7)
-        // anything else: filesize*2
-        int size = 0;
-        int filesize = (int)(new File(path)).length();
-        if (file.getExt(path).equals("wav")) size = filesize*2;
-        else if (file.getExt(path).equals("mp3")) size = filesize*10;
-        else if (file.getExt(path).equals("ogg")) size = filesize*10;
-        else if (file.getExt(path).equals("flac")) size = filesize*(10/7)/2;
-        else size = filesize*2;
+      if (path.contains(CACHE_PATH)) return; // We ain't gonna cache cache files wtf.
+      
+      // Bug fix to avoid outofmemoryexception, find the size now, not later.
+      // Because we're still loading up the sound file in the background, best we can do here is
+      // make an estimate on how large the file will be.
+      // Here's the rules:
+      // wav: filesize*2
+      // mp3: filesize*10
+      // ogg: filesize*10
+      // anything else: filesize*2
+      int size = 0;
+      int filesize = (int)(new File(path)).length();
+      if (file.getExt(path).equals("wav")) size = filesize*2;
+      else if (file.getExt(path).equals("mp3")) size = filesize*10;
+      else if (file.getExt(path).equals("ogg")) size = filesize*10;
+      else size = filesize*2;
+      
+      int maxCacheSize = MAX_CACHE_SIZE;
+      if (lowMemory) {
+        maxCacheSize = MAX_CACHE_SIZE_LOW_MEM;
+      }
       
       // FLAC is not supported by soundfile so don't bother caching that.
-      //if (size > MAX_CACHE_SIZE) console.log("SKIP "+size+" "+MAX_CACHE_SIZE);
-      if (file.getExt(path).equals("flac") || size > MAX_CACHE_SIZE) {
+      if (file.getExt(path).equals("flac") || size > maxCacheSize) {
+        //console.log("flac file or file is way too big.");
         return;
       }
       
-      // For now I'm gonna remove the MAX_CACHE_TIME limitation.
-      if ((CACHE_MUSIC && !isAndroid()) /* && cacheTime < MAX_CACHE_TIME */) {
-        
+      // File too small, not worth caching as this will just waste storage space (it's better just to load it directly).
+      if (size < MIN_CACHE_SIZE) {
+        //console.log("File too small to be worth caching.");
+        return;
+      }
+      
         boolean cacheLoaded = true;
-        String cacheFilePath = CACHE_PATH+MUSIC_CACHE_FILE;
-        JSONArray jsonarray = null;
-        File f = new File(cacheFilePath);
-        if (f.exists()) {
+        String cacheInfoPath = CACHE_PATH+MUSIC_CACHE_FILE;
+        JSONObject json = null;
+        if (file.exists(cacheInfoPath)) {
           try {
-            jsonarray = app.loadJSONArray(cacheFilePath);
-            if (jsonarray == null) {
-              console.info("updateMusicCache: couldn't load music cache.");
+            json = app.loadJSONObject(cacheInfoPath);
+            if (json == null) {
+              //console.log("updateMusicCache: couldn't load music cache.");
               cacheLoaded = false;
             }
           }
           catch (RuntimeException e) {
-            console.info("updateMusicCache: something's wrong with the music cache json.");
+            //console.log("updateMusicCache: something's wrong with the music cache json.");
             cacheLoaded = false;
           }
         }
         else cacheLoaded = false;
         
-        if (!cacheLoaded || jsonarray == null) {
-          jsonarray = new JSONArray();
+        if (!cacheLoaded || json == null) {
+          json = new JSONObject();
         }
         
         
-        // If cache hasn't been found then the entry in the cache will automatically not be found lol.
-        JSONObject obj;
-        int score = max(int(MAX_CACHE_TIME-cacheTime), 0);
-        // Set the score to our forced score instead if active.
-        if (forceScore != -1) {
-          score = forceScore;
-        }
         
         // Save these for later, we'll need the below down there in the code.
         String tempCacheFilePath = null;
-        boolean createNewEntry = true;
         
-        // TODO: this loop is technically inefficient.
-        for (int i = 0; i < jsonarray.size(); i++) {
-          obj = jsonarray.getJSONObject(i);
-          if (processPath(obj.getString("originalPath", "")).equals(path)) {
-            // Add to the priority, but we don't want it to overflow, so max out if it reaches max integer value.
-            int priority = (int)min(obj.getInt("priority", 0)+score, Integer.MAX_VALUE-MAX_CACHE_TIME*2);
-            obj.setInt("priority", priority);
-            
-            // In case we need to re-create the cached file later.
-            tempCacheFilePath = processPath(obj.getString("cachePath", ""));
-            
-            //console.log("Priority: "+str(priority)+" "+str(score));
-            
-            // We've of course found an existing entry so no need to create a new one.
-            // Tell that to the code below.
-            createNewEntry = false;
-          }
+        boolean createNewEntry = json.isNull(toPossibleRelative(path));
+        if (createNewEntry) {
+          //console.log("no cache, creating new");
+        }
+        else {
+          tempCacheFilePath = fromPossibleRelative(json.getJSONObject(toPossibleRelative(path)).getString("cache_path"));
+          //console.log("existing cache path");
         }
         
         
-        
-        
-        
         // Save the actual wav file as cache
-        String cachedFileName = "";
+        String cachedPath = "";
         final String ext = file.getExt(path);
         // Sometimes the entry can exist but not the cached file.
         // We can easily just re-create the entry if it's missing.
@@ -3008,14 +3009,14 @@ public class TWEngine {
         // If it's a wav, there's no need to do converstions into the cache.
         // Just tell it that the original path is the cached path.
         if (ext.equals("wav")) {
-          cachedFileName = path;
+          cachedPath = path;
           //obj.setString("cachePath", cachedFileName.replaceAll("\\\\", "/"));
         }
         // Otherwise, begin to load the compressed file, decompress it, and save as wav in cache folder.
         else {
           // 2 cases here:
           // - We're playing music that has never been cached before
-          // - The music has a cache entry but the cache WAV file doesn't exist for some resason
+          // - The music has a cache entry but the cache WAV file doesn't exist.
           String temp = "";
           // Entry already exists but wav file doesn't
           if (!createNewEntry) {
@@ -3031,8 +3032,10 @@ public class TWEngine {
             temp = generateCachePath("wav");
           }
           
-          final String cachedFileNameFinal = temp;
-          cachedFileName = cachedFileNameFinal;
+          // From here we go ahead and generate the cache wav file.
+          
+          final String cachedFilePathFinal = temp;
+          cachedPath = cachedFilePathFinal;
           
           if (!DISABLE_GSTREAMER) {
             // Kickstart the thread that will cache the file.
@@ -3057,10 +3060,13 @@ public class TWEngine {
                   // for mp3 files
                   // TODO: Read mp3/ogg header data and determine samplerate there.
                   if (ext.equals("mp3")) {
-                    samplerate = 44100;
+                    samplerate = 48000;
                   }
-                  saveAsWav(s, samplerate, cachedFileNameFinal);
-                  PApplet.println("DONE SOUND CACHE "+cachedFileNameFinal);
+                  
+                  saveAsWav(s, samplerate, cachedFilePathFinal);
+                  s.removeFromCache();
+                  System.gc();
+                  PApplet.println("DONE SOUND CACHE "+cachedFilePathFinal);
                   
                 }
                 catch (RuntimeException e) {
@@ -3071,194 +3077,75 @@ public class TWEngine {
               }
             }
             );
+            t1.setDaemon(true);
             t1.start();
           }
         }
         
-        // Nothing more to do.
-        if (!createNewEntry) {
-          // Write to the file
-          try {
-            app.saveJSONArray(jsonarray, cacheFilePath);
-          }
-          catch (RuntimeException e) {
-            console.warn(e.getMessage());
-            console.warn("Failed to write music cache file:");
-          }
-          return;
-        }
-        
-        cachedFileName = cachedFileName.replaceAll("\\\\", "/");
-        
-        // We want our cached paths to be relative
-        if (cachedFileName.contains(APPPATH)) {
-          String newTemp = "?/"+cachedFileName.substring(APPPATH.length());
-          cachedFileName = newTemp;
-        }
-        String newPath = path.replaceAll("\\\\", "/");        
-        if (newPath.contains(APPPATH)) {
-          String newTemp = "?/"+path.substring(APPPATH.length());
-          newPath = newTemp;
-        }
-        
+        // Save to the cache info
         // If we get to this point, entry doesn't exist in the cache file/cache file doesn't exist.
-        obj = new JSONObject();
-        obj.setString("cachePath", cachedFileName);
-        obj.setString("originalPath", newPath);
-        obj.setInt("priority", score);
-        obj.setInt("sizekb", size/1024);
-        jsonarray.append(obj);
+        JSONObject obj = new JSONObject();
+        obj.setString("cache_path", toPossibleRelative(cachedPath));
+        json.setJSONObject(toPossibleRelative(path), obj);
         try {
-          saveJSONArray(jsonarray, cacheFilePath);
+          app.saveJSONObject(json, cacheInfoPath);
         }
         catch (RuntimeException e) {
           console.warn(e.getMessage());
           console.warn("Failed to write music cache file:");
         }
-        
-        //console.log("Cache "+path);
-        
-      }
     }
     
-    // IMPORTANT NOTE: this does NOT run the loader code in a seperate thread. Make sure
-    // to run this in a seperate thread otherwise you're going to experience stalling BIIIIIG time.
-    public void loadMusicCache() {
-      if (CACHE_MUSIC && !isAndroid()) {
-        String cacheFilePath = CACHE_PATH+MUSIC_CACHE_FILE;
-        File f = new File(cacheFilePath);
-        if (f.exists()) {
-          JSONArray jsonarray;
-          try {
-            jsonarray = app.loadJSONArray(cacheFilePath);
-            if (jsonarray == null) {
-              console.info("loadMusicCache: couldn't load music cache.");
-              return;
-            }
+    
+    public String tryGetMusicCache(String originalPath) {
+      String cacheFilePath = CACHE_PATH+MUSIC_CACHE_FILE;
+      
+      // TODO: Loading it each time is very inefficient, we should probably cache the cache.
+      File f = new File(cacheFilePath);
+      if (f.exists()) {
+        JSONObject json;
+        try {
+          json = app.loadJSONObject(cacheFilePath);
+          if (json == null) {
+            //console.log("cache miss, info file null");
+            return null;
           }
-          catch (RuntimeException e) {
-            console.info("loadMusicCache: something's wrong with the music cache json.");
-            return;
-          }
-          
-          
-          // Two parts below: 
-          // 1. Decide which cached files will be loaded,
-          // 2. Load the actual cache into ram
-          
-          // NOTE: this isn't perfect because the cache might not exist,
-          // so full resources might not be used,
-          // but honestly why bother with a rare edge case.
-          // Not on my todo list anytime soon.
-          
-          int totalSizeKB = 0;
-          
-          ArrayList<CachedEntry> loadMusic = new ArrayList<CachedEntry>();
-          
-          // At this point all checks should have passed.
-          // Load all music from the array
-          int l = jsonarray.size();
-          for (int i = 0; i < l; i++) {
-            JSONObject obj = jsonarray.getJSONObject(i);
-            if (obj != null) {
-              // The path here is the path of the original file,
-              // NOT the cached file. (remember we're passing it
-              // thru tryGetSoundCache())
-              String cachedpath = obj.getString("cachePath", "");
-              String originalPath = obj.getString("originalPath", "");
-              int sizekb = obj.getInt("sizekb", Integer.MAX_VALUE);
-              
-              // Priority is based on the time from the start of the application (when gstreamer starts initialising)
-              // so that we know how important it is to load the file.
-              // For example, if our music in our home directory realm is going to have a pretty big priority.
-              // Meanwhile, some folder we rarely visit is going to have a miniscule priority.
-              int priority = obj.getInt("priority", 0);
-              
-              // Validity check (mostly to check cache isn't corrupted):
-              // - Actually has a path
-              // - Total size isn't missing
-              // - Priority isn't missing.
-              if (cachedpath.length() > 0 && sizekb < MAX_MUSIC_CACHE_SIZE_KB && priority > 0) {
-                f = new File(cachedpath);
-                // Check: file exists
-                if (f.exists()) {
-                  // Check: size fits. If it doesn't, see if there's any possibility of
-                  // evicting cached music with less priority.
-                  if (totalSizeKB+sizekb < MAX_MUSIC_CACHE_SIZE_KB) {
-                    console.info("loadMusicCache: Easy cache add.");
-                    loadMusic.add(new CachedEntry(cachedpath, originalPath, priority, sizekb));
-                    totalSizeKB += sizekb;
-                  }
-                  // Not enough space, see if there's others with less priority that we can evict.
-                  else {
-                    console.info("loadMusicCache: Not enough cache space, seeing if there's someone we can kick out.");
-                    // Loop through the list, check if there's someone with lower priority we can kick out.
-                    // Yes, technically squared big-o, but we're dealing with what? less than 10 cached entries at most?
-                    // No biggie.
-                    int ll = loadMusic.size();
-                    for (int ii = 0 ; ii < ll; ii++) {
-                      CachedEntry c = loadMusic.get(ii);
-                      
-                      // Our priority is higher and it fits if we evict the old one.
-                      if (c.priority < priority && totalSizeKB-c.sizekb+sizekb < MAX_MUSIC_CACHE_SIZE_KB) {
-                        // Replace old one with our entry.
-                        console.info("loadMusicCache: Evicted lower priority cache for higher priority one.");
-                        loadMusic.set(ii, new CachedEntry(cachedpath, originalPath, priority, sizekb));
-                        totalSizeKB += sizekb;
-                        // And of course break out so that we don't replace all the entries.
-                        break;
-                      }
-                    }
-                    // If we break out here then we couldn't find a spot, so sad :(
-                    // Oh well huehue
-                    
-                    console.info("loadMusicCache: I couldn't find a space for me, aww :(");
-                  }
-                }
-              }
-            }
-          }
-          // End loop 1
-          // Move on to actually loading the files lol.
-          
-          // Step 2 load the music.
-          for (CachedEntry c : loadMusic) {
-            // If this passes then we can load this file
-            
-            try {
-              SoundFile music = new SoundFile(app, c.cachedpath, false); //tryLoadSoundCache(c.path, null);
-              // If cache exists of the music.
-              cachedMusicMap.put(c.originalpath, music);
-            }
-            catch (Exception e) {
-              //console.warn("Cache music load ("+c.cachedpath+") failed.");
-              //(new File(c.cachedpath)).delete();
-            }
-            //console.log(c.originalpath);
-          }
-          
-          
-          // We're not done yet!
-          // Step 3 load force-cached music
-          for (String filename : FORCE_CACHE_MUSIC()) {
-            if (!(new File(filename).isAbsolute())) {
-              filename = (APPPATH+filename).replaceAll("//", "/");
-            }
-            
-            if (!file.exists(filename)) {
-              console.bugWarn("loadMusicCache: constant FORCE_CACHE_MUSIC filename entry "+filename+" does not exist!");
-            }
-            
-            SoundFile music = new SoundFile(app, filename, false);
-            cachedMusicMap.put(filename, music);
-          }
-              
-          
         }
-        // If there's no cache file then don't bother lol.
+        catch (RuntimeException e) {
+          //console.log("cache miss, info file exception");
+          return null;
+        }
+        
+        
+        // Check cache entry exists
+        String originalPathRel = toPossibleRelative(originalPath);
+        JSONObject entry = json.getJSONObject(originalPathRel);
+        if (entry != null) {
+          // Cache hit. Not done yet tho.
+          String cachePath = fromPossibleRelative(entry.getString("cache_path"));
+          
+          
+          // Check music file actually exists.
+          if (file.exists(cachePath)) {
+            //console.log("cache hit");
+            return cachePath;
+          }
+          else {
+            //console.log("cache miss, cache file doesnt exist");
+            
+          }
+        }
+        else {
+          //console.log("cache miss, entry doesnt exist");
+        }
       }
-      else console.info("loadMusicCache: CACHE_MUSIC disabled, no loading cached music");
+      else {
+        //console.log("cache miss, info file doenst exist");
+      }
+      
+      return originalPath;
     }
+    
     
     // Ugly code but secure
     public boolean loadingMusic() {
@@ -3266,6 +3153,10 @@ public class TWEngine {
       if (isAndroid()) return false;
       boolean ready = musicReady.get();
       //if (gstreamerLoading && ready) gstreamerLoading = false;
+      
+      // Not android and gstreamer is disabled.
+      if (DISABLE_GSTREAMER) return true;
+      
       return !ready;
     }
     
@@ -3445,7 +3336,7 @@ public class TWEngine {
       if (musicReady.get() == false) {
         reloadMusic = true;
         reloadMusicPath = path;
-        updateMusicCache(path);
+        //updateMusicCache(path);
       }
   
       // Temporary fix
@@ -3633,10 +3524,7 @@ public class TWEngine {
         if (CACHE_MUSIC && !isAndroid()) {
           if (streamerMusic != null) streamerMusic.switchMode();
           if (streamerMusicFadeTo != null) streamerMusicFadeTo.switchMode();
-          // We no longer need the cached music map. Just to be safe, don't null it
-          // in case of nullpointerexception, but create a new one to clear the cache
-          // stored in it
-          cachedMusicMap = new HashMap<String, SoundFile>();
+          
         }
         else {
           stopMusic();
@@ -3704,14 +3592,6 @@ public class TWEngine {
               streamerMusic.play();
             }
           }
-        }
-      }
-      
-      
-      if (cacheTime <= MAX_CACHE_TIME) {
-        
-        if (display != null) {
-          cacheTime += display.getDelta();
         }
       }
     }
@@ -5060,7 +4940,6 @@ public class TWEngine {
         
         String[] keywords = st.split(" ");
         
-        int i = 0;
         for (Leaf leaf : entries.values()) {
           boolean contains = true;
           
@@ -5097,7 +4976,6 @@ public class TWEngine {
             // Finally
             results.add(leaf);
           }
-          i++;
           
           //if (i > 2000) {
           //  break;
@@ -5331,7 +5209,7 @@ public class TWEngine {
               Throwable cause = ite.getCause(); // Get the underlying exception
               console.warnOnce("Run plugin exception: " + ite.getClass().getSimpleName() + 
                                 " | Cause: " + (cause != null ? cause.getClass().getSimpleName() + " - " + cause.getMessage() : "No cause"));
-              cause.printStackTrace(); // Print the stack trace of the underlying exception
+              if (cause != null) cause.printStackTrace(); // Print the stack trace of the underlying exception
           } catch (IllegalAccessException iae) {
               console.warnOnce("Run plugin exception: " + iae.getClass().getSimpleName() + " - " + iae.getMessage());
           } catch (Exception e) {
@@ -5718,6 +5596,7 @@ public class TWEngine {
     getUpdateInfo();
     
     lowMemory = settings.getBoolean("low_memory", false);
+    enableCaching = settings.getBoolean("caching", true);
 
     power.setDynamicFramerate(settings.getBoolean("dynamic_framerate", true));
     DEFAULT_FONT_NAME = settings.getString("default_system_font", "Typewriter");
@@ -6564,7 +6443,7 @@ public class TWEngine {
       if (finalBenchmarkFrame) {
         // Calculate the average for that timestamp.
         long results = benchmarkArray[timestampIndex-1] /= benchmarkFrames;
-        String mssg = lastTimestampName+" - "+name+": "+str(results)+"microseconds";
+        String mssg = lastTimestampName+" - "+name+": "+str(results)+" microseconds";
         benchmarkResults.add(mssg);
         lastTimestampName = name;
       }
@@ -6654,9 +6533,6 @@ public class TWEngine {
     loadAllAssets(APPPATH+FONT_PATH());
     loadAllAssets(APPPATH+SHADER_PATH());
     loadAllAssets(APPPATH+SOUND_PATH());
-    
-    // gstreamer takes time to start, cache the music so that we can use it while gstreamer starts up.
-    sound.loadMusicCache();
   }
 
   
@@ -7091,9 +6967,9 @@ public class TWEngine {
       // Android doesn't wait for music
       // Anyways do nothing here to stop the other code below running.
     }
-    else if (!CACHE_MUSIC) {
-      if (sound.loadingMusic()) return true;
-    }
+    //else if (!CACHE_MUSIC) {
+    //  if (sound.loadingMusic()) return true;
+    //}
     else {
       // Otherwise, proceed right ahead if-
       // The home dir's .pixelrealm-bgm is cached
@@ -7142,7 +7018,7 @@ public class TWEngine {
     }
   }
 
-  public JSONObject cacheInfoJSON = null;
+  public JSONObject cacheInfoJSON = new JSONObject();
 
   // Whenever cache is written, it would be inefficient to open and close the file each time. So, have a timeout
   // timer which when it expires, the file is written and saved and closed.
@@ -7160,6 +7036,7 @@ public class TWEngine {
         return;
       }
     }
+    
 
     // First, open the cache file if it's not been opened already.
     if (cacheInfoTimeout == 0) {
@@ -7430,6 +7307,7 @@ public class TWEngine {
   
   
   public String saveCacheEntry(String originalPath, int size) {
+    
     JSONObject properties = new JSONObject();
     String cachePath = generateCachePath(file.getExt(originalPath));
     
@@ -7444,7 +7322,7 @@ public class TWEngine {
       properties.setString("lastModified", "");
       properties.setInt("size", size);
     }
-
+    
     cacheInfoJSON.setJSONObject(originalPath, properties);
     stats.increase("cache_files_created", 1);
     

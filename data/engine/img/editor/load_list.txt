@@ -3,9 +3,12 @@ engine/img/editor/bigger_text_128.png
 engine/img/editor/camera_128.png
 engine/img/editor/copy_button_128.png
 engine/img/editor/cross_128.png
+engine/img/editor/down_triangle_64.png
 engine/img/editor/flip_camera_128.png
 engine/img/editor/fonts_128.png
 engine/img/editor/forward_arrow_128.png
+engine/img/editor/keybinding_1_128.png
+engine/img/editor/keybinding_2_128.png
 engine/img/editor/paste_button_128.png
 engine/img/editor/smaller_text_128.png
 engine/img/editor/snap_button_128.png

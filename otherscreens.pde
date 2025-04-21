@@ -138,6 +138,8 @@ public class Benchmark extends Screen {
   
   public SpriteSystemPlaceholder gui;
   
+  private float highestTime = 0f;
+  
   public Benchmark(TWEngine e) {
     super(e);
     textFont(engine.DEFAULT_FONT);
@@ -145,6 +147,20 @@ public class Benchmark extends Screen {
     ui.useSpriteSystem(gui);
     myUpperBarColor = color(100);
     gui.interactable = false;
+    
+    // Find highest benchmark time (used to scale results relative to highest time).
+    for (long longTime : engine.benchmarkArray) {
+      float time = (float)((int)longTime);
+      
+      // Stupid hack (end to start times end up causing everything else to look small)
+      if (time > 10000f) {
+        continue;
+      }
+      
+      if (time > highestTime) {
+        highestTime = time;
+      }
+    }
   }
   
   public void upperBar() {
@@ -159,30 +175,36 @@ public class Benchmark extends Screen {
     // We expect the benchmark to have completed
     
     textAlign(LEFT, TOP);
-    textSize(40);
+    textFont(engine.DEFAULT_FONT, 16f);
+    
     text("Benchmark results", 10, myUpperBarWeight+10);
     
     
-    float x = 10;
-    float y = myUpperBarWeight+50;
+    float x = 10f;
+    float y = myUpperBarWeight+50f;
     
-    int i = 0;
-    float c = 0;
+    float c = 0f;
     
     noStroke();
-    textSize(20);
     colorMode(HSB, 255);
-    for (String res : engine.benchmarkResults) {
+    for (int i = 0; i < engine.benchmarkResults.size(); i++) {
+      float time = (float)((int)engine.benchmarkArray[i]);
+      
+      // Stupid hack (end to start times end up causing everything else to look small)
+      if (time > 10000f) {
+        continue;
+      }
+      
       fill(c, 255, 128);
       c += 40.;
       c %= 255.;
-      rect(x, y, ((int)engine.benchmarkArray[i])/2, 20);
+      float WI = WIDTH-20f;
+      rect(x, y, (time/highestTime)*WI, 20);
       
       fill(255);
-      text(res, x, y-3);
+      text(engine.benchmarkResults.get(i), x, y+3);
       
-      i++;
-      y += 25;
+      y += 25f;
       
     }
     colorMode(RGB, 255);

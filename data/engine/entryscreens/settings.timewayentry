@@ -27,10 +27,19 @@
     "type": 1
   },
   {
+    "size": 30,
+    "color": -1,
+    "x": 153,
+    "y": 1016,
+    "ID": "sleep_when_inactive",
+    "text": "Sleep when not in focus",
+    "type": 4
+  },
+  {
     "size": 16,
     "color": -7303024,
-    "x": 161,
-    "y": 3454,
+    "x": 164,
+    "y": 3526,
     "ID": "71358744",
     "text": "On Windows, the music streamer service can take a while to start up. While it's starting up, cached music files can be used to keep the\nbackground music playing. However, this significantly increases space used by cache.",
     "type": 1
@@ -47,8 +56,8 @@
   {
     "size": 16,
     "color": -7303024,
-    "x": 160,
-    "y": 3294,
+    "x": 162,
+    "y": 3343,
     "ID": "50702696",
     "text": "Timeway makes use of cache files to improve loading performance. This increases disk usage.",
     "type": 1
@@ -157,7 +166,7 @@
     "max_value": 1
   },
   {
-    "button_color": -10400387,
+    "button_color": "FF614D7D",
     "size": 30,
     "color": -1,
     "x": 180,
@@ -165,7 +174,7 @@
     "ID": "keybind_settings",
     "text": "Keybind settings",
     "type": 8,
-    "button_color_hover": -7507787
+    "button_color_hover": "FF8D70B5"
   },
   {
     "size": 16,
@@ -183,15 +192,6 @@
     "y": 2053,
     "ID": "26828670",
     "text": "How pixelated the screen is. Higher values = more pixelated. May decrease performance.",
-    "type": 1
-  },
-  {
-    "size": 16,
-    "color": -7303024,
-    "x": 147,
-    "y": 3660,
-    "ID": "82190808",
-    "text": "If the music streamer service is not available and there's no cache, loading music or nothing can be played in the background, or alternatively\nTimeway can wait for the music streamer service to start instead (not recommended)",
     "type": 1
   },
   {
@@ -217,8 +217,8 @@
   {
     "size": 30,
     "color": -1,
-    "x": 144,
-    "y": 3252,
+    "x": 132,
+    "y": 3292,
     "ID": "enable_caching",
     "text": "Enable caching",
     "type": 4
@@ -236,20 +236,6 @@
     "y": 1158,
     "ID": "target_framerate",
     "text": "Target framerate",
-    "type": 7
-  },
-  {
-    "size": 26,
-    "color": -1,
-    "x": 137,
-    "options": [
-      "Play loading music",
-      "Play nothing (silence)",
-      "Wait for music service to start"
-    ],
-    "y": 3587,
-    "ID": "cache_miss_method",
-    "text": "Music cache miss method:",
     "type": 7
   },
   {
@@ -296,8 +282,8 @@
   {
     "size": 30,
     "color": -1,
-    "x": 139,
-    "y": 3411,
+    "x": 136,
+    "y": 3481,
     "ID": "music_caching",
     "text": "Music caching",
     "type": 4
@@ -377,24 +363,6 @@
     "ID": "64003664",
     "text": "Plugins extend Timeway functionality and are automatically loaded during runtime. These are experimental so they are turned off by\ndefault for security. You may enable this if you want to program with Timeway or use plugins, ",
     "type": 1
-  },
-  {
-    "size": 24,
-    "color": -14773,
-    "x": 545,
-    "y": 3630,
-    "ID": "music_cache_miss_warning",
-    "text": "This option is not recommended.",
-    "type": 1
-  },
-  {
-    "size": 30,
-    "color": -1,
-    "x": 153,
-    "y": 1016,
-    "ID": "sleep_when_inactive",
-    "text": "Sleep when not in focus",
-    "type": 4
   },
   {
     "size": 30,
