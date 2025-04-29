@@ -1,0 +1,59 @@
+uniform mat4 transformMatrix;
+uniform mat4 texMatrix;
+uniform mat3 normalMatrix;
+
+attribute vec4 color;
+attribute vec4 position;
+attribute vec2 texCoord;
+attribute vec3 normal;
+
+varying vec4 vertColor;
+varying vec4 vertTexCoord;
+
+uniform float time;
+uniform float ambient;
+uniform float reffect;
+uniform float geffect;
+uniform float beffect;
+uniform float fadeLength;
+uniform float fadeStart;
+uniform vec3 lightDirection;
+
+uniform int mode;
+#define MODE_STANDARD 1
+#define MODE_ENV 2
+#define MODE_PORTAL 3
+#define MODE_WATER 4
+
+void main() {
+  gl_Position = transformMatrix * position;
+  
+  if (mode == MODE_STANDARD) {
+	vertTexCoord = vec4(texCoord, 1.0, 1.0) * texMatrix;
+    vertColor = color;
+  }
+  else if (mode == MODE_ENV || mode == MODE_WATER) {
+    float z = gl_Position.z;
+    float opacity = clamp(1.0-((z-fadeStart) / fadeLength), -1.0, 1.0);
+
+    // Lighting
+    float dp = (normal.x * lightDirection.x + normal.y * lightDirection.y + normal.z * lightDirection.z);
+    
+    float c = ((dp*2. + 2.) / 2.)*1.0-1.0;
+    vertColor = color*vec4(ambient+clamp((c*reffect), 0.0, 1000.), ambient+clamp((c*geffect), 0.0, 1000.), ambient+clamp((c*beffect), 0.0, 1000.), opacity);
+	
+    vertTexCoord = vec4(texCoord, 0.0, 1.0);
+	if (mode == MODE_WATER) {
+		vertTexCoord = vec4(texCoord+vec2(time*0.1), 0.0, 1.0);
+	}
+  }
+  else if (mode == MODE_PORTAL) {
+	vertTexCoord = vec4(texCoord, 1.0, 1.0) * texMatrix;
+    vertColor = color;
+  }
+  else {
+    vertTexCoord = vec4(0.0);
+    vertColor = vec4(0.0);
+  }
+    
+}

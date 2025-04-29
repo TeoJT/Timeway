@@ -1331,6 +1331,14 @@ public class TWEngine {
       );
     }
     
+    public PShader getShader(String shaderName) {
+      return getShaderWithParams(shaderName, null);
+    }
+    
+    public PShader getShaderWithArgs(String shaderName, Object... uniforms) {
+      return getShaderWithParams(shaderName, uniforms);
+    }
+    
     public PShader getShaderWithParams(String shaderName, Object[] uniforms) {
       PShaderEntry shentry = shaders.get(shaderName);
       if (shentry == null) {
@@ -1340,6 +1348,9 @@ public class TWEngine {
       PShader sh = shentry.shader;
       
       if (!shaders.get(shaderName).success) return errShader;
+      
+      if (uniforms == null) return sh;
+      
       int l = uniforms.length;
       
       for (int i = 0; i < l; i++) {
