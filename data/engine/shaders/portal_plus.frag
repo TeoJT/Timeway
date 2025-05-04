@@ -7,6 +7,7 @@ precision mediump float;
 #define PI 3.1415926535
 uniform float u_dir;
 uniform float u_time;
+uniform vec2 pixelRes;
 uniform sampler2D texture;
 varying vec4 vertTexCoord;
 varying vec4 vertColor;
@@ -23,15 +24,15 @@ float pixelate(float o, float res) {
     return (floor(o*res))/res;
 }
 
-const vec2 pixels = vec2(1500., 221.);
+
 
 
 void main(void)
 {
     vec2 st = vertTexCoord.xy;
     
-    float aspect = (pixels.x/pixels.y);
-    vec2 tt = gl_FragCoord.xy/pixels.xy;
+    float aspect = (pixelRes.x/pixelRes.y);
+    vec2 tt = gl_FragCoord.xy/pixelRes.xy;
     //tt.x *= 2.;
     tt.y = 1.-tt.y;
     

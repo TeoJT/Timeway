@@ -191,7 +191,7 @@
     "x": 166,
     "y": 2053,
     "ID": "26828670",
-    "text": "How pixelated the screen is. Higher values = more pixelated. May decrease performance.",
+    "text": "How pixelated the screen is. Higher values = more pixelated. \u0003\u0003\u0003\u0003\u0003\u0003\u0003\u0003\u0003\u0003\u0003\u0003\u0003\u0003\u0003\u0003\u0003\u0003\u0003\u0003\u0003\u0003\u0003\u0003\u0003\u0003\u0003Less pixelation may reduce performance.",
     "type": 1
   },
   {
@@ -254,6 +254,7 @@
     "options": [
       "Prompt realm templates",
       "Create default realm files",
+      "Create default (legacy) realm files",
       "Do nothing"
     ],
     "y": 2301,
@@ -306,7 +307,7 @@
     "ID": "field_of_view",
     "text": "Field of view",
     "type": 5,
-    "max_value": 180
+    "max_value": 140
   },
   {
     "min_value": 0,

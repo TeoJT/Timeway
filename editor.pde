@@ -963,6 +963,10 @@ public class Editor extends Screen {
           slider.valFloat = x;
         }
         
+        public boolean mouseDown() {
+          return slider.mouseDown();
+        }
+        
       
         public void display() {
             //canvas.pushMatrix();
@@ -1025,7 +1029,7 @@ public class Editor extends Screen {
         
         public void setVal(int x) {
           if (slider == null) return;
-          slider.valInt = x;
+          slider.setVal(x);
         }
         
         // MUST be called on creation
@@ -1053,7 +1057,7 @@ public class Editor extends Screen {
         public String selectedOption = "Sample option";
         
         private final float BOX_X_POS  = 400f;
-        private final float BOX_X_SIZE = 500f;
+        private final float BOX_X_SIZE = 520f;
         
         public void createOptions(JSONArray array) {
           options = new String[array.size()];
@@ -1093,7 +1097,9 @@ public class Editor extends Screen {
             canvas.text(displayText, x, y);
             // Selected option text
             canvas.fill(255f);
-            canvas.text(selectedOption, x+BOX_X_POS+10f, y);
+            
+            // Quick visual fix (vrey bad coding but im lazy)
+            canvas.text(selectedOption.length() > 28 ? selectedOption.substring(0, 25)+"..." : selectedOption, x+BOX_X_POS+10f, y);
             canvas.popMatrix();
         }
         
@@ -1907,7 +1913,7 @@ public class Editor extends Screen {
         if (!ui.miniMenuShown() && !cameraMode) 
           display.clip(0, 0, WIDTH, myUpperBarWeight);
         super.upperBar();
-        display.defaultShader();
+        display.resetShader();
         
         if (showGUI)
           runGUI();
@@ -1922,7 +1928,7 @@ public class Editor extends Screen {
       if (upperBarDrop == CAMERA_OFF_ANIMATION) myLowerBarWeight = LOWER_BAR_WEIGHT+(LOWER_BAR_EXPAND * (upperbarExpand));
       
       super.lowerBar();
-      display.defaultShader();
+      display.resetShader();
     }
     
     public float insertedXpos = 10;
@@ -2497,7 +2503,7 @@ public class ReadOnlyEditor extends Editor {
     app.noStroke();
     app.rect(0, 0, WIDTH, myUpperBarWeight);
     display.recordLogicTime();
-    display.defaultShader();
+    display.resetShader();
     
     // display our very small ui
     ui.useSpriteSystem(readonlyEditorUI);
@@ -2527,7 +2533,7 @@ public class ReadOnlyEditor extends Editor {
     app.noStroke();
     app.rect(0, HEIGHT-myLowerBarWeight, WIDTH, myLowerBarWeight);
     display.recordLogicTime();
-    display.defaultShader();
+    display.resetShader();
   }
 }
 
@@ -2566,6 +2572,10 @@ public class SettingsScreen extends ReadOnlyEditor {
   public final static String SETTINGS_PATH        = "engine/entryscreens/settings.timewayentry";
   public final static String SETTINGS_PATH_PHONE  = "engine/entryscreens/settings_phone.timewayentry";
   
+  private PGraphics[] mockSceneScales = new PGraphics[5];
+  private PGraphics mockScene = null;
+  private int mockSceneHeight = 0;
+  
   public SettingsScreen(TWEngine engine) {
     // Kinda overcoming an unnecessary java limitation where super must be the first statement,
     // we choose the phone version (for condensed screens) or the normal version.
@@ -2574,6 +2584,8 @@ public class SettingsScreen extends ReadOnlyEditor {
     
     loadSettings();
     get("invalid_path_error").visible = !(file.exists(getInputField("home_directory").inputText) && file.isDirectory(getInputField("home_directory").inputText));
+    
+    mockSceneHeight = (int)(HEIGHT-myUpperBarWeight-myLowerBarWeight);
   }
   
   
@@ -2677,7 +2689,7 @@ public class SettingsScreen extends ReadOnlyEditor {
     if (newRealmAction.equals("nothing")) newRealmAction = "Do nothing";
     getOptionsField("new_realm").selectedOption = newRealmAction;
     
-    getSliderIntField("pixelation_scale").setVal(settings.getInt("pixelation_scale", 4)-1);
+    getSliderIntField("pixelation_scale").setVal(settings.getInt("pixelation_scale", 4));
     getBooleanField("enable_caching").state = settings.getBoolean("caching", true);
     
     String powerMode = settings.getString("force_power_mode", "Auto");
@@ -2713,6 +2725,9 @@ public class SettingsScreen extends ReadOnlyEditor {
     else if (selected.equals("Create default realm files")) {
       settings.setString("new_realm_action", "default");
     }
+    else if (selected.equals("Create default (legacy) realm files")) {
+      settings.setString("new_realm_action", "default_legacy");
+    }
     else if (selected.equals("Do nothing")) {
       settings.setString("new_realm_action", "nothing");
     }
@@ -2739,6 +2754,53 @@ public class SettingsScreen extends ReadOnlyEditor {
     settings.setBoolean("enable_plugins", getBooleanField("enable_plugins").state);
     
     System.gc();
+  }
+  
+  private float backgroundFade = 255f;
+  
+  public void backg() {
+    // When sliding the mockSceneSlider, fade in the mock pixelrealm scene.
+    boolean showMockScene = getSliderIntField("pixelation_scale").mouseDown();
+    showMockScene |= getSliderField("field_of_view").mouseDown();
+    //showMockScene = true;
+    
+    // Fade in/out.
+    if (showMockScene) {
+      backgroundFade -= 5f*display.getDelta();
+    }
+    else {
+      backgroundFade += 5f*display.getDelta();
+    }
+    // constraint
+    backgroundFade = max(min(backgroundFade, 255f), 127f);
+    
+    // Render the scene
+    if (backgroundFade < 255f) {
+      // Select the scale of the scene.
+      // Using the mockSceneScales array is sort of like caching the scenes so we don't need to waste performance
+      // creating a new scene every frame (gross).
+      int scale = getSliderIntField("pixelation_scale").getValInt();
+      if (scale == 0) return;
+      if (mockSceneScales[scale] == null) {
+        // Create (make sure it's pixelated)
+        mockScene = createGraphics((int)(WIDTH/float(scale)), (int)(mockSceneHeight/float(scale)), P3D);
+        ((PGraphicsOpenGL)mockScene).textureSampling(2);
+        
+        // Cache newly created scaled scene.
+        mockSceneScales[scale] = mockScene;
+      }
+      mockScene = mockSceneScales[scale];
+      
+      renderPixelRealmMockup();
+      //renderObjects();
+      app.image(mockScene, 0, myUpperBarWeight, WIDTH, mockSceneHeight);
+    }
+    
+    // Render the actual background on top as a transparent layer (if sliding the slider, otherwise fully opaque when fully faded in).
+    app.fill(red(myBackgroundColor), green(myBackgroundColor), blue(myBackgroundColor), backgroundFade);
+    app.noStroke();
+    app.rect(0, myUpperBarWeight, WIDTH, HEIGHT-myUpperBarWeight-myLowerBarWeight);
+    
   }
   
   public void content() {
@@ -2783,6 +2845,204 @@ public class SettingsScreen extends ReadOnlyEditor {
     }
     else return false;
   }
+  
+  float LOOK_DIST = 50f;
+  float direction = 0;
+  float groundSize = 400;
+  // I was originally going to simply record a pixel realm scene as an obj file and then display it with a single line of
+  // code. Turns out, exporting an obj of the scene is a lot harder than I thought. So unfortunately we're doing immediate
+  // mode rendering of the default scene using this copy+paste but massively dumbed down.
+  private void renderPixelRealmMockup() {
+      mockScene.beginDraw();
+      mockScene.background(0);
+      mockScene.noStroke();
+      mockScene.hint(DISABLE_DEPTH_TEST);
+      mockScene.perspective(PI/3.0, (float)mockScene.width/mockScene.height, 10., 1000000.);
+      mockScene.image(display.systemImages.get("pixelrealm-sky-legacy"), 0, 0, mockScene.width, mockScene.height);
+      mockScene.flush();
+      mockScene.hint(ENABLE_DEPTH_TEST);
+      
+      mockScene.pushMatrix();
+      
+      float playerX = 0f;
+      float playerY = 0f;
+      float playerZ = 0f;
+      
+      mockScene.camera(playerX, playerY-80f, playerZ, 
+        playerX+sin(direction)*LOOK_DIST, playerY-80f, playerZ+cos(direction)*LOOK_DIST, 
+        0., 1., 0.);
+      setPerspective();
+      
+      int renderDistance = 6;
+      float chunkx = floor(playerX/groundSize)+1.;
+      float chunkz = floor(playerZ/groundSize)+1.; 
+      float FADE_DIST_GROUND = PApplet.pow(PApplet.max(renderDistance-3, 0.)*groundSize, 2);
+      for (float tilez = chunkz-renderDistance-1; tilez < chunkz+renderDistance; tilez += 1.) {
+        for (float tilex = chunkx-renderDistance-1; tilex < chunkx+renderDistance; tilex += 1.) {
+          float x = groundSize*(tilex-0.5), z = groundSize*(tilez-0.5);
+          float dist = PApplet.pow((playerX-x), 2)+PApplet.pow((playerZ-z), 2);
+          boolean dontRender = false;
+          if (dist > FADE_DIST_GROUND) {
+            float fade = calculateFade(dist, FADE_DIST_GROUND);
+            if (fade > 1) {
+              mockScene.tint(255, fade);
+              mockScene.fill(255, fade); 
+            }
+            else dontRender = true;
+          } else {
+            mockScene.noTint();
+            mockScene.fill(255);
+          } 
+          if (!dontRender) {
+            mockScene.beginShape();
+            mockScene.textureMode(NORMAL);
+            mockScene.textureWrap(REPEAT);
+            mockScene.texture(display.systemImages.get("pixelrealm-grass-legacy"));
+            
+            PVector v1 = new PVector((tilex-1.)*groundSize, 0f, (tilez-1.)*groundSize);          // Left, top
+            PVector v2 = new PVector((tilex)*groundSize, 0f,  (tilez-1.)*groundSize);          // Right, top
+            PVector v3 = new PVector((tilex)*groundSize, 0f,  (tilez)*groundSize);          // Right, bottom
+            PVector v4 = new PVector((tilex-1.)*groundSize, 0f,  (tilez)*groundSize);          // Left, bottom
+            
+            mockScene.vertex(v1.x, v1.y, v1.z, 0, 0);                                    
+            mockScene.vertex(v2.x, v2.y, v2.z, 2, 0);  
+            mockScene.vertex(v3.x, v3.y, v3.z, 2, 2);  
+            mockScene.vertex(v4.x, v4.y, v4.z, 0, 2);       
+  
+            mockScene.endShape();
+          }
+        }
+      }
+      mockScene.noTint();
+      mockScene.fill(255);
+      
+      renderObjects();
+      
+      mockScene.endDraw();
+      
+  
+      mockScene.popMatrix();
+    }
+    
+    private void renderObjects() {
+      mockScene.beginShape(QUADS);
+      mockScene.texture(display.systemImages.get("pixelrealm-terrain_object-legacy"));
+      //mockScene.fill(255);
+      mockScene.pushMatrix();
+      //mockScene.translate(-input.mouseX(), 0f, -input.mouseY());
+      mockScene.tint(255, 9.856995);
+      mockScene.vertex(852.4165, -279.81158, -1418.4941, 0.999, 0.0);
+      mockScene.vertex(1142.228, -279.81158, -1418.4941, 0.0, 0.0);
+      mockScene.vertex(1142.228, 10.0, -1418.4941, 0.0, 0.999);
+      mockScene.vertex(852.4165, 10.0, -1418.4941, 0.999, 0.999);
+      mockScene.tint(255, 11.663315);
+      mockScene.vertex(1254.8113, -273.69412, -1019.15796, 0.999, 0.0);
+      mockScene.vertex(1538.5056, -273.69412, -1019.15796, 0.0, 0.0);
+      mockScene.vertex(1538.5056, 10.0, -1019.15796, 0.0, 0.999);
+      mockScene.vertex(1254.8113, 10.0, -1019.15796, 0.999, 0.999);
+      mockScene.tint(255, 20.580292);
+      mockScene.vertex(-1094.7216, -144.77814, 1366.8511, 0.999, 0.0);
+      mockScene.vertex(-939.9435, -144.77814, 1366.8511, 0.0, 0.0);
+      mockScene.vertex(-939.9435, 10.0, 1366.8511, 0.0, 0.999);
+      mockScene.vertex(-1094.7216, 10.0, 1366.8511, 0.999, 0.999);
+      mockScene.tint(255, 80.44942);
+      mockScene.vertex(-1569.7898, -336.5367, -612.3378, 0.999, 0.0);
+      mockScene.vertex(-1223.2532, -336.5367, -612.3378, 0.0, 0.0);
+      mockScene.vertex(-1223.2532, 10.0, -612.3378, 0.0, 0.999);
+      mockScene.vertex(-1569.7898, 10.0, -612.3378, 0.999, 0.999);
+      mockScene.tint(255, 104.15323);
+      mockScene.vertex(-1099.9895, -158.2349, -1031.6885, 0.999, 0.0);
+      mockScene.vertex(-931.75464, -158.2349, -1031.6885, 0.0, 0.0);
+      mockScene.vertex(-931.75464, 10.0, -1031.6885, 0.0, 0.999);
+      mockScene.vertex(-1099.9895, 10.0, -1031.6885, 0.999, 0.999);
+      mockScene.tint(255, 121.6434);
+      mockScene.vertex(-313.464, -192.6547, 1372.0471, 0.999, 0.0);
+      mockScene.vertex(-110.809204, -192.6547, 1372.0471, 0.0, 0.0);
+      mockScene.vertex(-110.809204, 10.0, 1372.0471, 0.0, 0.999);
+      mockScene.vertex(-313.464, 10.0, 1372.0471, 0.999, 0.999);
+      mockScene.tint(255, 178.64462);
+      mockScene.vertex(852.4165, -279.81158, -618.4941, 0.999, 0.0);
+      mockScene.vertex(1142.228, -279.81158, -618.494, 0.0, 0.0);
+      mockScene.vertex(1142.228, 10.0, -618.494, 0.0, 0.999);
+      mockScene.vertex(852.4165, 10.0, -618.4941, 0.999, 0.999);
+      mockScene.tint(255, 181.92719);
+      mockScene.vertex(-1139.1392, -258.2411, 579.165, 0.999, 0.0);
+      mockScene.vertex(-870.89813, -258.2411, 579.165, 0.0, 0.0);
+      mockScene.vertex(-870.89813, 10.0, 579.165, 0.0, 0.999);
+      mockScene.vertex(-1139.1392, 10.0, 579.165, 0.999, 0.999);
+      mockScene.tint(255, 185.11197);
+      mockScene.vertex(-688.7383, -129.4941, 965.19244, 0.999, 0.0);
+      mockScene.vertex(-549.24414, -129.4941, 965.19244, 0.0, 0.0);
+      mockScene.vertex(-549.24414, 10.0, 965.19244, 0.0, 0.999);
+      mockScene.vertex(-688.7383, 10.0, 965.19244, 0.999, 0.999);
+      mockScene.tint(255, 220.32867);
+      mockScene.vertex(94.99255, -171.05307, 969.7027, 0.999, 0.0);
+      mockScene.vertex(276.04553, -171.05307, 969.7027, 0.0, 0.0);
+      mockScene.vertex(276.04553, 10.0, 969.7027, 0.0, 0.999);
+      mockScene.vertex(94.99255, 10.0, 969.7027, 0.999, 0.999);
+      mockScene.tint(255, 252.50594);
+      mockScene.vertex(500.17358, -157.81845, 568.2664, 0.999, 0.0);
+      mockScene.vertex(667.99194, -157.81845, 568.2664, 0.0, 0.0);
+      mockScene.vertex(667.99194, 10.0, 568.2664, 0.0, 0.999);
+      mockScene.vertex(500.17358, 10.0, 568.2664, 0.999, 0.999);
+      mockScene.tint(255, 255);
+      mockScene.vertex(-696.7269, -149.90054, -232.59293, 0.999, 0.0);
+      mockScene.vertex(-536.8263, -149.90054, -232.59293, 0.0, 0.0);
+      mockScene.vertex(-536.8263, 10.0, -232.59293, 0.0, 0.999);
+      mockScene.vertex(-696.7269, 10.0, -232.59293, 0.999, 0.999);
+      mockScene.tint(255, 255);
+      mockScene.vertex(-422.34216, -470.7794, 602.23114, 0.999, 0.0);
+      mockScene.vertex(58.437134, -470.7794, 602.23114, 0.0, 0.0);
+      mockScene.vertex(58.437134, 10.0, 602.23114, 0.0, 0.999);
+      mockScene.vertex(-422.34216, 10.0, 602.23114, 0.999, 0.999);
+      mockScene.tint(255, 255);
+      mockScene.vertex(59.6792, -261.2592, 579.4925, 0.999, 0.0);
+      mockScene.vertex(330.93848, -261.2592, 579.4925, 0.0, 0.0);
+      mockScene.vertex(330.93848, 10.0, 579.4925, 0.0, 0.999);
+      mockScene.vertex(59.6792, 10.0, 579.4925, 0.999, 0.999);
+      mockScene.endShape();
+      mockScene.flush();
+      
+      display.shader(mockScene, "portal_plus", "u_time", display.getTimeSecondsLoop(), "u_dir", -direction/(PI*2));
+      mockScene.beginShape(QUADS);
+      mockScene.texture(display.systemImages.get("white"));
+      mockScene.vertex(-152.54541, -224.0, 391.89288, 0.999, 0.0);
+      mockScene.vertex(-24.54541, -224.0, 391.89288, 0.0, 0.0);
+      mockScene.vertex(-24.54541, 0.0, 391.89288, 0.0, 0.999);
+      mockScene.vertex(-152.54541, 0.0, 391.89288, 0.999, 0.999);
+      mockScene.endShape();
+      mockScene.flush();
+      
+      mockScene.resetShader();
+      mockScene.beginShape(QUADS);
+      mockScene.texture(display.systemImages.get("pixelrealm-terrain_object-legacy"));
+      mockScene.tint(255, 255);
+      mockScene.vertex(-324.22778, -220.15033, -224.96893, 0.999, 0.0);
+      mockScene.vertex(-94.07739, -220.15033, -224.96893, 0.0, 0.0);
+      mockScene.vertex(-94.07739, 10.0, -224.96893, 0.0, 0.999);
+      mockScene.vertex(-324.22778, 10.0, -224.96893, 0.999, 0.999);
+      mockScene.tint(255, 255);
+      mockScene.vertex(28.769653, -340.21637, 188.06152, 0.999, 0.0);
+      mockScene.vertex(378.98608, -340.21637, 188.06152, 0.0, 0.0);
+      mockScene.vertex(378.98608, 10.0, 188.06152, 0.0, 0.999);
+      mockScene.vertex(28.769653, 10.0, 188.06152, 0.999, 0.999);
+      
+      mockScene.endShape();
+      mockScene.popMatrix();
+    }
+    
+    private float calculateFade(float dist, float fadeDist) {
+      float d = (dist-fadeDist);
+      float scale = (5./PApplet.pow(groundSize, 1.8));
+      return 255-(d*scale);
+    }
+    
+    private void setPerspective() {
+      float fovx = radians(getSliderField("field_of_view").getVal());
+      float fovy = (float)mockScene.width/mockScene.height;
+      mockScene.perspective(fovx, fovy, 10f, 1000000.);
+    }
+    
 }
 
 

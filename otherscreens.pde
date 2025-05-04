@@ -460,7 +460,7 @@ public class Explorer extends Screen {
     
     display.shader("fabric", "color", 0.5,0.5,0.5,1., "intensity", 0.1);
     super.lowerBar();
-    display.defaultShader();
+    display.resetShader();
   }
     
   

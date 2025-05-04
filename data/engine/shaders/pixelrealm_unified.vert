@@ -28,14 +28,14 @@ uniform int mode;
 void main() {
   gl_Position = transformMatrix * position;
   
+  float z = gl_Position.z;
+  float opacity = clamp(1.0-((z-fadeStart) / fadeLength), -1.0, 1.0);
+  
   if (mode == MODE_STANDARD) {
 	vertTexCoord = vec4(texCoord, 1.0, 1.0) * texMatrix;
     vertColor = color;
   }
   else if (mode == MODE_ENV || mode == MODE_WATER) {
-    float z = gl_Position.z;
-    float opacity = clamp(1.0-((z-fadeStart) / fadeLength), -1.0, 1.0);
-
     // Lighting
     float dp = (normal.x * lightDirection.x + normal.y * lightDirection.y + normal.z * lightDirection.z);
     
@@ -49,7 +49,7 @@ void main() {
   }
   else if (mode == MODE_PORTAL) {
 	vertTexCoord = vec4(texCoord, 1.0, 1.0) * texMatrix;
-    vertColor = color;
+    vertColor = color*vec4(1.0, 1.0, 1.0, opacity);
   }
   else {
     vertTexCoord = vec4(0.0);

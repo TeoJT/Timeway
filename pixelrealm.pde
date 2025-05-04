@@ -264,9 +264,15 @@ public class PixelRealm extends Screen {
     sound.setSoundVolume("underwater", 0.);
     sound.loopSound("underwater");
     
+    // Some settings
+    fovx = radians(settings.getFloat("fov", 60f));
+    DISPLAY_SCALE = settings.getInt("pixelation_scale", 4);
+    
     // --- Create graphics canvas ---
     // Disable texture filtering
     scene = createGraphics((int(WIDTH/DISPLAY_SCALE)), int(this.height/DISPLAY_SCALE), P3D);
+    //scene = (OBJExport) createGraphics((int(WIDTH/DISPLAY_SCALE)), int(this.height/DISPLAY_SCALE),"nervoussystem.obj.OBJExport","colored.obj");
+    
     ((PGraphicsOpenGL)scene).textureSampling(2);        
     scene.hint(DISABLE_OPENGL_ERRORS);
     fovy = (float)scene.width/scene.height;
@@ -942,7 +948,41 @@ public class PixelRealm extends Screen {
       
       loadMinimal = false;
       
-      if (isNewRealm()) promptNewRealm();
+      if (isNewRealm()) {
+        // Run one of the following actions based on our settings;
+        String action = settings.getString("new_realm_action", "prompt");
+        if (action.equals("prompt")) {
+          promptNewRealm();
+        }
+        else if (action.equals("default")) {
+          // Create default realm template files in folder.
+          boolean grassSuccess = file.copy(engine.APPPATH+engine.IMG_PATH()+"pixelrealm/default/pixelrealm-grass.png", stateDirectory+REALM_GRASS+".png");
+          boolean skySuccess = file.copy(engine.APPPATH+engine.IMG_PATH()+"pixelrealm/default/pixelrealm-sky.png", stateDirectory+REALM_SKY+".png");
+          boolean treeSuccess = file.copy(engine.APPPATH+engine.IMG_PATH()+"pixelrealm/default/pixelrealm-terrain_object.png", stateDirectory+REALM_TREE+".png");
+          boolean bgmSuccess = file.copy(engine.APPPATH+"engine/music/pixelrealm_default_bgm.wav", stateDirectory+REALM_BGM+".wav");
+          
+          if (!grassSuccess) console.warn("Couldn't create grass realm file.");
+          if (!skySuccess) console.warn("Couldn't create sky realm file.");
+          if (!treeSuccess) console.warn("Couldn't create tree realm file.");
+          if (!bgmSuccess) console.warn("Couldn't create music realm file.");
+        }
+        else if (action.equals("default_legacy")) {
+          boolean grassSuccess = file.copy(engine.APPPATH+engine.IMG_PATH()+"pixelrealm/default-legacy/pixelrealm-grass-legacy.png", stateDirectory+REALM_GRASS+".png");
+          boolean skySuccess = file.copy(engine.APPPATH+engine.IMG_PATH()+"pixelrealm/default-legacy/pixelrealm-sky-legacy.png", stateDirectory+REALM_SKY+".png");
+          boolean treeSuccess = file.copy(engine.APPPATH+engine.IMG_PATH()+"pixelrealm/default-legacy/pixelrealm-terrain_object-legacy.png", stateDirectory+REALM_TREE_LEGACY+".png");
+          boolean bgmSuccess = file.copy(engine.APPPATH+"engine/music/pixelrealm_default_bgm_legacy.wav", stateDirectory+REALM_BGM+".wav");
+          
+          if (!grassSuccess) console.warn("Couldn't create grass realm file.");
+          if (!skySuccess) console.warn("Couldn't create sky realm file.");
+          if (!treeSuccess) console.warn("Couldn't create tree realm file.");
+          if (!bgmSuccess) console.warn("Couldn't create music realm file.");
+        }
+        else if (action.equals("nothing")) {
+          // Do literally nothing.
+        }
+        
+      }
+      
       // Load realm emerging from our exit portal.
       loadRealm();
       
@@ -2863,11 +2903,13 @@ public class PixelRealm extends Screen {
   
       public void display() {
         if (visible) {
+          //println("----------------- PORTAL");
           display.recordRendererTime();
           
           if (versionCompatibility == 1) {
             // So old and inefficient...
-            display.shader(scene, "portal_plus", "u_time", display.getTimeSecondsLoop(), "u_dir", -direction/(PI*2));
+            float scale = (float)(5-DISPLAY_SCALE);
+            display.shader(scene, "portal_plus", "u_time", display.getTimeSecondsLoop(), "u_dir", -direction/(PI*2), "pixelRes", 1500f*scale, 221f*scale);
           }
           else if (versionCompatibility == 2) {
             usePortalShader();
@@ -3147,12 +3189,14 @@ public class PixelRealm extends Screen {
             if (fade > 1) {
               scene.tint(tint, fade);
               scene.fill(tint, fade);
+              //println("mockScene.fill(255, "+fade+");");
             } else {
               dontRender = true;
             }
           } else {
             scene.tint(tint, 255);
             scene.fill(tint, 255);
+            //println("mockScene.fill(255, 255);");
           }
         }
         else if (versionCompatibility == 2) {
@@ -3205,6 +3249,18 @@ public class PixelRealm extends Screen {
           scene.noTint();
           scene.fill(255);
           scene.endShape();
+          
+          //x1 -= playerX;
+          //x2 -= playerX;
+          //y1 -= playerY;
+          //y2 -= playerY;
+          //z1 -= playerZ;
+          //z2 -= playerZ;
+          
+          //println("mockScene.vertex("+x1+", "+y1+", "+z1+", "+uvx+", "+uvy+");");
+          //println("mockScene.vertex("+x2+", "+y1+", "+z2+", "+uvxx+", "+uvy+");");
+          //println("mockScene.vertex("+x2+", "+y2+", "+z2+", "+uvxx+", "+uvyy+");");
+          //println("mockScene.vertex("+x1+", "+y2+", "+z1+", "+uvx+", "+uvyy+");");
   
           scene.popMatrix();
         }
@@ -4118,7 +4174,9 @@ public class PixelRealm extends Screen {
       }
       
       try {
-        file.backupAndSaveJSON(turfJson, this.stateDirectory+REALM_TURF);
+        if (settings.getBoolean("backup_realm_files", true)) {
+          file.backupAndSaveJSON(turfJson, this.stateDirectory+REALM_TURF);
+        }
       }
       catch (RuntimeException e) {
         console.log("Maybe permissions are denied for this folder?");
@@ -5297,7 +5355,7 @@ public class PixelRealm extends Screen {
       display.recordLogicTime();
     }
     
-    private static final int MODE_STANDARD = 1;
+    //private static final int MODE_STANDARD = 1;
     private static final int MODE_ENV = 2;
     private static final int MODE_PORTAL = 3;
     private static final int MODE_WATER = 4;
@@ -5760,6 +5818,7 @@ public class PixelRealm extends Screen {
     
     float closestDist = 0;
     public void renderPRObjects() {
+      //println("-----------------------------------------------------------------------------------------------------");
       for (PRObject o : ordering) {
         if (currentTool == TOOL_GRABBER && closestObject == o)
           o.tint = color(255, 200, 200);
@@ -6298,7 +6357,9 @@ public class PixelRealm extends Screen {
       scene.resetShader();
     }
     else if (currRealm.versionCompatibility == 2) {
-      display.shader(scene, "pixelrealm_unified");
+      float scale = (float)(5-DISPLAY_SCALE);
+      display.shader(scene, "pixelrealm_unified",
+      "pixelRes", 1500f*scale, 221f*scale);
     }
 
     //scene.translate(-xpos+(scene.width / 2), ypos+(sin(bob)*3)+(scene.height / 2)+80, -zpos+(scene.width / 2));
@@ -6340,6 +6401,7 @@ public class PixelRealm extends Screen {
     
     display.recordRendererTime();
     scene.endDraw();
+    //scene.dispose();
     if (currRealm.realmPlugin != null) currRealm.realmPlugin.sketchioGraphics = app.g;
     float wi = scene.width*DISPLAY_SCALE;
     float hi = this.height;
@@ -6760,6 +6822,7 @@ public class PixelRealm extends Screen {
       console.log("Relocated "+successfulRelocations+" items.");
       return true;
     }
+      
     else return false;
   }
   

@@ -94,14 +94,6 @@ public class TWEngine {
   public String STATS_FILE() { return "stats.json"; }
   public String PATH_SPRITES_ATTRIB() { return "engine/spritedata/"; }
   public String CACHE_INFO() { return "cache_info.json"; }
-  
-  public String[] FORCE_CACHE_MUSIC() {
-    String[] forceCacheMusic = {
-      "engine/music/pixelrealm_default_bgm.wav",
-      "engine/music/pixelrealm_default_bgm_legacy.wav",
-    };
-    return forceCacheMusic;
-  }
 
   // Static constants
   public static final float   KEY_HOLD_TIME       = 30.; // 30 frames
@@ -1266,7 +1258,7 @@ public class TWEngine {
       }
     }
   
-    public void defaultShader() {
+    public void resetShader() {
       app.resetShader();
     }
     
@@ -2195,6 +2187,10 @@ public class TWEngine {
         return false;
       }
       
+      public boolean mouseDown() {
+        return usingNode == this;
+      }
+      
       public void detectUserInput() {
         if (usingNode == null && inBox() && input.primaryOnce) {
           usingNode = this;
@@ -2269,6 +2265,10 @@ public class TWEngine {
         app.text(disp, x+CONTROL_X-12, y);
       }
       
+      public void setVal(float val) {
+        this.valFloat = val;
+      }
+      
       protected void renderSlider(float y) {
         app.strokeWeight(5);
         app.line(x+CONTROL_X, y, x+wi, y);
@@ -2303,7 +2303,11 @@ public class TWEngine {
       
       public CustomSliderInt(String l, int min, int max, int initVal) {
         super(l, (float)min, (float)max, (float)initVal);
-        valInt = initVal;
+        setVal(initVal);
+      }
+      
+      public void setVal(int val) {
+        this.valFloat = (float)val;
       }
       
       @Override
@@ -6004,7 +6008,7 @@ public class TWEngine {
       // TODO have some sort of fabric function instead of this mess.
       display.shader("fabric", "color", float((c>>16)&0xFF)/255., float((c>>8)&0xFF)/255., float((c)&0xFF)/255., 1., "intensity", 0.1);
       rect(x1-wi, y1, wi*2, hi);
-      display.defaultShader();
+      display.resetShader();
       ui.loadingIcon(x1-wi+64, y1+64);
 
       fill(255);
@@ -6064,7 +6068,7 @@ public class TWEngine {
       // TODO have some sort of fabric function instead of this mess.
       display.shader("fabric", "color", float((c>>16)&0xFF)/255., float((c>>8)&0xFF)/255., float((c)&0xFF)/255., 1., "intensity", 0.1);
       rect(x1-wi, y1, wi*2, hi);
-      display.defaultShader();
+      display.resetShader();
       ui.loadingIcon(x1-wi+64, y1+64);
 
       fill(255);
@@ -6133,7 +6137,7 @@ public class TWEngine {
       // TODO have some sort of fabric function instead of this mess.
       display.shader("fabric", "color", float((c>>16)&0xFF)/255., float((c>>8)&0xFF)/255., float((c)&0xFF)/255., 1., "intensity", 0.1);
       rect(x1-wi, y1, wi*2, hi);
-      display.defaultShader();
+      display.resetShader();
       
       display.imgCentre("error", x1-wi+64, y1+64);
       
@@ -7580,6 +7584,7 @@ public class TWEngine {
     public boolean shiftDown = false;
     public boolean ctrlDown = false;
     public boolean altDown  = false;
+    public boolean altgrDown  = false;
     public boolean enterDown = false;
     public boolean leftDown = false;
     public boolean rightDown = false;
@@ -7591,6 +7596,7 @@ public class TWEngine {
     private int shiftDownCounter = 0;
     private int ctrlDownCounter = 0;
     private int altDownCounter  = 0;
+    private int altgrDownCounter  = 0;
     private int enterDownCounter = 0;
     private int leftDownCounter = 0;
     private int rightDownCounter = 0;
@@ -7602,6 +7608,7 @@ public class TWEngine {
     public boolean shiftOnce = false;
     public boolean ctrlOnce = false;
     public boolean altOnce  = false;
+    public boolean altgrOnce  = false;
     public boolean enterOnce = false;
     public boolean leftOnce = false;
     public boolean rightOnce = false;
@@ -7613,6 +7620,7 @@ public class TWEngine {
     public static final char SHIFT_KEY = 3;
     public static final char CTRL_KEY = 4;
     public static final char ALT_KEY = 5;
+    public static final char ALTGR_KEY = 6;
     
     
     public InputModule() {
@@ -7702,6 +7710,7 @@ public class TWEngine {
       if (shiftDown) shiftDownCounter++; else shiftDownCounter = 0;
       if (ctrlDown) ctrlDownCounter++; else ctrlDownCounter = 0;
       if (altDown) altDownCounter++; else altDownCounter = 0;
+      if (altgrDown) altgrDownCounter++; else altgrDownCounter = 0;
       if (enterDown) enterDownCounter++; else enterDownCounter = 0;
       if (leftDown) leftDownCounter++; else leftDownCounter = 0;
       if (rightDown) rightDownCounter++; else rightDownCounter = 0;
@@ -7713,6 +7722,7 @@ public class TWEngine {
       shiftOnce = (shiftDownCounter == 1);
       ctrlOnce = (ctrlDownCounter == 1);
       altOnce = (altDownCounter == 1);
+      altgrOnce = (altgrDownCounter == 1);
       enterOnce = (enterDownCounter == 1);
       leftOnce = (leftDownCounter == 1);
       rightOnce = (rightDownCounter == 1);
@@ -7851,6 +7861,9 @@ public class TWEngine {
         case ALT:
           altDown = false;
           break;
+        case 19:  // ALT GR
+          altgrDown = false;
+          break;
         case LEFT:
           leftDown = false;
           break;
@@ -7945,6 +7958,8 @@ public class TWEngine {
         return this.ctrlDown;
       else if (k == ALT_KEY)
         return this.altDown;
+      else if (k == ALTGR_KEY)
+        return this.altgrDown;
       else 
         // Otherwise just tell us if the key is down or not
         return keyDown(k);
@@ -7967,6 +7982,8 @@ public class TWEngine {
         return this.secondaryOnce;
       else if (k == SHIFT_KEY)
         return this.shiftOnce;
+      else if (k == ALTGR_KEY)
+        return this.altgrOnce;
       else if (k == ALT_KEY)
         return this.altOnce;
       else if (k == CTRL_KEY)
@@ -8022,8 +8039,14 @@ public class TWEngine {
         case SHIFT_KEY:
         text = "Shift";
         break;
+        case 127:
+        text = "Delete";
+        break;
         case ALT_KEY:
         text = "Alt";
+        break;
+        case ALTGR_KEY:
+        text = "Alt Gr";
         break;
         case CTRL_KEY:
         text = "Ctrl";
@@ -8123,6 +8146,10 @@ public class TWEngine {
           case ALT:
             altDown = true;
             lastKeyPressed = ALT_KEY;
+            return;
+          case 19:      // ALT GR  
+            altgrDown = true;
+            lastKeyPressed = ALTGR_KEY;
             return;
           case LEFT:
             leftDownCounter = 0;
