@@ -226,7 +226,7 @@ public class PixelRealm extends Screen {
     float tileSize = 400f;
     int wi = ceil(areaSize/tileSize);
     waterObject = app.createShape();
-    
+    waterObject.noStroke();
     waterObject.beginShape(QUADS);
     waterObject.textureMode(NORMAL);
     waterObject.texture(REALM_WATER_DEFAULT);
@@ -310,10 +310,14 @@ public class PixelRealm extends Screen {
   // Classes we need
   class RealmTexture {
     private PImage singleImg = null;
-    private PImage[] aniImg = null;
+    private int len = 0;
+    private float[] texU;
+    private float[] texV;
+    private float[] texW;
+    private float[] texH;
+    private int[] widths;
+    private int[] heights;
     private final static float ANIMATION_INTERVAL = 10.;
-    public float width = 0;
-    public float height = 0;
     
     
     public RealmTexture() {
@@ -323,141 +327,175 @@ public class PixelRealm extends Screen {
     public RealmTexture(PImage img) {
       set(img);
     }
-    public void set(PImage img) {
+    private void set(PImage img) {
+      // With a single image, we only need one uvs.
+      texU = new float[1];
+      texV = new float[1];
+      texW = new float[1];
+      texH = new float[1];
+      widths = new int[1];
+      heights = new int[1];
+      len = 1;
+      
+      texU[0] = 0f;
+      texV[0] = 0f;
+      texW[0] = 1f;
+      texH[0] = 1f;
+      
       if (img == null) {
-        //console.bugWarn("set: passing a null image");
         singleImg = display.systemImages.get("white");
-        width = singleImg.width;
-        height = singleImg.height;
-        return;
+        widths[0] = 256;
+        heights[0] = 256;
       }
-      singleImg = img;
-      aniImg = null;
-      width = singleImg.width;
-      height = singleImg.height;
+      else {
+        singleImg = img;
+        widths[0] = img.width;
+        heights[0] = img.height;
+      }
     }
     public RealmTexture(PImage[] imgs) {
       set(imgs);
     }
-    public void set(PImage[] imgs) {
-      if (imgs.length == 0) {
-        console.bugWarn("set PImage[]: passing an empty list");
-        singleImg = display.systemImages.get("white");
-        width = singleImg.width;
-        height = singleImg.height;
+    private void set(PImage[] imgs) {
+      if (imgs.length == 1) {
+        set(imgs[0]);
         return;
       }
-      else if (imgs.length == 1) {
-        singleImg = imgs[0];
-        width = imgs[0].width;
-        height = imgs[0].height;
-        return;
+      
+      // 1. Calculate the required size for the singleImage.
+      int requiredWidth = 0;   // Width is increased with each image
+      int requiredHeight = 0;  // Height is max'd out to the image with the largest height.
+      for (int i = 0; i < imgs.length; i++) {
+        requiredWidth += imgs[i].width;
+        requiredHeight = max(requiredHeight, imgs[i].height);
       }
-      singleImg = null;
-      aniImg = new PImage[imgs.length];
-      int i = 0;
-      for (PImage p : imgs) {
-        aniImg[i++] = p;
+      
+      // 2. Create the image and uv vars
+      singleImg = app.createImage(requiredWidth, requiredHeight, ARGB); 
+      
+      len = imgs.length;
+      texU = new float[len];
+      texV = new float[len];
+      texW = new float[len];
+      texH = new float[len];
+      widths = new int[len];
+      heights = new int[len];
+      
+      // 3. Copy the image data to singleImage, and assign uv coords and w/h.
+      int baseX = 0;
+      for (int i = 0; i < len; i++) {
+        imgs[i].loadPixels();
+        for (int y = 0; y < imgs[i].height; y++) {
+          for (int x = 0; x < imgs[i].width; x++) {
+            singleImg.pixels[(baseX + x) + y * singleImg.width] = imgs[i].pixels[x + y * imgs[i].width];
+          }
+        }
+        // Set uv's
+        texU[i] = float(baseX)/float(singleImg.width);
+        texV[i] = 0f;                                  // Oh wait...
+        texW[i] = float(baseX+imgs[i].width)/float(singleImg.width);
+        texH[i] = float(imgs[i].height)/float(singleImg.height);
+        widths[i] = imgs[i].width;
+        heights[i] = imgs[i].height;
+        
+        baseX += imgs[i].width;
       }
-      width = aniImg[0].width;
-      height = aniImg[0].height;
+      singleImg.updatePixels();
+      
+      // And we're done.
     }
     public RealmTexture(ArrayList<PImage> imgs) {
-      set(imgs);
-    }
-    public void set(ArrayList<PImage> imgs) {
-      if (imgs.size() == 0) {
-        console.bugWarn("set ArrayList: passing an empty list");
-        singleImg = display.systemImages.get("white");
-        return;
-      }
-      else if (imgs.size() == 1) {
-        singleImg = imgs.get(0);
-        width = singleImg.width;
-        height = singleImg.height;
-        return;
-      }
-      singleImg = null;
-      aniImg = new PImage[imgs.size()];
+      PImage[] aniImg = new PImage[imgs.size()];
       int i = 0;
       for (PImage p : imgs) {
         aniImg[i++] = p;
       }
-      width = aniImg[0].width;
-      height = aniImg[0].height;
+      set(aniImg);
     }
     public RealmTexture(String[] imgs) {
-      set(imgs);
-    }
-    public void set(String[] imgs) {
-      if (imgs.length == 0) {
-        console.bugWarn("set String[]: passing an empty list");
-        singleImg = display.systemImages.get("white");
-        return;
+      if (imgs != null && imgs.length != 0) {
+        PImage[] aniImg = new PImage[imgs.length];
+        int i = 0;
+        for (String s : imgs) {
+          aniImg[i++] = display.systemImages.get(s);
+        }
+        set(aniImg);
       }
-      else if (imgs.length == 1) {
-        singleImg = display.systemImages.get(imgs[0]);
-        width = singleImg.width;
-        height = singleImg.height;
-        return;
+      else {
+        set(display.systemImages.get("white"));
       }
-      singleImg = null;
-      aniImg = new PImage[imgs.length];
-      int i = 0;
-      for (String s : imgs) {
-        aniImg[i++] = display.systemImages.get(s);
-      }
-      width = aniImg[0].width;
-      height = aniImg[0].height;
     }
     
     
     public RealmTexture(String imgName) {
-      singleImg = display.systemImages.get(imgName);
+      set(display.systemImages.get(imgName));
+      
     }
     
     public int length() {
       if (singleImg != null) return 1;
-      else if (aniImg != null) return aniImg.length;
+      else if (texU != null) return len;
       else return 1;
     }
     
-    public PImage get(int index) {
-      if (singleImg != null) {
-        width = singleImg.width;
-        height = singleImg.height;
-        return singleImg;
+    public float getU(int index) {
+      if (texU == null) {
+        return 0f;
       }
-      else if (aniImg != null) {
-        width = aniImg[0].width;
-        height = aniImg[0].height;
-        return aniImg[index%aniImg.length];
+      return texU[index%len];
+    }
+    public float getV(int index) {
+      if (texV == null) return 0f;
+      return texV[index%len];
+    }
+    public float getW(int index) {
+      if (texW == null) return 0f;
+      return texW[index%len];
+    }
+    public float getH(int index) {
+      if (texH == null) return 0f;
+      return texH[index%len];
+    }
+    public int getWidth(int index) {
+      if (widths == null) return 0;
+      return widths[index%len];
+    }
+    public int getHeight(int index) {
+      if (heights == null) return 0;
+      return heights[index%len];
+    }
+    
+    private int aniIndex() {
+      return int(animationTick/ANIMATION_INTERVAL);
+    }
+    
+    public float getU() {
+      return this.getU(aniIndex());
+    }
+    public float getV() {
+      return this.getV(aniIndex());
+    }
+    public float getW() {
+      return this.getW(aniIndex());
+    }
+    public float getH() {
+      return this.getH(aniIndex());
+    }
+    public int getWidth() {
+      return getWidth(aniIndex());
+    }
+    public int getHeight() {
+      return getHeight(aniIndex());
+    }
+    
+    public PImage get() {
+      if (singleImg != null) {
+        return singleImg;
       }
       else {
         return display.errorImg;
       }
     }
-    
-    public PImage get() {
-      return this.get(int(animationTick/ANIMATION_INTERVAL));
-    }
-    
-    public PImage getRandom() {
-      return this.get(int(app.random(0., aniImg.length)));
-    }
-    
-    public PImage getRandom(float seed) {
-      PImage p;
-      if (aniImg != null) {
-        p = this.get(int( engine.noise(seed) * float(aniImg.length) * 3.)%aniImg.length);
-      }
-      else {
-        p = this.get();
-      }
-      width = p.width;
-      height = p.height;
-      return p;
-    } 
   }
   
   
@@ -1518,6 +1556,7 @@ public class PixelRealm extends Screen {
           scene.textureWrap(REPEAT);
           pshapeChunk = createShape();
           pshapeChunk.beginShape(QUAD);
+          pshapeChunk.noStroke();
           pshapeChunk.textureMode(NORMAL);
           // TODO: add code ready for custom tile textures.
           pshapeChunk.texture(img_grass.get());
@@ -1667,8 +1706,6 @@ public class PixelRealm extends Screen {
     
     // --- Define our PR objects. ---
     class TerrainPRObject extends PRObject {
-      // Randseed is only used in version 1.x.
-      private float randSeed = 0.;
       
       // Modern version 2.0.
       private int imgIndex = 0;
@@ -1678,6 +1715,7 @@ public class PixelRealm extends Screen {
         this.img = img_tree;
         // Small hitbox
         this.hitboxWi = wi*0.25;
+        imgIndex = int(random(0, 9));
         readjustSize();
       }
       
@@ -1688,7 +1726,8 @@ public class PixelRealm extends Screen {
         readjustSize();
         if (legacy_autogenStuff != null)
           legacy_autogenStuff.add(id);
-        randSeed = x+y+z;
+          
+        imgIndex = int(random(0, 9));
         
         // Small hitbox
         this.hitboxWi = wi*0.25;
@@ -1699,7 +1738,6 @@ public class PixelRealm extends Screen {
         this.img = img_tree;
         this.size = size;
         readjustSize();
-        randSeed = x+y+z;
         
         // Our RealmImage class allows us to go as high as we want :)
         imgIndex = int(random(0, 9));
@@ -1710,14 +1748,9 @@ public class PixelRealm extends Screen {
       
       public void readjustSize() {
         // Set the size in case there's a realm refresh.
-        if (versionCompatibility == 1) {
-          this.wi = img.getRandom(randSeed).width*size;
-          this.hi = img.getRandom(randSeed).height*size;
-        }
-        else if (versionCompatibility == 2) {
-          this.wi = img.get(imgIndex).width*size;
-          this.hi = img.get(imgIndex).height*size;
-        }
+        
+        this.wi = img.getWidth(imgIndex)*size;
+        this.hi = img.getHeight(imgIndex)*size;
       }
       
       public void display() {
@@ -1739,12 +1772,17 @@ public class PixelRealm extends Screen {
         
         readjustSize();
         
+        float texu = img.getU(imgIndex);
+        float texv = img.getV(imgIndex);
+        float texw = img.getW(imgIndex);
+        float texh = img.getH(imgIndex);
+        
         if (versionCompatibility == 1) {
-          displayQuad(img.getRandom(randSeed), x1, y1, z1, x2, y1+hi, z2);
+          displayQuad(img.get(), x1, y1, z1, x2, y1+hi, z2, texu, texv, texw, texh);
         }
         if (versionCompatibility == 2) {
           useEnvironmentShader();
-          displayQuad(img.get(imgIndex), x1, y1, z1, x2, y1+hi, z2);
+          displayQuad(img.get(), x1, y1, z1, x2, y1+hi, z2, texu, texv, texw, texh);
         }
       }
       
@@ -2430,7 +2468,7 @@ public class PixelRealm extends Screen {
         if (visible) {
           if (this.img != null) {
             if (!loadFlag) {
-              if (img.width > 0 && img.height > 0) {
+              if (img.getWidth() > 0 && img.getHeight() > 0) {
   
                 // If the image HASN'T been cached (same as using a boolean called cachedFlag)
                 // the image hasn't been cached, so let's create some to reduce load times
@@ -2448,10 +2486,10 @@ public class PixelRealm extends Screen {
                 loadFlag = true;
               }
             }
-            if (img.width > 0 && img.height > 0 && loadFlag) {
+            if (img.getWidth() > 0 && img.getHeight() > 0 && loadFlag) {
               //setSize(1.);
-              this.wi = img.width*size;
-              this.hi = img.height*size;
+              this.wi = img.getWidth()*size;
+              this.hi = img.getHeight()*size;
               float y1 = y-hi;
               // There's no y2 huehue.
               
@@ -3120,8 +3158,8 @@ public class PixelRealm extends Screen {
           console.bugWarn("You shouldn't be setting the size if you don't have an image!");
           return;
         }
-        this.wi = img.width*size;
-        this.hi = img.height*size;
+        this.wi = img.getWidth()*size;
+        this.hi = img.getHeight()*size;
       }
       
       public void run() {
@@ -3162,6 +3200,13 @@ public class PixelRealm extends Screen {
       }
       
       protected void displayQuad(PImage im, float x1, float y1, float z1, float x2, float y2, float z2) {
+        displayQuad(im, x1, y1, z1, x2, y2, z2, 0f, 0f, 0.999f, 0.999f);
+      }
+      
+      
+      // The many arguments is temporary. This is gonna be totally rewritten later on.
+      protected void displayQuad(PImage im, float x1, float y1, float z1, float x2, float y2, float z2,
+      float texU, float texV, float texW, float texH) {
         // An exception is known to happen here
         if (im == null) return;
         
@@ -3222,10 +3267,10 @@ public class PixelRealm extends Screen {
   
   
           scene.beginShape();
-          float uvx = 0.999f;
-          float uvy = 0f;
-          float uvxx = 0f;
-          float uvyy = 0.999f;
+          float uvx = texW;
+          float uvy = texV;
+          float uvxx = texU;
+          float uvyy = texH;
           if (!dontRender) {
             scene.textureMode(NORMAL);
             scene.textureWrap(REPEAT);
@@ -4500,12 +4545,7 @@ public class PixelRealm extends Screen {
       }
   
       // New array and plonk that all in there.
-      if (img_tree != null) {
-        img_tree.set(imgs);
-      }
-      else {
-        img_tree = new RealmTexture(imgs);
-      }
+      img_tree = new RealmTexture(imgs);
   
       //if (!loadedMusic) {
       String[] soundFileFormats = {".wav", ".mp3", ".ogg", ".flac"};
@@ -4983,6 +5023,7 @@ public class PixelRealm extends Screen {
         float snappedz = 0.;
         
         // Bulge tool
+        useStandardShader();
         if (subTool == MORPHER_BULGE || subTool == MORPHER_FLAT) {
           // Here we display the cool ass morpher circle.
           float size = (morpherRadius*2.)/8.;
@@ -5355,7 +5396,7 @@ public class PixelRealm extends Screen {
       display.recordLogicTime();
     }
     
-    //private static final int MODE_STANDARD = 1;
+    private static final int MODE_STANDARD = 1;
     private static final int MODE_ENV = 2;
     private static final int MODE_PORTAL = 3;
     private static final int MODE_WATER = 4;
@@ -5420,6 +5461,17 @@ public class PixelRealm extends Screen {
         sh.set("time", display.getTimeSeconds());
         
         currShaderMode = MODE_WATER;
+      }
+    }
+    
+    private void useStandardShader() {
+      if (currShaderMode != MODE_STANDARD) {
+        scene.flush();
+        
+        PShader sh = display.getShaderWithArgs("pixelrealm_unified");
+        sh.set("mode", MODE_STANDARD);
+        
+        currShaderMode = MODE_STANDARD;
       }
     }
     

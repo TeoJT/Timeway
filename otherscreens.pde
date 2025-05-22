@@ -149,13 +149,8 @@ public class Benchmark extends Screen {
     gui.interactable = false;
     
     // Find highest benchmark time (used to scale results relative to highest time).
-    for (long longTime : engine.benchmarkArray) {
-      float time = (float)((int)longTime);
-      
-      // Stupid hack (end to start times end up causing everything else to look small)
-      if (time > 10000f) {
-        continue;
-      }
+    for (int i = 1; i < engine.benchmarkArray.length; i++) {
+      float time = (float)((int)engine.benchmarkArray[i]);
       
       if (time > highestTime) {
         highestTime = time;
@@ -187,13 +182,8 @@ public class Benchmark extends Screen {
     
     noStroke();
     colorMode(HSB, 255);
-    for (int i = 0; i < engine.benchmarkResults.size(); i++) {
+    for (int i = 1; i < engine.benchmarkResults.size(); i++) {
       float time = (float)((int)engine.benchmarkArray[i]);
-      
-      // Stupid hack (end to start times end up causing everything else to look small)
-      if (time > 10000f) {
-        continue;
-      }
       
       fill(c, 255, 128);
       c += 40.;
