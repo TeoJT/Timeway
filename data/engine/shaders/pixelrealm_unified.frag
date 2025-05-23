@@ -25,6 +25,7 @@ uniform int mode;
 #define MODE_ENV 2
 #define MODE_PORTAL 3
 #define MODE_WATER 4
+#define MODE_TEST 5
 
 
 float pixelate(float o, float res) {
@@ -82,6 +83,9 @@ void main(void)
 		color *= color.g >= 0.99 ? texture2D(texture, tt).rgb : vec3(1.0);
 		
 		fragOut = vec4(color, opacity) * vertColor;
+    }
+    else if (mode == MODE_TEST) {
+		fragOut = vec4(1.0, 0.0, 0.0, 1.0);
     }
 	else {
 		fragOut = vec4(0.0);

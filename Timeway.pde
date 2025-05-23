@@ -46,6 +46,11 @@ import java.io.PrintWriter;
 **/
 
 
+// Set to true if you want to show the error log like in an exported build
+// rather than throw the error to processing (can be useful if you need more
+// error info)
+final boolean sketch_FORCE_CRASH_SCREEN = true;
+final boolean sketch_MAXIMISE = true;
 
 
 
@@ -63,11 +68,6 @@ TWEngine timewayEngine;
 boolean sketch_showCrashScreen = false;
 String sketch_ERR_LOG_PATH;
 
-// Set to true if you want to show the error log like in an exported build
-// rather than throw the error to processing (can be useful if you need more
-// error info)
-final boolean sketch_FORCE_CRASH_SCREEN = false;
-final boolean sketch_MAXIMISE = true;
 
 void settings() {
   try {

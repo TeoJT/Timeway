@@ -53,7 +53,7 @@ import java.lang.reflect.InvocationTargetException;
 public class TWEngine {
   //*****************CONSTANTS SETTINGS**************************
   // Info and versioning
-  private static final String VERSION     = "0.1.5";
+  private static final String VERSION     = "0.1.6";
   
   public String getAppName() {
     return "Timeway";
@@ -3275,6 +3275,7 @@ public class TWEngine {
           }
         }
         );
+        t1.setDaemon(true);
         t1.start();
         startupGStreamer = false;
       }
@@ -3291,6 +3292,7 @@ public class TWEngine {
             }
           }
           );
+          t1.setDaemon(true);
           t1.start();
         //}
       }
@@ -5126,6 +5128,7 @@ public class TWEngine {
           traverse(path, 0);
         }
       });
+      t1.setDaemon(true);
       t1.start();
     }
   }
@@ -6049,6 +6052,7 @@ public class TWEngine {
             }
           );
           updateError = "";
+          t1.setDaemon(true);
           t1.start();
         }
         else {
@@ -6211,6 +6215,7 @@ public class TWEngine {
     );
     updateError = "";
     
+    t1.setDaemon(true);
     t1.start();
   }
 

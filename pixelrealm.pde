@@ -158,6 +158,9 @@ public class PixelRealm extends Screen {
   protected PixelRealmState.PRObject optionHighlightedItem = null;
   protected String cassettePlaying = "";   // Empty string for realm bgm.
   
+  private PShader unifiedShader = null;
+  private PGL pgl;
+  
   private AtomicBoolean refreshRealm = new AtomicBoolean(false);
   private AtomicInteger refresherCommand = new AtomicInteger(0);
   // 0 means no command.
@@ -279,6 +282,7 @@ public class PixelRealm extends Screen {
     // Only set up legacy portal when we go into the easter egg.
     // TODO: re-add. Or most likely remove it :(
     //setupLegacyPortal();
+    
     
     // TODO: I'd love to do a performance benchmark based on the number of cores we're using.
     int numCores = Runtime.getRuntime().availableProcessors();
@@ -495,6 +499,15 @@ public class PixelRealm extends Screen {
       else {
         return display.errorImg;
       }
+    }
+    
+    public int getGLName() {
+      Texture obj = ((Texture)scene.getCache(singleImg));
+      if (obj == null) {
+        console.bugWarn("getGLName getCache failed");
+        return 0;
+      }
+      return obj.glName;
     }
   }
   
@@ -894,6 +907,42 @@ public class PixelRealm extends Screen {
           }
     });
     refresherThread.start();
+  }
+  
+  
+  //private void tint(float r, float g, float b, float a) {
+  //  if (unifiedShader != null) {
+  //    unifiedShader.set("tintColor", r/255f, g/255f, b/255f, a/255f);
+  //    unifiedShader.consumeUniforms();
+  //  }
+  //}
+  
+  //private void tint(float r, float g, float b) {
+  //  if (unifiedShader != null) {
+  //    unifiedShader.set("tintColor", r/255f, g/255f, b/255f, 1f);
+  //    unifiedShader.consumeUniforms();
+  //  }
+  //}
+  
+  private void tint(int c, float a) {
+    if (unifiedShader != null) {
+      unifiedShader.set("tintColor", red(c)/255f, green(c)/255f, blue(c)/255f, a/255f);
+      unifiedShader.consumeUniforms();
+    }
+  }
+  
+  //private void tint(float t) {
+  //  if (unifiedShader != null) {
+  //    unifiedShader.set("tintColor", t/255f, t/255f, t/255f, 1f);
+  //    unifiedShader.consumeUniforms();
+  //  }
+  //}
+  
+  private void noTint() {
+    if (unifiedShader != null) {
+      unifiedShader.set("tintColor", 1f, 1f, 1f, 1f);
+      unifiedShader.consumeUniforms();
+    }
   }
     
   
@@ -1702,12 +1751,11 @@ public class PixelRealm extends Screen {
     
     
     
-    
+    private GLQuadElement[] treeGLElements = new GLQuadElement[9];
     
     // --- Define our PR objects. ---
     class TerrainPRObject extends PRObject {
       
-      // Modern version 2.0.
       private int imgIndex = 0;
       
       public TerrainPRObject() {
@@ -1756,34 +1804,16 @@ public class PixelRealm extends Screen {
       public void display() {
         if (img == null)
           return;
-          
-          
-        float y1 = y-hi;
-        // There's no y2 huehue.
-
-        // Half width
-        float hwi = wi/2;
-        float sin_d = cache_flatSinDirection*(hwi);
-        float cos_d = cache_flatCosDirection*(hwi);
-        float x1 = x + sin_d;
-        float z1 = z + cos_d;
-        float x2 = x - sin_d;
-        float z2 = z - cos_d;
         
-        readjustSize();
-        
-        float texu = img.getU(imgIndex);
-        float texv = img.getV(imgIndex);
-        float texw = img.getW(imgIndex);
-        float texh = img.getH(imgIndex);
-        
-        if (versionCompatibility == 1) {
-          displayQuad(img.get(), x1, y1, z1, x2, y1+hi, z2, texu, texv, texw, texh);
-        }
         if (versionCompatibility == 2) {
-          useEnvironmentShader();
-          displayQuad(img.get(), x1, y1, z1, x2, y1+hi, z2, texu, texv, texw, texh);
+          //useEnvironmentShader();
         }
+        
+        if (treeGLElements[imgIndex] == null) {
+          treeGLElements[imgIndex] = new GLQuadElement(img, imgIndex, wi, hi);
+        }
+        
+        billboard(treeGLElements[imgIndex], x, y, z);
       }
       
       public JSONObject save() {
@@ -1817,6 +1847,8 @@ public class PixelRealm extends Screen {
         
         //console.log(".pixelrealm-tree-"+int(name.charAt(17)-48));
         imgIndex = int(name.charAt(17)-48);
+        
+        readjustSize();
         
         // If the object is below the ground, reset its position.
         if (y > yy+5.) this.y = yy;
@@ -1852,10 +1884,7 @@ public class PixelRealm extends Screen {
       }
   
       public void display() {
-        if (versionCompatibility == 2) {
-          useEnvironmentShader();
-        }
-        displayBillboard();
+        super.display();
       }
       
       public void run() {
@@ -2222,13 +2251,13 @@ public class PixelRealm extends Screen {
           if (dist > terrain.FADE_DIST_OBJECTS) {
             float fade = calculateFade(dist, terrain.FADE_DIST_OBJECTS);
             if (fade > 1) {
-              scene.tint(tint, fade);
+              //tint(tint, fade);
               scene.fill(tint, fade);
             } else {
               dontRender = true;
             }
           } else {
-            scene.tint(tint, 255);
+            //noTint();
             scene.fill(tint, 255);
           }
         }
@@ -2238,7 +2267,8 @@ public class PixelRealm extends Screen {
           if (x*x+z*z > terrain.FADE_DIST_OBJECTS) {
             dontRender = true;
           }
-          scene.fill(tint, 255);
+          //scene.fill(tint, 255);
+          noTint();
         }
         
         if (!dontRender) {
@@ -2280,12 +2310,12 @@ public class PixelRealm extends Screen {
   
       public void display() {
         // Display the name of the file
-        float d = direction-PI;
   
         display.recordRendererTime();
         
         scene.pushMatrix();
         scene.translate(x, y-hi-20, z);
+        float d = direction-PI;
         scene.rotateY(d);
         scene.textFont(engine.DEFAULT_FONT, 16);
         scene.textAlign(CENTER, CENTER);
@@ -2294,8 +2324,8 @@ public class PixelRealm extends Screen {
         scene.popMatrix();
         
         display.recordLogicTime();
-  
-        displayBillboard();
+        
+        super.display();
       }
     }
     
@@ -2516,7 +2546,7 @@ public class PixelRealm extends Screen {
               }
                
               app.fill(tint);
-              displayQuad(this.img.get(), x1, y1, z1, x2, y1+hi, z2);
+              //displayQuad(this.img.get(), x1, y1, z1, x2, y1+hi, z2);
             }
           }
         }
@@ -2652,7 +2682,7 @@ public class PixelRealm extends Screen {
               float z2 = z - cos_d;
               
               
-              displayQuad(this.img.get(), x1, y1, z1, x2, y1+hi, z2);
+              //displayQuad(this.img.get(), x1, y1, z1, x2, y1+hi, z2);
           }
         }
         // Reset tint
@@ -2944,24 +2974,15 @@ public class PixelRealm extends Screen {
           //println("----------------- PORTAL");
           display.recordRendererTime();
           
-          if (versionCompatibility == 1) {
-            // So old and inefficient...
-            float scale = (float)(5-DISPLAY_SCALE);
-            display.shader(scene, "portal_plus", "u_time", display.getTimeSecondsLoop(), "u_dir", -direction/(PI*2), "pixelRes", 1500f*scale, 221f*scale);
-          }
-          else if (versionCompatibility == 2) {
-            usePortalShader();
-          }
           
-          scene.fill(this.tint);
-          displayBillboard();
+          usePortalShader();
           
-          if (versionCompatibility == 1) {
-            scene.resetShader();
-          }
-          else if (versionCompatibility == 2) {
-            useEnvironmentShader();
-          }
+          //scene.fill(this.tint);
+          
+          initElement();
+          billboard(element, x, y, z);
+          
+          useEnvironmentShader();
           
   
           // Display text over the portal showing the directory.
@@ -3032,6 +3053,7 @@ public class PixelRealm extends Screen {
       public float y;
       public float z;
       public RealmTexture img = null;
+      public GLQuadElement element = null;
       protected float size = 1.;
       protected float wi = 0.;
       protected float hi = 0.;
@@ -3165,154 +3187,313 @@ public class PixelRealm extends Screen {
       public void run() {
         // By default nothing.
       }
+      
+      protected void initElement() {
+        if (element == null) {
+          element = new GLQuadElement(img, 0, wi, hi);
+        }
+      }
   
       public void display() {
-        if (versionCompatibility == 2) {
-          useEnvironmentShader();
-        }
-        displayBillboard();
-      }
-      
-      
-      
-      protected void displayBillboard() {
-        if (visible) {
-          if (img == null)
-            return;
-  
-          float y1 = y-hi;
-          // There's no y2 huehue.
-  
-          // Half width
-          float hwi = wi/2;
-          float sin_d = cache_flatSinDirection*(hwi);
-          float cos_d = cache_flatCosDirection*(hwi);
-          float x1 = x + sin_d;
-          float z1 = z + cos_d;
-          float x2 = x - sin_d;
-          float z2 = z - cos_d;
-  
-          displayQuad(this.img.get(), x1, y1, z1, x2, y1+hi, z2);
-  
-          // Reset tint
-          this.tint = color(255);
-        }
-      }
-      
-      protected void displayQuad(PImage im, float x1, float y1, float z1, float x2, float y2, float z2) {
-        displayQuad(im, x1, y1, z1, x2, y2, z2, 0f, 0f, 0.999f, 0.999f);
-      }
-      
-      
-      // The many arguments is temporary. This is gonna be totally rewritten later on.
-      protected void displayQuad(PImage im, float x1, float y1, float z1, float x2, float y2, float z2,
-      float texU, float texV, float texW, float texH) {
-        // An exception is known to happen here
-        if (im == null) return;
-        
-        //boolean selected = lineLine(x1,z1,x2,z2,beamX1,beamZ1,beamX2,beamZ2);
-        //color selectedColor = color(255);
-        //if (hovering()) {
-        //  selectedColor = color(255, 127, 127);
+        //if (versionCompatibility == 2) {
         //}
-  
-        boolean useFinder = false;
-        useFinder &= finderEnabled;
+        useStandardShader();
+        billboard(element, x, y, z);
+      }
+      
+      protected void billboard(GLQuadElement element, float x, float y, float z) {
+        if (element == null) return;
   
         //Now render the image in 3D!!!
-  
-        //Add some fog for objects as they get further away.
-        //Note that if the transparacy is 100%, the object will not be rendered at all.
-        float dist = PApplet.pow((playerX-x), 2)+PApplet.pow((playerZ-z), 2);
-  
         boolean dontRender = false;
         
         // Only for versions 1.0 and 1.1 since 2.0 has completely different fading mechanics.
         if (versionCompatibility == 1) {
+          //Add some fog for objects as they get further away.
+          //Note that if the transparacy is 100%, the object will not be rendered at all.
+          float dist = PApplet.pow((playerX-x), 2f)+PApplet.pow((playerZ-z), 2f);
+          
           if (dist > terrain.FADE_DIST_OBJECTS) {
             float fade = calculateFade(dist, terrain.FADE_DIST_OBJECTS);
-            if (fade > 1) {
-              scene.tint(tint, fade);
-              scene.fill(tint, fade);
+            if (fade > 1f) {
+              tint(tint, fade);
+              //scene.fill(tint, fade);
               //println("mockScene.fill(255, "+fade+");");
             } else {
               dontRender = true;
             }
           } else {
-            scene.tint(tint, 255);
-            scene.fill(tint, 255);
+            noTint();
+            //scene.fill(tint, 255);
             //println("mockScene.fill(255, 255);");
           }
         }
         else if (versionCompatibility == 2) {
-          float x = playerX-this.x;
-          float z = playerZ-this.z;
-          if (x*x+z*z > terrain.FADE_DIST_OBJECTS) {
+          float xx = playerX-this.x;
+          float zz = playerZ-this.z;
+          if (xx*xx+zz*zz > terrain.FADE_DIST_OBJECTS) {
             dontRender = true;
           }
-          scene.fill(tint, 255);
-        }
-    
-        if (useFinder) {
-          scene.stroke(255, 127, 127);
-          scene.strokeWeight(2.);
-          //scene.fill(255);
-        } else {
-          scene.noStroke();
+          noTint();
+          //scene.fill(tint, 255);
         }
         
         display.recordRendererTime();
-        if (!dontRender || useFinder) {
+        if (!dontRender) {
+          
           scene.pushMatrix();
-  
-  
-          scene.beginShape();
-          float uvx = texW;
-          float uvy = texV;
-          float uvxx = texU;
-          float uvyy = texH;
-          if (!dontRender) {
-            scene.textureMode(NORMAL);
-            scene.textureWrap(REPEAT);
-            
-            scene.texture(im);
-          }
           
-          if (flippedTexture) {
-            float tmp = uvx;
-            uvx = uvxx;
-            uvxx = tmp;
-          }
+          float d = direction-PI;
+          scene.translate(x, y, z);
+          scene.rotateY(d);
           
+          unifiedShader.setCommonUniforms();
           
-          scene.vertex(x1, y1, z1, uvx, uvy);           // Bottom left
-          scene.vertex(x2, y1, z2, uvxx, uvy);    // Bottom right
-          scene.vertex(x2, y2, z2, uvxx, uvyy); // Top right
-          scene.vertex(x1, y2, z1, uvx, uvyy);  // Top left
-          if (useFinder) scene.vertex(x1, y1, z1, 0, 0);  // Extra vertex to render a complete square if finder is enabled.
-          // Not necessary if just rendering the quad without the line.
-          scene.noTint();
-          scene.fill(255);
-          scene.endShape();
+          element.render();
           
-          //x1 -= playerX;
-          //x2 -= playerX;
-          //y1 -= playerY;
-          //y2 -= playerY;
-          //z1 -= playerZ;
-          //z2 -= playerZ;
-          
-          //println("mockScene.vertex("+x1+", "+y1+", "+z1+", "+uvx+", "+uvy+");");
-          //println("mockScene.vertex("+x2+", "+y1+", "+z2+", "+uvxx+", "+uvy+");");
-          //println("mockScene.vertex("+x2+", "+y2+", "+z2+", "+uvxx+", "+uvyy+");");
-          //println("mockScene.vertex("+x1+", "+y2+", "+z1+", "+uvx+", "+uvyy+");");
-  
           scene.popMatrix();
         }
+        
+        if (versionCompatibility == 1) noTint();
         display.recordLogicTime();
       }
     }
     // End PRObject classes.
+    
+    
+    
+    private int colorAttribLoc = -1;
+    private int posAttribLoc = -1;
+    private int uvAttribLoc = -1;
+    private int norAttribLoc = -1;
+    
+    private void updateUnifiedShaderGLInfo() {
+      // For some reason we have to put this line here otherwise it won't work. Yes, running that every frame.
+      unifiedShader = display.getShader("pixelrealm_unified");
+      unifiedShader.bind();
+      int shaderID = unifiedShader.glProgram;
+      
+      colorAttribLoc = pgl.getAttribLocation(shaderID, "color");
+      posAttribLoc = pgl.getAttribLocation(shaderID, "position");
+      uvAttribLoc = pgl.getAttribLocation(shaderID, "texCoord");
+      norAttribLoc = pgl.getAttribLocation(shaderID, "normal");
+      
+      // Reset these. That's what was causing the black squares glitch.
+      currEnabledAttribVBO = -1;
+      currQuadElementTexture = -1;
+    }
+    
+    
+    private int currEnabledAttribVBO = -1;
+    private int currQuadElementTexture = -1;
+    
+    // Class for holding our special super-fast billboards and quads
+    class GLQuadElement {
+      private int bufferID = -1;
+      private int textureID = -1;
+      
+      public GLQuadElement(RealmTexture img, int imgIndex, float wi, float hi) {
+        genBuffer();
+        
+        // Generate our quad with the texture.
+        float texu = img.getU(imgIndex);
+        float texv = img.getV(imgIndex);
+        float texw = img.getW(imgIndex);
+        float texh = img.getH(imgIndex);
+        textureID = pimgToGLName(img.get());
+        
+        float hwi = wi/2f;
+        createVBO(-hwi, -hi, 0f, hwi, 0f, 0f, texu, texv, texw, texh);
+      }
+      
+      private int pimgToGLName(PImage img) {
+        Texture obj = ((Texture)scene.getCache(img));
+        if (obj == null) {
+          obj = ((PGraphicsOpenGL)scene).getTexture(img);
+          return obj.glName;
+        }
+        return obj.glName;
+      }
+      
+      private void genBuffer() {
+        IntBuffer intBuffer = IntBuffer.allocate(1);
+        pgl.genBuffers(1, intBuffer);
+        bufferID = intBuffer.get(0);
+      }
+      
+      private FloatBuffer allocateDirectFloatBuffer(int n) {
+        return ByteBuffer.allocateDirect(n * Float.BYTES).order(ByteOrder.nativeOrder()).asFloatBuffer();
+      }
+      
+      public void render() {
+        // Bind
+        if (currEnabledAttribVBO != bufferID) {
+          // Disable previous attrib arrays
+          pgl.bindBuffer(PGL.ARRAY_BUFFER, currEnabledAttribVBO);
+          pgl.disableVertexAttribArray(colorAttribLoc);
+          pgl.disableVertexAttribArray(posAttribLoc);
+          pgl.disableVertexAttribArray(uvAttribLoc);
+          pgl.disableVertexAttribArray(norAttribLoc);
+          
+          // Enable our attrib arrays
+          pgl.bindBuffer(PGL.ARRAY_BUFFER, bufferID);
+          
+          pgl.vertexAttribPointer(colorAttribLoc, 4, PGL.FLOAT, false, 52, 0);
+          pgl.vertexAttribPointer(posAttribLoc,   4, PGL.FLOAT, false, 52, 16);
+          pgl.vertexAttribPointer(uvAttribLoc,    2, PGL.FLOAT, false, 52, 32);
+          pgl.vertexAttribPointer(norAttribLoc,   3, PGL.FLOAT, false, 52, 40);
+          
+          pgl.enableVertexAttribArray(colorAttribLoc);
+          pgl.enableVertexAttribArray(posAttribLoc);
+          pgl.enableVertexAttribArray(uvAttribLoc);
+          pgl.enableVertexAttribArray(norAttribLoc);
+          pgl.bindBuffer(PGL.ARRAY_BUFFER, 0);
+          
+          // OpenGL is just so dumb now that i know vulkan lmao
+          
+          currEnabledAttribVBO = bufferID;
+        }
+        
+        // Bind texture too (not necessary but I like to do it to be safe with performance)
+        if (currQuadElementTexture != textureID) {
+          pgl.bindTexture(PGL.TEXTURE_2D, textureID);
+          
+          currQuadElementTexture = textureID;
+        }
+        
+        pgl.drawArrays(PGL.TRIANGLES, 0, 6);
+      }
+      
+      private void createVBO(float x1, float y1, float z1, float x2, float y2, float z2, float uvx, float uvy, float uvxx, float uvyy) {
+        FloatBuffer attribBuffer = allocateDirectFloatBuffer(24);
+        
+        float[] attr = new float[156];
+        
+        int a = 0;
+        
+        // color1
+        attr[a++] = 1f;
+        attr[a++] = 1f;
+        attr[a++] = 1f;
+        attr[a++] = 1f;
+        // v1
+        attr[a++] = x1;
+        attr[a++] = y1;
+        attr[a++] = z1;
+        attr[a++] = 1f;
+        // uv1
+        attr[a++] = uvx;
+        attr[a++] = uvy;
+        // normal1
+        attr[a++] = 0f;
+        attr[a++] = 0f;
+        attr[a++] = 0f;
+        
+        // color2
+        attr[a++] = 1f;
+        attr[a++] = 1f;
+        attr[a++] = 1f;
+        attr[a++] = 1f;
+        // v2
+        attr[a++] = x2;
+        attr[a++] = y1;
+        attr[a++] = z2;
+        attr[a++] = 1f;
+        // uv2
+        attr[a++] = uvxx;
+        attr[a++] = uvy;
+        // normal2
+        attr[a++] = 0f;
+        attr[a++] = 0f;
+        attr[a++] = 0f;
+        
+        
+        // color3
+        attr[a++] = 1f;
+        attr[a++] = 1f;
+        attr[a++] = 1f;
+        attr[a++] = 1f;
+        // v3
+        attr[a++] = x2;
+        attr[a++] = y2;
+        attr[a++] = z2;
+        attr[a++] = 1f;
+        // uv3
+        attr[a++] = uvxx;
+        attr[a++] = uvyy;
+        // normal3
+        attr[a++] = 0f;
+        attr[a++] = 0f;
+        attr[a++] = 0f;
+        
+        
+        // color4
+        attr[a++] = 1f;
+        attr[a++] = 1f;
+        attr[a++] = 1f;
+        attr[a++] = 1f;
+        // v4
+        attr[a++] = x1;
+        attr[a++] = y1;
+        attr[a++] = z1;
+        attr[a++] = 1f;
+        // uv4
+        attr[a++] = uvx;
+        attr[a++] = uvy;
+        // normal4
+        attr[a++] = 0f;
+        attr[a++] = 0f;
+        attr[a++] = 0f;
+        
+        
+        // color5
+        attr[a++] = 1f;
+        attr[a++] = 1f;
+        attr[a++] = 1f;
+        attr[a++] = 1f;
+        // v3
+        attr[a++] = x2;
+        attr[a++] = y2;
+        attr[a++] = z2;
+        attr[a++] = 1f;
+        // uv5
+        attr[a++] = uvxx;
+        attr[a++] = uvyy;
+        // normal5
+        attr[a++] = 0f;
+        attr[a++] = 0f;
+        attr[a++] = 0f;
+        
+        // color6
+        attr[a++] = 1f;
+        attr[a++] = 1f;
+        attr[a++] = 1f;
+        attr[a++] = 1f;
+        // v6
+        attr[a++] = x1;
+        attr[a++] = y2;
+        attr[a++] = z1;
+        attr[a++] = 1f;
+        // uv6
+        attr[a++] = uvx;
+        attr[a++] = uvyy;
+        // normal6
+        attr[a++] = 0f;
+        attr[a++] = 0f;
+        attr[a++] = 0f;
+        
+        
+        attribBuffer = allocateDirectFloatBuffer(attr.length);
+        
+        attribBuffer.rewind();
+        attribBuffer.put(attr);
+        attribBuffer.rewind();
+        
+        pgl.bindBuffer(PGL.ARRAY_BUFFER, bufferID);
+        pgl.bufferData(PGL.ARRAY_BUFFER, Float.BYTES * attr.length, attribBuffer, PGL.DYNAMIC_DRAW);
+        pgl.bindBuffer(PGL.ARRAY_BUFFER, 0);
+      }
+    }
     
     
     
@@ -5318,8 +5499,10 @@ public class PixelRealm extends Screen {
           boolean dontRender = false;
           if (dist > tt.FADE_DIST_GROUND) {
             float fade = calculateFade(dist, tt.FADE_DIST_GROUND);
-            if (fade > 1) {scene.tint(255, fade);
-            scene.fill(255, fade); }
+            if (fade > 1) {
+              scene.tint(255, fade);
+              scene.fill(255, fade); 
+            }
             else dontRender = true;
           } else {
             scene.noTint();
@@ -5336,11 +5519,14 @@ public class PixelRealm extends Screen {
             scene.texture(img_grass.get());
             display.recordLogicTime();
   
-  
+            
+            // 23/05/25
+            // Wow... that's ancient code. Let's keep it here for old time's sake?
             if (tilex == chunkx && tilez == chunkz) {
-              //scene.tint(color(255, 127, 127));
+              //tint(color(255, 127, 127));
               //console.log(str(chunkx)+" "+str(chunkz));
             }
+            
             PVector v1 = calcTile(tilex-1., tilez-1.);          // Left, top
             PVector v2 = calcTile(tilex, tilez-1.);          // Right, top
             PVector v3 = calcTile(tilex, tilez);          // Right, bottom
@@ -5355,7 +5541,7 @@ public class PixelRealm extends Screen {
   
   
             scene.endShape();
-            //scene.noTint();
+            //noTint();
             display.recordLogicTime();
   
             final float treeLikelyhood = 0.6;
@@ -5400,6 +5586,8 @@ public class PixelRealm extends Screen {
     private static final int MODE_ENV = 2;
     private static final int MODE_PORTAL = 3;
     private static final int MODE_WATER = 4;
+    private static final int MODE_TEST = 5;
+    
     
     private PShader environmentShader() {
       float x = (float)lightDirectionsX[lightDirectionSlider.valInt%16];
@@ -5423,19 +5611,31 @@ public class PixelRealm extends Screen {
     
     private void useEnvironmentShader() {
       if (currShaderMode != MODE_ENV) {
-        scene.flush();
         display.recordRendererTime();
         
         environmentShader().set("mode", MODE_ENV);
+        if (unifiedShader != null) unifiedShader.consumeUniforms();
         
         display.recordLogicTime();
         currShaderMode = MODE_ENV;
       }
     }  
     
+    @SuppressWarnings("unused")
+    private void useTestShader() {
+      if (currShaderMode != MODE_TEST) {
+        display.recordRendererTime();
+        
+        environmentShader().set("mode", MODE_TEST);
+        unifiedShader.consumeUniforms();
+        
+        display.recordLogicTime();
+        currShaderMode = MODE_TEST;
+      }
+    }  
+    
     private void usePortalShader() {
       if (currShaderMode != MODE_PORTAL) {
-        scene.flush();
         display.recordRendererTime();
         
         display.getShaderWithArgs("pixelrealm_unified", 
@@ -5444,6 +5644,8 @@ public class PixelRealm extends Screen {
         "fadeStart", terrain.BEGIN_FADE, 
         "fadeLength", terrain.FADE_LENGTH
         ).set("mode", MODE_PORTAL);
+        
+        if (unifiedShader != null) unifiedShader.consumeUniforms();
         
         
         display.recordLogicTime();
@@ -5454,11 +5656,11 @@ public class PixelRealm extends Screen {
     
     private void useWaterShader() {
       if (currShaderMode != MODE_WATER) {
-        scene.flush();
-        
         PShader sh = environmentShader();
         sh.set("mode", MODE_WATER);
         sh.set("time", display.getTimeSeconds());
+        
+        if (unifiedShader != null) unifiedShader.consumeUniforms();
         
         currShaderMode = MODE_WATER;
       }
@@ -5466,10 +5668,10 @@ public class PixelRealm extends Screen {
     
     private void useStandardShader() {
       if (currShaderMode != MODE_STANDARD) {
-        scene.flush();
-        
         PShader sh = display.getShaderWithArgs("pixelrealm_unified");
         sh.set("mode", MODE_STANDARD);
+        
+        if (unifiedShader != null) unifiedShader.consumeUniforms();
         
         currShaderMode = MODE_STANDARD;
       }
@@ -5868,14 +6070,24 @@ public class PixelRealm extends Screen {
       return getHoldingName(holdingObject);
     }
     
-    float closestDist = 0;
+    
     public void renderPRObjects() {
       //println("-----------------------------------------------------------------------------------------------------");
+      // This needs to be here, again, difficulties with mid-pgl stuff :(
+      useStandardShader();
+      pgl = scene.beginPGL();
+      
+      noTint();
+      
+      updateUnifiedShaderGLInfo();
+      
       for (PRObject o : ordering) {
         if (currentTool == TOOL_GRABBER && closestObject == o)
           o.tint = color(255, 200, 200);
         o.display();
       }
+      display.getShader("pixelrealm_unified").unbind();
+      scene.endPGL();
     }
     
     public void tp(float x, float y, float z) {
@@ -5923,6 +6135,7 @@ public class PixelRealm extends Screen {
         scene.vertex(0, scene.height, ttt, uvy+ttt);
         
         scene.endShape();
+        scene.noTint();
       }
       else {
         sound.setSoundVolume("underwater", 0.0);
@@ -6405,14 +6618,10 @@ public class PixelRealm extends Screen {
     scene.pushMatrix();
     display.recordLogicTime();
     
-    if (currRealm.versionCompatibility == 1) {
-      scene.resetShader();
-    }
-    else if (currRealm.versionCompatibility == 2) {
-      float scale = (float)(5-DISPLAY_SCALE);
-      display.shader(scene, "pixelrealm_unified",
-      "pixelRes", 1500f*scale, 221f*scale);
-    }
+    float scale = (float)(5-DISPLAY_SCALE);
+    display.shader(scene, "pixelrealm_unified",
+    "pixelRes", 1500f*scale, 221f*scale,
+    "tintColor", 1f, 1f, 1f, 1f);
 
     //scene.translate(-xpos+(scene.width / 2), ypos+(sin(bob)*3)+(scene.height / 2)+80, -zpos+(scene.width / 2));
     {
