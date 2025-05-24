@@ -873,6 +873,15 @@ public class PixelRealm extends Screen {
   private int currQuadElementTexture = -1;
   private boolean rebindVertexShader = false;
   
+    
+  private void unifiedShaderRebindCheck() {
+    if (rebindVertexShader) {
+      unifiedShader.bind();
+      rebindVertexShader = false;
+    }
+  }
+    
+  
   // Class for holding our special super-fast billboards and quads
   class GLQuadElement {
     private int bufferID = -1;
@@ -916,11 +925,7 @@ public class PixelRealm extends Screen {
     }
     
     public void render() {
-      // Bind shader
-      if (rebindVertexShader) {
-        unifiedShader.bind();
-        rebindVertexShader = false;
-      }
+      unifiedShaderRebindCheck();
       
       // Bind vbos
       if (currEnabledAttribVBO != bufferID) {
@@ -2186,16 +2191,18 @@ public class PixelRealm extends Screen {
         if (img == null)
           return;
         
-        if (versionCompatibility == 2) {
-          //useEnvironmentShader();
-        }
-        
         if (treeGLElements[imgIndex] == null) {
           treeGLElements[imgIndex] = new GLQuadElement(img, imgIndex);
         }
         
         useEnvironmentShader();
+        if (tint != defaultTint) {
+          tint(tint, 255);
+        }
+        
         billboard(treeGLElements[imgIndex], x, y, z, size);
+        
+        if (tint != defaultTint) noTint();
       }
       
       public JSONObject save() {
@@ -2641,7 +2648,7 @@ public class PixelRealm extends Screen {
               dontRender = true;
             }
           } else {
-            noTint();
+            tint(tint, 255);
           }
         }
         else if (versionCompatibility == 2) {
@@ -2650,7 +2657,10 @@ public class PixelRealm extends Screen {
           if (x*x+z*z > terrain.FADE_DIST_OBJECTS) {
             dontRender = true;
           }
-          noTint();
+          else if (tint != defaultTint) {
+            // Tint not for fade, but for portals, highlight etc
+            tint(tint, 255f);
+          }
         }
         
         useEnvironmentShader();
@@ -2658,6 +2668,8 @@ public class PixelRealm extends Screen {
         if (!dontRender) {
           renderPShape(CASSETTE_OBJ, this.x, this.y, this.z, SIZE, this.rotY);
         }
+        
+        if (tint != defaultTint) noTint();
         
       }
       
@@ -3346,13 +3358,20 @@ public class PixelRealm extends Screen {
           
           usePortalShader();
           
+          if (tint != defaultTint) {
+            // Tint not for fade, but for portals, highlight etc
+            tint(tint, 255f);
+          }
+          
           if (element == null || elementRefreshRequired) {
             element = new GLQuadElement(img, 0, wi, hi);
             elementRefreshRequired = false;
           }
           billboard(element, x, y, z, 1f);
           
-          useEnvironmentShader();
+          if (tint != defaultTint) noTint();
+          
+          useTextShader();
           
           // Display text over the portal showing the directory.
           float d = direction-PI;
@@ -3367,7 +3386,13 @@ public class PixelRealm extends Screen {
           scene.text(filename, 0, 0, 0);
           scene.popMatrix();
           
+          scene.flush();
+          currEnabledAttribVBO = -1;
+          currQuadElementTexture = -1;
+          rebindVertexShader = true;
+          
           display.recordLogicTime();
+          
   
           // Reset tint
           this.tint = color(255);
@@ -3413,7 +3438,7 @@ public class PixelRealm extends Screen {
     
     
     
-    
+    final color defaultTint = color(255,255,255);
   
     class PRObject {
       public int id;
@@ -3604,7 +3629,7 @@ public class PixelRealm extends Screen {
               dontRender = true;
             }
           } else {
-            noTint();
+            tint(tint, 255);
           }
         }
         else if (versionCompatibility == 2) {
@@ -3612,6 +3637,10 @@ public class PixelRealm extends Screen {
           float zz = playerZ-this.z;
           if (xx*xx+zz*zz > terrain.FADE_DIST_OBJECTS) {
             dontRender = true;
+          }
+          else if (tint != defaultTint) {
+            // Tint not for fade, but for portals, highlight etc
+            tint(tint, 255f);
           }
         }
         
@@ -3637,7 +3666,7 @@ public class PixelRealm extends Screen {
           scene.popMatrix();
         }
         
-        if (versionCompatibility == 1) noTint();
+        if (versionCompatibility == 1 || tint != defaultTint) noTint();
         display.recordLogicTime();
       }
       
@@ -5781,7 +5810,7 @@ public class PixelRealm extends Screen {
     private static final int MODE_PORTAL = 3;
     private static final int MODE_WATER = 4;
     private static final int MODE_TEST = 5;
-    
+    private static final int MODE_TEXT = 6;
     
     private PShader environmentShader() {
       float x = (float)lightDirectionsX[lightDirectionSlider.valInt%16];
@@ -5804,6 +5833,7 @@ public class PixelRealm extends Screen {
     }
     
     private void useEnvironmentShader() {
+      unifiedShaderRebindCheck();
       if (currShaderMode != MODE_ENV) {
         display.recordRendererTime();
         
@@ -5815,8 +5845,23 @@ public class PixelRealm extends Screen {
       }
     }  
     
+    // TODO: This is just the environment shader. Modify so that text isn't affected by lighting, etc.
+    private void useTextShader() {
+      unifiedShaderRebindCheck();
+      if (currShaderMode != MODE_ENV) {
+        display.recordRendererTime();
+        
+        environmentShader().set("mode", MODE_ENV);
+        if (unifiedShader != null && pgl != null) unifiedShader.consumeUniforms();
+        
+        display.recordLogicTime();
+        currShaderMode = MODE_ENV;
+      }
+    } 
+    
     @SuppressWarnings("unused")
     private void useTestShader() {
+      unifiedShaderRebindCheck();
       if (currShaderMode != MODE_TEST) {
         display.recordRendererTime();
         
@@ -5831,6 +5876,7 @@ public class PixelRealm extends Screen {
     }  
     
     private void usePortalShader() {
+      unifiedShaderRebindCheck();
       if (currShaderMode != MODE_PORTAL) {
         display.recordRendererTime();
         
@@ -5851,6 +5897,7 @@ public class PixelRealm extends Screen {
     }
     
     private void useWaterShader() {
+      unifiedShaderRebindCheck();
       if (currShaderMode != MODE_WATER) {
         PShader sh = environmentShader();
         sh.set("mode", MODE_WATER);
@@ -5865,6 +5912,7 @@ public class PixelRealm extends Screen {
     }
     
     private void useStandardShader() {
+      unifiedShaderRebindCheck();
       if (currShaderMode != MODE_STANDARD) {
         PShader sh = display.getShaderWithArgs("pixelrealm_unified");
         sh.set("mode", MODE_STANDARD);
