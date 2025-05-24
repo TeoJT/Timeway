@@ -865,6 +865,235 @@ public class PixelRealm extends Screen {
   
   
   
+  private int colorAttribLoc = -1;
+  private int posAttribLoc = -1;
+  private int uvAttribLoc = -1;
+  private int norAttribLoc = -1;
+  private int currEnabledAttribVBO = -1;
+  private int currQuadElementTexture = -1;
+  private boolean rebindVertexShader = false;
+  
+  // Class for holding our special super-fast billboards and quads
+  class GLQuadElement {
+    private int bufferID = -1;
+    private int textureID = -1;
+    
+    public GLQuadElement(RealmTextureUV img, int imgIndex, float wi, float hi) {
+      genBuffer();
+      
+      // Generate our quad with the texture.
+      float texu = img.getU(imgIndex);
+      float texv = img.getV(imgIndex);
+      float texw = img.getW(imgIndex);
+      float texh = img.getH(imgIndex);
+      textureID = pimgToGLName(img.get());
+      
+      float hwi = wi/2f;
+      createVBO(-hwi, -hi, 0f, hwi, 0f, 0f, texu, texv, texw, texh);
+    }
+    
+    public GLQuadElement(RealmTextureUV img, int imgIndex) {
+      this(img, imgIndex, img.getWidth(imgIndex), img.getHeight(imgIndex));
+    }
+    
+    private int pimgToGLName(PImage img) {
+      Texture obj = ((Texture)scene.getCache(img));
+      if (obj == null) {
+        obj = ((PGraphicsOpenGL)scene).getTexture(img);
+        return obj.glName;
+      }
+      return obj.glName;
+    }
+    
+    private void genBuffer() {
+      IntBuffer intBuffer = IntBuffer.allocate(1);
+      pgl.genBuffers(1, intBuffer);
+      bufferID = intBuffer.get(0);
+    }
+    
+    private FloatBuffer allocateDirectFloatBuffer(int n) {
+      return ByteBuffer.allocateDirect(n * Float.BYTES).order(ByteOrder.nativeOrder()).asFloatBuffer();
+    }
+    
+    public void render() {
+      // Bind shader
+      if (rebindVertexShader) {
+        unifiedShader.bind();
+        rebindVertexShader = false;
+      }
+      
+      // Bind vbos
+      if (currEnabledAttribVBO != bufferID) {
+        // Disable previous attrib arrays
+        pgl.bindBuffer(PGL.ARRAY_BUFFER, currEnabledAttribVBO);
+        pgl.disableVertexAttribArray(colorAttribLoc);
+        pgl.disableVertexAttribArray(posAttribLoc);
+        pgl.disableVertexAttribArray(uvAttribLoc);
+        pgl.disableVertexAttribArray(norAttribLoc);
+        
+        // Enable our attrib arrays
+        pgl.bindBuffer(PGL.ARRAY_BUFFER, bufferID);
+        
+        pgl.vertexAttribPointer(colorAttribLoc, 4, PGL.FLOAT, false, 52, 0);
+        pgl.vertexAttribPointer(posAttribLoc,   4, PGL.FLOAT, false, 52, 16);
+        pgl.vertexAttribPointer(uvAttribLoc,    2, PGL.FLOAT, false, 52, 32);
+        pgl.vertexAttribPointer(norAttribLoc,   3, PGL.FLOAT, false, 52, 40);
+        
+        pgl.enableVertexAttribArray(colorAttribLoc);
+        pgl.enableVertexAttribArray(posAttribLoc);
+        pgl.enableVertexAttribArray(uvAttribLoc);
+        pgl.enableVertexAttribArray(norAttribLoc);
+        pgl.bindBuffer(PGL.ARRAY_BUFFER, 0);
+        
+        // OpenGL is just so dumb now that i know vulkan lmao
+        
+        currEnabledAttribVBO = bufferID;
+      }
+      
+      // Bind texture too (not necessary but I like to do it to be safe with performance)
+      if (currQuadElementTexture != textureID) {
+        pgl.bindTexture(PGL.TEXTURE_2D, textureID);
+        
+        currQuadElementTexture = textureID;
+      }
+      
+      pgl.drawArrays(PGL.TRIANGLES, 0, 6);
+    }
+    
+    private void createVBO(float x1, float y1, float z1, float x2, float y2, float z2, float uvx, float uvy, float uvxx, float uvyy) {
+      FloatBuffer attribBuffer = allocateDirectFloatBuffer(24);
+      
+      float[] attr = new float[156];
+      
+      int a = 0;
+      
+      // color1
+      attr[a++] = 1f;
+      attr[a++] = 1f;
+      attr[a++] = 1f;
+      attr[a++] = 1f;
+      // v1
+      attr[a++] = x1;
+      attr[a++] = y1;
+      attr[a++] = z1;
+      attr[a++] = 1f;
+      // uv1
+      attr[a++] = uvx;
+      attr[a++] = uvy;
+      // normal1
+      attr[a++] = 0f;
+      attr[a++] = 0f;
+      attr[a++] = 0f;
+      
+      // color2
+      attr[a++] = 1f;
+      attr[a++] = 1f;
+      attr[a++] = 1f;
+      attr[a++] = 1f;
+      // v2
+      attr[a++] = x2;
+      attr[a++] = y1;
+      attr[a++] = z2;
+      attr[a++] = 1f;
+      // uv2
+      attr[a++] = uvxx;
+      attr[a++] = uvy;
+      // normal2
+      attr[a++] = 0f;
+      attr[a++] = 0f;
+      attr[a++] = 0f;
+      
+      
+      // color3
+      attr[a++] = 1f;
+      attr[a++] = 1f;
+      attr[a++] = 1f;
+      attr[a++] = 1f;
+      // v3
+      attr[a++] = x2;
+      attr[a++] = y2;
+      attr[a++] = z2;
+      attr[a++] = 1f;
+      // uv3
+      attr[a++] = uvxx;
+      attr[a++] = uvyy;
+      // normal3
+      attr[a++] = 0f;
+      attr[a++] = 0f;
+      attr[a++] = 0f;
+      
+      
+      // color4
+      attr[a++] = 1f;
+      attr[a++] = 1f;
+      attr[a++] = 1f;
+      attr[a++] = 1f;
+      // v4
+      attr[a++] = x1;
+      attr[a++] = y1;
+      attr[a++] = z1;
+      attr[a++] = 1f;
+      // uv4
+      attr[a++] = uvx;
+      attr[a++] = uvy;
+      // normal4
+      attr[a++] = 0f;
+      attr[a++] = 0f;
+      attr[a++] = 0f;
+      
+      
+      // color5
+      attr[a++] = 1f;
+      attr[a++] = 1f;
+      attr[a++] = 1f;
+      attr[a++] = 1f;
+      // v3
+      attr[a++] = x2;
+      attr[a++] = y2;
+      attr[a++] = z2;
+      attr[a++] = 1f;
+      // uv5
+      attr[a++] = uvxx;
+      attr[a++] = uvyy;
+      // normal5
+      attr[a++] = 0f;
+      attr[a++] = 0f;
+      attr[a++] = 0f;
+      
+      // color6
+      attr[a++] = 1f;
+      attr[a++] = 1f;
+      attr[a++] = 1f;
+      attr[a++] = 1f;
+      // v6
+      attr[a++] = x1;
+      attr[a++] = y2;
+      attr[a++] = z1;
+      attr[a++] = 1f;
+      // uv6
+      attr[a++] = uvx;
+      attr[a++] = uvyy;
+      // normal6
+      attr[a++] = 0f;
+      attr[a++] = 0f;
+      attr[a++] = 0f;
+      
+      
+      attribBuffer = allocateDirectFloatBuffer(attr.length);
+      
+      attribBuffer.rewind();
+      attribBuffer.put(attr);
+      attribBuffer.rewind();
+      
+      pgl.bindBuffer(PGL.ARRAY_BUFFER, bufferID);
+      pgl.bufferData(PGL.ARRAY_BUFFER, Float.BYTES * attr.length, attribBuffer, PGL.DYNAMIC_DRAW);
+      pgl.bindBuffer(PGL.ARRAY_BUFFER, 0);
+    }
+  }
+    
+  
+  
+  
   
   protected class PocketItem {
     
@@ -2407,14 +2636,12 @@ public class PixelRealm extends Screen {
           if (dist > terrain.FADE_DIST_OBJECTS) {
             float fade = calculateFade(dist, terrain.FADE_DIST_OBJECTS);
             if (fade > 1) {
-              //tint(tint, fade);
-              scene.fill(tint, fade);
+              tint(tint, fade);
             } else {
               dontRender = true;
             }
           } else {
-            //noTint();
-            scene.fill(tint, 255);
+            noTint();
           }
         }
         else if (versionCompatibility == 2) {
@@ -2423,23 +2650,15 @@ public class PixelRealm extends Screen {
           if (x*x+z*z > terrain.FADE_DIST_OBJECTS) {
             dontRender = true;
           }
-          //scene.fill(tint, 255);
           noTint();
         }
         
+        useEnvironmentShader();
+        
         if (!dontRender) {
-          display.recordRendererTime();
-          scene.pushMatrix();
-          scene.translate(this.x, this.y, this.z);
-          scene.scale(-SIZE);
-          //scene.rotateX(rotX);
-          
-          scene.rotateY(rotY);
-          //scene.rotateZ(rotZ);
-          scene.shape(CASSETTE_OBJ);
-          scene.popMatrix();
-          display.recordLogicTime();
+          renderPShape(CASSETTE_OBJ, this.x, this.y, this.z, SIZE, this.rotY);
         }
+        
       }
       
       public void scaleUp(float amount) {
@@ -3322,6 +3541,24 @@ public class PixelRealm extends Screen {
       public void destroy() {
         ordering.remove(myOrderingNode);
       }
+      
+      protected void renderPShape(PShape obj, float x, float y, float z, float scale, float rot) {
+        display.recordRendererTime();
+        scene.pushMatrix();
+        scene.translate(x, y, z);
+        scene.scale(-scale);
+        scene.rotateY(rot);
+        
+        // Whenever we use Processing's PShape, we gotta reset these cus the set vbos and textures will
+        // be different.
+        currEnabledAttribVBO = -1;
+        currQuadElementTexture = -1;
+        rebindVertexShader = true;
+        
+        scene.shape(obj);
+        scene.popMatrix();
+        display.recordLogicTime();
+      }
   
       public void setSize(float size) {
         this.size = size;
@@ -3433,15 +3670,12 @@ public class PixelRealm extends Screen {
     
     
     
-    private int colorAttribLoc = -1;
-    private int posAttribLoc = -1;
-    private int uvAttribLoc = -1;
-    private int norAttribLoc = -1;
     
     private void updateUnifiedShaderGLInfo() {
       // For some reason we have to put this line here otherwise it won't work. Yes, running that every frame.
       unifiedShader = display.getShader("pixelrealm_unified");
       unifiedShader.bind();
+      rebindVertexShader = false;
       int shaderID = unifiedShader.glProgram;
       
       colorAttribLoc = pgl.getAttribLocation(shaderID, "color");
@@ -3454,221 +3688,6 @@ public class PixelRealm extends Screen {
       currQuadElementTexture = -1;
     }
     
-    
-    private int currEnabledAttribVBO = -1;
-    private int currQuadElementTexture = -1;
-    
-    // Class for holding our special super-fast billboards and quads
-    class GLQuadElement {
-      private int bufferID = -1;
-      private int textureID = -1;
-      
-      public GLQuadElement(RealmTextureUV img, int imgIndex, float wi, float hi) {
-        genBuffer();
-        
-        // Generate our quad with the texture.
-        float texu = img.getU(imgIndex);
-        float texv = img.getV(imgIndex);
-        float texw = img.getW(imgIndex);
-        float texh = img.getH(imgIndex);
-        textureID = pimgToGLName(img.get());
-        
-        float hwi = wi/2f;
-        createVBO(-hwi, -hi, 0f, hwi, 0f, 0f, texu, texv, texw, texh);
-      }
-      
-      public GLQuadElement(RealmTextureUV img, int imgIndex) {
-        this(img, imgIndex, img.getWidth(imgIndex), img.getHeight(imgIndex));
-      }
-      
-      private int pimgToGLName(PImage img) {
-        Texture obj = ((Texture)scene.getCache(img));
-        if (obj == null) {
-          obj = ((PGraphicsOpenGL)scene).getTexture(img);
-          return obj.glName;
-        }
-        return obj.glName;
-      }
-      
-      private void genBuffer() {
-        IntBuffer intBuffer = IntBuffer.allocate(1);
-        pgl.genBuffers(1, intBuffer);
-        bufferID = intBuffer.get(0);
-      }
-      
-      private FloatBuffer allocateDirectFloatBuffer(int n) {
-        return ByteBuffer.allocateDirect(n * Float.BYTES).order(ByteOrder.nativeOrder()).asFloatBuffer();
-      }
-      
-      public void render() {
-        // Bind
-        if (currEnabledAttribVBO != bufferID) {
-          // Disable previous attrib arrays
-          pgl.bindBuffer(PGL.ARRAY_BUFFER, currEnabledAttribVBO);
-          pgl.disableVertexAttribArray(colorAttribLoc);
-          pgl.disableVertexAttribArray(posAttribLoc);
-          pgl.disableVertexAttribArray(uvAttribLoc);
-          pgl.disableVertexAttribArray(norAttribLoc);
-          
-          // Enable our attrib arrays
-          pgl.bindBuffer(PGL.ARRAY_BUFFER, bufferID);
-          
-          pgl.vertexAttribPointer(colorAttribLoc, 4, PGL.FLOAT, false, 52, 0);
-          pgl.vertexAttribPointer(posAttribLoc,   4, PGL.FLOAT, false, 52, 16);
-          pgl.vertexAttribPointer(uvAttribLoc,    2, PGL.FLOAT, false, 52, 32);
-          pgl.vertexAttribPointer(norAttribLoc,   3, PGL.FLOAT, false, 52, 40);
-          
-          pgl.enableVertexAttribArray(colorAttribLoc);
-          pgl.enableVertexAttribArray(posAttribLoc);
-          pgl.enableVertexAttribArray(uvAttribLoc);
-          pgl.enableVertexAttribArray(norAttribLoc);
-          pgl.bindBuffer(PGL.ARRAY_BUFFER, 0);
-          
-          // OpenGL is just so dumb now that i know vulkan lmao
-          
-          currEnabledAttribVBO = bufferID;
-        }
-        
-        // Bind texture too (not necessary but I like to do it to be safe with performance)
-        if (currQuadElementTexture != textureID) {
-          pgl.bindTexture(PGL.TEXTURE_2D, textureID);
-          
-          currQuadElementTexture = textureID;
-        }
-        
-        pgl.drawArrays(PGL.TRIANGLES, 0, 6);
-      }
-      
-      private void createVBO(float x1, float y1, float z1, float x2, float y2, float z2, float uvx, float uvy, float uvxx, float uvyy) {
-        FloatBuffer attribBuffer = allocateDirectFloatBuffer(24);
-        
-        float[] attr = new float[156];
-        
-        int a = 0;
-        
-        // color1
-        attr[a++] = 1f;
-        attr[a++] = 1f;
-        attr[a++] = 1f;
-        attr[a++] = 1f;
-        // v1
-        attr[a++] = x1;
-        attr[a++] = y1;
-        attr[a++] = z1;
-        attr[a++] = 1f;
-        // uv1
-        attr[a++] = uvx;
-        attr[a++] = uvy;
-        // normal1
-        attr[a++] = 0f;
-        attr[a++] = 0f;
-        attr[a++] = 0f;
-        
-        // color2
-        attr[a++] = 1f;
-        attr[a++] = 1f;
-        attr[a++] = 1f;
-        attr[a++] = 1f;
-        // v2
-        attr[a++] = x2;
-        attr[a++] = y1;
-        attr[a++] = z2;
-        attr[a++] = 1f;
-        // uv2
-        attr[a++] = uvxx;
-        attr[a++] = uvy;
-        // normal2
-        attr[a++] = 0f;
-        attr[a++] = 0f;
-        attr[a++] = 0f;
-        
-        
-        // color3
-        attr[a++] = 1f;
-        attr[a++] = 1f;
-        attr[a++] = 1f;
-        attr[a++] = 1f;
-        // v3
-        attr[a++] = x2;
-        attr[a++] = y2;
-        attr[a++] = z2;
-        attr[a++] = 1f;
-        // uv3
-        attr[a++] = uvxx;
-        attr[a++] = uvyy;
-        // normal3
-        attr[a++] = 0f;
-        attr[a++] = 0f;
-        attr[a++] = 0f;
-        
-        
-        // color4
-        attr[a++] = 1f;
-        attr[a++] = 1f;
-        attr[a++] = 1f;
-        attr[a++] = 1f;
-        // v4
-        attr[a++] = x1;
-        attr[a++] = y1;
-        attr[a++] = z1;
-        attr[a++] = 1f;
-        // uv4
-        attr[a++] = uvx;
-        attr[a++] = uvy;
-        // normal4
-        attr[a++] = 0f;
-        attr[a++] = 0f;
-        attr[a++] = 0f;
-        
-        
-        // color5
-        attr[a++] = 1f;
-        attr[a++] = 1f;
-        attr[a++] = 1f;
-        attr[a++] = 1f;
-        // v3
-        attr[a++] = x2;
-        attr[a++] = y2;
-        attr[a++] = z2;
-        attr[a++] = 1f;
-        // uv5
-        attr[a++] = uvxx;
-        attr[a++] = uvyy;
-        // normal5
-        attr[a++] = 0f;
-        attr[a++] = 0f;
-        attr[a++] = 0f;
-        
-        // color6
-        attr[a++] = 1f;
-        attr[a++] = 1f;
-        attr[a++] = 1f;
-        attr[a++] = 1f;
-        // v6
-        attr[a++] = x1;
-        attr[a++] = y2;
-        attr[a++] = z1;
-        attr[a++] = 1f;
-        // uv6
-        attr[a++] = uvx;
-        attr[a++] = uvyy;
-        // normal6
-        attr[a++] = 0f;
-        attr[a++] = 0f;
-        attr[a++] = 0f;
-        
-        
-        attribBuffer = allocateDirectFloatBuffer(attr.length);
-        
-        attribBuffer.rewind();
-        attribBuffer.put(attr);
-        attribBuffer.rewind();
-        
-        pgl.bindBuffer(PGL.ARRAY_BUFFER, bufferID);
-        pgl.bufferData(PGL.ARRAY_BUFFER, Float.BYTES * attr.length, attribBuffer, PGL.DYNAMIC_DRAW);
-        pgl.bindBuffer(PGL.ARRAY_BUFFER, 0);
-      }
-    }
     
     
     
