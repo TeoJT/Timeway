@@ -26,6 +26,7 @@ uniform int mode;
 #define MODE_PORTAL 3
 #define MODE_WATER 4
 #define MODE_TEST 5
+#define MODE_FLIPTEX 7
 
 
 float pixelate(float o, float res) {
@@ -86,6 +87,9 @@ void main(void)
     }
     else if (mode == MODE_TEST) {
 		fragOut = vec4(1.0, 0.0, 0.0, 1.0);
+    }
+    else if (mode == MODE_FLIPTEX) {
+        fragOut = vertColor;
     }
 	else {
 		fragOut = vec4(0.0);

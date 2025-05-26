@@ -313,7 +313,7 @@ public class PixelRealm extends Screen {
   
   // Classes we need
   class RealmTextureUV {
-    private PImage singleImg = null;
+    public PImage singleImg = null;
     private int len = 0;
     private float[] texU;
     private float[] texV;
@@ -741,25 +741,32 @@ public class PixelRealm extends Screen {
     public ItemSlot<T> tail = null;
     public ItemSlot<T> inventorySelectedItem = null;
     
+    @Override
     public Iterator<T> iterator() {
-      ArrayList<T> ll = new ArrayList<T>();
-      itCurr = head;
-      ItemSlot<T> n = head;
-      int counter = 0;
-      while (n != null) {
-        ll.add(n.carrying);
-        n = n.next;
-        
-        // Safety check
-        counter++;
-        if (counter > 5000000) {
-          // Hard to recover from.
-          // We don't really have a choice but to crash the program at this point
-          throw new RuntimeException("A fatal linkedlist bug occured. Program self-crashed to save your computer from exploding.");
+        return new LinkedListIterator();
+    }
+
+    private class LinkedListIterator implements Iterator<T> {
+        private ItemSlot<T> current;
+
+        public LinkedListIterator() {
+            this.current = head;
         }
-      }
-      
-      return ll.iterator();
+
+        @Override
+        public boolean hasNext() {
+            return current != null;
+        }
+
+        @Override
+        public T next() {
+            if (!hasNext()) {
+                throw new java.util.NoSuchElementException();
+            }
+            T value = current.carrying;
+            current = current.next;
+            return value;
+        }
     }
     
     ItemSlot itCurr = null;
@@ -898,7 +905,13 @@ public class PixelRealm extends Screen {
       textureID = pimgToGLName(img.get());
       
       float hwi = wi/2f;
-      createVBO(-hwi, -hi, 0f, hwi, 0f, 0f, texu, texv, texw, texh);
+      
+      if (hi < 0) {
+        createVBO(-hwi, 0f, 0f, hwi, hi, 0f, texu, texv, texw, texh);
+      }
+      else {
+        createVBO(-hwi, -hi, 0f, hwi, 0f, 0f, texu, texv, texw, texh);
+      }
     }
     
     public GLQuadElement(RealmTextureUV img, int imgIndex) {
@@ -988,7 +1001,7 @@ public class PixelRealm extends Screen {
       // normal1
       attr[a++] = 0f;
       attr[a++] = 0f;
-      attr[a++] = 0f;
+      attr[a++] = 1f;
       
       // color2
       attr[a++] = 1f;
@@ -1006,7 +1019,7 @@ public class PixelRealm extends Screen {
       // normal2
       attr[a++] = 0f;
       attr[a++] = 0f;
-      attr[a++] = 0f;
+      attr[a++] = 1f;
       
       
       // color3
@@ -1025,7 +1038,7 @@ public class PixelRealm extends Screen {
       // normal3
       attr[a++] = 0f;
       attr[a++] = 0f;
-      attr[a++] = 0f;
+      attr[a++] = 1f;
       
       
       // color4
@@ -1044,7 +1057,7 @@ public class PixelRealm extends Screen {
       // normal4
       attr[a++] = 0f;
       attr[a++] = 0f;
-      attr[a++] = 0f;
+      attr[a++] = 1f;
       
       
       // color5
@@ -1063,7 +1076,7 @@ public class PixelRealm extends Screen {
       // normal5
       attr[a++] = 0f;
       attr[a++] = 0f;
-      attr[a++] = 0f;
+      attr[a++] = 1f;
       
       // color6
       attr[a++] = 1f;
@@ -1081,7 +1094,7 @@ public class PixelRealm extends Screen {
       // normal6
       attr[a++] = 0f;
       attr[a++] = 0f;
-      attr[a++] = 0f;
+      attr[a++] = 1f;
       
       
       attribBuffer = allocateDirectFloatBuffer(attr.length);
@@ -2471,6 +2484,7 @@ public class PixelRealm extends Screen {
                   );
                   if (im != null) {
                     img = new RealmTextureUV(im);
+                    elementRefreshRequired = true;
                   }
                 }
                 else if (ext.equals("pdf")) {
@@ -2500,9 +2514,7 @@ public class PixelRealm extends Screen {
                   }
                   );
                   img = new RealmTextureUV(im);
-                  
                   elementRefreshRequired = true;
-                  
                 }
               }
             }
@@ -2815,6 +2827,9 @@ public class PixelRealm extends Screen {
             display.setPGraphics(g);
             if (power.powerMode != PowerMode.MINIMAL) scene.beginDraw();
             img = new RealmTextureUV(mycanvas);
+            elementRefreshRequired = true;
+            bugFixUpsideDown = true;
+            
             display.uploadAllAtOnce(false);
             setSize(0.5);
             
@@ -2841,6 +2856,7 @@ public class PixelRealm extends Screen {
       public boolean loadFlag = false;
       public boolean cacheFlag = false;
       public boolean allowTexFlipping = false;
+      protected boolean bugFixUpsideDown = false;   // pls punish me for this.
       
   
   
@@ -2909,26 +2925,40 @@ public class PixelRealm extends Screen {
               this.hi = img.getHeight()*size;
               // There's no y2 huehue.
               
+              useEnvironmentShader();
               
-              // Half width
-              float hwi = wi/2;
               
               if (allowTexFlipping) {
+                float hwi = wi/2;
                 float sin_dd = sin(rot+HALF_PI)*(hwi);
                 float cos_dd = cos(rot+HALF_PI)*(hwi);
                 float dx1 = playerX - (x + sin_dd);
                 float dz1 = playerZ - (z + cos_dd);
                 float dx2 = playerX - (x - sin_dd);
                 float dz2 = playerZ - (z - cos_dd);
-                flippedTexture = (abs(dx1*dx1+dz1*dz1) < abs(dx2*dx2+dz2*dz2));
+                if (unifiedShader != null) {
+                  unifiedShader.set("flipTexture", abs(dx1*dx1+dz1*dz1) < abs(dx2*dx2+dz2*dz2));
+                  unifiedShader.consumeUniforms();
+                }
               }
               
               if (element == null || elementRefreshRequired) {
-                element = new GLQuadElement(img, 0, wi, hi);
+                if (bugFixUpsideDown) {
+                  element = new GLQuadElement(img, 0, wi, -hi);
+                }
+                else {
+                  element = new GLQuadElement(img, 0, wi, hi);
+                }
+                
                 elementRefreshRequired = false;
               }
                
               displayQuad(element, x, y, z, rot-HALF_PI);
+              
+              if (unifiedShader != null && allowTexFlipping) {
+                unifiedShader.set("flipTexture", false);
+                unifiedShader.consumeUniforms();
+              }
             }
           }
         }
@@ -3454,7 +3484,7 @@ public class PixelRealm extends Screen {
       public boolean visible = true;         // Used for manual turning on/off visibility
       public color tint = color(255);
       protected ItemSlot<PRObject> myOrderingNode = null;
-      protected boolean flippedTexture = false;
+      
       
   
       public PRObject() {
@@ -4882,6 +4912,10 @@ public class PixelRealm extends Screen {
       PImage DEFAULT_TREE = REALM_TREE_DEFAULT;
       PImage DEFAULT_SKY = REALM_SKY_DEFAULT;
       String DEFAULT_BGM = REALM_BGM_DEFAULT;
+      
+      // This is a bug fix. Sometimes we refresh the realm. Since GLQuadElements are kinda linked to images,
+      // we need to reset these whenever we modify images.
+      treeGLElements = new GLQuadElement[9];
       
       
       // Classic backwards compatibility for old realms

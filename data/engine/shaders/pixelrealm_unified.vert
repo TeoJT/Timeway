@@ -1,6 +1,8 @@
+#version 330 core
+
 uniform mat4 transformMatrix;
 uniform mat4 texMatrix;
-uniform mat3 normalMatrix;
+uniform mat4 modelview;
 
 attribute vec4 color;
 attribute vec4 position;
@@ -10,15 +12,19 @@ attribute vec3 normal;
 varying vec4 vertColor;
 varying vec4 vertTexCoord;
 
-uniform vec4  tintColor;
-uniform float time;
-uniform float ambient;
-uniform float reffect;
-uniform float geffect;
-uniform float beffect;
-uniform float fadeLength;
-uniform float fadeStart;
-uniform vec3 lightDirection;
+uniform vec4    tintColor;
+uniform float   time;
+uniform float   ambient;
+uniform float   reffect;
+uniform float   geffect;
+uniform float   beffect;
+uniform float   fadeLength;
+uniform float   fadeStart;
+uniform vec3    lightDirection;
+uniform bool    flipTexture; 
+
+#define PI 3.1415926535
+#define HALF_PI 1.570796327
 
 uniform int mode;
 #define MODE_STANDARD 1
@@ -39,12 +45,20 @@ void main() {
   }
   else if (mode == MODE_ENV || mode == MODE_WATER) {
     // Lighting
-    float dp = (normal.x * lightDirection.x + normal.y * lightDirection.y + normal.z * lightDirection.z);
+	float dp = dot(normal, lightDirection);
     
     float c = ((dp*2. + 2.) / 2.)*1.0-1.0;
     vertColor = color * vec4(ambient+clamp((c*reffect), 0.0, 1000.), ambient+clamp((c*geffect), 0.0, 1000.), ambient+clamp((c*beffect), 0.0, 1000.), opacity) * tintColor;
 	
-    vertTexCoord = vec4(texCoord, 0.0, 1.0);
+	if (flipTexture) {
+		float flipped = (texCoord.x - 1.0)*(texCoord.x - 1.0);
+		vertTexCoord = vec4(flipped, texCoord.y, 0.0, 1.0);
+	}
+	else {
+		vertTexCoord = vec4(texCoord, 0.0, 1.0);
+	}
+	
+	
 	if (mode == MODE_WATER) {
 		vertTexCoord = vec4(texCoord+vec2(time*0.1), 0.0, 1.0);
 	}

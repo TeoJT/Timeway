@@ -324,6 +324,7 @@ public class Editor extends Screen {
     private float canvasScale;
     private JSONArray loadedJsonArray;
     protected boolean readOnly = false;
+    private boolean forcedScrollBugFix = false;
     
     // X goes unused for now but could be useful later.
     private float extentX = 0.;
@@ -1216,7 +1217,6 @@ public class Editor extends Screen {
     
     
     
-    
     //**************************************************************************************
     //**********************************EDITOR SCREEN CODE**********************************
     //**************************************************************************************  
@@ -1268,6 +1268,7 @@ public class Editor extends Screen {
         if (c != null) {
           canvas = c;
           canvasScale = canvas.width/(WIDTH);
+          forcedScrollBugFix = true;
         }
         else {
           canvas = g;
@@ -2062,10 +2063,15 @@ public class Editor extends Screen {
         // Because every placeable is placed at a slight offset due to the ribbon bar,
         // readonly doesn't have this bar and hence we should limit scroll at where the
         // ribbon bar normally is.
-        if (!readOnly)
-          input.processScroll(0., scrollLimitY);
-        else 
-          input.processScroll(-UPPER_BAR_DROP_WEIGHT, scrollLimitY);
+        if (forcedScrollBugFix) {
+          input.scrollOffset = -UPPER_BAR_DROP_WEIGHT;
+        }
+        else {
+          if (!readOnly)
+            input.processScroll(0., scrollLimitY);
+          else 
+            input.processScroll(-UPPER_BAR_DROP_WEIGHT, scrollLimitY);
+        }
           
         extentX = 0;
         extentY = 0;
