@@ -3416,10 +3416,7 @@ public class PixelRealm extends Screen {
           scene.text(filename, 0, 0, 0);
           scene.popMatrix();
           
-          scene.flush();
-          currEnabledAttribVBO = -1;
-          currQuadElementTexture = -1;
-          rebindVertexShader = true;
+          rebind();
           
           display.recordLogicTime();
           
@@ -3606,9 +3603,7 @@ public class PixelRealm extends Screen {
         
         // Whenever we use Processing's PShape, we gotta reset these cus the set vbos and textures will
         // be different.
-        currEnabledAttribVBO = -1;
-        currQuadElementTexture = -1;
-        rebindVertexShader = true;
+        rebind();
         
         scene.shape(obj);
         scene.popMatrix();
@@ -6013,10 +6008,25 @@ public class PixelRealm extends Screen {
         chunkz++;
       }
       
+      // If using immediate mode, we gotta be careful with our super fragile gl renderer.
+      // Flush what we have and rebind.
+      if (modifyTerrain) {
+        scene.flush();
+        rebind();
+      }
+      
       if (terrain.hasWater)
         renderWater();
         
       scene.popMatrix();
+    }
+    
+    
+    public void rebind() {
+      scene.flush();
+      currEnabledAttribVBO = -1;
+      currQuadElementTexture = -1;
+      rebindVertexShader = true;
     }
     
     
