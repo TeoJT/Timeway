@@ -1719,8 +1719,12 @@ public class PixelRealm extends Screen {
             terrainZ, 
             3+(30*pureStaticNoise)
           );
+          //console.log("tree "+countt);
+          //countt++;
         }
       }
+      
+      //int countt = 0;
       
       public float getPointY(float x, float z) {
         float y = sin(x*hillFrequency)*hillHeight+sin(z*hillFrequency)*hillHeight;
@@ -3629,6 +3633,9 @@ public class PixelRealm extends Screen {
         //if (versionCompatibility == 2) {
         //}
         useEnvironmentShader();
+        
+        if (currentTool == TOOL_GRABBER && closestObject == this)
+          tint = color(255, 200, 200);
         
         if (element == null && img != null) {
           element = new GLQuadElement(img, 0);
@@ -5961,8 +5968,6 @@ public class PixelRealm extends Screen {
       
       float chunkWiHi = groundSize*float(CHUNK_SIZE);
       
-      int chunkx = round((playerX)/(chunkWiHi))-renderDistance-1;
-      int chunkz = round((playerZ)/(chunkWiHi))-renderDistance;
 
       display.recordRendererTime();
       scene.hint(ENABLE_DEPTH_TEST);
@@ -5970,11 +5975,37 @@ public class PixelRealm extends Screen {
       
       scene.pushMatrix();
       
-      int xstart = chunkx;
-      for (int y = 0; y < renderDistance*2; y++) {
-        chunkx = xstart;
-        for (int x = 0; x < renderDistance*2; x++) {
-          chunkx++;
+      int cullDirection = getCullDirection();
+      
+      int csx = 0;
+      int csy = 0;
+      int cex = renderDistance;
+      int cey = renderDistance;
+
+      switch (cullDirection) {
+        case 0:
+        csx = renderDistance;
+        break;
+        case 1:
+        cey = 2;
+        break;
+        case 2:
+        cex = 2;
+        break;
+        case 3:
+        csy = renderDistance-1;
+        break;
+      }
+      
+      int startx = round((playerX)/(chunkWiHi))-renderDistance-1;
+      int startz = round((playerZ)/(chunkWiHi))-renderDistance;
+      
+      for (int y = csy; y < renderDistance+cey; y++) {
+        for (int x = csx; x < renderDistance+cex; x++) {
+          
+          int chunkx = startx + x;
+          int chunkz = startz + y;
+          
           
           if (version.equals("2.0")) {
             if (
@@ -6005,7 +6036,6 @@ public class PixelRealm extends Screen {
           chunk.renderChunk();
           
         }
-        chunkz++;
       }
       
       // If using immediate mode, we gotta be careful with our super fragile gl renderer.
@@ -6046,8 +6076,7 @@ public class PixelRealm extends Screen {
       
       float factorthing = (terrainchunkWiHi/waterSize);
       float renderDistance = (factorthing*terrain.getRenderDistance());
-      float tilex = round((playerX)/(waterSize))-renderDistance-1;
-      float tilez = round((playerZ)/(waterSize))-renderDistance;
+      
       
       float limitX = factorthing*float(terrain.chunkLimitX)*waterSize;
       float limitZ = factorthing*float(terrain.chunkLimitZ)*waterSize;
@@ -6056,12 +6085,15 @@ public class PixelRealm extends Screen {
       
       int irenderDist = int(renderDistance*1.8f);
       
-      float xstart = tilex;
+      float startx = round((playerX)/(waterSize))-renderDistance-1;
+      float startz = round((playerZ)/(waterSize))-renderDistance;
+      
+      int cullDirection = getCullDirection();
       
       for (int y = 0; y < irenderDist*2; y++) {
-        tilex = xstart;
         for (int x = 0; x < irenderDist*2; x++) {
-          tilex += 1.0;
+          float tilex = startx + (float)x;
+          float tilez = startz + (float)y;
           
           float xx1, zz1, xx2, zz2;
           
@@ -6083,10 +6115,27 @@ public class PixelRealm extends Screen {
           scene.pushMatrix();
           scene.translate(xx1, terrain.waterLevel, zz1);
           scene.scale((xx2-xx1)/waterSize, 1f, (zz2-zz1)/waterSize);
-          scene.shape(waterObject);
+          
+          switch (cullDirection) {
+            case 0:
+            if (xx2 > playerX)  // Top
+              scene.shape(waterObject);
+            break;
+            case 1:
+            if (zz1 < playerZ)
+              scene.shape(waterObject);
+            break;
+            case 2:
+            if (xx1 < playerX)  // Bottom
+              scene.shape(waterObject);
+            break;
+            case 3:
+            if (zz2 > playerZ)  // Left
+              scene.shape(waterObject);
+            break;
+          }
           scene.popMatrix();
         }
-        tilez += 1.0;
       }
     }
     
@@ -6360,6 +6409,25 @@ public class PixelRealm extends Screen {
       return getHoldingName(holdingObject);
     }
     
+    private int getCullDirection() {
+      int cullDirection = 0;
+      
+      float dir = (direction-HALF_PI/2f)%TWO_PI;
+      if (dir < 0)
+        dir += TWO_PI;
+      if (dir < HALF_PI)
+        cullDirection = 0;
+      else if (dir < PI)
+        cullDirection = 1;
+      else if (dir < PI+HALF_PI)
+        cullDirection = 2;
+      else if (dir < TWO_PI)
+        cullDirection = 3;
+        
+      return cullDirection;
+    }
+    
+    int prevCullDir = -1;
     
     public void renderPRObjects() {
       //println("-----------------------------------------------------------------------------------------------------");
@@ -6367,14 +6435,38 @@ public class PixelRealm extends Screen {
       useStandardShader();
       pgl = scene.beginPGL();
       
+        
+      //if (prevCullDir != cullDirection) {
+      //  console.log(dir);
+      //  prevCullDir = cullDirection;
+      //}
+      
       noTint();
       
       updateUnifiedShaderGLInfo();
       
+      int cullDirection = getCullDirection();
+      
       for (PRObject o : ordering) {
-        if (currentTool == TOOL_GRABBER && closestObject == o)
-          o.tint = color(255, 200, 200);
-        o.display();
+
+        switch (cullDirection) {
+          case 0:
+          if (o.x > playerX)  // Top
+            o.display();
+          break;
+          case 1:
+          if (o.z < playerZ)
+            o.display();
+          break;
+          case 2:
+          if (o.x < playerX)  // Bottom
+            o.display();
+          break;
+          case 3:
+          if (o.z > playerZ)  // Left
+            o.display();
+          break;
+        }
       }
       display.getShader("pixelrealm_unified").unbind();
       scene.endPGL();
@@ -6921,10 +7013,17 @@ public class PixelRealm extends Screen {
       float z = currRealm.playerZ;
       float LOOK_DIST = 200.;
       display.recordRendererTime();
-      scene.camera(x, y, z, 
-        x+sin(currRealm.direction)*LOOK_DIST, y, z+cos(currRealm.direction)*LOOK_DIST, 
-        0., 1., 0.);
-      if (currRealm.lights) scene.pointLight(255, 245, 245, x, y, z);
+      if (input.keyDown('k')) {
+        scene.camera(x, y-10000f, z, 
+          x+sin(currRealm.direction)*LOOK_DIST, y, z+cos(currRealm.direction)*LOOK_DIST, 
+          0., 1., 0.);
+      }
+      else {
+        scene.camera(x, y, z, 
+          x+sin(currRealm.direction)*LOOK_DIST, y, z+cos(currRealm.direction)*LOOK_DIST, 
+          0., 1., 0.);
+        if (currRealm.lights) scene.pointLight(255, 245, 245, x, y, z);
+      }
       display.recordLogicTime();
     }
     engine.timestamp("perspective");
