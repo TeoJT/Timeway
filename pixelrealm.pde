@@ -93,6 +93,7 @@ public class PixelRealm extends Screen {
   private PImage REALM_TREE_DEFAULT;
   private PImage REALM_WATER_DEFAULT;
   private PShape waterObject;
+  private RealmTextureClassic IMG_COIN;
   
   private PShape CASSETTE_OBJ;
   
@@ -106,7 +107,6 @@ public class PixelRealm extends Screen {
   private boolean secondaryAction = false;
   private boolean realmCaching = false;
   private int currShaderMode = 0;
-  private RealmTextureUV IMG_COIN;
   private int drawnEntries = 0;
   private int entriesTotal = 0;
   private int timeInRealm  = 0;
@@ -258,9 +258,9 @@ public class PixelRealm extends Screen {
     REALM_SKY_DEFAULT_LEGACY = display.systemImages.get("pixelrealm-sky-legacy");
     REALM_TREE_DEFAULT_LEGACY = display.systemImages.get("pixelrealm-terrain_object-legacy");
     REALM_GRASS_DEFAULT_LEGACY = display.systemImages.get("pixelrealm-grass-legacy");
-  
+    
     String[] COINS = { "coin_0", "coin_1", "coin_2", "coin_3", "coin_4", "coin_5"};
-    IMG_COIN = new RealmTextureUV(COINS);
+    IMG_COIN = new RealmTextureClassic(COINS);
     
     // --- Sounds and music ---
     sound.loopSound("portal");
@@ -310,6 +310,11 @@ public class PixelRealm extends Screen {
     this(engine, engine.DEFAULT_DIR);
   }
   
+  private final static float ANIMATION_INTERVAL = 10.;
+  private int aniIndex() {
+    return int(animationTick/ANIMATION_INTERVAL);
+  }
+  
   
   // Classes we need
   class RealmTextureUV {
@@ -321,7 +326,6 @@ public class PixelRealm extends Screen {
     private float[] texH;
     private int[] widths;
     private int[] heights;
-    private final static float ANIMATION_INTERVAL = 10.;
     
     
     public RealmTextureUV() {
@@ -2155,6 +2159,7 @@ public class PixelRealm extends Screen {
     
     
     private GLQuadElement[] treeGLElements = new GLQuadElement[9];
+    private GLQuadElement[] coinGLElements = new GLQuadElement[6];
     
     // --- Define our PR objects. ---
     class TerrainPRObject extends PRObject {
@@ -2166,7 +2171,7 @@ public class PixelRealm extends Screen {
         this.img = img_tree;
         // Small hitbox
         this.hitboxWi = wi*0.25;
-        imgIndex = int(random(0, 9));
+        imgIndex = int(random(0, 9))%numTreeTextures;
         readjustSize();
       }
       
@@ -2178,7 +2183,7 @@ public class PixelRealm extends Screen {
         if (legacy_autogenStuff != null)
           legacy_autogenStuff.add(id);
           
-        imgIndex = int(random(0, 9));
+        imgIndex = int(random(0, 9))%numTreeTextures;
         
         // Small hitbox
         this.hitboxWi = wi*0.25;
@@ -2191,7 +2196,7 @@ public class PixelRealm extends Screen {
         readjustSize();
         
         // Our RealmImage class allows us to go as high as we want :)
-        imgIndex = int(random(0, 9));
+        imgIndex = int(random(0, 9))%numTreeTextures;
         
         // Small hitbox
         this.hitboxWi = wi*0.25;
@@ -2252,7 +2257,7 @@ public class PixelRealm extends Screen {
         }
         
         //console.log(".pixelrealm-tree-"+int(name.charAt(17)-48));
-        imgIndex = int(name.charAt(17)-48);
+        imgIndex = int(name.charAt(17)-48)%numTreeTextures;
         
         readjustSize();
         
@@ -3439,13 +3444,23 @@ public class PixelRealm extends Screen {
       
       public PRCoin(float x, float y, float z) {
         super(x,y,z);
-        this.img = IMG_COIN;
+        this.img = img_tree;  // Coins are secretly stored in img_tree as an optimisation so we don't need to switch textures so frequently.
         setSize(0.25);
         this.hitboxWi = wi;
       }
       
       public void display() {
-        super.display();
+        int aniIndex = (aniIndex()%6);
+        if (coinGLElements[aniIndex] == null) {
+          coinGLElements[aniIndex] = new GLQuadElement(img, numTreeTextures+aniIndex);
+        }
+        
+        useEnvironmentShader();
+        if (tint != defaultTint) {
+          tint(tint, 255);
+        }
+        
+        billboard(coinGLElements[aniIndex], x, y, z, size);
       }
       
       public void run() {
@@ -4903,6 +4918,7 @@ public class PixelRealm extends Screen {
       loadRealmAssets(this.stateDirectory);
     }
   
+    private int numTreeTextures = 1;
     
     // Used with a flash to refresh the sky
     // TODO: Needs tidying up (especially since we have a imageFileExists method now)
@@ -4918,6 +4934,7 @@ public class PixelRealm extends Screen {
       // This is a bug fix. Sometimes we refresh the realm. Since GLQuadElements are kinda linked to images,
       // we need to reset these whenever we modify images.
       treeGLElements = new GLQuadElement[9];
+      
       
       
       // Classic backwards compatibility for old realms
@@ -4936,6 +4953,7 @@ public class PixelRealm extends Screen {
       
       /// here we search for the terrain objects textures from the dir.
       ArrayList<PImage> imgs = new ArrayList<PImage>();
+      
   
       if (file.exists(DEFAULT_SKY+".gif")) {
         img_sky = new RealmTextureClassic();
@@ -4968,6 +4986,8 @@ public class PixelRealm extends Screen {
       
       
       imgs = new ArrayList<PImage>();
+      
+      numTreeTextures = 1;
   
       // Try to find the first terrain object texture, it will return default if not found
       PImage terrainobj = (PImage)getRealmFile(DEFAULT_TREE, dir+REALM_TREE_LEGACY+"-1.png", dir+REALM_TREE+"-1.png", dir+REALM_TREE+".png");
@@ -4980,9 +5000,17 @@ public class PixelRealm extends Screen {
         terrainobj = (PImage)getRealmFile(DEFAULT_TREE, dir+REALM_TREE_LEGACY+"-"+str(i+1)+".png", dir+REALM_TREE+"-"+str(i+1)+".png");
         if (terrainobj != DEFAULT_TREE) {
           imgs.add(terrainobj);
+          numTreeTextures++;
         }
         i++;
       }
+      
+      imgs.add(display.systemImages.get("coin_0"));
+      imgs.add(display.systemImages.get("coin_1"));
+      imgs.add(display.systemImages.get("coin_2"));
+      imgs.add(display.systemImages.get("coin_3"));
+      imgs.add(display.systemImages.get("coin_4"));
+      imgs.add(display.systemImages.get("coin_5"));
   
       // New array and plonk that all in there.
       img_tree = new RealmTextureUV(imgs);
@@ -6538,10 +6566,13 @@ public class PixelRealm extends Screen {
       if (currRealm.collectedCoins > 0 && currRealm.collectedCoins < 100) {
         scene.textFont(engine.DEFAULT_FONT, 16);
         float y = 8.-coinCounterBounce*6.;
+        scene.pushMatrix();
+        scene.scale(5-DISPLAY_SCALE);
         scene.image(IMG_COIN.get(), 10, y, 16, 17);
         scene.textAlign(LEFT, TOP);
         scene.fill(255);
         scene.text("x "+str(collectedCoins), 30, y);
+        scene.popMatrix();
         
         coinCounterBounce *= pow(0.85, display.getDelta());
       }
@@ -7013,17 +7044,10 @@ public class PixelRealm extends Screen {
       float z = currRealm.playerZ;
       float LOOK_DIST = 200.;
       display.recordRendererTime();
-      if (input.keyDown('k')) {
-        scene.camera(x, y-10000f, z, 
-          x+sin(currRealm.direction)*LOOK_DIST, y, z+cos(currRealm.direction)*LOOK_DIST, 
-          0., 1., 0.);
-      }
-      else {
-        scene.camera(x, y, z, 
-          x+sin(currRealm.direction)*LOOK_DIST, y, z+cos(currRealm.direction)*LOOK_DIST, 
-          0., 1., 0.);
-        if (currRealm.lights) scene.pointLight(255, 245, 245, x, y, z);
-      }
+      scene.camera(x, y, z, 
+        x+sin(currRealm.direction)*LOOK_DIST, y, z+cos(currRealm.direction)*LOOK_DIST, 
+        0., 1., 0.);
+      if (currRealm.lights) scene.pointLight(255, 245, 245, x, y, z);
       display.recordLogicTime();
     }
     engine.timestamp("perspective");
