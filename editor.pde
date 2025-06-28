@@ -296,6 +296,569 @@ class DCapture extends EditorCapture implements java.beans.PropertyChangeListene
 
 
 
+// Pretty much a copy+paste of Processing's source code, but specifically for software rendering,
+// and also being multi-threading friendly.
+public class SoftwareRenderer {
+  public PFont textFont;
+  protected char[] textBuffer = new char[8 * 1024];
+  protected char[] textWidthBuffer = new char[8 * 1024];
+  
+  protected int textBreakCount;
+  protected int[] textBreakStart;
+  protected int[] textBreakStop;
+  
+  private PImage canvas;
+  
+  private float scaleX = 0f;
+  private float scaleY = 0f;
+  
+  private color fillColor = 0;
+  
+  /** The current text align (read-only) */
+  public int textAlign = LEFT;
+
+  /** The current vertical text alignment (read-only) */
+  public int textAlignY = BASELINE;
+
+  /** The current text mode (read-only) */
+  public int textMode = MODEL;
+
+  /** The current text size (read-only) */
+  public float textSize = 16;
+
+  /** The current text leading (read-only) */
+  public float textLeading;
+
+  /** Used internally to check whether still using the default font */
+  protected String defaultFontName;
+
+  static final protected String ERROR_TEXTFONT_NULL_PFONT =
+    "A null PFont was passed to textFont()";
+  
+  
+  public SoftwareRenderer(PImage canvas) {
+    fillColor = color(255);
+    textSize = 12;
+    textLeading = 14;
+    textAlign = LEFT;
+    textMode = MODEL;
+    this.canvas = canvas;
+  }
+  
+  public void beginDraw() {
+    canvas.loadPixels();
+  }
+  
+  public void clear() {
+    for (int y = 0; y < canvas.height; y++) {
+      for (int x = 0; x < canvas.width; x++) {
+        canvas.pixels[y*canvas.width + x] = 0xFF0f0f0e;
+      }
+    }
+  }
+  
+  public void endDraw() {
+    canvas.updatePixels();
+  }
+  
+  public void textLeading(float leading) {
+    textLeading = leading;
+  }
+  
+  // Just to keep code consistant and clean(-ish)
+  public void fill(color c) {
+    //fill(c);
+    fillColor = c;
+  }
+  public void fill(float c) {
+    //fill(c);
+    fillColor = color(c);
+  }
+  public void fill(color c, float a) {
+    //fill(c, a);
+    fillColor = color(c, a);
+  }
+  public void fill(float c, float a) {
+    //fill(c, a);
+    fillColor = color(c, a);
+  }
+  public void fill(float r, float g, float b) {
+    //fill(r,g,b);
+    fillColor = color(r, g, b);
+  }
+  public void fill(float r, float g, float b, float a) {
+    //fill(r,g,b,a);
+    fillColor = color(r, g, b, a);
+  }
+  
+  
+  public void text(String str, float x, float y) {
+      if (textFont == null) {
+        // TODO: Add warning
+        return;
+      }
+  
+      int length = str.length();
+      if (length > textBuffer.length) {
+        textBuffer = new char[length + 10];
+      }
+      str.getChars(0, length, textBuffer, 0);
+      text(textBuffer, 0, length, x, y);
+    }
+    
+    
+    
+    public void text(char[] chars, int start, int stop, float x, float y) {
+      // If multiple lines, sum the height of the additional lines
+      float high = 0; //-textAscent();
+      for (int i = start; i < stop; i++) {
+        if (chars[i] == '\n') {
+          high += textLeading;
+        }
+      }
+      if (textAlignY == CENTER) {
+        // for a single line, this adds half the textAscent to y
+        // for multiple lines, subtract half the additional height
+        //y += (textAscent() - textDescent() - high)/2;
+        y += (textAscent() - high)/2;
+      } else if (textAlignY == TOP) {
+        // for a single line, need to add textAscent to y
+        // for multiple lines, no different
+        y += textAscent();
+      } else if (textAlignY == BOTTOM) {
+        // for a single line, this is just offset by the descent
+        // for multiple lines, subtract leading for each line
+        y -= textDescent() + high;
+      //} else if (textAlignY == BASELINE) {
+        // do nothing
+      }
+  
+  //    int start = 0;
+      int index = 0;
+      while (index < stop) { //length) {
+        if (chars[index] == '\n') {
+          textLineAlignImpl(chars, start, index, x, y);
+          start = index + 1;
+          y += textLeading;
+        }
+        index++;
+      }
+      if (start < stop) {  //length) {
+        textLineAlignImpl(chars, start, index, x, y);
+      }
+    }
+  
+  
+  
+  
+  public void text(String str, float x1, float y1, float x2, float y2) {
+      if (textFont == null) {
+        
+      }
+      
+      // NOTE: Removed switch statement here.
+      x2 += x1;
+      y2 += y1;
+      
+      if (x2 < x1) {
+        float temp = x1; x1 = x2; x2 = temp;
+      }
+      if (y2 < y1) {
+        float temp = y1; y1 = y2; y2 = temp;
+      }
+  
+  //    float currentY = y1;
+      float boxWidth = x2 - x1;
+  
+  //    // ala illustrator, the text itself must fit inside the box
+  //    currentY += textAscent(); //ascent() * textSize;
+  //    // if the box is already too small, tell em to f off
+  //    if (currentY > y2) return;
+  
+  //    float spaceWidth = textWidth(' ');
+  
+      if (textBreakStart == null) {
+        textBreakStart = new int[20];
+        textBreakStop = new int[20];
+      }
+      textBreakCount = 0;
+  
+      int length = str.length();
+      if (length + 1 > textBuffer.length) {
+        textBuffer = new char[length + 1];
+      }
+      str.getChars(0, length, textBuffer, 0);
+      // add a fake newline to simplify calculations
+      textBuffer[length++] = '\n';
+  
+      int sentenceStart = 0;
+      for (int i = 0; i < length; i++) {
+        if (textBuffer[i] == '\n') {
+  //        currentY = textSentence(textBuffer, sentenceStart, i,
+  //                                lineX, boxWidth, currentY, y2, spaceWidth);
+          boolean legit =
+            textSentence(textBuffer, sentenceStart, i, boxWidth);
+          if (!legit) break;
+  //      if (Float.isNaN(currentY)) break;  // word too big (or error)
+  //      if (currentY > y2) break;  // past the box
+          sentenceStart = i + 1;
+        }
+      }
+  
+      // lineX is the position where the text starts, which is adjusted
+      // to left/center/right based on the current textAlign
+      float lineX = x1; //boxX1;
+      if (textAlign == CENTER) {
+        lineX = lineX + boxWidth/2f;
+      } else if (textAlign == RIGHT) {
+        lineX = x2; //boxX2;
+      }
+  
+      float boxHeight = y2 - y1;
+      //int lineFitCount = 1 + PApplet.floor((boxHeight - textAscent()) / textLeading);
+      // incorporate textAscent() for the top (baseline will be y1 + ascent)
+      // and textDescent() for the bottom, so that lower parts of letters aren't
+      // outside the box. [0151]
+      float topAndBottom = textAscent() + textDescent();
+      int lineFitCount = 1 + PApplet.floor((boxHeight - topAndBottom) / textLeading);
+      int lineCount = Math.min(textBreakCount, lineFitCount);
+  
+      if (textAlignY == CENTER) {
+        float lineHigh = textAscent() + textLeading * (lineCount - 1);
+        float y = y1 + textAscent() + (boxHeight - lineHigh) / 2;
+        for (int i = 0; i < lineCount; i++) {
+          textLineAlignImpl(textBuffer, textBreakStart[i], textBreakStop[i], lineX, y);
+          y += textLeading;
+        }
+  
+      } else if (textAlignY == BOTTOM) {
+        float y = y2 - textDescent() - textLeading * (lineCount - 1);
+        for (int i = 0; i < lineCount; i++) {
+          textLineAlignImpl(textBuffer, textBreakStart[i], textBreakStop[i], lineX, y);
+          y += textLeading;
+        }
+  
+      } else {  // TOP or BASELINE just go to the default
+        float y = y1 + textAscent();
+        for (int i = 0; i < lineCount; i++) {
+          textLineAlignImpl(textBuffer, textBreakStart[i], textBreakStop[i], lineX, y);
+          y += textLeading;
+        }
+      }
+    }
+    
+    
+    
+    protected void textLineAlignImpl(char[] buffer, int start, int stop,
+                                     float x, float y) {
+      if (textAlign == CENTER) {
+        x -= textWidthImpl(buffer, start, stop) / 2f;
+  
+      } else if (textAlign == RIGHT) {
+        x -= textWidthImpl(buffer, start, stop);
+      }
+  
+      textLineImpl(buffer, start, stop, x, y);
+    }
+  
+  
+    /**
+     * Implementation of actual drawing for a line of text.
+     */
+    protected void textLineImpl(char[] buffer, int start, int stop,
+                                float x, float y) {
+      for (int index = start; index < stop; index++) {
+        textCharImpl(buffer[index], x, y);
+  
+        // this doesn't account for kerning
+        x += this.textWidth(buffer[index]);
+      }
+  //    textX = x;
+  //    textY = y;
+  //    textZ = 0;  // this will get set by the caller if non-zero
+    }
+  
+  
+    protected void textCharImpl(char ch, float x, float y) { //, float z) {
+      PFont.Glyph glyph = textFont.getGlyph(ch);
+      if (glyph != null) {
+        if (textMode == MODEL) {
+          float floatSize = textFont.getSize();
+          float high = glyph.height / floatSize;
+          float wide = glyph.width / floatSize;
+          float leftExtent = glyph.leftExtent / floatSize;
+          float topExtent = glyph.topExtent  / floatSize;
+  
+          float x1 = x + leftExtent * textSize;
+          float y1 = y - topExtent * textSize;
+          float x2 = x1 + wide * textSize;
+          float y2 = y1 + high * textSize;
+          
+  
+          textCharModelImpl(glyph.image,
+                            x1, y1, x2, y2,
+                        glyph.width, glyph.height);
+        }
+      } else if (ch != ' ' && ch != 127) {
+        println("No glyph found for the " + ch + " (\\u" + PApplet.hex(ch, 4) + ") character");
+      }
+    }
+    
+    private boolean imgText = false;
+  
+  
+    protected void textCharModelImpl(PImage glyph,
+                                 float x1, float y1, //float z1,
+                                 float x2, float y2, //float z2,
+                                 int u2, int v2) {
+      imgText = true;
+      imageImpl(glyph, x1, y1, x2, y2, 0, 0, u2, v2); 
+      imgText = false;
+    }
+    
+    protected void imageImpl(PImage img,
+                         float x1, float y1, float x2, float y2,
+                         int u1, int v1, int u2, int v2) {
+      img.loadPixels();
+      
+      x1 *= scaleX;
+      y1 *= scaleY;
+      x2 *= scaleX;
+      y2 *= scaleY;
+      
+      float r = red(fillColor)/255f;
+      float g = green(fillColor)/255f;
+      float b = blue(fillColor)/255f;
+      //float a = alpha(fillColor);
+      
+      int wi = int(canvas.width);
+      
+                           
+      // Assumes app.loadPixels has already been called.
+      for (int y = (int)y1; y < (int)y2; y++) {
+        for (int x = (int)x1; x < (int)x2; x++) {
+          int samplerX = u1+int((((float)(x-x1))/((float)(x2-x1)))*(float)u2);
+          int samplerY = v1+int((((float)(y-y1))/((float)(y2-y1)))*(float)v2);
+          
+          color c = 0;
+          if (samplerX >= 0 && samplerX < img.width && samplerY >= 0 && samplerY < img.height)
+            c = img.pixels[samplerY*img.width + samplerX];
+          
+          if (x >= 0 && x < canvas.width && y >= 0 && y < canvas.height) {
+            if (imgText) {
+              if (blue(c) > 0) {
+                canvas.pixels[y * wi + x] = color(blue(c)*r, blue(c)*g, blue(c)*b, 255);
+              }
+            }
+            else {
+              if (alpha(c) > 0) {
+                canvas.pixels[y * wi + x] = color(red(c)*r, green(c)*g, blue(c)*b, 255);
+              }
+            }
+          }
+        }
+      }
+    }
+    
+    public void scale(float x) {
+      scaleX = x;
+      scaleY = x;
+    }
+    
+    public void scale(float x, float y) {
+      scaleX = x;
+      scaleY = y;
+    }
+    
+    public void image(PImage img, float a, float b) {
+      if (img.width == -1 || img.height == -1) return;
+  
+      imageImpl(img,
+                a, b, a+img.width, b+img.height,
+                0, 0, img.width, img.height);
+    }
+  
+    public void image(PImage img, float a, float b, float c, float d) {
+      image(img, a, b, c, d, 0, 0, img.width, img.height);
+    }
+    
+    public void image(PImage img,
+                  float a, float b, float c, float d,
+                  int u1, int v1, int u2, int v2) {
+  // Starting in release 0144, image errors are simply ignored.
+  // loadImageAsync() sets width and height to -1 when loading fails.
+  if (img.width == -1 || img.height == -1) return;
+
+  if (c < 0) {  // reset a negative width
+    a += c; c = -c;
+  }
+  if (d < 0) {  // reset a negative height
+    b += d; d = -d;
+  }
+
+  imageImpl(img,
+            a, b, a + c, b + d,
+            u1, v1, u2, v2);
+
+}
+  
+  
+  
+    protected void textSentenceBreak(int start, int stop) {
+      if (textBreakCount == textBreakStart.length) {
+        textBreakStart = PApplet.expand(textBreakStart);
+        textBreakStop = PApplet.expand(textBreakStop);
+      }
+      textBreakStart[textBreakCount] = start;
+      textBreakStop[textBreakCount] = stop;
+      textBreakCount++;
+    }
+    
+    protected boolean textSentence(char[] buffer, int start, int stop,
+                                   float boxWidth) {
+      float runningX = 0;
+  
+      // Keep track of this separately from index, since we'll need to back up
+      // from index when breaking words that are too long to fit.
+      int lineStart = start;
+      int wordStart = start;
+      int index = start;
+      while (index <= stop) {
+        // boundary of a word or end of this sentence
+        if ((buffer[index] == ' ') || (index == stop)) {
+  //        System.out.println((index == stop) + " " + wordStart + " " + index);
+          float wordWidth = 0;
+          if (index > wordStart) {
+            // we have a non-empty word, measure it
+            wordWidth = textWidthImpl(buffer, wordStart, index);
+          }
+  
+          if (runningX + wordWidth >= boxWidth) {
+            if (runningX != 0) {
+              // Next word is too big, output the current line and advance
+              index = wordStart;
+              textSentenceBreak(lineStart, index);
+              // Eat whitespace before the first word on the next line.
+              while ((index < stop) && (buffer[index] == ' ')) {
+                index++;
+              }
+            } else {  // (runningX == 0)
+              // If this is the first word on the line, and its width is greater
+              // than the width of the text box, then break the word where at the
+              // max width, and send the rest of the word to the next line.
+              if (index - wordStart < 25) {
+                do {
+                  index--;
+                  if (index == wordStart) {
+                    // Not a single char will fit on this line. screw 'em.
+                    return false;
+                  }
+                  wordWidth = textWidthImpl(buffer, wordStart, index);
+                } while (wordWidth > boxWidth);
+              } else {
+                // This word is more than 25 characters long, might be faster to
+                // start from the beginning of the text rather than shaving from
+                // the end of it, which is super slow if it's 1000s of letters.
+                // https://github.com/processing/processing/issues/211
+                int lastIndex = index;
+                index = wordStart + 1;
+                // walk to the right while things fit
+  //              while ((wordWidth = textWidthImpl(buffer, wordStart, index)) < boxWidth) {
+                while (textWidthImpl(buffer, wordStart, index) < boxWidth) {
+                  index++;
+                  if (index > lastIndex) {  // Unreachable?
+                    break;
+                  }
+                }
+                index--;
+                if (index == wordStart) {
+                  return false;  // nothing fits
+                }
+              }
+  
+              //textLineImpl(buffer, lineStart, index, x, y);
+              textSentenceBreak(lineStart, index);
+            }
+            lineStart = index;
+            wordStart = index;
+            runningX = 0;
+  
+          } else if (index == stop) {
+            // last line in the block, time to unload
+            //textLineImpl(buffer, lineStart, index, x, y);
+            textSentenceBreak(lineStart, index);
+  //          y += textLeading;
+            index++;
+  
+          } else {  // this word will fit, just add it to the line
+            runningX += wordWidth;
+            wordStart = index ;  // move on to the next word including the space before the word
+            index++;
+          }
+        } else {  // not a space or the last character
+          index++;  // this is just another letter
+        }
+      }
+  //    return y;
+      return true;
+    }
+    
+    
+    protected float textWidthImpl(char[] buffer, int start, int stop) {
+      float wide = 0;
+      for (int i = start; i < stop; i++) {
+        // could add kerning here, but it just ain't implemented
+        wide += textFont.width(buffer[i]) * textSize;
+      }
+      return wide;
+    }
+    
+    protected void handleTextSize(float size) {
+      textSize = size;
+      textLeading = (this.textAscent() + this.textDescent()) * 1.275f;
+    }
+    
+    public void textSize(float size) {
+      handleTextSize(size);
+    }
+    
+    public float textAscent() {
+      return textFont.ascent() * textSize;
+    }
+    
+    public float textDescent() {
+      return textFont.descent() * textSize;
+    }
+    
+    protected void textFontImpl(PFont which, float size) {
+      textFont = which;
+      handleTextSize(size);
+    }
+    
+    public void textFont(PFont which, float size) {
+      textFontImpl(which, size);
+    }
+    
+    public void textAlign(int alignX, int alignY) {
+      textAlign = alignX;
+      textAlignY = alignY;
+    }
+    
+    public float textWidth(char c) {
+      textWidthBuffer[0] = c;
+      return textWidthImpl(textWidthBuffer, 0, 1);
+    }
+}
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -320,7 +883,9 @@ public class Editor extends Screen {
     private boolean autoScaleDown = false;
     private boolean changesMade = false;
     private int upperBarDrop = INITIALISE_DROP_ANIMATION;
-    private PGraphics canvas;
+    private boolean useSoftwareRendering = false;
+    private SoftwareRenderer softwareRender;
+    private PImage softwareRenderCanvas;
     private float canvasScale;
     private JSONArray loadedJsonArray;
     protected boolean readOnly = false;
@@ -535,8 +1100,10 @@ public class Editor extends Screen {
         // Just a placeholder display for the base class.
         // You shouldn't use super.display() for inherited classes.
         public void display() {
-            canvas.fill(255, 0, 0);
-            canvas.rect(sprite.xpos, sprite.ypos, sprite.wi, sprite.hi);
+          if (!useSoftwareRendering) {
+            app.fill(255, 0, 0);
+            app.rect(sprite.xpos, sprite.ypos, sprite.wi, sprite.hi);
+          }
         }
 
         public void update() {
@@ -584,22 +1151,33 @@ public class Editor extends Screen {
         }
 
         public void display() {
-            canvas.pushMatrix();
-            canvas.scale(canvasScale);
-            canvas.fill(textColor);
-            canvas.textAlign(LEFT, TOP);
-            canvas.textFont(fontStyle, fontSize);
-            canvas.textLeading(fontSize+lineSpacing);
-
-            String displayText = "";
-            if (editing()) {
-                displayText = input.keyboardMessageDisplay();
-            }
-            else {
-                displayText = text;
-            }
-            canvas.text(displayText, sprite.xpos, sprite.ypos-canvas.textDescent()+EXPAND_HITBOX/2+10);
-            canvas.popMatrix();
+          
+          String displayText = "";
+          if (editing()) {
+              displayText = input.keyboardMessageDisplay();
+          }
+          else {
+              displayText = text;
+          }
+          
+          if (useSoftwareRendering) {
+            softwareRender.scale(canvasScale);
+            softwareRender.fill(textColor);
+            softwareRender.textAlign(LEFT, TOP);
+            softwareRender.textFont(fontStyle, fontSize);
+            softwareRender.textLeading(fontSize+lineSpacing);
+            softwareRender.text(displayText, sprite.xpos, sprite.ypos-app.textDescent()+EXPAND_HITBOX/2+10);
+          }
+          else {
+            app.pushMatrix();
+            app.scale(canvasScale);
+            app.fill(textColor);
+            app.textAlign(LEFT, TOP);
+            app.textFont(fontStyle, fontSize);
+            app.textLeading(fontSize+lineSpacing);
+            app.text(displayText, sprite.xpos, sprite.ypos-app.textDescent()+EXPAND_HITBOX/2+10);
+            app.popMatrix();
+          }
         }
         
         public void updateDimensions() {
@@ -749,10 +1327,20 @@ public class Editor extends Screen {
                 editingPlaceable = this;
             }
             
-            canvas.pushMatrix();
-            canvas.scale(canvasScale);
-            placeableSprites.sprite(sprite.getName(), imageName);
-            canvas.popMatrix();
+            if (useSoftwareRendering) {
+              PImage img = display.systemImages.get(imageName);
+              if (img == null) return;
+              
+              softwareRender.scale(canvasScale);
+              softwareRender.fill(255, 255, 255, 255);
+              softwareRender.image(img, sprite.getX(), sprite.getY(), sprite.getWidth(), sprite.getHeight());
+            }
+            else {
+              app.pushMatrix();
+              app.scale(canvasScale);
+              placeableSprites.sprite(sprite.getName(), imageName);
+              app.popMatrix();
+            }
         }
     }
     
@@ -766,11 +1354,11 @@ public class Editor extends Screen {
         public String inputText = "";
       
         public void display() {
-            canvas.pushMatrix();
-            canvas.scale(canvasScale);
-            canvas.textAlign(LEFT, TOP);
-            canvas.textFont(fontStyle, fontSize);
-            canvas.textLeading(fontSize+lineSpacing);
+            app.pushMatrix();
+            app.scale(canvasScale);
+            app.textAlign(LEFT, TOP);
+            app.textFont(fontStyle, fontSize);
+            app.textLeading(fontSize+lineSpacing);
 
             String displayText = "";
             if (editing()) {
@@ -783,14 +1371,14 @@ public class Editor extends Screen {
                 displayText = text+" "+inputText;
             }
             float x = sprite.xpos;
-            float y = sprite.ypos-canvas.textDescent()+EXPAND_HITBOX/2+10;
-            canvas.stroke(255f);
-            canvas.strokeWeight(1f);
-            canvas.fill(100, 60);
-            canvas.rect(x+canvas.textWidth(text+" ")-10f, y-EXPAND_HITBOX, PApplet.max(canvas.textWidth(inputText)+30f, MIN_FIELD_VISIBLE_SIZE)+EXPAND_HITBOX*2f+10f, sprite.getHeight());
-            canvas.fill(textColor);
-            canvas.text(displayText, x, y);
-            canvas.popMatrix();
+            float y = sprite.ypos-app.textDescent()+EXPAND_HITBOX/2+10;
+            app.stroke(255f);
+            app.strokeWeight(1f);
+            app.fill(100, 60);
+            app.rect(x+app.textWidth(text+" ")-10f, y-EXPAND_HITBOX, PApplet.max(app.textWidth(inputText)+30f, MIN_FIELD_VISIBLE_SIZE)+EXPAND_HITBOX*2f+10f, sprite.getHeight());
+            app.fill(textColor);
+            app.text(displayText, x, y);
+            app.popMatrix();
         }
         
         public void updateDimensions() {
@@ -841,11 +1429,11 @@ public class Editor extends Screen {
         public float animationInverted = 0f;
       
         public void display() {
-            canvas.pushMatrix();
-            canvas.scale(canvasScale);
-            canvas.textAlign(LEFT, TOP);
-            canvas.textFont(fontStyle, fontSize);
-            canvas.textLeading(fontSize+lineSpacing);
+            app.pushMatrix();
+            app.scale(canvasScale);
+            app.textAlign(LEFT, TOP);
+            app.textFont(fontStyle, fontSize);
+            app.textLeading(fontSize+lineSpacing);
 
             String displayText = "";
             if (editing()) {
@@ -855,8 +1443,8 @@ public class Editor extends Screen {
                 displayText = text;
             }
             float textx = sprite.xpos;
-            float texty = sprite.ypos-canvas.textDescent()+EXPAND_HITBOX/2+10;
-            float x = textx+canvas.textWidth(text)+20f;
+            float texty = sprite.ypos-app.textDescent()+EXPAND_HITBOX/2+10;
+            float x = textx+app.textWidth(text)+20f;
             float y = texty-EXPAND_HITBOX;
             float wi = sprite.getHeight()*1.8f;
             float hi = sprite.getHeight();
@@ -880,27 +1468,27 @@ public class Editor extends Screen {
             
             if (state == true) {
               knobx += (wi-knobwi-KNOB_PADDING*2f)*animation;
-              canvas.fill(app.lerpColor(COLOR_OFF, COLOR_ON, animation));
+              app.fill(app.lerpColor(COLOR_OFF, COLOR_ON, animation));
             }
             else {
               knobx += (wi-knobwi-KNOB_PADDING*2f)*(1f-animation);
-              canvas.fill(app.lerpColor(COLOR_ON, COLOR_OFF, animation));
+              app.fill(app.lerpColor(COLOR_ON, COLOR_OFF, animation));
             }
             
             // Draw switch
-            canvas.stroke(255f);
-            canvas.strokeWeight(2f);
-            canvas.rect(x, y, wi, hi);
+            app.stroke(255f);
+            app.strokeWeight(2f);
+            app.rect(x, y, wi, hi);
             
             // Knob
-            canvas.noStroke();
-            canvas.fill(255f); 
-            canvas.rect(knobx, y+KNOB_PADDING, knobwi, knobwi);
+            app.noStroke();
+            app.fill(255f); 
+            app.rect(knobx, y+KNOB_PADDING, knobwi, knobwi);
             
             // Text
-            canvas.fill(textColor);
-            canvas.text(displayText, textx, texty);
-            canvas.popMatrix();
+            app.fill(textColor);
+            app.text(displayText, textx, texty);
+            app.popMatrix();
             
             animationInverted *= PApplet.pow(0.85f, display.getDelta());
             updateDimensions();
@@ -970,11 +1558,11 @@ public class Editor extends Screen {
         
       
         public void display() {
-            //canvas.pushMatrix();
-            //canvas.scale(canvasScale);
-            canvas.textAlign(LEFT, TOP);
-            canvas.textFont(fontStyle, fontSize);
-            canvas.textLeading(fontSize+lineSpacing);
+            //app.pushMatrix();
+            //app.scale(canvasScale);
+            app.textAlign(LEFT, TOP);
+            app.textFont(fontStyle, fontSize);
+            app.textLeading(fontSize+lineSpacing);
 
             String displayText = "";
             if (editing()) {
@@ -985,9 +1573,9 @@ public class Editor extends Screen {
             }
             
             float textx = sprite.xpos;
-            float texty = sprite.ypos-canvas.textDescent()+EXPAND_HITBOX/2+10;
+            float texty = sprite.ypos-app.textDescent()+EXPAND_HITBOX/2+10;
             
-            if (canvas == g) {
+            if (!useSoftwareRendering) {
               slider.label = displayText;
               slider.wi = 750f;
               slider.display(textx, texty);
@@ -997,7 +1585,7 @@ public class Editor extends Screen {
               movingSlider = true;
             }
             
-            //canvas.popMatrix();
+            //app.popMatrix();
             updateDimensions();
         }
         
@@ -1072,11 +1660,11 @@ public class Editor extends Screen {
         }
       
         public void display() {
-            canvas.pushMatrix();
-            canvas.scale(canvasScale);
-            canvas.textAlign(LEFT, TOP);
-            canvas.textFont(fontStyle, fontSize);
-            canvas.textLeading(fontSize+lineSpacing);
+            app.pushMatrix();
+            app.scale(canvasScale);
+            app.textAlign(LEFT, TOP);
+            app.textFont(fontStyle, fontSize);
+            app.textLeading(fontSize+lineSpacing);
 
             String displayText = "";
             if (editing()) {
@@ -1086,22 +1674,22 @@ public class Editor extends Screen {
                 displayText = text;
             }
             float x = sprite.xpos;
-            float y = sprite.ypos-canvas.textDescent()+EXPAND_HITBOX/2+10;
-            canvas.stroke(255f);
-            canvas.strokeWeight(1f);
-            canvas.fill(100, 60);
-            canvas.rect(x+BOX_X_POS, y-EXPAND_HITBOX, BOX_X_SIZE, sprite.getHeight());
+            float y = sprite.ypos-app.textDescent()+EXPAND_HITBOX/2+10;
+            app.stroke(255f);
+            app.strokeWeight(1f);
+            app.fill(100, 60);
+            app.rect(x+BOX_X_POS, y-EXPAND_HITBOX, BOX_X_SIZE, sprite.getHeight());
             display.img("down_triangle_64", x+BOX_X_POS+BOX_X_SIZE-69f, y, sprite.getHeight()-20f, sprite.getHeight()-20f);
             
-            canvas.fill(textColor);
+            app.fill(textColor);
             // Label text
-            canvas.text(displayText, x, y);
+            app.text(displayText, x, y);
             // Selected option text
-            canvas.fill(255f);
+            app.fill(255f);
             
             // Quick visual fix (vrey bad coding but im lazy)
-            canvas.text(selectedOption.length() > 28 ? selectedOption.substring(0, 25)+"..." : selectedOption, x+BOX_X_POS+10f, y);
-            canvas.popMatrix();
+            app.text(selectedOption.length() > 28 ? selectedOption.substring(0, 25)+"..." : selectedOption, x+BOX_X_POS+10f, y);
+            app.popMatrix();
         }
         
         //public void updateDimensions() {
@@ -1114,7 +1702,7 @@ public class Editor extends Screen {
         // Need a custom click method since we can't have selected placeables in read-only mode.
         private boolean myClick() {
           float x = sprite.xpos;
-          float y = sprite.ypos-canvas.textDescent()+EXPAND_HITBOX/2+10;
+          float y = sprite.ypos-app.textDescent()+EXPAND_HITBOX/2+10;
           return ui.buttonImg("nothing", x+BOX_X_POS, y-EXPAND_HITBOX, BOX_X_SIZE, sprite.getHeight()) && input.primaryOnce && !input.mouseMoved;
         }
         
@@ -1162,11 +1750,11 @@ public class Editor extends Screen {
         public boolean clicked = false;
       
         public void display() {
-            canvas.pushMatrix();
-            canvas.scale(canvasScale);
-            canvas.textAlign(LEFT, TOP);
-            canvas.textFont(fontStyle, fontSize);
-            canvas.textLeading(fontSize+lineSpacing);
+            app.pushMatrix();
+            app.scale(canvasScale);
+            app.textAlign(LEFT, TOP);
+            app.textFont(fontStyle, fontSize);
+            app.textLeading(fontSize+lineSpacing);
 
             String displayText = "";
             if (editing()) {
@@ -1178,29 +1766,29 @@ public class Editor extends Screen {
             
             float PADDING = 5f;
             float textx = sprite.xpos;
-            float texty = sprite.ypos-canvas.textDescent()+EXPAND_HITBOX/2+10;
+            float texty = sprite.ypos-app.textDescent()+EXPAND_HITBOX/2+10;
             float x = textx-10f-PADDING;
             float y = texty-EXPAND_HITBOX-PADDING;
             float wi = sprite.getWidth()+20f+PADDING*2f;
             float hi = sprite.getHeight()+PADDING*2f;
             
             
-            canvas.stroke(255f);
-            canvas.strokeWeight(1f);
+            app.stroke(255f);
+            app.strokeWeight(1f);
             if (ui.mouseInArea(x, y, wi, hi)) {
-              canvas.fill(rgbHover); 
+              app.fill(rgbHover); 
             }
             else {
-              canvas.fill(rgb); 
+              app.fill(rgb); 
             }
             
-            canvas.rect(x, y, wi, hi);
+            app.rect(x, y, wi, hi);
             clicked = readOnly && ui.buttonImg("nothing", x, y, wi, hi);
             
             // Text
-            canvas.fill(textColor);
-            canvas.text(displayText, textx, texty);
-            canvas.popMatrix();
+            app.fill(textColor);
+            app.text(displayText, textx, texty);
+            app.popMatrix();
             
             
             updateDimensions();
@@ -1221,10 +1809,10 @@ public class Editor extends Screen {
     //**********************************EDITOR SCREEN CODE**********************************
     //**************************************************************************************  
     // Pls don't use this constructor in your code if you are sane.
-    public Editor(TWEngine engine, String entryPath, PGraphics c, boolean doMultithreaded) {
+    public Editor(TWEngine engine, String entryPath, boolean full, boolean loadMultithreaded) {
         super(engine);
         this.entryPath = entryPath;
-        if (c == null) {
+        if (full) {
           gui = new SpriteSystemPlaceholder(engine, engine.APPPATH+engine.PATH_SPRITES_ATTRIB()+"gui/editor/");
           gui.repositionSpritesToScale();
           gui.interactable = false;
@@ -1265,14 +1853,15 @@ public class Editor extends Screen {
         autoScaleDown = settings.getBoolean("auto_scale_down", false);
         input.scrollOffset = 0.;
         
-        if (c != null) {
-          canvas = c;
-          canvasScale = canvas.width/(WIDTH);
+        if (!full) {
+          softwareRenderCanvas = app.createImage(480, 270, ARGB);
+          softwareRender = new SoftwareRenderer(softwareRenderCanvas);
+          canvasScale = 480f/(WIDTH);
+          useSoftwareRendering = true;
           forcedScrollBugFix = true;
         }
         else {
-          canvas = g;
-          canvasScale = canvas.width/(WIDTH*display.getScale());
+          canvasScale = app.width/(WIDTH*display.getScale());
         }
 
         myLowerBarColor   = 0xFF4c4945;
@@ -1280,7 +1869,7 @@ public class Editor extends Screen {
         myBackgroundColor = BACKGROUND_COLOR;
         //myBackgroundColor = color(255,0,0);
         
-        if (doMultithreaded) 
+        if (loadMultithreaded) 
           readEntryJSONInSeperateThread();
         else {
           readEntryJSON();
@@ -1289,7 +1878,41 @@ public class Editor extends Screen {
     }
     
     public Editor(TWEngine e, String entryPath) {
-      this(e, entryPath, null, true);
+      this(e, entryPath, true, true);
+    }
+    
+    public void beginSoftwareRendering() {
+      if (useSoftwareRendering) {
+        softwareRender.beginDraw();
+        softwareRender.clear();
+      }
+      else {
+        console.bugWarn("beginSoftwareRendering(): useSoftwareRendering is false.");
+      }
+    }
+    
+    public void bug() {
+      softwareRenderCanvas.loadPixels();
+    }
+    
+    public void endSoftwareDraw() {
+      if (useSoftwareRendering) {
+        softwareRender.endDraw();
+      }
+      else {
+        console.bugWarn("endSoftwareDraw(): useSoftwareRendering is false.");
+      }
+      
+    }
+    
+    public PImage getSoftwareRenderedCanvas() {
+      if (useSoftwareRendering) {
+        return softwareRenderCanvas;
+      }
+      else {
+        console.bugWarn("getSoftwareRenderedCanvas(): useSoftwareRendering is false.");
+        return display.systemImages.get("white");
+      }
     }
 
     //*****************************************************************
@@ -2482,8 +3105,8 @@ public class Editor extends Screen {
 public class ReadOnlyEditor extends Editor {
   protected SpriteSystemPlaceholder readonlyEditorUI;
   
-  public ReadOnlyEditor(TWEngine engine, String entryPath, PGraphics c, boolean doMultithreaded) {
-    super(engine, entryPath, c, doMultithreaded);
+  public ReadOnlyEditor(TWEngine engine, String entryPath, boolean full, boolean loadMultithreaded) {
+    super(engine, entryPath, full, loadMultithreaded);
     setupp();
   }
   
@@ -2586,7 +3209,7 @@ public class SettingsScreen extends ReadOnlyEditor {
     // Kinda overcoming an unnecessary java limitation where super must be the first statement,
     // we choose the phone version (for condensed screens) or the normal version.
     //super(engine, engine.display.phoneMode ? engine.APPPATH+SETTINGS_PATH_PHONE : engine.APPPATH+SETTINGS_PATH, null, false);
-    super(engine, engine.APPPATH+SETTINGS_PATH, null, false);
+    super(engine, engine.APPPATH+SETTINGS_PATH, true, false);
     
     loadSettings();
     get("invalid_path_error").visible = !(file.exists(getInputField("home_directory").inputText) && file.isDirectory(getInputField("home_directory").inputText));
@@ -3133,7 +3756,7 @@ public class KeybindSettingsScreen extends ReadOnlyEditor {
   
   public KeybindSettingsScreen(TWEngine engine) {
     //super(engine, engine.display.phoneMode ? engine.APPPATH+CREDITS_PATH_PHONE : engine.APPPATH+CREDITS_PATH);
-    super(engine, engine.APPPATH+KEYBIND_SETTING_PATH, null, false);
+    super(engine, engine.APPPATH+KEYBIND_SETTING_PATH, true, false);
     loadSettings();
   }
   

@@ -40,6 +40,7 @@ import java.util.Iterator;   // Used by the stack class at the bottom
 import java.util.Arrays;   // Used by the stack class at the bottom
 import java.util.Collections;
 import java.lang.reflect.InvocationTargetException;
+import java.util.concurrent.TimeUnit;
 
 
 //Garbage Collection Tuning: While you can't change the heap size dynamically, you can tune garbage collection behavior using JVM options such as:
@@ -1011,8 +1012,6 @@ public class TWEngine {
     private float selectBorderTime = 0.;
     public boolean showCPUBenchmarks = false;
     public PGraphics currentPG;
-    private boolean allAtOnce = false;
-    private PImage white;
     private IntBuffer clearList;
     private int clearListIndex = 0;
     public boolean showMemUsage = false;
@@ -1276,10 +1275,6 @@ public class TWEngine {
       for (PShaderEntry s : sh.values()) {
         this.loadShader(s.filepath);
       }
-    }
-    
-    public void uploadAllAtOnce(boolean tf) {
-      allAtOnce = tf;
     }
     
     public void initShader(String name) {
@@ -1754,10 +1749,7 @@ public class TWEngine {
       float t = getTimeSeconds();
       return t-floor(t);
     }
-    
-  
   }
-
 
 
 
@@ -3092,7 +3084,7 @@ public class TWEngine {
               }
             }
             );
-            t1.setDaemon(true);
+            //t1.setDaemon(true);
             t1.start();
           }
         }
@@ -3233,6 +3225,7 @@ public class TWEngine {
     
     private float masterVolume = 1.;
     private float musicVolume = 1.;
+     
     
     public void setMasterVolume(float vol) {
       masterVolume = vol;
@@ -3258,6 +3251,9 @@ public class TWEngine {
         reloadMusicPath = path;
       }
       
+      // Crash avoidance
+      //if (crashAvoidance)
+      
       // We don't need to boot up gstreamer in android cus gstreamer doesn't exist in android.
       if (startupGStreamer && !isAndroid()) {
         //console.log("startup gstreamer");
@@ -3275,7 +3271,7 @@ public class TWEngine {
           }
         }
         );
-        t1.setDaemon(true);
+        //t1.setDaemon(true);
         t1.start();
         startupGStreamer = false;
       }
@@ -3292,7 +3288,7 @@ public class TWEngine {
             }
           }
           );
-          t1.setDaemon(true);
+          //t1.setDaemon(true);
           t1.start();
         //}
       }
@@ -3328,7 +3324,9 @@ public class TWEngine {
   
     public void stopMusic() {
       if (streamerMusic != null) {
-        streamerMusic.stop();
+        // We use pause instead of stop because stop can cause crashes
+        streamerMusic.pause();
+          
         streamerMusic = null;
       }
       if (streamerMusicFadeTo != null) {
@@ -3470,6 +3468,10 @@ public class TWEngine {
       float beatspersecond = 60f/bpm;
       float framesPerBeat = (display.BASE_FRAMERATE*beatspersecond);
       return framesPerBeat;
+    }
+    
+    public float framesPerQuarter() {
+      return framesPerBeat()/4f;
     }
     
     public float beatSaw(int beatoffset, int everyxbeat) {
@@ -5128,7 +5130,7 @@ public class TWEngine {
           traverse(path, 0);
         }
       });
-      t1.setDaemon(true);
+      //t1.setDaemon(true);
       t1.start();
     }
   }
@@ -5166,6 +5168,7 @@ public class TWEngine {
     public PluginModule() {
       // Load the boilerplate for plugin code.
       if (file.exists(APPPATH+BOILERPLATE_PATH)) {
+        
       }
       else {
         console.warn(APPPATH+BOILERPLATE_PATH+" not found! Plugins will not work.");
@@ -5194,6 +5197,9 @@ public class TWEngine {
       private Object pluginIntance;
       public PGraphics sketchioGraphics;
       
+      // DO NOT rely on this to get error message. You should only access this after the run() method returns false.
+      public String exceptionMessage = "";
+      
       // Need this because the run method needs our plugin object.
       private Plugin thisPlugin;
       
@@ -5214,7 +5220,9 @@ public class TWEngine {
       }
       
       // Call this to run a cycle of the plugin.
-      void run() {
+      // Returns true if it runs without problems.
+      // Returns false if there's an uncaught exception.
+      public boolean run() {
         if (compiled && pluginRunPoint != null && pluginIntance != null) {
           // TODO: extra protection
           // e.g. saving from infinite loops, block from running until resolved,
@@ -5228,12 +5236,26 @@ public class TWEngine {
               console.warnOnce("Run plugin exception: " + ite.getClass().getSimpleName() + 
                                 " | Cause: " + (cause != null ? cause.getClass().getSimpleName() + " - " + cause.getMessage() : "No cause"));
               if (cause != null) cause.printStackTrace(); // Print the stack trace of the underlying exception
+              
+              if (cause != null) {
+                exceptionMessage = cause.getClass().getSimpleName() + " - " + cause.getMessage();
+              }
+              else {
+                exceptionMessage = "No exception cause specified - typically caused by a bug in TWEngine's plugin handler.";
+              }
+              
+              return false;
           } catch (IllegalAccessException iae) {
               console.warnOnce("Run plugin exception: " + iae.getClass().getSimpleName() + " - " + iae.getMessage());
+              exceptionMessage = iae.getClass().getSimpleName() + " - " + iae.getMessage();
+              return false;
           } catch (Exception e) {
               console.warnOnce("Run plugin exception: " + e.getClass().getSimpleName() + " - " + e.getMessage());
+              exceptionMessage = e.getClass().getSimpleName() + " - " + e.getMessage();
+              return false;
           }
         }
+        return true;
       }
       
       // Loads class from file.
@@ -5306,7 +5328,7 @@ public class TWEngine {
         cacheEntry++;
         compiled = false;
         
-        console.log("Compiling plugin...");
+        //console.log("Compiling plugin...");
         
         String pluginBoilerplateCode_1 = "";
         String pluginBoilerplateCode_2 = "";
@@ -5314,6 +5336,10 @@ public class TWEngine {
         
         // Moved here instead of setup because we want to be able to modify the boilerplate file too without having to restart
         // the program each time.
+        
+        console.log(APPPATH+BOILERPLATE_PATH);
+        
+        console.log(file.exists(APPPATH+BOILERPLATE_PATH));
         
         if (file.exists(APPPATH+BOILERPLATE_PATH)) {
           String[] txts = app.loadStrings(APPPATH+BOILERPLATE_PATH);
@@ -5333,11 +5359,14 @@ public class TWEngine {
           console.warn(APPPATH+BOILERPLATE_PATH+" not found! Plugins will not work.");
         }
         
+        
+        
         // We don't actually need the cache info, but calling this method will
         // create the cache folder if it doesn't already exist, which is wayyyy
         // less work and coding to do. Plus it'll automatically close after 10
         // frames, you know the routine.
         openCacheInfo();
+        
         
         // Now remember, we go
         // raw code -> java file (combined with boilerplate) -> class file -> jar file.
@@ -5349,6 +5378,7 @@ public class TWEngine {
         // raw code -> java file
         String fullCode = pluginBoilerplateCode_1+code+pluginBoilerplateCode_2;
         app.saveStrings(javaFileOut, fullCode.split("\n"));
+        
         
         
         // Delete all .class files in the cache directory
@@ -5363,6 +5393,7 @@ public class TWEngine {
         // java file -> class file
         CmdOutput cmd = toClassFile(javaFileOut);
         compiled = cmd.success;
+        
         
         if (!compiled) {
           this.errorOutput = cmd.message;
@@ -5878,13 +5909,30 @@ public class TWEngine {
       // Run the OS command
       Process process = Runtime.getRuntime().exec(cmd);
       
+      
       // Get the messages from the console (so that we can get stuff like error messages).
       BufferedReader stdInput = new BufferedReader(new InputStreamReader(process.getInputStream()));
       //BufferedReader stdOutput = new BufferedReader(new OutputStream(process.getOutputStream()));
       BufferedReader stdError = new BufferedReader(new InputStreamReader(process.getErrorStream()));
       
+      
       // This function should prolly run this in a different thread.
-      int exitCode = process.waitFor();
+      
+      boolean timeout = !process.waitFor(settings.getInt("compilation_timeout_milliseconds", 6000), TimeUnit.MILLISECONDS);
+      
+      if (timeout) {
+        return new CmdOutput(1, "Compilation timeout; this is typically caused by a boilerplate code error.");
+      }
+      
+      int exitCode;
+      try {
+        exitCode = process.exitValue();
+      }
+      // Had to timeout or process not yet exited.
+      catch (IllegalThreadStateException e) {
+        return new CmdOutput(1, "No exit code available; may be caused by runExecutableCommand bug.");
+      }
+      
       
       // s will be used to read the stdout lines.
       String s = null;
@@ -6052,7 +6100,7 @@ public class TWEngine {
             }
           );
           updateError = "";
-          t1.setDaemon(true);
+          //t1.setDaemon(true);
           t1.start();
         }
         else {
@@ -6215,7 +6263,7 @@ public class TWEngine {
     );
     updateError = "";
     
-    t1.setDaemon(true);
+    //t1.setDaemon(true);
     t1.start();
   }
 
@@ -6765,7 +6813,7 @@ public class TWEngine {
       this.consolePrint(message, color(255));
     }
     public void warn(String message) {
-      //this.consolePrint("WARNING "+message, color(255, 200, 30));
+      this.consolePrint("WARNING "+message, color(255, 200, 30));
       //if (enableBasicUI) {
       //  this.basicui.showWarningWindow(message);
       //}
@@ -6912,6 +6960,8 @@ public class TWEngine {
       // Don't load anything since .vert also loads corresponding .frag
     } else if (ext.equals("wav") || ext.equals("ogg") || ext.equals("mp3")) {
       sound.sounds.put(name, new SoundFile(app, path));
+    } else if (ext.equals("ini")) {
+      // Just ignore these
     } else {
       console.warn("Unknown file type "+ext+" for file "+name+", skipping.");
     }
@@ -8305,7 +8355,7 @@ public class TWEngine {
   
   
   
-  
+  private long gcPanicCooldown = 1;
   
   public Screen getPrevScreen() {
     if (screenStack.isEmpty()) {
@@ -8397,8 +8447,15 @@ public class TWEngine {
     
     if (lowMemory) {
       // If the memory is past its 512mb limit, call the garbage collector. Get that mem usage down.
+      // If there's no effect, slow down the number of times we call gc() so that we don't lag the system to a crawl.
       if (Runtime.getRuntime().totalMemory() > 536870912l) {
-        System.gc();
+        if ((long)app.frameCount % gcPanicCooldown == 0l) {
+          System.gc();
+          gcPanicCooldown *= 2l;
+        }
+      }
+      else {
+        gcPanicCooldown = 1l;
       }
     }
     

@@ -840,7 +840,7 @@ public class PixelRealmWithUI extends PixelRealm {
 
   class NewRealmMenu extends TitleMenu {
     int tempIndex = -1;
-    int coolDown = 0;
+    float coolDown = 0.1f;
 
     // Slight delay before we show the menu, for a bug fix.
     int tmr = 0;
@@ -880,7 +880,7 @@ public class PixelRealmWithUI extends PixelRealm {
       String path = templates.get(index);
       sound.playSound("menu_select");
       changedTemplate = true;
-      coolDown = 5;
+      coolDown = 1f;
 
       previewName = "";
       // Load template information.
@@ -939,7 +939,7 @@ public class PixelRealmWithUI extends PixelRealm {
       app.textSize(16);
       //String left = str(settings.getKeybinding("inventorySelectLeft"));
       //String right = str(settings.getKeybinding("inventorySelectRight"));
-      app.text("Navigate with < and > keys, press <enter/return> to confirm.", getXmid(), getYbottom()-40);
+      app.text("Navigate with "+input.keyTextForm(settings.getKeybinding("inventory_select_left", '<'))+" and "+input.keyTextForm(settings.getKeybinding("inventory_select_right", '>'))+" keys, press <enter/return> to confirm.", getXmid(), getYbottom()-40);
 
       // Lil easter egg for the glitched realm
       if (previewName.equals("YOUR FAVOURITE REALM")) {
@@ -956,7 +956,7 @@ public class PixelRealmWithUI extends PixelRealm {
       if (allow) {
         if ((input.keyActionOnce("inventory_select_left", ',')
           || ui.buttonVary("newrealm-prev", "back_arrow_128", ""))
-          && coolDown == 0) {
+          && coolDown <= 0f) {
           tempIndex--;
           if (tempIndex < 0) tempIndex = templates.size()-1;
           preview(tempIndex);
@@ -965,7 +965,7 @@ public class PixelRealmWithUI extends PixelRealm {
       
       if ((input.keyActionOnce("inventory_select_right", '.')
         || ui.buttonVary("newrealm-next", "forward_arrow_128", ""))
-        && coolDown == 0) {
+        && coolDown <= 0f) {
         tempIndex++;
         if (tempIndex > templates.size()-1) tempIndex = 0;
         preview(tempIndex);
@@ -1048,7 +1048,7 @@ public class PixelRealmWithUI extends PixelRealm {
       // resulting in weird billboard 3d objects facing the wrong angle.
       // Delay the pausing of movement just a lil bit to let it update.
       movementPaused = (tmr++ > 2);
-      if (coolDown > 0) coolDown--;
+      if (coolDown > 0f) coolDown -= display.getDelta();
     }
   }
 

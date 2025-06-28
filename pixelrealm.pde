@@ -149,7 +149,6 @@ public class PixelRealm extends Screen {
   protected boolean usePortalAllowed = true;
   protected boolean modifyTerrain = false;
   protected int nodeSound = 0;
-  private boolean drawEntryOnce = true;
   protected float morpherRadius = 150.;
   protected float morpherBlockHeight = 0.;
   protected float fovx = PI/3.0;
@@ -292,7 +291,7 @@ public class PixelRealm extends Screen {
     console.info("# cores reserved for loading: "+MAX_LOADER_THREADS);
     
     if (engine.lowMemory) {
-      MAX_MEM_USAGE = 1024L*1024L*80L; // 64MB
+      MAX_MEM_USAGE = 1024L*1024L*80L;
     }
     
     String startRealm = file.directorify(file.getPrevDir(dir));
@@ -1387,12 +1386,12 @@ public class PixelRealm extends Screen {
     private String musicPath = engine.APPPATH+REALM_BGM_DEFAULT;
     private boolean loadMinimal = false;
     public boolean memOverload = false;
-    
     private TWEngine.PluginModule.Plugin realmPlugin;
     public String realmPluginPath = "";
     private AtomicBoolean successfulCompile = new AtomicBoolean();
     private AtomicBoolean pluginCompiled = new AtomicBoolean();
     private boolean showDebugMessageOnce = true;
+    public EntryFileObject entryToReload = null;
     
     public HashMap<Integer, TerrainChunkV2> chunks = new HashMap<Integer, TerrainChunkV2>();
     
@@ -2442,6 +2441,7 @@ public class PixelRealm extends Screen {
               }
               
               //console.log("Garbage collector beg "+maxRamKB+ " "+engine.getUsedMemKB());
+              println("beg");
               System.gc();
               try {
                 Thread.sleep(100);
@@ -2518,7 +2518,11 @@ public class PixelRealm extends Screen {
                       if (isImg)
                         ((ImageFileObject)me).cacheFlag = true;
                       
-                      System.gc();
+                      // No need in normal mode since that will just cause lag. Remember, the threads are there to beg the garbage collector
+                      // if memory spikes gets a little too high.
+                      if (engine.lowMemory) {
+                        System.gc();
+                      }
                     }
                   }
                   );
@@ -2739,8 +2743,8 @@ public class PixelRealm extends Screen {
     
     class EntryFileObject extends ImageFileObject {
       private Editor renderedEntry = null;
-      private PGraphics mycanvas = null;
       private boolean loadFromSource = false;
+      private AtomicBoolean refreshRequired = new AtomicBoolean(false);
       
       public EntryFileObject(float x, float y, float z, String dir) {
         super(x, y, z, dir);
@@ -2758,24 +2762,14 @@ public class PixelRealm extends Screen {
         if (newFile) {
           loadFlag = true;
           
-          display.uploadAllAtOnce(true);
-          if (power.powerMode != PowerMode.MINIMAL) scene.endDraw();
-            
-          display.setPGraphics(mycanvas);
-          mycanvas.beginDraw();
-          mycanvas.background(0xFF0f0f0e);
-          mycanvas.endDraw();
-          display.setPGraphics(g);
-          if (power.powerMode != PowerMode.MINIMAL) scene.beginDraw();
-          img = new RealmTextureUV(mycanvas);
-          display.uploadAllAtOnce(false);
+          // TODO: loading entry (grey) texture.
+          img = new RealmTextureUV(display.systemImages.get("blank_entry"));
           setSize(0.5);
         }
       }
       
       private void setup() {
         allowTexFlipping = true;
-        mycanvas = createGraphics(480, 270, P2D);
       }
       
       public void load(JSONObject json) {
@@ -2791,16 +2785,24 @@ public class PixelRealm extends Screen {
           // Here, we gotta generate cache.
           // Pretty easy in hindsight.
           public void run() {
-            renderedEntry = new ReadOnlyEditor(engine, dir, mycanvas, false);
+            // Don't load full, don't do multithreaded.
+            renderedEntry = new ReadOnlyEditor(engine, dir, false, false);
             loadFromSource = true;
           }
         });
         
       }
       
+      
+      public void interationAction() {
+        file.open(dir);
+        entryToReload = this;
+      }
+      
       public void loadFromSource() {
         entriesTotal++;
-        renderedEntry = new ReadOnlyEditor(engine, dir, mycanvas, true);
+        // Don't load full ui, but load multithreaded.
+        renderedEntry = new ReadOnlyEditor(engine, dir, false, true);
         loadFromSource = true;
       }
       
@@ -2811,49 +2813,46 @@ public class PixelRealm extends Screen {
       public void run() {
         super.run();
         
-        if (loadFromSource && drawEntryOnce) {
+        if (loadFromSource) {
           // Wait until the entry has been loaded in the seperate thread.
-          if (renderedEntry != null && mycanvas != null && renderedEntry.isLoaded()) {
-            // Now this is the cringy bit: stop rendering to the main scene (bad for opengl performance
-            // but this is a load so it doesn't matter that much), quickly render our entry, then go back
-            // to rendering to the main scene. Remember this all runs on the main thread.
-            display.uploadAllAtOnce(true);
-            if (power.powerMode != PowerMode.MINIMAL) scene.endDraw();
-            display.setPGraphics(mycanvas);
-            mycanvas.beginDraw();
-            mycanvas.background(renderedEntry.BACKGROUND_COLOR);
-            input.scrollOffset = -renderedEntry.UPPER_BAR_DROP_WEIGHT;
-            renderedEntry.renderPlaceables();
+          if (renderedEntry != null && renderedEntry.isLoaded()) {
             
-            // This can have bad consiquences sometimes by random chance
-            try {
-              mycanvas.endDraw();
-            }
-            catch (RuntimeException e) {
-              console.warn("Entry rendering error, continuing.");
-            }
-            
-            display.setPGraphics(g);
-            if (power.powerMode != PowerMode.MINIMAL) scene.beginDraw();
-            img = new RealmTextureUV(mycanvas);
+            Thread t1 = new Thread(new Runnable() {
+              public void run() {
+                input.scrollOffset = -renderedEntry.UPPER_BAR_DROP_WEIGHT;
+                renderedEntry.beginSoftwareRendering();
+                renderedEntry.renderPlaceables();
+                
+                if (engine.enableCaching) {
+                  engine.saveCacheImage(dir, renderedEntry.getSoftwareRenderedCanvas());
+                }
+                refreshRequired.set(true);
+              }
+            });
+            t1.start();
+            loadFromSource = false;
+          }
+        }
+        
+        if (refreshRequired.compareAndSet(true, false)) {
+            // Low level OpenGL renderer stuff.
             elementRefreshRequired = true;
-            bugFixUpsideDown = true;
+            bugFixUpsideDown = false;
             
-            display.uploadAllAtOnce(false);
+            renderedEntry.endSoftwareDraw();
+            img = new RealmTextureUV(renderedEntry.getSoftwareRenderedCanvas());
+            
             setSize(0.5);
             
             // Don't care about these two anymore
-            mycanvas = null;
-            renderedEntry.free();
-            renderedEntry = null;
-            loadFromSource = false;
-            drawEntryOnce = false;
-            if (engine.enableCaching) {
-              engine.saveCacheImage(this.dir, img.get());
+            if (entryToReload == null) {
+              // Bug fix: if it's not null, it most likely means we're returning from an editor and just quickly refreshing
+              // the one entry, preventing the previous screen's images from being cleared too quickly.
+              renderedEntry.free();
             }
+            renderedEntry = null;
             
             drawnEntries++;
-          }
         }
       }
     }
@@ -6277,6 +6276,7 @@ public class PixelRealm extends Screen {
         if (launchWhenPlaced) {
           if (currRealm.holdingObject instanceof FileObject) {
             FileObject o = (FileObject)currRealm.holdingObject;
+            if (currRealm.holdingObject instanceof EntryFileObject) entryToReload = (EntryFileObject)currRealm.holdingObject;
             file.open(o.dir);
             currentTool = TOOL_NORMAL;
             launchWhenPlaced = false;
@@ -6397,7 +6397,7 @@ public class PixelRealm extends Screen {
       
       // Reset to true for EntryFileObjects so that they don't all draw at the same
       // time clobbering up the fps.
-      drawEntryOnce = true;
+      //drawEntryOnce = true;
       
       // Run all the PRObjects.
       for (PRObject o : ordering) {
@@ -7168,7 +7168,7 @@ public class PixelRealm extends Screen {
     
     // Once the entry has been loaded, rendering stage and save to disk
     if (backgroundEntry != null) {
-      drawEntryOnce = true;
+      //drawEntryOnce = true;
       backgroundEntry.run();
       
       //println("In "+backgroundRealm.stateDirectory);
@@ -7343,6 +7343,12 @@ public class PixelRealm extends Screen {
     if (engine.showUpdateScreen) {
       requestScreen(new Updater(engine, engine.updateInfo));
       engine.showUpdateScreen = false;
+    }
+  }
+  
+  public void previousReturnAnimation() {
+    if (currRealm.entryToReload != null) {
+      currRealm.entryToReload.loadFromSource();
     }
   }
   
