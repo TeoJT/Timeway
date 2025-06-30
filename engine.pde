@@ -54,7 +54,7 @@ import java.util.concurrent.TimeUnit;
 public class TWEngine {
   //*****************CONSTANTS SETTINGS**************************
   // Info and versioning
-  private static final String VERSION     = "0.1.6";
+  private static final String VERSION     = "0.1.7";
   
   public String getAppName() {
     return "Timeway";
@@ -1014,7 +1014,6 @@ public class TWEngine {
     public PGraphics currentPG;
     private IntBuffer clearList;
     private int clearListIndex = 0;
-    public boolean showMemUsage = false;
     public boolean phoneMode = false;
     
     public final float BASE_FRAMERATE = 60.;
@@ -1593,35 +1592,6 @@ public class TWEngine {
       return (timeframe/float(thisFrameMillis-lastFrameMillis))*BASE_FRAMERATE;
     }
     
-    public void displayMemUsageBar() {
-      pushMatrix();
-      scale(getScale());
-      display.recordRendererTime();
-      long used = (Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory());
-      //float percentage = (float)used/(float)MAX_MEM_USAGE;
-      long total = Runtime.getRuntime().totalMemory();
-      float percentage = (float)used/(float)total;
-      noStroke();
-      
-      float y = 0;
-      
-      fill(0, 0, 0, 127);
-      rect(100, y+20, (WIDTH-200.), 50);
-      
-      if (percentage > 0.8) 
-        fill(255, 140, 20); // Low mem
-      else 
-        fill(50, 50, 255);  // Normal
-        
-        
-      rect(100, y+20, (WIDTH-200.)*percentage, 50);
-      fill(255);
-      textFont(DEFAULT_FONT, 30);
-      textAlign(LEFT, CENTER);
-      text("Mem: "+(used/1024)+" kb / "+(total/1024)+" kb", 105, y+45);
-      display.recordLogicTime();
-      popMatrix();
-    }
     
     public void displayScreens() {
       // Set the display scale; since I've been programming this with my Surface Book 2 at high density resolution,
@@ -1772,6 +1742,7 @@ public class TWEngine {
     public SpriteSystemPlaceholder currentSpritePlaceholderSystem;
     public boolean spriteSystemClickable = false;
     public MiniMenu currMinimenu = null;
+    public SpriteSystemPlaceholder dummySpriteSystem;
     
     // To be used by API.
     public HashMap<String, SpriteSystemPlaceholder> spriteSystems;
@@ -2143,6 +2114,10 @@ public class TWEngine {
       }
     }
     
+    public void display() {
+      displayMiniMenu();
+    }
+    
     
     ///////////////////////////////////////////////////////
     // CUSTOM SLIDERS
@@ -2496,12 +2471,12 @@ public class TWEngine {
       }
       spriteSystems.put(name, new SpriteSystemPlaceholder(engine, path));
     }
-        
+    
     public SpriteSystemPlaceholder getSpriteSystem(String name) {
       if (!spriteSystems.containsKey(name)) {
         console.warn("Sprite system "+name+" doesn't exist!");
-        // TODO: Return a blank spritesystem so that we don't crash.
-        return null;
+        
+        return dummySpriteSystem;
       }
       else {
         return spriteSystems.get(name);
@@ -6409,8 +6384,8 @@ public class TWEngine {
       console.log("Shaders reloaded.");
     }
     else if (commandEquals(command, "/memusage")) {
-      display.showMemUsage = !display.showMemUsage;
-      if (display.showMemUsage) console.log("Memory usage bar shown.");
+      showMemUsage = !showMemUsage;
+      if (showMemUsage) console.log("Memory usage bar shown.");
       else console.log("Memory usage bar hidden.");
     }
     else if (commandEquals(command, "/sleepmode") || commandEquals(command, "/minimalmode") || commandEquals(command, "/minimizedmode")) {
@@ -8388,6 +8363,121 @@ public class TWEngine {
     }
   }
   
+  private long usedMemValues[] = new long[400];;
+  private int usedMemValuesIndex = 0;
+  private boolean showMemUsage = false;
+  private long[] heapFillRateValues = new long[30];
+  private long lastUsedMemSize = 0;
+  private long heapFillDisplayKB = 0;
+  private long minimumMem = 0;
+  private long totalToKeepTrackOfMinimumMem = 0;
+  
+  public void memUsage() {
+    long used = (Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory());
+    long total = Runtime.getRuntime().totalMemory();
+    
+    
+    if (showMemUsage) {
+      app.pushMatrix();
+      app.scale(display.getScale());
+      
+      
+      app.noStroke();
+      
+      float y = 20f;
+      float hi = 100f;
+      float wi = (display.WIDTH-200f);
+      
+      // Bar
+      app.fill(0, 0, 0, 127);
+      app.rect(100f, y, wi, hi);
+      
+      // Line graph
+      app.fill(255, 150);
+      int l = usedMemValues.length;
+      float xpw = wi / (float)l;
+      for (int i = 0; i < l-1; i++) {
+        float xp1 = 100f + ((float)i / (float)l) * wi;
+        float yp2 = min((((float)usedMemValues[(usedMemValuesIndex+i)%l] / (float)total)) * hi, hi);
+        rect(xp1, y+hi-yp2, xpw, yp2);
+        
+        // Lil red indicator bar
+        if (i == l-2) {
+          rect(xp1+xpw, y+hi-yp2, xpw, yp2);
+          fill(255, 0, 0);
+          rect(100f+wi-70f, y+hi-yp2-4f, 70f, 4f); 
+        }
+      }
+      
+      // Overall memory usage
+      app.fill(0);
+      app.textFont(DEFAULT_FONT, 30);
+      app.textAlign(LEFT, CENTER);
+      app.text("Mem: "+(used/1024L)+"KB / "+(total/1024)+"KB ("+(used/1048576L)+"MB / "+(total/1048576L)+"MB)", 106, y+26);
+      app.fill(255);
+      app.text("Mem: "+(used/1024L)+"KB / "+(total/1024)+"KB ("+(used/1048576L)+"MB / "+(total/1048576L)+"MB)", 104, y+24);
+      
+      // Heap fill rate
+      // Calculate average first
+      if (app.frameCount % 7 == 0) {
+        long sum = 0;
+        for (int i = 0; i < heapFillRateValues.length; i++) {
+          sum += heapFillRateValues[i];
+        }
+        long avg = sum / (long)heapFillRateValues.length;
+        
+        heapFillDisplayKB = avg;
+      }
+      
+      // Indicator of low lowMemory mode
+      if (lowMemory) {
+        app.textAlign(RIGHT, CENTER);
+        app.textFont(DEFAULT_FONT, 22);
+        app.fill(0);
+        app.text("Low memory mode enabled", wi, y+26);
+        app.fill(255, 100, 100);
+        app.text("Low memory mode enabled", wi, y+24);
+        app.textAlign(LEFT, CENTER);
+      }
+      
+      // Display heap fill rate
+      app.textFont(DEFAULT_FONT, 20);
+      app.fill(0);
+      app.text("Heap fill rate: "+(heapFillDisplayKB/1024L)+"KB/frame", 106, y+52);
+      app.fill(255);
+      app.text("Heap fill rate: "+(heapFillDisplayKB/1024L)+"KB/frame", 104, y+50);
+      
+      // Display minimum memory
+      app.fill(0);
+      app.text("Min required mem: "+(minimumMem/1048576L)+"MB", 106, y+70);
+      app.fill(255);
+      app.text("Min required mem: "+(minimumMem/1048576L)+"MB", 104, y+68);
+      
+      app.textFont(DEFAULT_FONT, 12);
+      app.fill(0);
+      app.text("Use the /gc command to refresh min required memory.", 106, y+90);
+      app.fill(255);
+      app.text("Use the /gc command to refresh min required memory.", 104, y+88);
+      
+      app.popMatrix();
+    }
+    
+    // Used mem array
+    usedMemValues[usedMemValuesIndex] = used;
+    usedMemValuesIndex++;
+    if (usedMemValuesIndex >= usedMemValues.length) usedMemValuesIndex = 0;
+    
+    // Memory heap fill rate
+    heapFillRateValues[app.frameCount % heapFillRateValues.length] = used-lastUsedMemSize < 0 ? 0 : used-lastUsedMemSize;
+    lastUsedMemSize = used;
+    
+    // Minimum memory
+    if (totalToKeepTrackOfMinimumMem != total) {
+      minimumMem = used;
+      totalToKeepTrackOfMinimumMem = total;
+    }
+  }
+  
   public void saveCacheInfoNow() {
     if (cacheInfoJSON != null) {
       console.info("processCaching: saving cache info.");
@@ -8431,32 +8521,30 @@ public class TWEngine {
     processCaching();
     settings.update();
 
-    // Trully an awful piece of code.
+    // Truly an awful piece of code.
     //if ((int)app.frameCount % 2000 == 0) {
     //  stats.save();
     //}
 
-    if (display != null) display.recordRendererTime();
-    // This should be run at all times because apparently (for some stupid reason)
-    // it uses way more performance NOT to call background();
     app.background(0);
-    if (display != null) display.recordLogicTime();
 
     // Update inputs
     input.runInputManagement();
     
     // Get updates
-    processUpdate();
+    //processUpdate();
 
     // Show the current GUI.
     display.displayScreens();
     
     sound.processSound();
     
-    ui.displayMiniMenu();
+    // Dumb code
+    if (ui.dummySpriteSystem == null) ui.dummySpriteSystem = new SpriteSystemPlaceholder(this);
+    ui.display();
     
-    if (display.showMemUsage) {
-      display.displayMemUsageBar();
+    if (showMemUsage) {
+      memUsage();
     }
     
     if (lowMemory) {

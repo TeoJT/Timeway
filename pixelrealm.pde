@@ -1404,8 +1404,10 @@ public class PixelRealm extends Screen {
     public boolean lights = false;
     public int collectedCoins = 0;
     public boolean coins = false;
+    public boolean improvedFog2 = true;  // Newer 2.1 realms have different looking fog, but of course we have existing realms with the older fog.
     private boolean createdCoins = false;
     public boolean terraformWarning = true;
+    
     
     // All objects that are visible on the scene, their interactable actions are run.
     protected LinkedList<PRObject> ordering = new LinkedList<PRObject>();
@@ -1547,9 +1549,21 @@ public class PixelRealm extends Screen {
         
         // V2
         float chunkSizeUnits = groundSize*float(CHUNK_SIZE);
-        BEGIN_FADE = max(chunkSizeUnits*(getRenderDistance()-1.5), chunkSizeUnits*0.28f);
-        if (getRenderDistance() <= 1.0f) FADE_LENGTH = chunkSizeUnits*0.1f;  // Special case.
-        else FADE_LENGTH = chunkSizeUnits*0.4f;
+        
+        if (improvedFog2) {
+          BEGIN_FADE = max(chunkSizeUnits*(getRenderDistance()-1.5), chunkSizeUnits*0.28f);
+          if (getRenderDistance() <= 1.0f) {
+            FADE_LENGTH = chunkSizeUnits*0.1f;
+          }
+          else {
+            FADE_LENGTH = chunkSizeUnits*0.4f;
+          }
+        }
+        else {
+          BEGIN_FADE = chunkSizeUnits*(getRenderDistance()-1.5);
+          FADE_LENGTH = chunkSizeUnits;
+        }
+        
         
         
         if (versionCompatibility == 2) {
@@ -1612,6 +1626,7 @@ public class PixelRealm extends Screen {
       public void save(JSONObject j) {
           j.setString("terrain_type", NAME);
           j.setBoolean("coins", coins);
+          j.setBoolean("improved_fog_2", improvedFog2);
           j.setString("compatibility_version", version);
           j.setInt("render_distance", (int)getRenderDistance());
           j.setFloat("ground_size", getGroundSize());
@@ -1623,6 +1638,7 @@ public class PixelRealm extends Screen {
       
       public void load(JSONObject j) {
         coins = j.getBoolean("coins", false);
+        improvedFog2 = j.getBoolean("improved_fog_2", false);
         setRenderDistance(j.getInt("render_distance", 6));
         setGroundSize(j.getFloat("ground_size", 100.));
         hasWater = j.getBoolean("has_water", false);
@@ -1796,6 +1812,7 @@ public class PixelRealm extends Screen {
         TREE_FREQUENCY =        j.getFloat("tree_frequency");
         OCTAVE=                 j.getInt("noise_octave");
         NOISE_SEED =            j.getInt("noise_seed");
+        update();
       }
       
       private TWEngine.UIModule.CustomSlider maxHeightSlider;
@@ -6006,9 +6023,8 @@ public class PixelRealm extends Screen {
       
       int csx = 0;
       int csy = 0;
-      int cex = renderDistance;
+      int cex = renderDistance+1;
       int cey = renderDistance;
-
       switch (cullDirection) {
         case 0:
         csx = renderDistance;
@@ -7124,6 +7140,7 @@ public class PixelRealm extends Screen {
     
     engine.timestamp("done");
     
+    
   }
   
   
@@ -7501,6 +7518,12 @@ public class PixelRealm extends Screen {
         p.surface();
       }
       console.log("Relocated "+successfulRelocations+" items.");
+      return true;
+    }
+    else if (engine.commandEquals(command, "/upgrade")) {
+      currRealm.improvedFog2 = true;
+      currRealm.terrain.update();
+      console.log(currRealm.version+" realm upgraded to newest.");
       return true;
     }
       
