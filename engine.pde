@@ -8106,6 +8106,20 @@ public class TWEngine {
         case CTRL_KEY:
         text = "Ctrl";
         break;
+        
+        // TODO: This assumes user has a QWERTY keyboard.
+        case '.':
+        text = ">";
+        break;
+        case ',':
+        text = "<";
+        break;
+        case '\'':
+        text = "@";
+        break;
+        case '=':
+        text = "+";
+        break;
         default:
         text = ""+Character.toUpperCase(c);
         break;
