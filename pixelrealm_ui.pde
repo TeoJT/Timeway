@@ -1181,7 +1181,8 @@ public class PixelRealmWithUI extends PixelRealm {
     public void close() {
       currRealm.chunks.clear();
       //tilesCache.clear();
-      currRealm.regenerateTrees();
+      currRealm.resetTrees();
+      //currRealm.regenerateTrees();
       //chunks = new HashMap<Integer, TerrainChunkV2>();
     }
   }

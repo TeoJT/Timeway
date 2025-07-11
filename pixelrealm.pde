@@ -19,8 +19,6 @@ public class PixelRealm extends Screen {
   // Constants and stuff
   final static String COMPATIBILITY_VERSION = "2.1";
   final static String SHORTCUT_COMPATIBILITY_VERSION = "1.0";
-  final static String QUICK_WARP_DATASET = "quick_warp_dataset";  // The name of this really doesn't matter as long as it's consistant when quick warping
-  final static String QUICK_WARP_ID = "quick_warp_id";  // Name doesn't matter as long as it doesnt change.
   final static float  PSHAPE_SIZE_FACTOR = 100.;
   final static int    MAX_CACHE_SIZE = 512;
   final static float  BACKWARD_COMPAT_SCALE = 256./(float)MAX_CACHE_SIZE;
@@ -136,7 +134,6 @@ public class PixelRealm extends Screen {
   private float jumpTimeout = 0;
   private float coyoteJump = 0.;
   private boolean showExperimentalGifs = false;
-  private boolean finderEnabled = false;   // Maybe this could be part of Pixel Realm state?
   protected boolean launchWhenPlaced = false; 
   protected int     currentTool = TOOL_NORMAL;
   protected int     subTool     = 0;
@@ -1942,6 +1939,10 @@ public class PixelRealm extends Screen {
       public PVector[][] tiles;
       public PShape pshapeChunk = null;
       
+      // When saving, unmodified chunks will not be written to file since we can
+      // easily recalculate them, saving disk space.
+      public boolean modified = false;
+      
       public TerrainChunkV2(int cx, int cy) {
         this.chunkX = cx;
         this.chunkY = cy;
@@ -1949,16 +1950,10 @@ public class PixelRealm extends Screen {
         
         
         // Terrain (ground)
-        for (int y = 0; y < CHUNK_SIZE+1; y++) {
-          for (int x = 0; x < CHUNK_SIZE+1; x++) {
-            float xx = float(x+chunkX*CHUNK_SIZE);
-            float yy = float(y+chunkY*CHUNK_SIZE);
-            
-            tiles[y][x] = calcTile(xx-1., yy-1.);
-            
-            terrain.genTerrainObj(xx-1., yy-1.);
-          }
-        }
+        calcTiles();
+        
+        // Generate trees
+        regenerateTerrainObj();
         
         //joinTiles();
         
@@ -1976,6 +1971,16 @@ public class PixelRealm extends Screen {
             // Decoding is much easier this time lol.
             byte[] decodedBytes = Base64.getDecoder().decode( json.getString("data").getBytes() );
             loadFromBytes(decodedBytes);
+            
+            // Chunks with data will have been modified.
+            // You may notice that since modified chunks is a new feature and there's loads of realms that were created before this was added,
+            // we sadly have to assume every chunk, modified or not, has been modified otherwise we will overwrite the genuinely modified chunks
+            // and lose data.
+            modified = true;
+          }
+          else {
+            // Calculate from scratch
+            calcTiles();
           }
         }
         catch (RuntimeException e) {
@@ -1987,6 +1992,16 @@ public class PixelRealm extends Screen {
         updatePShape();
       }
       
+      private void calcTiles() {
+        for (int y = 0; y < CHUNK_SIZE+1; y++) {
+          for (int x = 0; x < CHUNK_SIZE+1; x++) {
+            float xx = float(x+chunkX*CHUNK_SIZE);
+            float yy = float(y+chunkY*CHUNK_SIZE);
+            
+            tiles[y][x] = calcTile(xx-1., yy-1.);
+          }
+        }
+      }
       
       
       public void loadFromBytes(byte[] data) {
@@ -2094,15 +2109,13 @@ public class PixelRealm extends Screen {
         JSONObject j = new JSONObject();
         j.setInt("x", chunkX);
         j.setInt("z", chunkY);
-        int hashIndex = MAX_CHUNKS_XZ*chunkY + chunkX;
-        j.setInt("hash", hashIndex);
         
-        byte[] byteArray = getByteData();
-        
-        // Convert our chunk to base64!
-        String data = Base64.getEncoder().encodeToString(byteArray);
-        
-        j.setString("data", data);
+        if (modified) {
+          byte[] byteArray = getByteData();
+          // Convert our chunk to base64!
+          String data = Base64.getEncoder().encodeToString(byteArray);
+          j.setString("data", data);
+        }
         return j;
       }
       
@@ -2148,14 +2161,16 @@ public class PixelRealm extends Screen {
       // For "testing" purposes
       public void doThing() {
         tiles[int(random(0, 9))][int(random(0, 9))].y = random(-1000, 1000);
+        // Chunk has been modified
+        modified = true;
         updatePShape();
       }
 
 
       public void regenerateTerrainObj() {
         // Terrain (ground)
-        for (int y = 0; y < CHUNK_SIZE+1; y++) {
-          for (int x = 0; x < CHUNK_SIZE+1; x++) {
+        for (int y = 0; y < CHUNK_SIZE; y++) {
+          for (int x = 0; x < CHUNK_SIZE; x++) {
             float xx = float(x+chunkX*CHUNK_SIZE);
             float yy = float(y+chunkY*CHUNK_SIZE);
             
@@ -2168,8 +2183,6 @@ public class PixelRealm extends Screen {
       //  vhi[tilex%CHUNK_SIZE][tiley%CHUNK_SIZE] = val;
       //}
     }
-    
-    
     
     
     
@@ -2331,7 +2344,7 @@ public class PixelRealm extends Screen {
         // We expect the engine to have already loaded a JSON object.
         // Every 3d object has x y z position.
         
-        // Prepare random (but close by to player) positioning if file previously did not exist
+        // Prepare random (but close to player) positioning if file previously did not exist
         // in realm.
         this.x = lastPlacedPosX+random(-500, 500);
         this.z = lastPlacedPosZ+random(-500, 500);
@@ -2385,7 +2398,8 @@ public class PixelRealm extends Screen {
           lastPlacedPosZ = this.z;
         }
   
-        float yy = onSurface(this.x, this.z);
+        float yy = 0;
+        if (json.isNull("y")) yy = onSurface(this.x, this.z);
         this.y = json.getFloat("y", yy);
         
         //console.log("x: "+x+" y: "+y+" z: "+z);
@@ -3806,12 +3820,14 @@ public class PixelRealm extends Screen {
         // One less chunk in chunklimit
         // One less tile on the edge in the positive range so that it's easier to fix bugs with the
         // morpher tool
-        TerrainChunkV2 ch = getChunkAt(x, z);
-        if (ch == null) {
-          // NOTE: I guess it's just easier to check out of bounds
-          // if the chunk is null
-          return true;
-        }
+        
+        // NO it is not out of bounds if the chunk is null. Silly.
+        //TerrainChunkV2 ch = getChunkAt(x, z);
+        //if (ch == null) {
+        //  // NOTE: I guess it's just easier to check out of bounds
+        //  // if the chunk is null
+        //  return true;
+        //}
         
         return (
           int(tilex)/CHUNK_SIZE > terrain.chunkLimitX-1 ||
@@ -4433,7 +4449,7 @@ public class PixelRealm extends Screen {
       // File doesn't exist; create new turf file.
       } else {
         if (!loadMinimal) {
-          console.log("Creating new realm turf file.");
+          console.log("Creating new realm file.");
         }
         
         if (version.equals("1.0") || version.equals("1.1")) terrain = new SinesinesineTerrain();
@@ -4449,16 +4465,18 @@ public class PixelRealm extends Screen {
         
         if (loadMinimal) return;
         
+        // TODO: I have no idea why this was here??? Remove??? How did nothing break????????
+        
         // None of the objects are loaded from file but we still need to
         // call load() since this contains code to init the objects.
         // We need a blank jsonobject to make each fileobject think it hasn't
         // existed in the realm before.
-        JSONObject emptyJSON = new JSONObject();
-        for (FileObject o : files) {
-          if (o != null) {
-            o.load(emptyJSON);
-          }
-        }
+        //JSONObject emptyJSON = new JSONObject();
+        //for (FileObject o : files) {
+        //  if (o != null) {
+        //    o.load(emptyJSON);asdf
+        //  }
+        //}
       }
       
     }
@@ -4578,17 +4596,19 @@ public class PixelRealm extends Screen {
       //if (engine.cacheExists(stateDirectory+"terrain_cache.tmp")) {
       int l = chunksArray.size();
       for (int i = 0; i < l; i++) {
-        try {
+        //try {
           JSONObject chunkdata = chunksArray.getJSONObject(i);
           
           // Load data and put into chunks data.
           // If has is unassigned a value, put the new chunk into the void where it will never be reached lmao.
-          chunks.put(chunkdata.getInt("hash", Integer.MAX_VALUE), new TerrainChunkV2(chunkdata));
-        }
-        
-        // Just in case teehee.
-        catch (RuntimeException e) {
-        }
+          
+          int hashIndex = MAX_CHUNKS_XZ*chunkdata.getInt("z", Integer.MAX_VALUE) + chunkdata.getInt("x", Integer.MAX_VALUE);
+          chunks.put(hashIndex, new TerrainChunkV2(chunkdata));
+        //}
+        ////Just in case teehee.
+        //catch (RuntimeException e) {
+        //  console.log(e.getMessage());
+        //}
       }
       
         
@@ -4755,6 +4775,7 @@ public class PixelRealm extends Screen {
       JSONArray chunksArray = new JSONArray();
       HashSet<TerrainChunkV2> chunksSet = new HashSet<TerrainChunkV2>();
       for (TerrainChunkV2 chunk : chunks.values()) {
+        
         chunksArray.setJSONObject(i++, chunk.save());
         chunksSet.add(chunk);
       }
@@ -5668,6 +5689,8 @@ public class PixelRealm extends Screen {
             //console.log(chunksModified.size());
             for (TerrainChunkV2 ch : chunksModified) {
               ch.updatePShape();
+              // Chunk has been modified
+              ch.modified = true;
             }            
           }
           // End bulge and flat subtools
@@ -5725,6 +5748,8 @@ public class PixelRealm extends Screen {
                 //console.log(chunksModified.size());
                 for (TerrainChunkV2 chh : chunksModified) {
                   chh.updatePShape();
+                  // Chunk has been modified
+                  chh.modified = true;
                 }
               }
             }
@@ -6426,12 +6451,16 @@ public class PixelRealm extends Screen {
       engine.timestamp("PRObjects sorting");
     }
     
-    public void regenerateTrees() {
+    public void resetTrees() {
       for (PixelRealmState.PRObject o : currRealm.ordering) {
         if (o != null && o instanceof PixelRealmState.TerrainPRObject) {
           o.destroy();
         }
       }
+    }
+    
+    public void regenerateTrees() {
+      resetTrees();
       
       for (PixelRealmState.TerrainChunkV2 ch : currRealm.chunks.values()) {
         if (ch != null) {
