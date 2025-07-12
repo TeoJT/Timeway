@@ -2257,14 +2257,63 @@ public class PixelRealm extends Screen {
       }
       
       public JSONObject save() {
-        JSONObject PRObject = new JSONObject();
-        PRObject.setString("filename", ".pixelrealm-tree-"+str(imgIndex));
-        PRObject.setFloat("x", this.x);
-        PRObject.setFloat("y", this.y);
-        PRObject.setFloat("z", this.z);
-        PRObject.setFloat("scale", this.size);
+        console.bugWarn("Don't use the save() method on a TerrainPRObject.");
+        return null;
+      }
+      
+      public byte[] saveBytes(byte[] b, int startIndex) {
+        // type  1 byte
+        // x     4 bytes
+        // y     4 bytes
+        // z     4 bytes
+        // scale 4 bytes
+        // = 17 bytes
+        // Type
+        b[startIndex] = (byte)imgIndex;
+        
+        // x
+        floatToByteWrite(b, this.x, startIndex+1);
+        // y
+        floatToByteWrite(b, this.y, startIndex+5);
+        // z
+        floatToByteWrite(b, this.z, startIndex+9);
+        // scale
+        floatToByteWrite(b, this.size, startIndex+13);
+        
+        return b;
+      }
+      
+      private void floatToByteWrite(byte[] b, float val, int startIndex) {
+        int intBits = Float.floatToRawIntBits(val);
+        b[startIndex+3] = (byte) ((intBits >> 24) & 0xFF);
+        b[startIndex+2] = (byte) ((intBits >> 16) & 0xFF);
+        b[startIndex+1] = (byte) ((intBits >> 8) & 0xFF);
+        b[startIndex]   = (byte) intBits;
+      }
+      
+      private float bytesToFloat(byte[] b, int startIndex) {
+        int intBits = 0;
+        intBits |= ((b[startIndex+0] & 0xFF) << 0);
+        intBits |= ((b[startIndex+1] & 0xFF) << 8);
+        intBits |= ((b[startIndex+2] & 0xFF) << 16);
+        intBits |= ((b[startIndex+3] & 0xFF) << 24);
+        
+        return Float.intBitsToFloat(intBits);
+      }
+      
+      // New method for loading from a byte array
+      private void load(byte[] b, int startIndex) {
+        imgIndex = ((int)b[startIndex])%numTreeTextures;
+        this.x     = bytesToFloat(b, startIndex+1);
+        this.y     = bytesToFloat(b, startIndex+5);
+        this.z     = bytesToFloat(b, startIndex+9);
+        this.size = bytesToFloat(b, startIndex+13);
+        
         readjustSize();
-        return PRObject;
+        
+        // If the object is below the ground, reset its position.
+        float yy = onSurface(this.x, this.z);
+        if (y > yy+5.) this.y = yy;
       }
       
       
@@ -3117,20 +3166,20 @@ public class PixelRealm extends Screen {
                 this.hi = (float)video.sourceHeight*size;
               }
               
-              float y1 = y-hi;
+              //float y1 = y-hi;
               // There's no y2 huehue.
               
               
               // Half width
-              float hwi = wi/2;
+              //float hwi = wi/2;
               
               // TODO: cache and optimise
-              float sin_d = sin(rot)*(hwi);
-              float cos_d = cos(rot)*(hwi);
-              float x1 = x + sin_d;
-              float z1 = z + cos_d;
-              float x2 = x - sin_d;
-              float z2 = z - cos_d;
+              //float sin_d = sin(rot)*(hwi);
+              //float cos_d = cos(rot)*(hwi);
+              //float x1 = x + sin_d;
+              //float z1 = z + cos_d;
+              //float x2 = x - sin_d;
+              //float z2 = z - cos_d;
               
               
               //displayQuad(this.img.get(), x1, y1, z1, x2, y1+hi, z2);
@@ -4631,8 +4680,12 @@ public class PixelRealm extends Screen {
           // Each object is uniquely identified by its filename/folder name.
           String name = probjjson.getString("filename", "[null]");
           
-          // If the name begins with a "." then it is an abstract object (file that can appear multiple times in one realm)
-          // For now we just have terrain objects (aka trees)
+          // This code below is the old code for loading trees.
+          // Storing trees that way made turf files WAYYYY too big.
+          // It's now stored in a much more compact base64 byte array.
+          // However, there are still loads of realms that have the old
+          // tree data, so we keep the loading code for them and save them in the new
+          // byte array next time we save.
           if (name.length() >= 17 && name.substring(0, 17).equals(".pixelrealm-tree-")) {
             TerrainPRObject tree = new TerrainPRObject();
             tree.load(probjjson);
@@ -4656,6 +4709,19 @@ public class PixelRealm extends Screen {
         //  console.bugWarn(e.getMessage());
         //}
       }
+      
+      // Load trees from the base64 byte array
+      // Older realm files may not have it.
+      if (!jsonFile.isNull("tree_data")) {
+        byte[] decodedBytes = Base64.getDecoder().decode( jsonFile.getString("tree_data").getBytes() );
+        l = decodedBytes.length;
+        // Now create trees!
+        for (int i = 0; i < l; i += 17) {
+          TerrainPRObject tree = new TerrainPRObject();
+          tree.load(decodedBytes, i);
+        }
+      }
+      
       
       
       // For any remaiining items (still in the hashmap because they  are new files that were not
@@ -4759,13 +4825,33 @@ public class PixelRealm extends Screen {
         }
       }
       
+      jsonFile.setJSONArray("pr_objects", objects3d);
+      
+      // Now we save the TerrainPRObjects (trees)
+      // Rather than inefficiently saving each like a file, we instead compact it into a big byte array.
+      // First, count how many TerrainPRObjects there are so we can know the size of the byte array.
+      // Yeah, I know, looping twice over every object. But eventually, this save code is going to be offloaded to a different thread
+      // (or maybe it already is and I forgot to update this comment), so it's ok if it takes some time.
+      int count = 0;
       for (PRObject o : ordering) {
         if (o != null && o instanceof TerrainPRObject) {
-          objects3d.setJSONObject(i++, o.save());
+          count++;
         }
       }
       
-      jsonFile.setJSONArray("pr_objects", objects3d);
+      // Now make byte array and save bytes. Each tree takes 17 bytes.
+      i = 0;
+      byte[] treeByteArray = new byte[count*17];
+      for (PRObject o : ordering) {
+        if (o != null && o instanceof TerrainPRObject) {
+          ((TerrainPRObject)o).saveBytes(treeByteArray, i);
+          i += 17;
+        }
+      }
+      // Now save it in base64 format
+      String treeData = Base64.getEncoder().encodeToString(treeByteArray);
+      jsonFile.setString("tree_data", treeData);
+      
       
       // Save terrain information
       terrain.save(jsonFile);
