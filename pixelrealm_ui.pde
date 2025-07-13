@@ -453,6 +453,14 @@ public class PixelRealmWithUI extends PixelRealm {
         menuShown = false;
       }
       
+      // --- Gardner tool ---
+      if (ui.buttonVary("gardener_1", "new_entry_128", "Gardener")) {
+        currentTool = TOOL_GARDENER;
+        menuShown = false;
+        menu = null;
+        sound.playSound("menu_select");
+      }
+      
       // --- Morpher tool ---
       if (ui.buttonVary("morpher_1", "morpher_tool_128", "Morpher")) {
         if (currRealm.versionCompatibility == 1) {
@@ -1460,6 +1468,9 @@ public class PixelRealmWithUI extends PixelRealm {
         ui.useSpriteSystem(gui);
       }
       menu.display();
+    }
+    else {
+      optionHighlightedItem = null;
     }
   }
 

@@ -58,6 +58,7 @@ public class PixelRealm extends Screen {
   protected final static int TOOL_NORMAL = 1;
   protected final static int TOOL_GRABBER = 2;
   protected final static int TOOL_MORPHER = 3;
+  protected final static int TOOL_GARDENER = 4;
   
   // Morpher
   protected final static int MORPHER_BULGE   = 1;
@@ -153,6 +154,8 @@ public class PixelRealm extends Screen {
   private int slippingJumpsAllowed = 2;
   protected PixelRealmState.PRObject optionHighlightedItem = null;
   protected String cassettePlaying = "";   // Empty string for realm bgm.
+  private float nextRandomTreeSize = 0;
+  private int nextRandomTreeIndex = 0;
   
   private PShader unifiedShader = null;
   private PGL pgl;
@@ -279,6 +282,8 @@ public class PixelRealm extends Screen {
     // TODO: re-add. Or most likely remove it :(
     //setupLegacyPortal();
     
+    nextRandomTreeSize = random(3f, 7f);
+    nextRandomTreeIndex = int(random(0, 9));
     
     // TODO: I'd love to do a performance benchmark based on the number of cores we're using.
     int numCores = Runtime.getRuntime().availableProcessors();
@@ -1330,6 +1335,14 @@ public class PixelRealm extends Screen {
     }
   }
   
+  private void tint(int c) {
+    if (unifiedShader != null) {
+      unifiedShader.set("tintColor", red(c)/255f, green(c)/255f, blue(c)/255f, alpha(c)/255f);
+      unifiedShader.consumeUniforms();
+    }
+  }
+  
+  
   //private void tint(float t) {
   //  if (unifiedShader != null) {
   //    unifiedShader.set("tintColor", t/255f, t/255f, t/255f, 1f);
@@ -1389,6 +1402,7 @@ public class PixelRealm extends Screen {
     private AtomicBoolean pluginCompiled = new AtomicBoolean();
     private boolean showDebugMessageOnce = true;
     public EntryFileObject entryToReload = null;
+    private TerrainPRObject previewTree = null;
     
     public HashMap<Integer, TerrainChunkV2> chunks = new HashMap<Integer, TerrainChunkV2>();
     
@@ -2231,6 +2245,10 @@ public class PixelRealm extends Screen {
         this.hitboxWi = wi*0.25;
       }
       
+      public void setImgIndex(int index) {
+        imgIndex = index%numTreeTextures;
+      }
+      
       public void readjustSize() {
         // Set the size in case there's a realm refresh.
         
@@ -2239,16 +2257,18 @@ public class PixelRealm extends Screen {
       }
       
       public void display() {
+        // TODO: Remove...?
         if (img == null)
           return;
         
+        // TODO: more efficient to move it out of display() and do proper init code.
         if (treeGLElements[imgIndex] == null) {
           treeGLElements[imgIndex] = new GLQuadElement(img, imgIndex);
         }
         
         useEnvironmentShader();
         if (tint != defaultTint) {
-          tint(tint, 255);
+          tint(tint);
         }
         
         billboard(treeGLElements[imgIndex], x, y, z, size);
@@ -2314,6 +2334,12 @@ public class PixelRealm extends Screen {
         // If the object is below the ground, reset its position.
         float yy = onSurface(this.x, this.z);
         if (y > yy+5.) this.y = yy;
+      }
+      
+      public void checkHovering() {
+        // Reset tint
+        this.tint = color(255);
+        super.checkHovering();
       }
       
       
@@ -2753,7 +2779,7 @@ public class PixelRealm extends Screen {
               dontRender = true;
             }
           } else {
-            tint(tint, 255);
+            tint(tint);
           }
         }
         else if (versionCompatibility == 2) {
@@ -3478,7 +3504,7 @@ public class PixelRealm extends Screen {
           
           if (tint != defaultTint) {
             // Tint not for fade, but for portals, highlight etc
-            tint(tint, 255f);
+            tint(tint);
           }
           
           if (element == null || elementRefreshRequired) {
@@ -3535,9 +3561,6 @@ public class PixelRealm extends Screen {
         }
         
         useEnvironmentShader();
-        if (tint != defaultTint) {
-          tint(tint, 255);
-        }
         
         billboard(coinGLElements[aniIndex], x, y, z, size);
       }
@@ -3728,9 +3751,6 @@ public class PixelRealm extends Screen {
         //}
         useEnvironmentShader();
         
-        if (currentTool == TOOL_GRABBER && closestObject == this)
-          tint = color(255, 200, 200);
-        
         if (element == null && img != null) {
           element = new GLQuadElement(img, 0);
         }
@@ -3755,7 +3775,7 @@ public class PixelRealm extends Screen {
               dontRender = true;
             }
           } else {
-            tint(tint, 255);
+            tint(tint);
           }
         }
         else if (versionCompatibility == 2) {
@@ -3766,7 +3786,7 @@ public class PixelRealm extends Screen {
           }
           else if (tint != defaultTint) {
             // Tint not for fade, but for portals, highlight etc
-            tint(tint, 255f);
+            tint(tint);
           }
         }
         
@@ -3801,7 +3821,6 @@ public class PixelRealm extends Screen {
   
         boolean render = preRenderCheck(x, z);
         
-        display.recordRendererTime();
         if (render) {
           scene.pushMatrix();
           
@@ -3818,7 +3837,6 @@ public class PixelRealm extends Screen {
         }
         
         if (versionCompatibility == 1) noTint();
-        display.recordLogicTime();
       }
     }
     // End PRObject classes.
@@ -6436,31 +6454,82 @@ public class PixelRealm extends Screen {
     }
     
     public void runPRObjects() {
+      float SELECT_FAR = 280.;
+      
+      float cursorX = playerX+sin(direction)*SELECT_FAR;
+      float cursorZ = playerZ+cos(direction)*SELECT_FAR;
+      
       // Collision check (for now lets only do it to fileobjects)
       closestVal = Float.MAX_VALUE;
       closestObject = null;
-      for (FileObject f : files) {
-        f.checkHovering();
-        if (currentTool == TOOL_NORMAL && optionHighlightedItem == f) {
-          f.tint = color(255, 200, 200);
+      if (currentTool == TOOL_NORMAL || currentTool == TOOL_GRABBER) {
+        for (FileObject f : files) {
+          f.checkHovering();
+        }
+        
+        // Also check for pocket items
+        for (PRObject f : pocketObjects) {
+          f.checkHovering();
         }
       }
-      // Also check for pocket items
-      for (PRObject f : pocketObjects) {
-        f.checkHovering();
+      else if (currentTool == TOOL_GARDENER) {
+        // Hovering detection for all trees
+        for (PRObject o : ordering) {
+          if (o != null && o instanceof TerrainPRObject && o != previewTree) {
+            // TODO: Hovering detection is potentially expensive.
+            // Perform some sort of very cheap culling action.
+            o.checkHovering();
+          }
+        }
+        
+        // Display tree preview
+        if (previewTree == null) {
+          previewTree = new TerrainPRObject(
+                cursorX,
+                0,
+                cursorZ, 
+                nextRandomTreeSize
+          );
+        }
+        
+        previewTree.tint = color(255, 80);
+        previewTree.x = cursorX;
+        previewTree.y = onSurface(cursorX, cursorZ);
+        previewTree.z = cursorZ;
+      }
+      
+      if (currentTool != TOOL_GARDENER && previewTree != null) {
+        previewTree.y = 999999; // Move out of the player's line of vision.
+      }
+      
+      
+      if (currentTool == TOOL_NORMAL && optionHighlightedItem != null) {
+        optionHighlightedItem.tint = color(255, 200, 200);
+        //console.log("not null");
       }
       
       // Pick up code
       if (closestObject != null) {
-        FileObject p = (FileObject)closestObject;
+        // Highlight it if hovering over it
+        if (currentTool == TOOL_GRABBER || currentTool == TOOL_GARDENER) {
+          closestObject.tint = color(255, 200, 200);
+        }
+        
         if (primaryAction) {
           switch (currentTool) {
-            case TOOL_GRABBER:
-            pickupItem(p);
-            sound.playSound("pickup");
+            case TOOL_GRABBER: {
+              FileObject p = (FileObject)closestObject;
+              pickupItem(p);
+              sound.playSound("pickup");
+            }
             break;
-            case TOOL_NORMAL:
-            p.interationAction();
+            case TOOL_NORMAL: {
+              FileObject p = (FileObject)closestObject;
+              p.interationAction();
+            }
+            break;
+            case TOOL_GARDENER:
+              
             break;
             default:
             break;
@@ -6469,13 +6538,18 @@ public class PixelRealm extends Screen {
         
         if (secondaryAction) {
           switch (currentTool) {
-            case TOOL_NORMAL:
-            // Bring up menu
-            if (p != exitPortal) {
-              optionHighlightedItem = p;
-              promptFileOptions(p);
+            case TOOL_NORMAL: {
+              FileObject p = (FileObject)closestObject;
+              // Bring up menu
+              if (p != exitPortal) {
+                optionHighlightedItem = p;
+                promptFileOptions(p);
+              }
             }
             break;
+            case TOOL_GARDENER: {
+              closestObject.destroy();
+            }
             default:
             break;
           }
@@ -6490,20 +6564,37 @@ public class PixelRealm extends Screen {
         stats.increase("items_plonked_down", 1);
       }
       
+      // Growing trees
+      if (currentTool == TOOL_GARDENER && primaryAction) {
+        //sound.playSound("plonk");
+        stats.increase("trees_grown", 1);
+        
+        
+        TerrainPRObject tree = new TerrainPRObject(
+                cursorX, 
+                onSurface(cursorX, cursorZ),
+                cursorZ, 
+                nextRandomTreeSize
+        );
+        tree.setImgIndex(nextRandomTreeIndex);
+        nextRandomTreeSize = random(3f, 7f);
+        nextRandomTreeIndex = int(random(0, 9));
+        previewTree.setSize(nextRandomTreeSize);
+        previewTree.setImgIndex(nextRandomTreeIndex);
+      }
+      
+      
       // Holding object
       if (currentTool == TOOL_GRABBER) {
         // TODO: Subtools
         if (holdingObject != null) {
-          float SELECT_FAR = 300.;
-          float x = playerX+sin(direction)*SELECT_FAR;
-          float z = playerZ+cos(direction)*SELECT_FAR;
-          holdingObject.x = x;
-          holdingObject.z = z;
+          holdingObject.x = cursorX;
+          holdingObject.z = cursorZ;
           
           // Fade the held object so we can actually see where we're going.
           holdingObject.tint = color(255, 80);
           if (onGround())
-            holdingObject.y = onSurface(x, z);
+            holdingObject.y = onSurface(cursorX, cursorZ);
           else
             holdingObject.y = playerY;
             
