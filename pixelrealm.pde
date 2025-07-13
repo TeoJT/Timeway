@@ -2208,6 +2208,7 @@ public class PixelRealm extends Screen {
     class TerrainPRObject extends PRObject {
       
       private int imgIndex = 0;
+      public  float grow = 1f;
       
       public TerrainPRObject() {
         super();
@@ -2271,7 +2272,12 @@ public class PixelRealm extends Screen {
           tint(tint);
         }
         
-        billboard(treeGLElements[imgIndex], x, y, z, size);
+        if (grow < 0.999) {
+          grow += 0.02*display.getDelta();
+          if (grow > 1.) grow = 1.;
+        }
+        
+        billboard(treeGLElements[imgIndex], x, y, z, size*grow);
         
         if (tint != defaultTint) noTint();
       }
@@ -6577,6 +6583,8 @@ public class PixelRealm extends Screen {
                 nextRandomTreeSize
         );
         tree.setImgIndex(nextRandomTreeIndex);
+        tree.grow = 0f;
+        
         nextRandomTreeSize = random(3f, 7f);
         nextRandomTreeIndex = int(random(0, 9));
         previewTree.setSize(nextRandomTreeSize);
