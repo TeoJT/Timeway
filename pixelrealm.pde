@@ -119,8 +119,6 @@ public class PixelRealm extends Screen {
   
   // --- Legacy backward-compatibility stuff & easter eggs ---
   protected float height = HEIGHT-myUpperBarWeight-myLowerBarWeight;
-  private PGraphics legacy_portal;
-  private boolean legacy_portalEasteregg = false;
   private float coinCounterBounce = 0.;
   
   public PImage REALM_GRASS_DEFAULT_LEGACY;
@@ -2215,7 +2213,7 @@ public class PixelRealm extends Screen {
         this.img = img_tree;
         // Small hitbox
         this.hitboxWi = wi*0.25;
-        imgIndex = int(random(0, 9))%numTreeTextures;
+        imgIndex = int(random(0, 9));
         readjustSize();
       }
       
@@ -2227,7 +2225,7 @@ public class PixelRealm extends Screen {
         if (legacy_autogenStuff != null)
           legacy_autogenStuff.add(id);
           
-        imgIndex = int(random(0, 9))%numTreeTextures;
+        imgIndex = int(random(0, 9));
         
         // Small hitbox
         this.hitboxWi = wi*0.25;
@@ -2240,31 +2238,33 @@ public class PixelRealm extends Screen {
         readjustSize();
         
         // Our RealmImage class allows us to go as high as we want :)
-        imgIndex = int(random(0, 9))%numTreeTextures;
+        imgIndex = int(random(0, 9));
         
         // Small hitbox
         this.hitboxWi = wi*0.25;
       }
       
       public void setImgIndex(int index) {
-        imgIndex = index%numTreeTextures;
+        imgIndex = index;
       }
       
       public void readjustSize() {
         // Set the size in case there's a realm refresh.
         
-        this.wi = img.getWidth(imgIndex)*size;
-        this.hi = img.getHeight(imgIndex)*size;
+        this.wi = img.getWidth(imgIndex%numTreeTextures)*size;
+        this.hi = img.getHeight(imgIndex%numTreeTextures)*size;
       }
       
       public void display() {
         // TODO: Remove...?
         if (img == null)
           return;
+          
+        int i = imgIndex%numTreeTextures;
         
         // TODO: more efficient to move it out of display() and do proper init code.
-        if (treeGLElements[imgIndex] == null) {
-          treeGLElements[imgIndex] = new GLQuadElement(img, imgIndex);
+        if (treeGLElements[i] == null) {
+          treeGLElements[i] = new GLQuadElement(img, i);
         }
         
         useEnvironmentShader();
@@ -2277,7 +2277,7 @@ public class PixelRealm extends Screen {
           if (grow > 1.) grow = 1.;
         }
         
-        billboard(treeGLElements[imgIndex], x, y, z, size*grow);
+        billboard(treeGLElements[i], x, y, z, size*grow);
         
         if (tint != defaultTint) noTint();
       }
@@ -2329,7 +2329,7 @@ public class PixelRealm extends Screen {
       
       // New method for loading from a byte array
       private void load(byte[] b, int startIndex) {
-        imgIndex = ((int)b[startIndex])%numTreeTextures;
+        imgIndex = ((int)b[startIndex]);
         this.x     = bytesToFloat(b, startIndex+1);
         this.y     = bytesToFloat(b, startIndex+5);
         this.z     = bytesToFloat(b, startIndex+9);
@@ -2339,7 +2339,7 @@ public class PixelRealm extends Screen {
         
         // If the object is below the ground, reset its position.
         float yy = onSurface(this.x, this.z);
-        if (y > yy+5.) this.y = yy;
+        if (y > yy+30.) this.y = yy;
       }
       
       public void checkHovering() {
@@ -2367,7 +2367,7 @@ public class PixelRealm extends Screen {
         }
         
         //console.log(".pixelrealm-tree-"+int(name.charAt(17)-48));
-        imgIndex = int(name.charAt(17)-48)%numTreeTextures;
+        imgIndex = int(name.charAt(17)-48);
         
         readjustSize();
         
@@ -2375,6 +2375,7 @@ public class PixelRealm extends Screen {
         if (y > yy+5.) this.y = yy;
       }
     }
+    
   
   
     abstract class FileObject extends PRObject {
@@ -2479,8 +2480,7 @@ public class PixelRealm extends Screen {
           lastPlacedPosZ = this.z;
         }
   
-        float yy = 0;
-        if (json.isNull("y")) yy = onSurface(this.x, this.z);
+        float yy = onSurface(this.x, this.z);
         this.y = json.getFloat("y", yy);
         
         //console.log("x: "+x+" y: "+y+" z: "+z);
@@ -3454,7 +3454,6 @@ public class PixelRealm extends Screen {
         
         // Set hitbox size to small
         this.hitboxWi = wi*0.5;
-        if (legacy_portalEasteregg) setSize(0.8);
       }
       
       public void requestRealmSky(String d) {
@@ -3930,6 +3929,7 @@ public class PixelRealm extends Screen {
       return getplayerYOnQuad(pv1, pv2, pv3, pv4, x, z);
     }
     
+    
     // Similar to plantDown but guarentees than the object in question will not be levitating on a sloped surface.
     //private float plantDown(float x, float z) {
     //  if (terrain == null) {
@@ -4044,6 +4044,7 @@ public class PixelRealm extends Screen {
       
       if (ch != null) {
         
+        
         //if (debug) {
         //  console.log("B "+indicies[0]+" "+indicies[1]);
         //  console.log("A "+int(x)+" "+int(z));
@@ -4078,23 +4079,16 @@ public class PixelRealm extends Screen {
     int glowingtilex = 0;
     int glowingtiley = 0;
     private float calcTileY(float x, float z) {
-      
-      
       if (versionCompatibility == 1) return terrain.getPointY(x,z);
       else {
         // Skip all that if we just wanna modify terrain
-        if (modifyTerrain) return terrain.getPointY(x,z);
+        if (modifyTerrain) {
+          return terrain.getPointY(x,z);
+        }
         
         PVector v = getTileUsingIndicies(x, z);
         
         return v.y;
-        // return cached tile.
-        //if (v != null) {
-        //}
-        //// If the chunk has not been cached or we want the terrain to change real-time...
-        //else {
-        //  return terrain.getPointY(x,z);
-        //}
       }
     }
     
@@ -4858,7 +4852,7 @@ public class PixelRealm extends Screen {
       // (or maybe it already is and I forgot to update this comment), so it's ok if it takes some time.
       int count = 0;
       for (PRObject o : ordering) {
-        if (o != null && o instanceof TerrainPRObject) {
+        if (o != null && o != previewTree && o instanceof TerrainPRObject) {
           count++;
         }
       }
@@ -4867,7 +4861,7 @@ public class PixelRealm extends Screen {
       i = 0;
       byte[] treeByteArray = new byte[count*17];
       for (PRObject o : ordering) {
-        if (o != null && o instanceof TerrainPRObject) {
+        if (o != null && o != previewTree && o instanceof TerrainPRObject) {
           ((TerrainPRObject)o).saveBytes(treeByteArray, i);
           i += 17;
         }
@@ -6025,7 +6019,6 @@ public class PixelRealm extends Screen {
     private static final int MODE_PORTAL = 3;
     private static final int MODE_WATER = 4;
     private static final int MODE_TEST = 5;
-    private static final int MODE_TEXT = 6;
     
     private PShader environmentShader() {
       float x = (float)lightDirectionsX[lightDirectionSlider.valInt%16];
@@ -6572,7 +6565,7 @@ public class PixelRealm extends Screen {
       
       // Growing trees
       if (currentTool == TOOL_GARDENER && primaryAction) {
-        //sound.playSound("plonk");
+        sound.playSound("tree_grow");
         stats.increase("trees_grown", 1);
         
         
@@ -6729,6 +6722,7 @@ public class PixelRealm extends Screen {
       display.getShader("pixelrealm_unified").unbind();
       scene.endPGL();
       pgl = null;
+      if (closestObject != null) closestObject.tint = defaultTint; // Bug fix for switching tool while hovering.
     }
     
     public void tp(float x, float y, float z) {
@@ -7235,7 +7229,6 @@ public class PixelRealm extends Screen {
     }
     
     //This function assumes you have not called portal.beginDraw().
-    if (legacy_portalEasteregg) evolvingGatewayRenderPortal();
     
     engine.timestamp("start");
     
@@ -7620,29 +7613,6 @@ public class PixelRealm extends Screen {
     //  else  console.log("GUI is no longer interactable.");
     //  return true;
     //} 
-    else if (command.equals("/evolvinggateway")) {
-      if (legacy_portalEasteregg) {
-        sharedResources.set("legacy_evolvinggateway_easteregg", false);
-        legacy_portalEasteregg = false;
-        console.log("Legacy Evolving Gateway style portals disabled.");
-        
-        // Resize all the portals to the modern size.
-        for (PixelRealmState.FileObject o : currRealm.files) {if (o != null) {if (o instanceof PixelRealmState.DirectoryPortal) {
-              o.setSize(0.8);
-        }}}
-      }
-      else {
-        sharedResources.set("legacy_evolvinggateway_easteregg", true);
-        legacy_portalEasteregg = true;
-        console.log("Welcome back to Evolving Gateway!");
-        
-        // Resize all the portals to the legacy size.
-        for (PixelRealmState.FileObject o : currRealm.files) {if (o != null) {if (o instanceof PixelRealmState.DirectoryPortal) {
-              o.setSize(1.);
-        }}}
-      }
-      return true;
-    }
     else if (engine.commandEquals(command, "/tp")) {
       String[] args = getArgs(command);
       int i = 0;
@@ -7657,6 +7627,7 @@ public class PixelRealm extends Screen {
 
       return true;
     }
+    // TODO: Add new realm generators and remove this
     else if (engine.commandEquals(command, "/docoolthing")) {
       for (PixelRealmState.TerrainChunkV2 chunk : currRealm.chunks.values()) {
         console.log("aa");
@@ -7701,14 +7672,6 @@ public class PixelRealm extends Screen {
       
       console.log("FOV updated.");
       
-      return true;
-    }
-    else if (engine.commandEquals(command, "/hiresmode") || engine.commandEquals(command, "/hires")) {
-      DISPLAY_SCALE = 2;
-      scene = createGraphics((int(WIDTH/DISPLAY_SCALE)), int(this.height/DISPLAY_SCALE), P3D);
-      ((PGraphicsOpenGL)scene).textureSampling(2);     
-      console.log("High res mode enabled.");
-      console.log("Please restart to switch back");
       return true;
     }
     else if (engine.commandEquals(command, "/puthere")) {
@@ -7764,19 +7727,6 @@ public class PixelRealm extends Screen {
   
   
   
-  
-  
-  // Easter egg code
-  final int portPartNum = 90;
-  float portPartX[] = new float[portPartNum];
-  float portPartY[] = new float[portPartNum];
-  float portPartVX[] = new float[portPartNum];
-  float portPartVY[] = new float[portPartNum];
-  float portPartTick[] = new float[portPartNum];
-  void setupLegacyPortal() {legacy_portal = createGraphics(128, 128+96, P2D); ((PGraphicsOpenGL)legacy_portal).textureSampling(2); legacy_portal.hint(DISABLE_OPENGL_ERRORS);for (int i = 0; i < portPartNum; i++) {portPartX[i] = -999;}}
-  public void evolvingGatewayRenderPortal() {     legacy_portal.beginDraw(); legacy_portal.background(color(0, 0, 255), 0); legacy_portal.blendMode(ADD);     float w = 48, h = 48;     int n = 1;     switch (engine.power.getPowerMode()) {     case HIGH:       n = 1;       break;     case NORMAL:       n = 2;       break;     case SLEEPY:       n = 4;       break;     case MINIMAL:       n = 1;       break;     }      for (int j = 0; j < n; j++) {       if (int(random(0, 2)) == 0) {         int i = 0;
-boolean finding = true;         while (finding) {           if (int(portPartX[i]) == -999) {             finding = false;             portPartVX[i] = random(-0.5, 0.5);             portPartVY[i] = random(-0.2, 0.2);              portPartX[i] = legacy_portal.width/2;             portPartY[i] = random(h, legacy_portal.height-60);              portPartTick[i] = 255;
-  }            i++;           if (i >= portPartNum) {             finding = false;           }         }       }               for (int i = 0; i < portPartNum; i++) {         if (int(portPartX[i]) != -999) {           portPartVX[i] *= 0.99;           portPartVY[i] *= 0.99;            portPartX[i] += portPartVX[i];           portPartY[i] += portPartVY[i];              portPartTick[i] -= 2;            if (portPartTick[i] <= 0) {             portPartX[i] = -999;           }    }       }     }      for (int i = 0; i < portPartNum; i++) {       if (int(portPartX[i]) != -999) {         legacy_portal.tint(color(128, 128, 255), portPartTick[i]);            legacy_portal.image(display.systemImages.get("glow"), portPartX[i]-(w/2), portPartY[i]+(h/2), w, h);       }     }      legacy_portal.blendMode(NORMAL);     legacy_portal.endDraw();   }
 }
 
 

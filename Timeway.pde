@@ -78,6 +78,7 @@ void settings() {
     //size(900, 1800, P2D);
     //size(750, 1200, P2D);
     smooth(1);
+    pixelDensity(1);
     
     
     // Ugly, I know. But we're at the lowest level point in the program, so ain't

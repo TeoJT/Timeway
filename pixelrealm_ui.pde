@@ -454,7 +454,7 @@ public class PixelRealmWithUI extends PixelRealm {
       }
       
       // --- Gardner tool ---
-      if (ui.buttonVary("gardener_1", "new_entry_128", "Gardener")) {
+      if (ui.buttonVary("gardener_1", "gardener_tool_128", "Gardener")) {
         currentTool = TOOL_GARDENER;
         menuShown = false;
         menu = null;

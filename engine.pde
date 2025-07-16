@@ -1012,12 +1012,9 @@ public class TWEngine {
     private float selectBorderTime = 0.;
     public boolean showCPUBenchmarks = false;
     public PGraphics currentPG;
-    private IntBuffer clearList;
-    private int clearListIndex = 0;
     public boolean phoneMode = false;
     
     public final float BASE_FRAMERATE = 60.;
-    public final int CLEARLIST_SIZE = 4096;
     private float delta = 0.;
     private float forcedDelta = -1f;
     public boolean wireframe;
@@ -1034,8 +1031,6 @@ public class TWEngine {
     public int IDLE_TIME   = 3;
     
     public int timeMode = LOGIC_TIME;
-    
-    private PGL pgl;
     
     class PShaderEntry {
       public PShaderEntry(PShader s, String p) {
@@ -1130,8 +1125,6 @@ public class TWEngine {
         
         console.info("init: width/height set to "+str(WIDTH)+", "+str(HEIGHT));
         
-        clearList = IntBuffer.allocate(CLEARLIST_SIZE);
-    
         generateErrorImg();
         generateErrorShader();
         currentPG = g;
@@ -1670,19 +1663,6 @@ public class TWEngine {
     }
     
     public void update() {
-      
-      if (clearListIndex > 0) {
-        pgl = app.beginPGL();
-        clearList.rewind();
-        pgl.deleteTextures(clearListIndex, clearList);
-        clearList.rewind();
-        app.endPGL();
-        clearListIndex = 0;
-      }
-      
-      
-      
-      
       totalTimeMillis = thisFrameMillis-lastFrameMillis;
       lastFrameMillis = thisFrameMillis;
       thisFrameMillis = app.millis();
