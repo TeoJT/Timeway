@@ -29,6 +29,7 @@ public class PixelRealm extends Screen {
   final static int    CHUNK_SIZE = 8;
   final static int    MAX_CHUNKS_XZ = 32768;
   final static int    MAX_VIDEOS_ALLOWED = 0;
+  final static int    NUM_POOF_FRAMES = 9;
   
   // Movement/player constants.
   final static float BOB_SPEED = 0.4;
@@ -93,6 +94,9 @@ public class PixelRealm extends Screen {
   private PImage REALM_WATER_DEFAULT;
   private PShape waterObject;
   private RealmTextureClassic IMG_COIN;
+  private RealmTextureUV IMG_POOF;
+  private float IMG_POOF_HEIGHT;
+  private GLQuadElement[] poofElements = new GLQuadElement[NUM_POOF_FRAMES];
   
   private PShape CASSETTE_OBJ;
   
@@ -258,6 +262,11 @@ public class PixelRealm extends Screen {
     
     String[] COINS = { "coin_0", "coin_1", "coin_2", "coin_3", "coin_4", "coin_5"};
     IMG_COIN = new RealmTextureClassic(COINS);
+    
+    String[] POOF = { "poof-1", "poof-2", "poof-3", "poof-4", "poof-5", "poof-6", "poof-7", "poof-8", "poof-9" };
+    IMG_POOF = new RealmTextureUV(POOF);
+    IMG_POOF_HEIGHT = int(display.systemImages.get(POOF[0]).height);
+    
     
     // --- Sounds and music ---
     sound.loopSound("portal");
@@ -3586,6 +3595,38 @@ public class PixelRealm extends Screen {
     }
     
     
+    class PRPoof extends PRObject {
+      private float animation = 0f;
+      
+      public PRPoof(float x, float y, float z, float size) {
+        super(x,y,z);
+        this.img = IMG_POOF;  // Coins are secretly stored in img_tree as an optimisation so we don't need to switch textures so frequently.
+        setSize(size);
+        this.hitboxWi = wi;
+      }
+      
+      public void run() {
+        final float ANIMATION_SPEED = 0.3f;
+        animation += display.getDelta() * ANIMATION_SPEED;
+        if ((int)animation >= NUM_POOF_FRAMES) {
+          destroy();
+        }
+      }
+      
+      public void display() {
+        int index = int(animation);
+        if (index >= NUM_POOF_FRAMES) return;
+        if (poofElements[index] == null) {
+          poofElements[index] = new GLQuadElement(img, index);
+        }
+        
+        useEnvironmentShader();
+        
+        billboard(poofElements[index], x, y, z, size);
+      }
+    }
+    
+    
     
     
     
@@ -3870,8 +3911,30 @@ public class PixelRealm extends Screen {
     
     
     // --- State-dependant functions that our realm (And PRObjects) use ---
-    boolean onGround() {
+    private boolean onGround() {
       return (playerY >= onSurface(playerX, playerZ)-1.);
+    }
+    
+    protected void poofAt(PRObject o) {
+      
+        //  (osize*ohi)/phi=psize
+        float ohi = 0f;
+        if (o instanceof TerrainPRObject) {
+          ohi = (float)o.img.getHeight(((TerrainPRObject)o).imgIndex%numTreeTextures);
+        }
+        else if (o instanceof DirectoryPortal || o instanceof ShortcutPortal) {
+          ohi = 221f;
+        }
+        else {
+          ohi = (float)o.img.getHeight();
+        }
+        
+        float psize = (o.size*ohi)/IMG_POOF_HEIGHT;
+        
+        if (psize > 6f) psize = 1f; // Some PRObjects are stupidly tall. Let's just have a small poof so the poof is still visible.
+        
+        @SuppressWarnings("unused")
+        PRPoof poof = new PRPoof(o.x, o.y, o.z, psize);
     }
     
     private boolean outOfBounds(float x, float z) {
@@ -6547,7 +6610,9 @@ public class PixelRealm extends Screen {
             }
             break;
             case TOOL_GARDENER: {
+              poofAt(closestObject);
               closestObject.destroy();
+              sound.playSound("chop", random(0.95, 1.4));
             }
             default:
             break;

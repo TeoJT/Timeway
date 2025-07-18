@@ -455,16 +455,21 @@ public class PixelRealmWithUI extends PixelRealm {
       
       // --- Gardner tool ---
       if (ui.buttonVary("gardener_1", "gardener_tool_128", "Gardener")) {
-        currentTool = TOOL_GARDENER;
-        menuShown = false;
-        menu = null;
-        sound.playSound("menu_select");
+        if (currRealm.versionCompatibility == 1) {
+          menu = new DialogMenu("Can't use morpher", "back-newrealm", "This realm uses an older version and you can't use the gardener tool here. Please upgrade by selecting \"Terrain\" from the menu to use this tool.");
+        }
+        else {
+          currentTool = TOOL_GARDENER;
+          menuShown = false;
+          menu = null;
+          sound.playSound("menu_select");
+        }
       }
       
       // --- Morpher tool ---
       if (ui.buttonVary("morpher_1", "morpher_tool_128", "Morpher")) {
         if (currRealm.versionCompatibility == 1) {
-          menu = new DialogMenu("Can't use morpher", "back-newrealm", "You can't use the morpher tool in the older 1.x versions. Please upgrade realm via the terraformer to use this tool.");
+          menu = new DialogMenu("Can't use morpher", "back-newrealm", "This realm uses an older version and you can't use the morpher tool here. Please upgrade by selecting \"Terrain\" from the menu to use this tool.");
         }
         else {
           currentTool = TOOL_MORPHER;
@@ -531,7 +536,9 @@ public class PixelRealmWithUI extends PixelRealm {
         }
         
         if (file.recycle(probject.dir)) {
+          currRealm.poofAt(probject);
           probject.destroy();
+          sound.playSound("poof");
           console.log(filename+" moved to recycle bin.");
         }
         else {
@@ -650,7 +657,7 @@ public class PixelRealmWithUI extends PixelRealm {
       }
       
       if (this.probject instanceof PixelRealmState.EntryFileObject) {
-        if (ui.buttonVary("op-openreadonly", "cuber_tool_128", "Read only")) {
+        if (ui.buttonVary("op-openreadonly", "lock_128", "Read only")) {
           sound.playSound("menu_select");
           timewayEngine.file.openEntryReadonly(this.probject.dir);
           closeMenu();
