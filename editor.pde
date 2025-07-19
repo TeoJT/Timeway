@@ -1192,7 +1192,7 @@ public class Editor extends Screen {
           obj.setInt("y", int(this.sprite.getY()));
           obj.setFloat("size", this.fontSize);
           obj.setString("text", this.text);
-          obj.setInt("color", this.textColor);
+          obj.setString("color_hex", hex(this.textColor));
         }
 
         public void update() {
@@ -1275,7 +1275,7 @@ public class Editor extends Screen {
         }
         
         public PImage getImage() {
-          return display.systemImages.get(this.imageName);
+          return display.getImg(this.imageName);
         }
         
         public void display() {
@@ -1911,7 +1911,7 @@ public class Editor extends Screen {
       }
       else {
         console.bugWarn("getSoftwareRenderedCanvas(): useSoftwareRendering is false.");
-        return display.systemImages.get("white");
+        return display.getImg("white");
       }
     }
 
@@ -2119,7 +2119,12 @@ public class Editor extends Screen {
         t.sprite.name = getJSONArrayString(i, "ID", t.id);
         t.text = getJSONArrayString(i, "text", "");
         t.fontSize = getJSONArrayFloat(i, "size", 12.);
-        t.textColor = getJSONArrayInt(i, "color", color(255, 255, 255));
+        
+        // We now read color in hexadecimal format.
+        // But before, there were loads of entries that read text in decimal format.
+        // So: read old decimal format. If there's none, read (new) hexadecimal format. 
+        // And if there's still none, default to white.
+        t.textColor = getJSONArrayInt(i, "color", unhex(getJSONArrayString(i, "color_hex", "FFFFFFFF")));
         t.updateDimensions();
     }
     private TextPlaceable readTextPlaceable(int i) {
@@ -3487,7 +3492,7 @@ public class SettingsScreen extends ReadOnlyEditor {
       mockScene.noStroke();
       mockScene.hint(DISABLE_DEPTH_TEST);
       mockScene.perspective(PI/3.0, (float)mockScene.width/mockScene.height, 10., 1000000.);
-      mockScene.image(display.systemImages.get("pixelrealm-sky-legacy"), 0, 0, mockScene.width, mockScene.height);
+      mockScene.image(display.getImg("pixelrealm-sky-legacy"), 0, 0, mockScene.width, mockScene.height);
       mockScene.flush();
       mockScene.hint(ENABLE_DEPTH_TEST);
       
@@ -3526,7 +3531,7 @@ public class SettingsScreen extends ReadOnlyEditor {
             mockScene.beginShape();
             mockScene.textureMode(NORMAL);
             mockScene.textureWrap(REPEAT);
-            mockScene.texture(display.systemImages.get("pixelrealm-grass-legacy"));
+            mockScene.texture(display.getImg("pixelrealm-grass-legacy"));
             
             PVector v1 = new PVector((tilex-1.)*groundSize, 0f, (tilez-1.)*groundSize);          // Left, top
             PVector v2 = new PVector((tilex)*groundSize, 0f,  (tilez-1.)*groundSize);          // Right, top
@@ -3555,7 +3560,7 @@ public class SettingsScreen extends ReadOnlyEditor {
     
     private void renderObjects() {
       mockScene.beginShape(QUADS);
-      mockScene.texture(display.systemImages.get("pixelrealm-terrain_object-legacy"));
+      mockScene.texture(display.getImg("pixelrealm-terrain_object-legacy"));
       //mockScene.fill(255);
       mockScene.pushMatrix();
       //mockScene.translate(-input.mouseX(), 0f, -input.mouseY());
@@ -3634,7 +3639,7 @@ public class SettingsScreen extends ReadOnlyEditor {
       
       display.shader(mockScene, "portal_plus", "u_time", display.getTimeSecondsLoop(), "u_dir", -direction/(PI*2));
       mockScene.beginShape(QUADS);
-      mockScene.texture(display.systemImages.get("white"));
+      mockScene.texture(display.getImg("white"));
       mockScene.vertex(-152.54541, -224.0, 391.89288, 0.999, 0.0);
       mockScene.vertex(-24.54541, -224.0, 391.89288, 0.0, 0.0);
       mockScene.vertex(-24.54541, 0.0, 391.89288, 0.0, 0.999);
@@ -3644,7 +3649,7 @@ public class SettingsScreen extends ReadOnlyEditor {
       
       mockScene.resetShader();
       mockScene.beginShape(QUADS);
-      mockScene.texture(display.systemImages.get("pixelrealm-terrain_object-legacy"));
+      mockScene.texture(display.getImg("pixelrealm-terrain_object-legacy"));
       mockScene.tint(255, 255);
       mockScene.vertex(-324.22778, -220.15033, -224.96893, 0.999, 0.0);
       mockScene.vertex(-94.07739, -220.15033, -224.96893, 0.0, 0.0);

@@ -218,12 +218,10 @@ public class PixelRealm extends Screen {
     super(engine);
     
     // --- Load default assets ---
-    // TODO (eventually): load screen's assets, not everything from the loading screen (even tho that would be a minor optimisation)
-    // (get rid of the . at the start cus hidden files are no good)
-    REALM_SKY_DEFAULT = display.systemImages.get("pixelrealm-sky");
-    REALM_TREE_DEFAULT = display.systemImages.get("pixelrealm-terrain_object");
-    REALM_GRASS_DEFAULT = display.systemImages.get("pixelrealm-grass");
-    REALM_WATER_DEFAULT = display.systemImages.get("water");
+    REALM_SKY_DEFAULT = display.getImg("pixelrealm-sky");
+    REALM_TREE_DEFAULT = display.getImg("pixelrealm-terrain_object");
+    REALM_GRASS_DEFAULT = display.getImg("pixelrealm-grass");
+    REALM_WATER_DEFAULT = display.getImg("water");
     
     // Create PShape for the water.
     float areaSize = 2000f;
@@ -256,16 +254,16 @@ public class PixelRealm extends Screen {
     // Prepare other default objects.
     CASSETTE_OBJ = app.loadShape(engine.APPPATH+"engine/other/cassette.obj");
     
-    REALM_SKY_DEFAULT_LEGACY = display.systemImages.get("pixelrealm-sky-legacy");
-    REALM_TREE_DEFAULT_LEGACY = display.systemImages.get("pixelrealm-terrain_object-legacy");
-    REALM_GRASS_DEFAULT_LEGACY = display.systemImages.get("pixelrealm-grass-legacy");
+    REALM_SKY_DEFAULT_LEGACY = display.getImg("pixelrealm-sky-legacy");
+    REALM_TREE_DEFAULT_LEGACY = display.getImg("pixelrealm-terrain_object-legacy");
+    REALM_GRASS_DEFAULT_LEGACY = display.getImg("pixelrealm-grass-legacy");
     
     String[] COINS = { "coin_0", "coin_1", "coin_2", "coin_3", "coin_4", "coin_5"};
     IMG_COIN = new RealmTextureClassic(COINS);
     
     String[] POOF = { "poof-1", "poof-2", "poof-3", "poof-4", "poof-5", "poof-6", "poof-7", "poof-8", "poof-9" };
     IMG_POOF = new RealmTextureUV(POOF);
-    IMG_POOF_HEIGHT = int(display.systemImages.get(POOF[0]).height);
+    IMG_POOF_HEIGHT = int(display.getImg(POOF[0]).height);
     
     
     // --- Sounds and music ---
@@ -359,7 +357,7 @@ public class PixelRealm extends Screen {
       texH[0] = 1f;
       
       if (img == null) {
-        singleImg = display.systemImages.get("white");
+        singleImg = display.getImg("white");
         widths[0] = 256;
         heights[0] = 256;
       }
@@ -433,18 +431,18 @@ public class PixelRealm extends Screen {
         PImage[] aniImg = new PImage[imgs.length];
         int i = 0;
         for (String s : imgs) {
-          aniImg[i++] = display.systemImages.get(s);
+          aniImg[i++] = display.getImg(s);
         }
         set(aniImg);
       }
       else {
-        set(display.systemImages.get("white"));
+        set(display.getImg("white"));
       }
     }
     
     
     public RealmTextureUV(String imgName) {
-      set(display.systemImages.get(imgName));
+      set(display.getImg(imgName));
       
     }
     
@@ -541,7 +539,7 @@ public class PixelRealm extends Screen {
     public void set(PImage img) {
       if (img == null) {
         //console.bugWarn("set: passing a null image");
-        singleImg = display.systemImages.get("white");
+        singleImg = display.getImg("white");
         width = singleImg.width;
         height = singleImg.height;
         return;
@@ -557,7 +555,7 @@ public class PixelRealm extends Screen {
     public void set(PImage[] imgs) {
       if (imgs.length == 0) {
         console.bugWarn("set PImage[]: passing an empty list");
-        singleImg = display.systemImages.get("white");
+        singleImg = display.getImg("white");
         width = singleImg.width;
         height = singleImg.height;
         return;
@@ -583,7 +581,7 @@ public class PixelRealm extends Screen {
     public void set(ArrayList<PImage> imgs) {
       if (imgs.size() == 0) {
         console.bugWarn("set ArrayList: passing an empty list");
-        singleImg = display.systemImages.get("white");
+        singleImg = display.getImg("white");
         return;
       }
       else if (imgs.size() == 1) {
@@ -607,11 +605,11 @@ public class PixelRealm extends Screen {
     public void set(String[] imgs) {
       if (imgs.length == 0) {
         console.bugWarn("set String[]: passing an empty list");
-        singleImg = display.systemImages.get("white");
+        singleImg = display.getImg("white");
         return;
       }
       else if (imgs.length == 1) {
-        singleImg = display.systemImages.get(imgs[0]);
+        singleImg = display.getImg(imgs[0]);
         width = singleImg.width;
         height = singleImg.height;
         return;
@@ -620,7 +618,7 @@ public class PixelRealm extends Screen {
       aniImg = new PImage[imgs.length];
       int i = 0;
       for (String s : imgs) {
-        aniImg[i++] = display.systemImages.get(s);
+        aniImg[i++] = display.getImg(s);
       }
       width = aniImg[0].width;
       height = aniImg[0].height;
@@ -628,7 +626,7 @@ public class PixelRealm extends Screen {
     
     
     public RealmTextureClassic(String imgName) {
-      singleImg = display.systemImages.get(imgName);
+      singleImg = display.getImg(imgName);
     }
     
     public int length() {
@@ -2412,7 +2410,7 @@ public class PixelRealm extends Screen {
         dir = dir.replace('\\', '/');
         this.dir = dir;
         this.filename = file.getFilename(dir);
-        display.systemImages.get(file.extIcon(this.filename));
+        display.getImg(file.extIcon(this.filename));
       }
   
       public void display() {
@@ -2884,7 +2882,7 @@ public class PixelRealm extends Screen {
           loadFlag = true;
           
           // TODO: loading entry (grey) texture.
-          img = new RealmTextureUV(display.systemImages.get("blank_entry"));
+          img = new RealmTextureUV(display.getImg("blank_entry"));
           setSize(0.5);
         }
       }
@@ -3176,7 +3174,7 @@ public class PixelRealm extends Screen {
           movieEnabled = true;
         }
         else {
-          this.img = new RealmTextureUV(display.systemImages.get("video_nothumb"));
+          this.img = new RealmTextureUV(display.getImg("video_nothumb"));
           movieEnabled = false;
         }
         totalVideosLoaded++;
@@ -3419,6 +3417,10 @@ public class PixelRealm extends Screen {
           sound.playSound("shift");
           //prevRealm = currRealm;
           stats.increase("shortcut_portals_entered", 1);
+          
+          if (shortcutName.equals("neon_2222")) {
+            requestScreen(new WorldLegacy(engine));
+          }
           gotoRealm(this.shortcutDir);
         }
       }
@@ -4321,7 +4323,7 @@ public class PixelRealm extends Screen {
         switch (type) {
         case FILE_TYPE_UNKNOWN:
           fileobject = new UnknownTypeFileObject(path);
-          fileobject.img = new RealmTextureUV(engine.display.systemImages.get(file.typeToIco(type)));
+          fileobject.img = new RealmTextureUV(display.getImg(file.typeToIco(type)));
           fileobject.setSize(0.5);
           // NOTE: Put back hitbox size in case it becomes important later
           break;
@@ -4349,7 +4351,7 @@ public class PixelRealm extends Screen {
           break;
         default:
           fileobject = new UnknownTypeFileObject(path);
-          fileobject.img = new RealmTextureUV(display.systemImages.get(file.typeToIco(type)));
+          fileobject.img = new RealmTextureUV(display.getImg(file.typeToIco(type)));
           fileobject.setSize(0.5);
           // NOTE: Put back hitbox size in case it becomes important later
           break;
@@ -4534,8 +4536,9 @@ public class PixelRealm extends Screen {
         version = jsonFile.getString("compatibility_version", "");
         if (version.equals("1.0") || version.equals("1.1")) {
           versionCompatibility = 1;
-          // While we're here, make sure we're not in the morpher tool
-          if (currentTool == TOOL_MORPHER) currentTool = TOOL_NORMAL;
+          // While we're here, make sure we're not in the gardener morpher tool
+          if (currentTool == TOOL_GARDENER) currentTool = TOOL_NORMAL;
+          else if (currentTool == TOOL_MORPHER) currentTool = TOOL_NORMAL;
         }
         else if (version.equals("2.0") || version.equals("2.1")) {
           versionCompatibility = 2;
@@ -5209,12 +5212,12 @@ public class PixelRealm extends Screen {
         i++;
       }
       
-      imgs.add(display.systemImages.get("coin_0"));
-      imgs.add(display.systemImages.get("coin_1"));
-      imgs.add(display.systemImages.get("coin_2"));
-      imgs.add(display.systemImages.get("coin_3"));
-      imgs.add(display.systemImages.get("coin_4"));
-      imgs.add(display.systemImages.get("coin_5"));
+      imgs.add(display.getImg("coin_0"));
+      imgs.add(display.getImg("coin_1"));
+      imgs.add(display.getImg("coin_2"));
+      imgs.add(display.getImg("coin_3"));
+      imgs.add(display.getImg("coin_4"));
+      imgs.add(display.getImg("coin_5"));
   
       // New array and plonk that all in there.
       img_tree = new RealmTextureUV(imgs);
@@ -5706,10 +5709,10 @@ public class PixelRealm extends Screen {
           
           // Prepare the texture depending on subtool
           if (subTool == MORPHER_BULGE) {
-            scene.texture(display.systemImages.get("morpher_circle_bulge"));
+            scene.texture(display.getImg("morpher_circle_bulge"));
           }
           else if (subTool == MORPHER_FLAT) {
-            scene.texture(display.systemImages.get("morpher_circle_flat"));
+            scene.texture(display.getImg("morpher_circle_flat"));
           }
           
           // Now, go through a grid, getting y points on the terrain, and place a nice
@@ -7900,17 +7903,21 @@ class WorldLegacy extends Screen {
     return lerp(y1, y2, i);
   } 
   public void content() { 
+    display.resetShader();
     engine.noiseDetail(OCTAVE, 2.); 
-    display.img("sky_1", 0, myUpperBarWeight, 
+    display.img("pixelrealm-sky-legacy", 0, myUpperBarWeight, 
       WIDTH, this.height); 
     if (displayStars) drawNightSkyStars(); 
     float hillWidth=HILL_WIDTH; 
     float prevWaveHeight=WATER_LEVEL;
     float prevHeight=0; 
     float floorPos=this.height+myUpperBarWeight; 
-    if (input.primaryOnce) xscroll+=5; 
-    xscroll+=50; 
+    xscroll+=15*display.getDelta(); 
     moveStarX=1;
+    if (input.primaryDown) {
+      xscroll+=5*display.getDelta();
+      moveStarX=2;
+    }
     float[] chunks=new float[int(WIDTH/hillWidth)*2]; 
     int j=0; 
     float w=WIDTH+hillWidth; 
@@ -7943,7 +7950,7 @@ class WorldLegacy extends Screen {
       app.endShape(); 
       prevHeight=hillHeight; 
       prevWaveHeight=wave;
-      app.fill(0);
+      app.fill(255);
       app.textFont(engine.DEFAULT_FONT, 40);
       app.textAlign(LEFT, TOP);
       app.text("Press backspace to go back", 10, myUpperBarWeight+5);

@@ -1052,6 +1052,17 @@ public class TWEngine {
       timeMode = RENDER_TIME;
     }
     
+    public PImage getImg(String name) {
+      PImage img = systemImages.get(name);
+      if (img != null) {
+        return img;
+      }
+      else {
+        console.warnOnce("Image "+name+" doesn't exist.");
+        return errorImg;
+      }
+    }
+    
     public void recordLogicTime() {
       long time = System.nanoTime();
       if (timeMode == RENDER_TIME) {
@@ -1235,17 +1246,6 @@ public class TWEngine {
       }
       catch (RuntimeException e) {
         console.warn(path+" couldn't be loaded due to runtime exception.");
-      }
-    }
-  
-    public PImage getImg(String name) {
-      if (systemImages.get(name) != null) {
-        return systemImages.get(name);
-      } else {
-        console.warnOnce("Image "+name+" doesn't exist.");
-        
-        // TODO: Make it actually return something.
-        return null;
       }
     }
   
@@ -1528,8 +1528,9 @@ public class TWEngine {
     }
   
     public void img(String name, float x, float y, float w, float h) {
-      if (systemImages.get(name) != null) {
-        img(systemImages.get(name), x, y, w, h);
+      PImage image = systemImages.get(name);
+      if (image != null) {
+        img(image, x, y, w, h);
       } else {
         recordRendererTime();
         currentPG.image(errorImg, x, y, w, h);
@@ -1541,7 +1542,7 @@ public class TWEngine {
     public void img(String name, float x, float y) {
       PImage image = systemImages.get(name);
       if (image != null) {
-        img(systemImages.get(name), x, y, image.width, image.height);
+        img(image, x, y, image.width, image.height);
       } else {
         recordRendererTime();
         currentPG.image(errorImg, x, y, errorImg.width, errorImg.height);
@@ -8281,7 +8282,7 @@ public class TWEngine {
     public PImage getImage() {
       if (!isImage()) {
         console.bugWarn("getImage: clipboard doesn't contain an image, make sure to check first with isImage()!");
-        return display.systemImages.get("white");
+        return display.getImg("white");
       }
       
       PImage ret = (PImage)cachedClipboardObject;

@@ -91,7 +91,7 @@ public class PixelRealmWithUI extends PixelRealm {
     
     
     // Ugh. whatever.
-    IMG_BORDER_TILE = display.systemImages.get("menuborder");
+    IMG_BORDER_TILE = display.getImg("menuborder");
 
     touchControlsEnabled = settings.getBoolean("touch_controls", false);
     // Obviously needed on phones, regardless of settings.
