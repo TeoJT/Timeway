@@ -458,7 +458,7 @@ public class TWEngine {
     
     PowerMode prevPowerMode = PowerMode.HIGH;
     int recoveryFrameCount = 0;
-    int graceTimer = 0;
+    float graceTimer = 0f;
     int recoveryPhase = 1;
     float framerateBuffer[];
     private boolean forcePowerModeEnabled = false;
@@ -478,7 +478,7 @@ public class TWEngine {
   
     // If we gradually manage to make it to that score, we can go into RECOVERY mode to test what the framerate's like
     // up a level.
-    private final float FPS_SCORE_RECOVERY = 500.;
+    private final float FPS_SCORE_RECOVERY = 200.;
   
     // We want to recover to a higher framerate only if we're able to achieve a pretty good framerate.
     // The higher you make RECOVERY_NEGLIGENCE, the more it will neglect the possibility of recovery.
@@ -486,8 +486,8 @@ public class TWEngine {
     // RECOVERY_NEGLIGENCE is set to 1 but very unlikely if it's set to something higher like 5.
     private final float RECOVERY_NEGLIGENCE = 1;
     
-    private final int RECOVERY_PHASE_1_FRAMES = 20;
-    private final int RECOVERY_PHASE_2_FRAMES = 120;   // 2 seconds
+    private final int RECOVERY_PHASE_1_FRAMES = 10;
+    private final int RECOVERY_PHASE_2_FRAMES = 60;   // 1 second
     
     public PowerModeModule() {
       setForcedPowerMode(settings.getString("force_power_mode", "AUTO"));
@@ -623,19 +623,19 @@ public class TWEngine {
         powerMode = m;
         switch (m) {
         case HIGH:
-          frameRate(60);
+          app.frameRate(60);
           //console.log("Power mode HIGH");
           break;
         case NORMAL:
-          frameRate(30);
+          app.frameRate(30);
           //console.log("Power mode NORMAL");
           break;
         case SLEEPY:
-          frameRate(10);
+          app.frameRate(10);
           //console.log("Power mode SLEEPY");
           break;
         case MINIMAL:
-          frameRate(2); //idk for now
+          app.frameRate(2); //idk for now
           //console.log("Power mode MINIMAL");
           break;
         }
@@ -656,7 +656,7 @@ public class TWEngine {
     // We basically are telling the fps system to pause its score tracking as the average framerate drops.
     public void putFPSSystemIntoGraceMode() {
       fpsTrackingMode = GRACE;
-      graceTimer = 0;
+      graceTimer = 0f;
     }
   
     // Similar to putFPSSystemIntoGraceMode() but reset the score.
@@ -690,7 +690,8 @@ public class TWEngine {
       // 
       // Go into 1fps mode
   
-      // If the window is not focussed, don't even bother doing anything lol.
+      // If the window is not focused, don't even bother doing anything lol.
+      
       
       if (app.focused) {
         if (!focusedMode) {
@@ -756,7 +757,7 @@ public class TWEngine {
          - Don't keep track of score.
          - Use the real-time fps to take a small average of the current frame.
          - Once the average buffer is filled, use the average fps to determine whether we stay in this power mode or drop back.
-         - Framerate at least 58, 28 etc, stay in this mode and go back into monitor mode, and reset the score to the stable threshold.
+         - Framerate at least 58, 28 etc, stay in this FPS setting and go back into monitor mode, and reset the score to the stable threshold.
          - Otherwise, update recovery likelyhood and drop back.
          SLEEPY:
          - If sleepy mode is enabled, the score is paused and we don't do any operations;
@@ -767,19 +768,15 @@ public class TWEngine {
          */
     
         float stableFPS = 30.;
-        int n = 1;
         switch (powerMode) {
         case HIGH:
           stableFPS = 57.;
-          n = 1;
           break;
         case NORMAL:
           stableFPS = 27;
-          n = 2;
           break;
         case SLEEPY:
           stableFPS = 13.;
-          n = 4;
           break;
           // We shouldn't need to come to this but hey, this is a 
           // switch statement.
@@ -787,30 +784,33 @@ public class TWEngine {
           stableFPS = 1.;
           break;
         }
+        
+        
     
         if (fpsTrackingMode == MONITOR) {
+          //console.log("MONITOR "+fpsScore);
           // Everything in monitor will take twice or 4 times long if the framerate is lower.
-          for (int i = 0; i < n; i++) {
             if (frameRate < stableFPS) {
               //console.log("Drain");
               scoreDrain += (stableFPS-frameRate)/stableFPS;
-              fpsScore -= scoreDrain;
+              fpsScore -= scoreDrain*display.getDelta();
               //console.log(str(scoreDrain*scoreDrain));
               //console.log(str(fpsScore));
-            } else {
+            } 
+            else {
               scoreDrain = 0.;
               // If in stable zone...
               if (fpsScore > FPS_SCORE_MIDDLE) {
                 //console.log("stable zone");
     
                 if (powerMode != PowerMode.HIGH)
-                  fpsScore += recoveryScore;
+                  fpsScore += recoveryScore*display.getDelta();
     
                 //console.log(str(recoveryScore));
               }
               // If in unstable zone...
               else {
-                fpsScore += UNSTABLE_CONSTANT;
+                fpsScore += UNSTABLE_CONSTANT*display.getDelta();
               }
             }
     
@@ -822,6 +822,7 @@ public class TWEngine {
               scoreDrain = 0.;
     
               // Set the power mode down a level.
+              //console.log("Low FPS score, drop down ("+fpsScore+")");
               switch (powerMode) {
               case HIGH:
                 setPowerMode(PowerMode.NORMAL);
@@ -854,22 +855,18 @@ public class TWEngine {
                 // We shouldn't reach this here, but if we do, cap the
                 // score.
                 fpsScore = FPS_SCORE_RECOVERY;
-                n = 1;
                 break;
               case NORMAL:
                 // Cap it out at 30fps when in power saver mode.
                 if (getPowerSaver()) {
                   fpsScore = FPS_SCORE_RECOVERY;
-                  n = 2;
                 }
                 else {
                   setPowerMode(PowerMode.HIGH);
-                  n = 1;
                 }
                 break;
               case SLEEPY:
                 setPowerMode(PowerMode.NORMAL);
-                n = 2;
                 break;
               case MINIMAL:
                 // This is not a power level we upgrade to.
@@ -882,11 +879,11 @@ public class TWEngine {
               fpsTrackingMode = RECOVERY;
               recoveryFrameCount = 0;
               // Record the next so and so frames.
-              framerateBuffer = new float[RECOVERY_PHASE_1_FRAMES/n];
+              framerateBuffer = new float[RECOVERY_PHASE_1_FRAMES];
               recoveryPhase = 1;
             }
-          }
         } else if (fpsTrackingMode == RECOVERY) {
+          //console.log("RECOVERY phase "+recoveryPhase);
           // Record the fps, as long as we're not waiting to go back into MONITOR mode.
           if (recoveryPhase != 3)
             framerateBuffer[recoveryFrameCount++] = display.getLiveFPS();
@@ -909,14 +906,14 @@ public class TWEngine {
               // Move on to phase 2 and get a little more data.
               recoveryPhase = 2;
               recoveryFrameCount = 0;
-              framerateBuffer = new float[RECOVERY_PHASE_2_FRAMES/n];
+              framerateBuffer = new float[RECOVERY_PHASE_2_FRAMES];
             }
     
             // If the framerate is at least the minimum stable fps.
             else if (recoveryPhase == 2 && avg >= stableFPS) {
               //console.log("Recovery phase 2");
               // Now wait a bit before going back to monitor.
-              graceTimer = 0;
+              graceTimer = 0f;
               recoveryFrameCount = 0;
               fpsTrackingMode = GRACE;
             }
@@ -947,14 +944,13 @@ public class TWEngine {
             }
           }
         } else if (fpsTrackingMode == SLEEPY) {
+          //console.log("SLEEPY");
         } else if (fpsTrackingMode == GRACE) {
-          graceTimer++;
-          if (graceTimer > (240/n))
+          //console.log("GRACE "+graceTimer);
+          graceTimer += display.getDelta();
+          if (graceTimer > 120f)
             fpsTrackingMode = MONITOR;
         }  
-        
-        //console.log(fpsScore);
-        //console.log(getPowerModeString());
     }
     
     public boolean getSleepyMode() {
@@ -1650,11 +1646,13 @@ public class TWEngine {
           // If we're just getting started, we need to get a feel for the framerate since we don't want to start
           // slow and choppy. Once we're done transitioning to the first (well, after the startup) screen, go into
           // FPS recovery mode.
-          if (initialScreen) {
-            initialScreen = false;
-            power.setPowerMode(PowerMode.NORMAL);
-            power.forceFPSRecoveryMode();
-          }
+          
+          // New note: NOPE, changing it down makes it choppy and laggy.
+          //if (initialScreen) {
+          //  initialScreen = false;
+          //  power.setPowerMode(PowerMode.NORMAL);
+          //  power.forceFPSRecoveryMode();
+          //}
           //prevScreen = null;
         }
       } else {
@@ -8485,6 +8483,8 @@ public class TWEngine {
   public void previousScreen() {
     if (currScreen != null) currScreen.previousScreen();
   }
+  
+  //int lagarrayyyy[] = new int[9999999];
 
   // The core engine function which essentially runs EVERYTHING in Timeway.
   // All the screens, all the input management, and everything else.
@@ -8496,6 +8496,11 @@ public class TWEngine {
     
     display.WIDTH = width/display.displayScale;
     display.HEIGHT = height/display.displayScale;
+    
+    // Incase you ever wanted to purposefully introduce lag.
+    //for (int i = 0; i < 550000; i++) {
+    //  lagarrayyyy[int(random(0, 9999999))] = int(random(0, 9999999));
+    //}
 
     power.updatePowerMode();
 
@@ -8577,15 +8582,16 @@ public class TWEngine {
       app.scale(display.getScale());
       app.textFont(DEFAULT_FONT, 32);
       app.textAlign(LEFT, TOP);
-      float y = 5;
-      if (currScreen != null) y = currScreen.myUpperBarWeight+5;
+      float y = 5f;
+      float x = 5f;
+      if (currScreen != null) y = currScreen.myUpperBarWeight+5f;
       
       String txt = str(round(frameRate))+"\n"+power.getPowerModeString();
       
       app.fill(0);
-      app.text(txt, 5, y);
+      app.text(txt, x, y);
       app.fill(255);
-      app.text(txt, 7, y+2);
+      app.text(txt, x+2, y+2);
       app.popMatrix();
     }
 
