@@ -24,6 +24,9 @@ import javax.sound.sampled.AudioSystem;
 import javax.sound.sampled.AudioFileFormat;
 import javax.sound.sampled.AudioFormat;
 import javax.sound.sampled.AudioInputStream;
+import java.awt.datatransfer.Transferable;
+import java.awt.Image;
+
 
 
 // Sometimes it can be called if it's exclusive to android, and no action happens in Java mode.
@@ -151,6 +154,57 @@ public void copyStringToClipboard(String s) {
   clipboard.setContents(stringSelection, null);
 }
 
+ private class TransferableImage implements Transferable {
+
+        Image i;
+
+        public TransferableImage( Image i ) {
+            this.i = i;
+        }
+
+        public Object getTransferData( DataFlavor flavor )
+        throws UnsupportedFlavorException, IOException {
+            if ( flavor.equals( DataFlavor.imageFlavor ) && i != null ) {
+                return i;
+            }
+            else {
+                throw new UnsupportedFlavorException( flavor );
+            }
+        }
+
+        public DataFlavor[] getTransferDataFlavors() {
+            DataFlavor[] flavors = new DataFlavor[ 1 ];
+            flavors[ 0 ] = DataFlavor.imageFlavor;
+            return flavors;
+        }
+
+        public boolean isDataFlavorSupported( DataFlavor flavor ) {
+            DataFlavor[] flavors = getTransferDataFlavors();
+            for ( int i = 0; i < flavors.length; i++ ) {
+                if ( flavor.equals( flavors[ i ] ) ) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+    }
+
+public void copyImageToClipboard(PImage img) {
+  Clipboard clipboard = Toolkit.getDefaultToolkit().getSystemClipboard();
+  BufferedImage bufferedImage = new BufferedImage(img.width, img.height, BufferedImage.TYPE_INT_ARGB);
+  
+  img.loadPixels();
+  for (int y = 0; y < img.height; y++) {
+    for (int x = 0; x < img.width; x++) {
+      bufferedImage.setRGB(x, y, img.pixels[y * img.width + x]);
+    }
+  }
+  
+  TransferableImage transferableImage = new TransferableImage( bufferedImage );
+  clipboard.setContents(transferableImage, null);
+}
+
 
 public void desktopOpen(String file) {
   if (Desktop.isDesktopSupported()) {
@@ -188,7 +242,7 @@ public void openErrorLog() {
 }
 
 public void minimalErrorDialog(String mssg) {
-  JOptionPane.showMessageDialog(null, mssg, "Timeway Engine", 1);
+  JOptionPane.showMessageDialog(null, mssg, "Timeway", 1);
 }
 
 public void requestAndroidPermissions() {

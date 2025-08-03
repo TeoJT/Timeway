@@ -436,7 +436,7 @@ public class PixelRealmWithUI extends PixelRealm {
               currRealm.terraformWarning = false;
             }
           };
-          menu = new YesNoMenu("Old version", "This realm uses version "+currRealm.version+" and needs to be upgraded to "+COMPATIBILITY_VERSION+" to be terraformed. Upgrade now and continue?", ryes, rno);
+          menu = new YesNoMenu("Old version", "This realm uses an older save file version which does not support terrain options. Would you like to upgrade the realm save file?", ryes, rno);
         }
         else {
           sound.playSound("menu_select");

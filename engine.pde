@@ -5639,13 +5639,6 @@ public class TWEngine {
         }
       }
       
-      if (input.ctrlDown && input.keys[int('v')] == 2) {
-        //input.keyboardMessage = input.keyboardMessage.substring(0, input.keyboardMessage.length()-1);
-        if (clipboard.isString()) {
-          input.keyboardMessage += clipboard.getText();
-        }
-      }
-      
       float buttonwi = 200;
       boolean button = ui.basicButton("Enter", display.WIDTH/2-buttonwi/2, display.HEIGHT/2+50, buttonwi, 50f);
 
@@ -7815,14 +7808,20 @@ public class TWEngine {
       else if (keyOnce) {}
       else solidifyBlink = false;
       
+      // Paste text
+      // If you're wondering, need to use keys['v'] == 2 since there's a special exception when there's input prompts.
+      if (input.ctrlDown && keys['v'] == 2 && clipboard.isString()) {
+        String insert = clipboard.getText();
+        this.keyboardMessage = keyboardMessage.substring(0, cursorX) + insert + keyboardMessage.substring(cursorX);
+        cursorX += insert.length();
+      }
+      
       if (solidifyBlink) {
         blinkTime = 0.0;
       }
       cursorX = max(min(cursorX, keyboardMessage.length()), 0);
     
       blinkTime += display.getDelta();
-    
-      
   
       //*************MOUSE WHEEL*************
       if (rawScroll != 0) {
@@ -7840,7 +7839,16 @@ public class TWEngine {
     }
     
     private boolean ctrlTraversable() {
-      if (cursorX >= keyboardMessage.length()-1 || cursorX <= 0 ) return false;
+      if (cursorX >= keyboardMessage.length()) {
+        return false;
+      }
+      else if (cursorX == 0) {
+        return true;
+      }
+      else if (cursorX < 0) {
+        cursorX = 0;
+        return false;
+      }
       char c = keyboardMessage.charAt(cursorX);
       return c != ' '
           && c != '\n'
@@ -7858,6 +7866,7 @@ public class TWEngine {
   
     // To be called by base sketch code.
     public void releaseKeyboardAction(char kkey, int kkeyCode) {
+      keyHoldCounter = 0;
       // Special keys
       if (kkey == CODED) {
         switch (kkeyCode) {
@@ -7902,6 +7911,11 @@ public class TWEngine {
       if (shiftDown) {
         actualKey = char(kkeyCode);
       }
+      
+      if (ctrlDown) {
+        actualKey = char(kkeyCode);
+      }
+      
       int val = int(Character.toLowerCase(actualKey));
       
       if (val >= 1024) return;
@@ -8002,8 +8016,29 @@ public class TWEngine {
         return keyDownOnce(k);
       }
     }
+    
+    private void backspace() {
+      backspaceOnce();
+      
+      if (ctrlDown) {
+        int prevCursorX = cursorX;
+        cursorX--;
+        
+        int backspacesCount = 0;
+        while (ctrlTraversable()) {
+          cursorX--;
+          backspacesCount++;
+        }
+               
+        cursorX = prevCursorX;
+        
+        for (int i = 0; i < backspacesCount; i++) {
+          backspaceOnce();
+        }
+      }
+    }
   
-    public void backspace() {
+    private void backspaceOnce() {
       if (this.keyboardMessage.length() > 0 && cursorX > 0)  {
         this.keyboardMessage = keyboardMessage.substring(0, cursorX-1)+keyboardMessage.substring(cursorX);
         cursorX--;
@@ -8152,11 +8187,12 @@ public class TWEngine {
       keyHoldCounter = 0.;
     }
     
+    
     public void keyboardAction(char kkey, int kkeyCode) {
       lastKeyPressed     = kkey;
       lastKeycodePressed = kkeyCode;
       
-      if (kkey == CODED) {
+      if (kkey == CODED || kkey == 8) {
         switch (kkeyCode) {
           case CONTROL:
             ctrlDown = true;
@@ -8190,22 +8226,25 @@ public class TWEngine {
             downDownCounter = 0;
             downDown = true;
             break;
-          case 67:
+          case BACKSPACE:
             this.backspace();
             backspaceDown = true;
-            return;
+            break;
+          case 77:  // Glitchy key which isn't supposed to do anything.
+            
         }
         // 10 for android
-      } else if (kkey == ENTER || kkey == RETURN || int(kkey) == 10) {
+      } else if ((kkey == ENTER || kkey == RETURN || int(kkey) == 10) && !ctrlDown) {
         if (this.addNewlineWhenEnterPressed) {
           insert('\n');
         }
         enterDown = true;
         // 65535 67 for android
-      } else if (kkey == BACKSPACE) {    // Backspace
-        this.backspace();
-        backspaceDown = true;
       }
+      //else if (kkey == BACKSPACE) {    // Backspace
+      //  this.backspace();
+      //  backspaceDown = true;
+      //}
       else {
         insert(kkey);
       }
@@ -8215,11 +8254,19 @@ public class TWEngine {
       if (shiftDown) {
         actualKey = char(kkeyCode);
       }
+      
+      // CTRL is weird in Processing and has some special cases.
+      if (ctrlDown) {
+        actualKey = char(kkeyCode);
+      }
+      
       int val = int(Character.toLowerCase(actualKey));
       
       if (val >= 1024) return;
       if (keys[val] > 0) return;
+      
       keys[val] = 1;
+      
       stats.increase("keys_pressed", 1);
     }
   
@@ -8297,6 +8344,18 @@ public class TWEngine {
       catch (RuntimeException e) {
         console.warn(e.getMessage());
         console.warn("Couldn't copy text to clipboard: ");
+        return false;
+      }
+      return true;
+    }
+    
+    public boolean copyImage(PImage img) {
+      try {
+        copyImageToClipboard(img);
+      }
+      catch (RuntimeException e) {
+        console.warn(e.getMessage());
+        console.warn("Couldn't copy image to clipboard: ");
         return false;
       }
       return true;

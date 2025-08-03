@@ -7710,19 +7710,19 @@ public class PixelRealm extends Screen {
       return true;
     }
     else if (engine.commandEquals(command, "/goto")) {
-      String[] args = getArgs(command);
-      if (args.length >= 1) {
-        String path = args[0].trim().replaceAll("\\\\", "/");
-        if (file.exists(path) && file.isDirectory(path)) {
-          console.log("Transported to realm "+path+".");
-          gotoRealm(path);
-        }
-        else {
-          console.log(path+" is not a valid realm/folder!");
-        }
+      if (command.length() <= 6) {
+        console.log("Please provide a path where you want to go!");
+        return true;
+      }
+      
+      String path = command.substring(6).trim().replaceAll("\\\\", "/");
+      
+      if (file.exists(path) && file.isDirectory(path)) {
+        console.log("Transported to realm "+path+".");
+        gotoRealm(path);
       }
       else {
-        console.log("Please provide a path where you want to go!");
+        console.log(path+" is not a valid directory!");
       }
       return true;
     }

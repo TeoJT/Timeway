@@ -71,7 +71,6 @@ String sketch_ERR_LOG_PATH;
 
 void settings() {
   try {
-    // TODO... we're disabling graphics acceleration?!
     //if (isLinux())
     //  System.setProperty("jogl.disable.openglcore", "true");
     size(displayWidth, displayHeight, P2D);
@@ -209,10 +208,12 @@ void draw() {
 
 void keyPressed() {
   if (timewayEngine != null && timewayEngine.input != null) {
+    
     timewayEngine.input.keyboardAction(key, keyCode);
-
     // Begin the timer. This will automatically increment once it's != 0.
     timewayEngine.input.keyHoldCounter = 1;
+    
+    //timewayEngine.console.log("Down "+int(key)+" "+ int(keyCode));
   }
 }
 
@@ -220,8 +221,9 @@ void keyPressed() {
 void keyReleased() {
     // Stop the hold timer. This will no longer increment.
   if (timewayEngine != null && timewayEngine.input != null) {
-    timewayEngine.input.keyHoldCounter = 0;
     timewayEngine.input.releaseKeyboardAction(key, keyCode);
+    
+    //timewayEngine.console.log("Up "+int(key)+" "+ int(keyCode));
   }
   
 }

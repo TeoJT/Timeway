@@ -878,6 +878,9 @@ public class Editor extends Screen {
     private String entryDir;
     private color selectedColor = color(255, 255, 255);
     private float selectedFontSize = 20;
+    private color clipboardColor = color(255, 255, 255);
+    private float clipboardFontSize = 20;
+    private PFont clipboardFontStyle = engine.DEFAULT_FONT;
     private TextPlaceable entryNameText;
     private boolean cameraMode = false;
     private boolean autoScaleDown = false;
@@ -933,14 +936,7 @@ public class Editor extends Screen {
       labels[0] = "Copy";
       actions[0] = new Runnable() {public void run() {
           
-          if (editingPlaceable != null) {
-            if (editingPlaceable instanceof TextPlaceable) {
-              TextPlaceable t = (TextPlaceable)editingPlaceable;
-              boolean success = clipboard.copyString(t.text);
-              if (success)
-                console.log("Copied!");
-            }
-          }
+          copy();
           
       }};
       
@@ -968,9 +964,9 @@ public class Editor extends Screen {
       
       labels[0] = "Copy";
       actions[0] = new Runnable() {public void run() {
-          
-        console.log("Copying images to clipboard not supported yet, sorry!");
-          
+        
+        copy();
+        
       }};
       
       
@@ -2386,16 +2382,16 @@ public class Editor extends Screen {
           
           
           //************COPY BUTTON************
-          if (ui.button("copy", "copy_button_128", "Copy")) {
-            sound.playSound("select_any");
-            this.copy();
-          }
+          //if (ui.button("copy", "copy_button_128", "Copy")) {
+          //  sound.playSound("select_any");
+          //  this.copy();
+          //}
           
           //************PASTE BUTTON************
-          if (ui.button("paste", "paste_button_128", "Paste")) {
-            sound.playSound("select_any");
-            this.paste();
-          }
+          //if (ui.button("paste", "paste_button_128", "Paste")) {
+          //  sound.playSound("select_any");
+          //  this.paste();
+          //}
         }
         else {
           
@@ -2629,13 +2625,13 @@ public class Editor extends Screen {
     }
     
     // Just normal text by default.
-    private void insertText(String initText, float x, float y) {
-      insertText(initText, x, y, TYPE_TEXT);
+    private TextPlaceable insertText(String initText, float x, float y) {
+      return insertText(initText, x, y, TYPE_TEXT);
     }
     
-    private void insertText(String initText, float x, float y, int type) {
+    private TextPlaceable insertText(String initText, float x, float y, int type) {
         // Don't do anything if readonly enabled.
-        if (readOnly) return;
+        if (readOnly) return null;
         
         TextPlaceable editingTextPlaceable;
         if (type == TYPE_INPUT_FIELD) {
@@ -2681,6 +2677,8 @@ public class Editor extends Screen {
         editingTextPlaceable.updateDimensions();
         engine.allowShowCommandPrompt = false;
         stats.increase("text_created", 1);
+        
+        return editingTextPlaceable;
     }
     
     protected void renderPlaceables() {
@@ -2729,6 +2727,17 @@ public class Editor extends Screen {
         if (editingPlaceable instanceof TextPlaceable) {
           TextPlaceable t = (TextPlaceable)editingPlaceable;
           boolean success = clipboard.copyString(t.text);
+          if (success) {
+            clipboardFontSize = t.fontSize;
+            clipboardColor = t.textColor;
+            clipboardFontStyle = t.fontStyle;
+            console.log("Copied!");
+
+          }
+        }
+        else if (editingPlaceable instanceof ImagePlaceable) {
+          ImagePlaceable img = (ImagePlaceable)editingPlaceable;
+          boolean success = clipboard.copyImage(display.getImg(img.imageName));
           if (success)
             console.log("Copied!");
         }
@@ -2747,25 +2756,41 @@ public class Editor extends Screen {
       }
       else if (clipboard.isString()) {
         String pastedString = clipboard.getText();
-        
         if (editingPlaceable != null) {
+          console.log(1);
           // If we're currently editing text, append it
           if (editingPlaceable instanceof TextPlaceable) {
-            input.keyboardMessage += pastedString;
+          console.log(2);
+            TextPlaceable editingTextPlaceable = (TextPlaceable)editingPlaceable;
+            if (editingTextPlaceable.text.length() == 0) {
+          console.log(3);
+                editingTextPlaceable.fontSize = clipboardFontSize;
+                editingTextPlaceable.textColor = clipboardColor;
+                editingTextPlaceable.fontStyle = clipboardFontStyle;
+            }
           }
           else if (editingPlaceable instanceof ImagePlaceable) {
             // Place it just underneath the image.
             float imx = editingPlaceable.sprite.xpos;
             float imy = editingPlaceable.sprite.ypos;
             int imhi = editingPlaceable.sprite.hi;
-            insertText(pastedString, imx, imy+imhi);
+            TextPlaceable newText = insertText(pastedString, imx, imy+imhi);
+            
+            newText.fontSize = clipboardFontSize;
+            newText.textColor = clipboardColor;
+            newText.fontStyle = clipboardFontStyle;
           }
         }
         // No text or image being edited, just plonk it whereever.
         else {
           insertedXpos += 20;
           insertedYpos += 20;
-          insertText(pastedString, insertedXpos, insertedYpos);
+          TextPlaceable newText = insertText(pastedString, insertedXpos, insertedYpos);
+          
+            console.log(clipboardFontSize);
+          newText.fontSize = clipboardFontSize;
+          newText.textColor = clipboardColor;
+          newText.fontStyle = clipboardFontStyle;
         }
         stats.increase("strings_pasted", 1);
       }
@@ -2877,7 +2902,6 @@ public class Editor extends Screen {
         }
         
         
-        // TODO: CTRL+C CTRL+V in Processing is broken.
         if (input.ctrlDown && input.keyDownOnce('c')) { // Ctrl+c
           this.copy();
         }
@@ -3728,7 +3752,7 @@ public class KeybindSettingsScreen extends ReadOnlyEditor {
       'a',
       'e',
       'q',
-      TWEngine.InputModule.SHIFT_KEY,
+      TWEngine.InputModule.CTRL_KEY,
       '\n',
       ' ',
       'o',
@@ -3741,7 +3765,7 @@ public class KeybindSettingsScreen extends ReadOnlyEditor {
       '=',
       '-',
       '\b',
-      TWEngine.InputModule.ALT_KEY
+      TWEngine.InputModule.SHIFT_KEY
   };
   
   // Duplicate code but whatever.
