@@ -136,14 +136,14 @@ public class Updater extends Screen {
 
 public class Benchmark extends Screen {
   
-  public SpriteSystemPlaceholder gui;
+  public SpriteSystem gui;
   
   private float highestTime = 0f;
   
   public Benchmark(TWEngine e) {
     super(e);
     textFont(engine.DEFAULT_FONT);
-    gui = new SpriteSystemPlaceholder(engine, engine.APPPATH+engine.PATH_SPRITES_ATTRIB()+"gui/benchmark/");
+    gui = new SpriteSystem(engine, engine.APPPATH+engine.PATH_SPRITES_ATTRIB()+"gui/benchmark/");
     ui.useSpriteSystem(gui);
     myUpperBarColor = color(100);
     gui.interactable = false;
@@ -236,7 +236,7 @@ public class Explorer extends Screen {
   
   
   //DisplayableFile backButtonDisplayable = null;
-  SpriteSystemPlaceholder gui;
+  SpriteSystem gui;
   private int numTimewayEntries;
   public  float scrollBottom = 0.0;
   
@@ -244,7 +244,7 @@ public class Explorer extends Screen {
         super(engine);
         
         file.openDirInNewThread(engine.DEFAULT_DIR);
-        gui = new SpriteSystemPlaceholder(engine, engine.APPPATH+engine.PATH_SPRITES_ATTRIB()+"gui/explorer/");
+        gui = new SpriteSystem(engine, engine.APPPATH+engine.PATH_SPRITES_ATTRIB()+"gui/explorer/");
         gui.repositionSpritesToScale();
         gui.interactable = false;
         
@@ -258,7 +258,7 @@ public class Explorer extends Screen {
         super(engine);
         
         file.openDirInNewThread(dir);
-        gui = new SpriteSystemPlaceholder(engine, engine.APPPATH+engine.PATH_SPRITES_ATTRIB()+"gui/explorer/");
+        gui = new SpriteSystem(engine, engine.APPPATH+engine.PATH_SPRITES_ATTRIB()+"gui/explorer/");
         gui.repositionSpritesToScale();
         gui.interactable = false;
         
@@ -493,7 +493,7 @@ public class Explorer extends Screen {
 
 
 public class HomeScreen extends Screen {
-    private SpriteSystemPlaceholder gui = null;
+    private SpriteSystem gui = null;
 
     public HomeScreen(TWEngine engine) {
         super(engine);
@@ -501,7 +501,7 @@ public class HomeScreen extends Screen {
         myUpperBarColor = color(50);
         myLowerBarColor = color(50);
         
-        gui = new SpriteSystemPlaceholder(engine, engine.APPPATH+engine.PATH_SPRITES_ATTRIB()+"gui/homescreen/");
+        gui = new SpriteSystem(engine, engine.APPPATH+engine.PATH_SPRITES_ATTRIB()+"gui/homescreen/");
         gui.interactable = false;
     }
 
@@ -539,7 +539,7 @@ public class HomeScreen extends Screen {
         
         //gui.getSprite("homescreen-title").move(0f, 
         
-        SpriteSystemPlaceholder.Sprite logoSprite = gui.getSprite("homescreen-title");
+        SpriteSystem.Sprite logoSprite = gui.getSprite("homescreen-title");
         float offY = logoSprite.getY()+logoSprite.getHeight()-60;
         
         app.noStroke();

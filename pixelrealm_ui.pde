@@ -15,7 +15,7 @@ public class PixelRealmWithUI extends PixelRealm {
 
   public boolean menuShown = false;
   private boolean showPlayerPos = false;
-  private SpriteSystemPlaceholder gui = null;
+  private SpriteSystem gui = null;
   private Menu menu = null;
   private boolean touchControlsEnabled = false;
 
@@ -99,7 +99,7 @@ public class PixelRealmWithUI extends PixelRealm {
       touchControlsEnabled = true;
     }
 
-    gui = new SpriteSystemPlaceholder(engine, engine.APPPATH+engine.PATH_SPRITES_ATTRIB()+"gui/pixelrealm/");
+    gui = new SpriteSystem(engine, engine.APPPATH+engine.PATH_SPRITES_ATTRIB()+"gui/pixelrealm/");
     gui.suppressSpriteWarning = true;
     gui.interactable = false;
     ui.useSpriteSystem(gui);
@@ -139,7 +139,7 @@ public class PixelRealmWithUI extends PixelRealm {
       return cache_backX;
     }
     
-    private SpriteSystemPlaceholder gui() {
+    private SpriteSystem gui() {
       return ui.getInUseSpriteSystem();
     }
 
@@ -223,7 +223,7 @@ public class PixelRealmWithUI extends PixelRealm {
   }
 
   class TitleMenu extends Menu {
-    protected SpriteSystemPlaceholder.Sprite back;
+    protected SpriteSystem.Sprite back;
     protected String title;
     protected String bgName;
 
@@ -782,7 +782,7 @@ public class PixelRealmWithUI extends PixelRealm {
     }
     public void display() {
       displayBackground("back-terrainmenu");
-      if (ui.buttonVary("lighting", "lightbulb_128", "Lighting")) {
+      if (ui.buttonVary("lighting", "lightbulb_128", "Look & feel")) {
         sound.playSound("menu_select");
         lighting();
       }
@@ -799,7 +799,7 @@ public class PixelRealmWithUI extends PixelRealm {
           menu = new DialogMenu("Can't use lighting", "back-newrealm", "You can't customise lighting in older 1.x versions. Please upgrade realm via the terraformer.");
         }
         else {
-          menu = new CustomiseLightingMenu();
+          menu = new CustomiseLookAndFeelMenu();
         }
     }
     
@@ -828,6 +828,12 @@ public class PixelRealmWithUI extends PixelRealm {
         }
     }
   }
+  
+  
+  
+  
+  
+  
   
 
   class PocketMenu extends Menu {
@@ -1124,11 +1130,13 @@ public class PixelRealmWithUI extends PixelRealm {
 
   class CustomiseTerrainMenu extends CustomNodeMenu {
 
-    private int generatorIndex = 1;
+    private int generatorIndex = 0;
 
 
     public CustomiseTerrainMenu() {
       super("", "back-customise");
+      
+      generatorIndex = currRealm.terrainTypeToInt();
     }
 
 
@@ -1204,17 +1212,22 @@ public class PixelRealmWithUI extends PixelRealm {
   
   
   
-  class CustomiseLightingMenu extends CustomNodeMenu {
+  
+  
+  
+  
+  
+  class CustomiseLookAndFeelMenu extends CustomNodeMenu {
     
-    public CustomiseLightingMenu() {
+    public CustomiseLookAndFeelMenu() {
       super("", "back-lighting");
     }
     
     public void display() {
-      setTitle("-- Lighting --");
+      setTitle("-- Look & feel --");
       super.display();
 
-      if (ui.buttonVary("lighting-reset", "cross_128", "Reset")) {
+      if (ui.buttonVary("lighting-reset", "cross_128", "Reset lights")) {
         currRealm.ambientSlider.valFloat = 1f;
         currRealm.reffectSlider.valFloat = 0f;
         currRealm.geffectSlider.valFloat = 0f;
@@ -1231,7 +1244,9 @@ public class PixelRealmWithUI extends PixelRealm {
         menu = null;
       }
 
-      runCustomNodes(currRealm.lightingUINodes);
+      runCustomNodes(currRealm.lookAndFeelUINodes);
+      
+      currRealm.terrain.updateMinimalAttribs();
     }
   }
   

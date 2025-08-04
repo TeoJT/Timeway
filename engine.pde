@@ -54,7 +54,7 @@ import java.util.concurrent.TimeUnit;
 public class TWEngine {
   //*****************CONSTANTS SETTINGS**************************
   // Info and versioning
-  private static final String VERSION     = "0.1.7";
+  private static final String VERSION     = "0.1.8";
   
   public String getAppName() {
     return "Timeway";
@@ -1718,13 +1718,13 @@ public class TWEngine {
   public class UIModule {
     
     public float guiFade = 0;
-    public SpriteSystemPlaceholder currentSpritePlaceholderSystem;
+    public SpriteSystem currentSpritePlaceholderSystem;
     public boolean spriteSystemClickable = false;
     public MiniMenu currMinimenu = null;
-    public SpriteSystemPlaceholder dummySpriteSystem;
+    public SpriteSystem dummySpriteSystem;
     
     // To be used by API.
-    public HashMap<String, SpriteSystemPlaceholder> spriteSystems;
+    public HashMap<String, SpriteSystem> spriteSystems;
     public boolean usingTWITSpriteSystem = false;
     
     
@@ -1735,7 +1735,7 @@ public class TWEngine {
     
     
     public class MiniMenu {
-        public SpriteSystemPlaceholder g;
+        public SpriteSystem g;
         public float x = 0., y = 0.;
         public float width = 0., height = 0.;
         public float yappear = 1.;
@@ -2254,6 +2254,7 @@ public class TWEngine {
       
       public void setVal(int val) {
         this.valFloat = (float)val;
+        valInt = round(valFloat);
       }
       
       @Override
@@ -2297,7 +2298,7 @@ public class TWEngine {
     }
 
   
-    public void useSpriteSystem(SpriteSystemPlaceholder system) {
+    public void useSpriteSystem(SpriteSystem system) {
       this.currentSpritePlaceholderSystem = system;
       this.spriteSystemClickable = true;
       this.guiFade = 255.;
@@ -2446,12 +2447,12 @@ public class TWEngine {
     
     public void addSpriteSystem(TWEngine engine, String name, String path) {
       if (spriteSystems == null) {
-        spriteSystems = new HashMap<String, SpriteSystemPlaceholder>();
+        spriteSystems = new HashMap<String, SpriteSystem>();
       }
-      spriteSystems.put(name, new SpriteSystemPlaceholder(engine, path));
+      spriteSystems.put(name, new SpriteSystem(engine, path));
     }
     
-    public SpriteSystemPlaceholder getSpriteSystem(String name) {
+    public SpriteSystem getSpriteSystem(String name) {
       if (!spriteSystems.containsKey(name)) {
         console.warn("Sprite system "+name+" doesn't exist!");
         
@@ -2462,7 +2463,7 @@ public class TWEngine {
       }
     }
     
-    public SpriteSystemPlaceholder getInUseSpriteSystem() {
+    public SpriteSystem getInUseSpriteSystem() {
       if (currentSpritePlaceholderSystem == null) {
         // TODO: Return a blank spritesystem so that we don't crash.
         console.warn("No sprite system currently in use!");
@@ -2473,7 +2474,7 @@ public class TWEngine {
     
     public void updateSpriteSystems() {
       if (spriteSystems == null) return;
-      for (SpriteSystemPlaceholder system : spriteSystems.values()) {
+      for (SpriteSystem system : spriteSystems.values()) {
         system.updateSpriteSystem();
       }
     }
@@ -8585,7 +8586,7 @@ public class TWEngine {
     sound.processSound();
     
     // Dumb code
-    if (ui.dummySpriteSystem == null) ui.dummySpriteSystem = new SpriteSystemPlaceholder(this);
+    if (ui.dummySpriteSystem == null) ui.dummySpriteSystem = new SpriteSystem(this);
     ui.display();
     
     if (showMemUsage) {
@@ -8906,15 +8907,16 @@ public class DummyScreen extends Screen {
 //*********************Sprite Class****************************
 // Now yes, I am aware that the code is a mess and there are many
 // features inside of this class that go unused. This was ripped
-// straight from SketchiePad. This is mainly placeholder code as
-// to be able to have click+draggable objects.
+// straight from SketchiePad. 
+// UPDATE 2025: This is no longer placeholder code lmao. It's
+// official code that's here to stay.
 // Its functionalities:
 // 1. Create sprites simply by calling the sprite() method
 // 2. Click and drag objects
 // 3. Resize objects
 // 4. Save the position of objects between closing and starting again
 // 5. Move objects with code, but still allow the position to be updated when clicked+dragged.
-public final class SpriteSystemPlaceholder {
+public final class SpriteSystem {
         public HashMap<String, Integer> spriteNames;
         public ArrayList<Sprite> sprites;
         public Sprite selectedSprite;
@@ -8969,13 +8971,13 @@ public final class SpriteSystemPlaceholder {
         }
 
         // Use this constructor for no saving sprite data.
-        public SpriteSystemPlaceholder(TWEngine engine) {
+        public SpriteSystem(TWEngine engine) {
             this(engine, "");
             saveSpriteData = false;
         } 
 
         // Default constructor.
-        public SpriteSystemPlaceholder(TWEngine engine, String path) {
+        public SpriteSystem(TWEngine engine, String path) {
             this.engine = engine;
             spriteNames = new HashMap<String, Integer>();
             selectedSprites = new Stack<Sprite>(256);
@@ -9624,8 +9626,8 @@ public final class SpriteSystemPlaceholder {
                     this.hoveringOverResizeSquare = false;
                     }
                     if (resizeDrag.isDragging()) {
-                    wi = int((mouseX()+d/2-xpos));
-                    hi = int((mouseX()+d/2-xpos)*aspect);
+                    wi = int(max(mouseX()+d/2-xpos, BOX_SIZE));
+                    hi = int((float)wi*aspect);
                     
                     defwi = wi-offwi;
                     defhi = hi-offhi;
@@ -9663,10 +9665,10 @@ public final class SpriteSystemPlaceholder {
                     
                     if (resizeDrag.isDragging()) {
                       if (currentVertex == 1) {
-                        wi = int((mouseX()+d/2-xpos));
+                        wi = int(max(mouseX()+d/2-xpos, BOX_SIZE));
                       }
                       else if (currentVertex == 2) {
-                        hi = int((mouseY()+d/2-ypos));
+                        hi = int(max(mouseY()+d/2-ypos, BOX_SIZE));
                       }
                       
                       defwi = wi-offwi;

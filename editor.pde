@@ -867,8 +867,8 @@ public class SoftwareRenderer {
 public class Editor extends Screen {
     private boolean showGUI = false;
     private float upperbarExpand = 0;
-    protected SpriteSystemPlaceholder gui;
-    private SpriteSystemPlaceholder placeableSprites;
+    protected SpriteSystem gui;
+    private SpriteSystem placeableSprites;
     protected HashMap<String, Placeable> placeableset;
     private ArrayList<String> imagesInEntry;  // This is so that we can know what to remove when we exit this screen.
     private Placeable editingPlaceable = null;
@@ -877,9 +877,9 @@ public class Editor extends Screen {
     private String entryPath;
     private String entryDir;
     private color selectedColor = color(255, 255, 255);
-    private float selectedFontSize = 20;
+    private float selectedFontSize = 30f;
     private color clipboardColor = color(255, 255, 255);
-    private float clipboardFontSize = 20;
+    private float clipboardFontSize = 30f;
     private PFont clipboardFontStyle = engine.DEFAULT_FONT;
     private TextPlaceable entryNameText;
     private boolean cameraMode = false;
@@ -1052,7 +1052,7 @@ public class Editor extends Screen {
 
 
     public class Placeable {
-        public SpriteSystemPlaceholder.Sprite sprite;
+        public SpriteSystem.Sprite sprite;
         public String id;
         public boolean visible = true;
 
@@ -1809,7 +1809,7 @@ public class Editor extends Screen {
         super(engine);
         this.entryPath = entryPath;
         if (full) {
-          gui = new SpriteSystemPlaceholder(engine, engine.APPPATH+engine.PATH_SPRITES_ATTRIB()+"gui/editor/");
+          gui = new SpriteSystem(engine, engine.APPPATH+engine.PATH_SPRITES_ATTRIB()+"gui/editor/");
           gui.repositionSpritesToScale();
           gui.interactable = false;
           
@@ -1830,7 +1830,7 @@ public class Editor extends Screen {
           DEFAULT_FONT_SIZE = 50;
         }
         
-        placeableSprites = new SpriteSystemPlaceholder(engine);
+        placeableSprites = new SpriteSystem(engine);
         placeableSprites.allowSelectOffContentPane = false;
         imagesInEntry = new ArrayList<String>();
         placeableset = new HashMap<String, Placeable>();
@@ -2295,7 +2295,7 @@ public class Editor extends Screen {
   
           //************FONT COLOUR************
           if (ui.button("font_color", "fonts_128", "Colour")) {
-              SpriteSystemPlaceholder.Sprite s = gui.getSprite("font_color");
+              SpriteSystem.Sprite s = gui.getSprite("font_color");
               
               Runnable r = new Runnable() {
                 public void run() {
@@ -2350,7 +2350,7 @@ public class Editor extends Screen {
           // so suppress warnings so we don't get an ugly warning.
           // Nothing bad will happen other than that.
           gui.suppressSpriteWarning = true;
-          SpriteSystemPlaceholder.Sprite s = gui.getSprite("font_size");
+          SpriteSystem.Sprite s = gui.getSprite("font_size");
           // Draw text where the sprite is
           app.textAlign(CENTER, CENTER);
           app.textSize(20);
@@ -2757,13 +2757,10 @@ public class Editor extends Screen {
       else if (clipboard.isString()) {
         String pastedString = clipboard.getText();
         if (editingPlaceable != null) {
-          console.log(1);
           // If we're currently editing text, append it
           if (editingPlaceable instanceof TextPlaceable) {
-          console.log(2);
             TextPlaceable editingTextPlaceable = (TextPlaceable)editingPlaceable;
             if (editingTextPlaceable.text.length() == 0) {
-          console.log(3);
                 editingTextPlaceable.fontSize = clipboardFontSize;
                 editingTextPlaceable.textColor = clipboardColor;
                 editingTextPlaceable.fontStyle = clipboardFontStyle;
@@ -2787,7 +2784,6 @@ public class Editor extends Screen {
           insertedYpos += 20;
           TextPlaceable newText = insertText(pastedString, insertedXpos, insertedYpos);
           
-            console.log(clipboardFontSize);
           newText.fontSize = clipboardFontSize;
           newText.textColor = clipboardColor;
           newText.fontStyle = clipboardFontStyle;
@@ -3132,7 +3128,7 @@ public class Editor extends Screen {
 
 
 public class ReadOnlyEditor extends Editor {
-  protected SpriteSystemPlaceholder readonlyEditorUI;
+  protected SpriteSystem readonlyEditorUI;
   
   public ReadOnlyEditor(TWEngine engine, String entryPath, boolean full, boolean loadMultithreaded) {
     super(engine, entryPath, full, loadMultithreaded);
@@ -3149,7 +3145,7 @@ public class ReadOnlyEditor extends Editor {
     readOnly = true;
     input.scrollOffset = -UPPER_BAR_DROP_WEIGHT;
     
-    readonlyEditorUI = new SpriteSystemPlaceholder(engine, engine.APPPATH+engine.PATH_SPRITES_ATTRIB()+"gui/readonlyeditor/");
+    readonlyEditorUI = new SpriteSystem(engine, engine.APPPATH+engine.PATH_SPRITES_ATTRIB()+"gui/readonlyeditor/");
     readonlyEditorUI.repositionSpritesToScale();
     readonlyEditorUI.interactable = false;
   }

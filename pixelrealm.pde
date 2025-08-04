@@ -149,8 +149,9 @@ public class PixelRealm extends Screen {
   protected boolean usePortalAllowed = true;
   protected boolean modifyTerrain = false;
   protected int nodeSound = 0;
-  protected float morpherRadius = 150.;
-  protected float morpherBlockHeight = 0.;
+  protected float morpherRadius = 150f;
+  protected float morpherBlockHeight = 0f;
+  protected float morpherBlockCooldown = 0f;
   protected float fovx = PI/3.0;
   protected float fovy = 0.;
   private int slippingJumpsAllowed = 2;
@@ -1433,7 +1434,7 @@ public class PixelRealm extends Screen {
     
     protected LinkedList<PRObject> pocketObjects = new LinkedList<PRObject>();
     
-    public ArrayList<TWEngine.UIModule.CustomNode> lightingUINodes = new ArrayList<TWEngine.UIModule.CustomNode>();
+    public ArrayList<TWEngine.UIModule.CustomNode> lookAndFeelUINodes = new ArrayList<TWEngine.UIModule.CustomNode>();
     public TWEngine.UIModule.CustomSlider ambientSlider;
     public TWEngine.UIModule.CustomSlider reffectSlider;
     public TWEngine.UIModule.CustomSlider geffectSlider;
@@ -1451,9 +1452,9 @@ public class PixelRealm extends Screen {
       this.stateDirectory = file.directorify(dir);
       this.stateFilename  = file.getFilename(stateDirectory);
       
-      populateLightingUINodes();
-      
       loadMinimal = false;
+      
+      populateLookAndFeelUINodes();
       
       if (isNewRealm()) {
         // Run one of the following actions based on our settings;
@@ -1513,15 +1514,14 @@ public class PixelRealm extends Screen {
     
     
     
-    private void populateLightingUINodes() {
-        lightingUINodes.add(ambientSlider = ui.new CustomSlider("Ambient", 0f, 1f, 1f));
-        lightingUINodes.add(reffectSlider = ui.new CustomSlider("R", -5f, 5f, 0f));
-        lightingUINodes.add(geffectSlider = ui.new CustomSlider("G", -5f, 5f, 0f));
-        lightingUINodes.add(beffectSlider = ui.new CustomSlider("B", -5f, 5f, 0f));
-        lightingUINodes.add(lightDirectionSlider = ui.new CustomSliderInt("Direction", 0, 16, 0));
-        lightingUINodes.add(lightHeightSlider = ui.new CustomSliderInt("Height", -4, 16, 1));
+    private void populateLookAndFeelUINodes() {
+        lookAndFeelUINodes.add(ambientSlider = ui.new CustomSlider("Ambient", 0f, 1f, 1f));
+        lookAndFeelUINodes.add(reffectSlider = ui.new CustomSlider("R light", -5f, 5f, 0f));
+        lookAndFeelUINodes.add(geffectSlider = ui.new CustomSlider("G light", -5f, 5f, 0f));
+        lookAndFeelUINodes.add(beffectSlider = ui.new CustomSlider("B light", -5f, 5f, 0f));
+        lookAndFeelUINodes.add(lightDirectionSlider = ui.new CustomSliderInt("Light dir", 0, 16, 0));
+        lookAndFeelUINodes.add(lightHeightSlider = ui.new CustomSliderInt("Light height", -4, 16, 1));
     }
-    
     
     
     
@@ -1530,6 +1530,9 @@ public class PixelRealm extends Screen {
     
     public abstract class TerrainAttributes {
       public ArrayList<TWEngine.UIModule.CustomNode> customNodes = new ArrayList<TWEngine.UIModule.CustomNode>();
+      
+      public TWEngine.UIModule.CustomSliderInt renderDistSlider;
+      public TWEngine.UIModule.CustomSlider waterLevelSlider;
       
       private float renderDistance = 6.;
       private float groundRepeat = 2.;
@@ -1550,11 +1553,52 @@ public class PixelRealm extends Screen {
       
       public TerrainAttributes() {
         NAME = "[unknown]";
-        update();
+        createCustomiseNodes();
+        //update();
+      }
+      
+      public void createCustomiseNodes() {
+        customNodes = new ArrayList<TWEngine.UIModule.CustomNode>();
+        customNodes.add(renderDistSlider = ui.new CustomSliderInt("Render dist", 1, 15, (int)getRenderDistance()));
+        customNodes.add(waterLevelSlider = ui.new CustomSlider("Water level", -300, 300, -waterLevel));
+        
+        // I hate this solution so much
+        for (int i = 0; i < lookAndFeelUINodes.size(); i++) {
+          if (lookAndFeelUINodes.get(i).label.equals("Render dist")) {
+            lookAndFeelUINodes.remove(i);
+            break;
+          }
+        }
+        for (int i = 0; i < lookAndFeelUINodes.size(); i++) {
+          if (lookAndFeelUINodes.get(i).label.equals("Water level")) {
+            lookAndFeelUINodes.remove(i);
+            break;
+          }
+        }
+        
+        lookAndFeelUINodes.add(renderDistSlider);
+        lookAndFeelUINodes.add(waterLevelSlider);
+        
+        waterLevelSlider.setWhenMin("No water");
+      }
+      
+      protected float minWaterLevel() {
+        return 300f;
+      }
+      
+      public void updateMinimalAttribs() {
+        setRenderDistance(renderDistSlider.valInt);
+        
+        waterLevel = -waterLevelSlider.valFloat;
+        hasWater = (waterLevel < minWaterLevel());
       }
       
       public void updateAttribs() {
+        updateMinimalAttribs();
         
+        // Up is minus and down is positive.
+        // This may be confusing for the user.
+        // So just flip the signs here.
       }
       
       
@@ -1672,19 +1716,17 @@ public class PixelRealm extends Screen {
       
       private TWEngine.UIModule.CustomSlider hillHeightSlider;
       private TWEngine.UIModule.CustomSlider hillFrequencySlider;
-      
-      
-      private TWEngine.UIModule.CustomSliderInt renderDistSlider;
       private TWEngine.UIModule.CustomSliderInt chunkLimitSlider;
-      private TWEngine.UIModule.CustomSlider waterLevelSlider;
       private TWEngine.UIModule.CustomSlider groundSizeSlider;
       
       public SinesinesineTerrain() {
+        super();
         NAME = "Sine sine sine";
         createCustomiseNode();
       }
       
       public SinesinesineTerrain(JSONObject j) {
+        super();
         NAME = "Sine sine sine";
         load(j);
         createCustomiseNode();
@@ -1697,35 +1739,25 @@ public class PixelRealm extends Screen {
         // terraform_3 - Sounds like you're doing something subtle/sounds like water
         // terraform_4 - Sounds like you're doing something weird
         
-        customNodes = new ArrayList<TWEngine.UIModule.CustomNode>();
         customNodes.add(hillHeightSlider = ui.new CustomSlider("Height", 0., 800., hillHeight));
         customNodes.add(hillFrequencySlider = ui.new CustomSlider("Frequency", 0.0, 3.0, hillFrequency));
         
         customNodes.add(groundSizeSlider = ui.new CustomSlider("Tile size", 20., 1000., getGroundSize()));
-        customNodes.add(renderDistSlider = ui.new CustomSliderInt("Render dist", 1, 15, (int)getRenderDistance()));
         customNodes.add(chunkLimitSlider = ui.new CustomSliderInt("Chunk limit", 1, 50, 50));
-        customNodes.add(waterLevelSlider = ui.new CustomSlider("Water level", -300, 300, -waterLevel));
-        waterLevelSlider.setWhenMin("No water");
         chunkLimitSlider.setWhenMax("Unlimited");
       }
       
       
       public void updateAttribs() {
-        
-        hillHeight = hillHeightSlider.valFloat;
-        hillFrequency = hillFrequencySlider.valFloat;
+        super.updateAttribs();
         
         setGroundSize(groundSizeSlider.valFloat);
-        setRenderDistance(renderDistSlider.valInt);
         chunkLimitX = chunkLimitSlider.valInt;
         if (chunkLimitX == 100) chunkLimitX = Integer.MAX_VALUE;
         chunkLimitZ = chunkLimitX;
         
-        // Up is minus and down is positive.
-        // This may be confusing for the user.
-        // So just flip the signs here.
-        waterLevel = -waterLevelSlider.valFloat;
-        hasWater = (waterLevel < 300.);
+        hillHeight = hillHeightSlider.valFloat;
+        hillFrequency = hillFrequencySlider.valFloat;
       }
       
       // Based on (copied from) the v1 terrain renderer,
@@ -1837,12 +1869,11 @@ public class PixelRealm extends Screen {
       private TWEngine.UIModule.CustomSlider treeSlider;
       private TWEngine.UIModule.CustomSliderInt octaveSlider;
       
-      private TWEngine.UIModule.CustomSlider waterLevelSlider;
-      private TWEngine.UIModule.CustomSliderInt renderDistSlider;
       private TWEngine.UIModule.CustomSliderInt chunkLimitSlider;
       private TWEngine.UIModule.CustomSlider groundSizeSlider;
       
       public LegacyTerrain() {
+        super();
         NAME = "Legacy";
         NOISE_SEED = int(random(0., 99999999.));
         createCustomiseNode();
@@ -1855,7 +1886,6 @@ public class PixelRealm extends Screen {
       }
       
       private void createCustomiseNode() {
-        customNodes = new ArrayList<TWEngine.UIModule.CustomNode>();
         customNodes.add(maxHeightSlider  = ui.new CustomSlider("Max height", -200., 200., -HIGHEST_MOUNTAIN));
         customNodes.add(variSlider       = ui.new CustomSlider("Variability", 0., 0.5, VARI));
         customNodes.add(hillFrequencySlider = ui.new CustomSlider("Hill frequency", 0., 400., MOUNTAIN_FREQUENCY));
@@ -1865,15 +1895,21 @@ public class PixelRealm extends Screen {
         
         
         customNodes.add(groundSizeSlider = ui.new CustomSlider("Tile size", 20., 1000., getGroundSize()));
-        customNodes.add(renderDistSlider = ui.new CustomSliderInt("Render dist", 1, 15, (int)getRenderDistance()));
         customNodes.add(chunkLimitSlider = ui.new CustomSliderInt("Chunk limit", 1, 50, 50));
-        customNodes.add(waterLevelSlider = ui.new CustomSlider("Water level", -800, 2000, -waterLevel));
-        waterLevelSlider.setWhenMin("No water");
+        waterLevelSlider.min = -800;
+        waterLevelSlider.max = 2000;
         chunkLimitSlider.setWhenMax("Unlimited");
       }
       
       @Override
+      protected float minWaterLevel() {
+        return 800f;
+      }
+      
+      @Override
       public void updateAttribs() {
+        super.updateAttribs();
+        
         HIGHEST_MOUNTAIN = -maxHeightSlider.valFloat;
         VARI = variSlider.valFloat;
         MOUNTAIN_FREQUENCY = hillFrequencySlider.valFloat;
@@ -1881,17 +1917,10 @@ public class PixelRealm extends Screen {
         OCTAVE = octaveSlider.valInt;
         
         setGroundSize(groundSizeSlider.valFloat);
-        setRenderDistance(renderDistSlider.valInt);
         
         chunkLimitX = chunkLimitSlider.valInt;
         if (chunkLimitX == 100) chunkLimitX = Integer.MAX_VALUE;
         chunkLimitZ = chunkLimitX;
-        
-        // Up is minus and down is positive.
-        // This may be confusing for the user.
-        // So just flip the signs here.
-        waterLevel = -waterLevelSlider.valFloat;
-        hasWater = (waterLevel < 800.);
       }
       
       private float rand(float x, float y, float min, float max) { 
@@ -1944,6 +1973,12 @@ public class PixelRealm extends Screen {
         terrain = new LegacyTerrain();
         break;
       }
+    }
+    
+    public int terrainTypeToInt() {
+      if (terrain instanceof SinesinesineTerrain) return 0;
+      else if (terrain instanceof LegacyTerrain) return 1;
+      else return 0;
     }
     
     
@@ -4260,7 +4295,6 @@ public class PixelRealm extends Screen {
       loadRealmTerrain();
       
       if (terrain == null) terrain = new SinesinesineTerrain();
-      
     }
     
     public void refreshFiles() {
@@ -4578,6 +4612,20 @@ public class PixelRealm extends Screen {
           }
         }
         
+        // Coins!
+        
+        if (coins && !createdCoins) {
+          float x = random(-1000, 1000);
+          float z = random(-1000, 1000);
+          for (int i = 0; i < 100; i++) {
+            @SuppressWarnings("unused")
+            PRCoin coin = new PRCoin(x, onSurface(x,z), z);
+            x += random(-500, 500);
+            z += random(-500, 500);
+          }
+          createdCoins = true;
+        }
+        
         
       // File doesn't exist; create new turf file.
       } else {
@@ -4615,8 +4663,6 @@ public class PixelRealm extends Screen {
     }
     
     public void loadRealmV1(JSONObject jsonFile) {
-      boolean createCoins = false;
-      
       JSONArray objects3d = jsonFile.getJSONArray("objects3d");
       if (objects3d == null) {
         console.warn("Couldn't read turf file, objects3d array is missing/misnamed.");
@@ -4638,8 +4684,7 @@ public class PixelRealm extends Screen {
       t.setGroundSize(jsonFile.getFloat("ground_size", 400.));
       t.hillHeight = jsonFile.getFloat("hill_height", 0.);
       t.hillFrequency = jsonFile.getFloat("hill_frequency", 0.5);
-      createCoins = jsonFile.getBoolean("coins", true);
-      coins = createCoins;
+      coins = jsonFile.getBoolean("coins", true);
       
       terrain = t;
       if (terrain == null) console.bugWarn("loadRealmV1: Terrain is still null!");
@@ -4686,19 +4731,6 @@ public class PixelRealm extends Screen {
       JSONObject emptyJSON = new JSONObject();
       for (FileObject o : namesToObjects.values()) {
           o.load(emptyJSON);
-      }
-      
-      
-      if (createCoins && !createdCoins) {
-        float x = random(-1000, 1000);
-        float z = random(-1000, 1000);
-        for (int i = 0; i < 100; i++) {
-          @SuppressWarnings("unused")
-          PRCoin coin = new PRCoin(x, onSurface(x,z), z);
-          x += random(-500, 500);
-          z += random(-500, 500);
-        }
-        createdCoins = true;
       }
     }
     
@@ -4816,15 +4848,15 @@ public class PixelRealm extends Screen {
       }
       
       // Load lighting
-      ambientSlider.valFloat = jsonFile.getFloat("light_ambient", 1f);
-      reffectSlider.valFloat = jsonFile.getFloat("light_reffect", 0f);
-      geffectSlider.valFloat = jsonFile.getFloat("light_geffect", 0f);
-      beffectSlider.valFloat = jsonFile.getFloat("light_beffect", 0f);
-      lightDirectionSlider.valInt = jsonFile.getInt("light_direction", 0);
-      lightHeightSlider.valInt = jsonFile.getInt("light_height", 2);
+      ambientSlider.setVal(jsonFile.getFloat("light_ambient", 1f));
+      reffectSlider.setVal(jsonFile.getFloat("light_reffect", 0f));
+      geffectSlider.setVal(jsonFile.getFloat("light_geffect", 0f));
+      beffectSlider.setVal(jsonFile.getFloat("light_beffect", 0f));
+      lightDirectionSlider.setVal(jsonFile.getInt("light_direction", 0));
+      lightHeightSlider.setVal(jsonFile.getInt("light_height", 2));
       
-      // Bye bye Evolving Gateway coins :(
-      coins = false;
+      // Just for a little fun if the user knows how to modify their JSON files ;P
+      coins = jsonFile.getBoolean("coins", false);
     }
     
     
@@ -5318,7 +5350,7 @@ public class PixelRealm extends Screen {
       boolean splash = (!wasInWater && isInWater);
   
       // :3
-      if (input.keyAction("jump", ' ') && (onGround() || coyoteJump > 0.)) speed *= 3;
+      //if (input.keyAction("jump", ' ') && (onGround() || coyoteJump > 0.)) speed *= 3;
   
       float sin_d = sin(direction);
       float cos_d = cos(direction);
@@ -5689,7 +5721,7 @@ public class PixelRealm extends Screen {
         morpherRadius = min(max(morpherRadius, 25.), 2000.);
         
         // Place cursor in front of player.
-        float SELECT_FAR = 300.;
+        float SELECT_FAR = 450.;
         float px = playerX+sin(direction)*SELECT_FAR;
         float pz = playerZ+cos(direction)*SELECT_FAR;
         
@@ -5740,7 +5772,7 @@ public class PixelRealm extends Screen {
           //scene.texture(display.errorImg);
           
           // TODO: Shader for the selection box.
-          
+          useEnvironmentShader();
           scene.stroke(0);
           scene.strokeWeight(1);
           if (subTool == MORPHER_BLOCK) { 
@@ -5778,6 +5810,8 @@ public class PixelRealm extends Screen {
           scene.box(terrain.groundSize, BOX_HEIGHT-hheight+1, terrain.groundSize);
           scene.popMatrix();
           //console.log(x+" "+onSurface(x, z)+" "+z);
+          
+          morpherBlockCooldown -= display.getDelta();
           
           if (disabledDepthTest) scene.hint(ENABLE_DEPTH_TEST);
         }
@@ -5877,6 +5911,7 @@ public class PixelRealm extends Screen {
               morpherBlockHeight = 9999999.;
             }
             
+            
             // This one is pretty easy. We just modify the tile points
             // for a nice block shape.
             if ((getTileAt(px, pz).y != morpherBlockHeight 
@@ -5887,7 +5922,7 @@ public class PixelRealm extends Screen {
              ) {
               
              
-              if (input.keyAction("secondary_action", 'p')) {
+              if (input.keyAction("secondary_action", 'p') && morpherBlockCooldown <= 0f) {
                 getTileAt(px, pz).y                                       = morpherBlockHeight;
                 getTileAt(px+terrain.groundSize, pz).y                    = morpherBlockHeight;
                 getTileAt(px+terrain.groundSize, pz+terrain.groundSize).y = morpherBlockHeight;
@@ -5914,6 +5949,8 @@ public class PixelRealm extends Screen {
                 if (ch != null) chunksModified.add(ch);
                 
                 sound.playSound("blockdd");
+                morpherBlockCooldown = 12f;
+                
                 // And update the pshape (effectively updates the display on-screen)
                 //console.log(chunksModified.size());
                 for (TerrainChunkV2 chh : chunksModified) {
