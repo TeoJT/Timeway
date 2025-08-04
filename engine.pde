@@ -3884,6 +3884,8 @@ public class TWEngine {
     }
     
     public boolean copy(String src, String dest) {
+      src = src.replaceAll("\\\\", "/");
+      dest = dest.replaceAll("\\\\", "/");
       //if (!exists(src)) {
       //  console.bugWarn("copy: "+src+" doesn't exist!");
       //  return false;
@@ -3933,6 +3935,16 @@ public class TWEngine {
           Path copied = Paths.get(dest);
           Path originalPath = (new File(src)).toPath();
           Files.copy(originalPath, copied, StandardCopyOption.REPLACE_EXISTING);
+          
+          // Recursive copy for directories
+          if (file.isDirectory(src)) {
+            File[] files = (new File(src)).listFiles();
+            for (File f : files) {
+              String fpath = f.getAbsolutePath();
+              boolean success = copy(fpath, file.directorify(dest)+file.getFilename(fpath));
+              if (!success) return false;
+            }
+          }
         }
         catch (IOException e) {
           console.warn(e.getMessage());
@@ -4025,6 +4037,7 @@ public class TWEngine {
   
     public String getDir(String path) {
       try {
+        path = path.replaceAll("\\\\", "/");
         String str = path.substring(0, path.lastIndexOf('/', path.length()-2));
         return str;
       }
@@ -4037,6 +4050,7 @@ public class TWEngine {
     // If there's no dir, returns the full path instead of nothing.
     public String getDirLegacy(String path) {
       try {
+        path = path.replaceAll("\\\\", "/");
         String str = path.substring(0, path.lastIndexOf('/', path.length()-2));
         return str;
       }
@@ -4051,6 +4065,7 @@ public class TWEngine {
     
     // TODO: optimise to be safe and for use with MacOS and Linux.
     public String getPrevDir(String dir) {
+      dir = dir.replaceAll("\\\\", "/");
       int i = dir.lastIndexOf("/", dir.length()-2);
       if (i == -1) {
         console.bugWarn("getPrevDir: At root dir, make sure to use atRootDir in your code!");
@@ -4130,6 +4145,8 @@ public class TWEngine {
     
     // Converts a path (created from getRelativeDir) back to absolute path given a starting path
     public String relativeToAbsolute(String start, String relative) {
+      start = start.replaceAll("\\\\", "/");
+      relative = relative.replaceAll("\\\\", "/");
       try {
         String path = start;
         // Turn into list
@@ -4156,6 +4173,7 @@ public class TWEngine {
     }
     
     public String directorify(String dir) {
+      dir = dir.replaceAll("\\\\", "/");
       if (dir.charAt(dir.length()-1) != '/')  dir += "/";
       return dir;
     }
@@ -4219,6 +4237,7 @@ public class TWEngine {
     }
   
     public String getFilename(String path) {
+      path = path.replaceAll("\\\\", "/");
       int index = path.lastIndexOf('/', path.length()-2);
       if (index != -1) {
         if (path.charAt(path.length()-1) == '/') {
@@ -4231,6 +4250,7 @@ public class TWEngine {
     
     // Returns filename without the extension.
     public String getIsolatedFilename(String path) {
+      path = path.replaceAll("\\\\", "/");
       int index = path.lastIndexOf('/', path.length()-2);
       String filenameWithExt = "";
       if (index != -1) {

@@ -157,8 +157,10 @@ public class PixelRealm extends Screen {
   private int slippingJumpsAllowed = 2;
   protected PixelRealmState.PRObject optionHighlightedItem = null;
   protected String cassettePlaying = "";   // Empty string for realm bgm.
-  private float nextRandomTreeSize = 0;
+  private float nextRandomTreeSize = 0f;
   private int nextRandomTreeIndex = 0;
+  private float manualTreeSize = random(3f, 7f);
+  private int manualTreeIndex = 0;
   
   private PShader unifiedShader = null;
   private PGL pgl;
@@ -1813,6 +1815,8 @@ public class PixelRealm extends Screen {
       }
     }
     
+    int timesthing = 0;
+    
     public class LegacyTerrain extends TerrainAttributes {
       float MAX_RANDOM_HEIGHT=0.500; 
       float VARI=0.08;
@@ -1882,7 +1886,6 @@ public class PixelRealm extends Screen {
       public LegacyTerrain(JSONObject j) {
         this();
         load(j);
-        createCustomiseNode();
       }
       
       private void createCustomiseNode() {
@@ -1899,6 +1902,10 @@ public class PixelRealm extends Screen {
         waterLevelSlider.min = -800;
         waterLevelSlider.max = 2000;
         chunkLimitSlider.setWhenMax("Unlimited");
+        
+        //console.log("createCustomiseNode "+frameCount+" "+timesthing);
+        //timesthing++;
+        //Thread.dumpStack();
       }
       
       @Override
@@ -5663,6 +5670,52 @@ public class PixelRealm extends Screen {
               sound.playSound("pickup");
             }
           }
+          
+          if (currentTool == TOOL_GARDENER) {
+            
+            // Here, subtool is used to select the index of the tree texture, except it's a little weird:
+            // Index 0 = random
+            // Index 1-9 = tree texture at fixed size.
+            if (input.keyActionOnce("next_subtool", ']')) {
+              subTool++;
+              if (subTool > numTreeTextures) {
+                subTool = 0;
+              }
+              if (subTool != 0) {
+                manualTreeIndex = subTool-1;
+                previewTree.setImgIndex(manualTreeIndex);
+                previewTree.setSize(manualTreeSize);
+              }
+              else {
+                previewTree.setImgIndex(nextRandomTreeIndex);
+                previewTree.setSize(nextRandomTreeSize);
+              }
+            }
+            if (input.keyActionOnce("prev_subtool", '[')) {
+              subTool--;
+              if (subTool < 0) {
+                subTool = numTreeTextures;
+              }
+              if (subTool != 0) {
+                manualTreeIndex = subTool-1;
+                previewTree.setImgIndex(manualTreeIndex);
+                previewTree.setSize(manualTreeSize);
+              }
+              else {
+                previewTree.setImgIndex(nextRandomTreeIndex);
+                previewTree.setSize(nextRandomTreeSize);
+              }
+            }
+            
+            if (input.keyAction("scale_up", '=')) {
+              manualTreeSize += 0.04f;
+              previewTree.setSize(manualTreeSize);
+            }
+            if (input.keyAction("scale_down", '-')) {
+              manualTreeSize -= 0.04f;
+              previewTree.setSize(manualTreeSize);
+            }
+          }
       }
       else {
         primaryAction = false;
@@ -5679,42 +5732,45 @@ public class PixelRealm extends Screen {
     
     public void runMorpherTool() {
       if (currentTool == TOOL_MORPHER) {
-        // Some keyboard actions and controls (i dont need to explain that)
-        if (input.keyAction("scale_up", '=')) {
-          if (subTool == MORPHER_BULGE || subTool == MORPHER_FLAT) {
-            morpherRadius *= pow(1.01, display.getDelta());
-          }
-          else if (subTool == MORPHER_BLOCK) {
-            if (input.keyAction("move_slow", TWEngine.InputModule.ALT_KEY)) {
-              morpherBlockHeight -= 2.*display.getDelta();
+        
+        if (!movementPaused) {
+          // Some keyboard actions and controls (i dont need to explain that)
+          if (input.keyAction("scale_up", '=')) {
+            if (subTool == MORPHER_BULGE || subTool == MORPHER_FLAT) {
+              morpherRadius *= pow(1.01, display.getDelta());
             }
-            else {
-              morpherBlockHeight -= 6.*display.getDelta();
-            }
-          }
-        }
-        if (input.keyAction("scale_down", '-')) {
-          if (subTool == MORPHER_BULGE || subTool == MORPHER_FLAT) {
-            morpherRadius *= pow(0.99, display.getDelta());
-          }
-          else if (subTool == MORPHER_BLOCK) {
-            if (input.keyAction("move_slow", TWEngine.InputModule.ALT_KEY)) {
-              morpherBlockHeight += 2.*display.getDelta();
-            }
-            else {
-              morpherBlockHeight += 6.*display.getDelta();
+            else if (subTool == MORPHER_BLOCK) {
+              if (input.keyAction("move_slow", TWEngine.InputModule.ALT_KEY)) {
+                morpherBlockHeight -= 2.*display.getDelta();
+              }
+              else {
+                morpherBlockHeight -= 6.*display.getDelta();
+              }
             }
           }
-        }
-        if (input.keyActionOnce("next_subtool", ']')) {
-          subTool++;
-          if (subTool > 4) subTool = 1;
-          sound.playSound("switch_subtool");
-        }
-        else if (input.keyActionOnce("prev_subtool", '[')) {
-          subTool--;
-          if (subTool <= 0) subTool = 4;
-          sound.playSound("switch_subtool");
+          if (input.keyAction("scale_down", '-')) {
+            if (subTool == MORPHER_BULGE || subTool == MORPHER_FLAT) {
+              morpherRadius *= pow(0.99, display.getDelta());
+            }
+            else if (subTool == MORPHER_BLOCK) {
+              if (input.keyAction("move_slow", TWEngine.InputModule.ALT_KEY)) {
+                morpherBlockHeight += 2.*display.getDelta();
+              }
+              else {
+                morpherBlockHeight += 6.*display.getDelta();
+              }
+            }
+          }
+          if (input.keyActionOnce("next_subtool", ']')) {
+            subTool++;
+            if (subTool > 4) subTool = 1;
+            sound.playSound("switch_subtool");
+          }
+          else if (input.keyActionOnce("prev_subtool", '[')) {
+            subTool--;
+            if (subTool <= 0) subTool = 4;
+            sound.playSound("switch_subtool");
+          }
         }
         
         
@@ -5818,7 +5874,7 @@ public class PixelRealm extends Screen {
         // Finish rendering
         
         // This part of the code is what actually morphs the terrain.
-        if (input.keyAction("primary_action", 'o') || input.keyAction("secondary_action", 'p')) {
+        if ((input.keyAction("primary_action", 'o') || input.keyAction("secondary_action", 'p')) && !movementPaused) {
           // Need this hashset so that only one unique chunk is in there at a time (I think)
           HashSet<TerrainChunkV2> chunksModified = new HashSet<TerrainChunkV2>();
           
@@ -6617,7 +6673,7 @@ public class PixelRealm extends Screen {
           closestObject.tint = color(255, 200, 200);
         }
         
-        if (primaryAction) {
+        if (primaryAction && !movementPaused) {
           switch (currentTool) {
             case TOOL_GRABBER: {
               FileObject p = (FileObject)closestObject;
@@ -6638,7 +6694,7 @@ public class PixelRealm extends Screen {
           }
         }
         
-        if (secondaryAction) {
+        if (secondaryAction && !movementPaused) {
           switch (currentTool) {
             case TOOL_NORMAL: {
               FileObject p = (FileObject)closestObject;
@@ -6661,7 +6717,7 @@ public class PixelRealm extends Screen {
       }
       
       // Plonking down objects
-      if (currentTool == TOOL_GRABBER && currRealm.holdingObject != null && secondaryAction) {
+      if (currentTool == TOOL_GRABBER && currRealm.holdingObject != null && secondaryAction  && !movementPaused) {
         issueRefresherCommand(REFRESHER_PAUSE);
         placeDownObject();
         sound.playSound("plonk");
@@ -6669,24 +6725,32 @@ public class PixelRealm extends Screen {
       }
       
       // Growing trees
-      if (currentTool == TOOL_GARDENER && primaryAction) {
+      if (currentTool == TOOL_GARDENER && primaryAction && !movementPaused) {
         sound.playSound("tree_grow");
         stats.increase("trees_grown", 1);
         
+        float size = nextRandomTreeSize;
+        int index = nextRandomTreeIndex;
+        if (subTool != 0) {
+          size = manualTreeSize;
+          index = manualTreeIndex;
+        }
         
         TerrainPRObject tree = new TerrainPRObject(
                 cursorX, 
                 onSurface(cursorX, cursorZ),
                 cursorZ, 
-                nextRandomTreeSize
+                size
         );
-        tree.setImgIndex(nextRandomTreeIndex);
+        tree.setImgIndex(index);
         tree.grow = 0f;
         
-        nextRandomTreeSize = random(3f, 7f);
-        nextRandomTreeIndex = int(random(0, 9));
-        previewTree.setSize(nextRandomTreeSize);
-        previewTree.setImgIndex(nextRandomTreeIndex);
+        if (subTool == 0) {
+          nextRandomTreeSize = random(3f, 7f);
+          nextRandomTreeIndex = int(random(0, 9));
+          previewTree.setSize(nextRandomTreeSize);
+          previewTree.setImgIndex(nextRandomTreeIndex);
+        }
       }
       
       

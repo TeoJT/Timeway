@@ -460,6 +460,7 @@ public class PixelRealmWithUI extends PixelRealm {
         }
         else {
           currentTool = TOOL_GARDENER;
+          subTool = 0;
           menuShown = false;
           menu = null;
           sound.playSound("menu_select");
