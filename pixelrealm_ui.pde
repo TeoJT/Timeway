@@ -1609,7 +1609,7 @@ public class PixelRealmWithUI extends PixelRealm {
       // (as well as move backwards) while still moving.
       if (touch) {
         if (dash) {
-          input.setAction("dash", 'r');
+          input.setAction("dash", TWEngine.InputModule.CTRL_KEY);
         }
         
         if (touchLeft) {

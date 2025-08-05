@@ -1983,9 +1983,9 @@ public class PixelRealm extends Screen {
     }
     
     public int terrainTypeToInt() {
-      if (terrain instanceof SinesinesineTerrain) { return 0; }
-      else if (terrain instanceof LegacyTerrain) { return 1; }
-      else { return 0; }
+      if (terrain instanceof SinesinesineTerrain) return 0;
+      else if (terrain instanceof LegacyTerrain) return 1;
+      else return 0;
     }
     
     
@@ -5343,13 +5343,13 @@ public class PixelRealm extends Screen {
       isWalking = false;
       float speed = WALK_ACCELERATION;
   
-      if (input.keyAction("dash", TWEngine.InputModule.SHIFT_KEY)) {
+      if (input.keyAction("dash", TWEngine.InputModule.CTRL_KEY)) {
         speed = RUN_SPEED+runAcceleration;
         if (RUN_SPEED+runAcceleration <= MAX_SPEED) runAcceleration+=RUN_ACCELERATION;
       } else runAcceleration = 0.;
       
       // TODO: Make keybinding instead of fixed.
-      if (input.keyAction("move_slow", TWEngine.InputModule.ALT_KEY)) {
+      if (input.keyAction("move_slow", TWEngine.InputModule.SHIFT_KEY)) {
         speed = SNEAK_SPEED;
         runAcceleration = 0.;
       }
@@ -5447,7 +5447,7 @@ public class PixelRealm extends Screen {
           }
   
   
-          if (input.keyAction("move_slow", TWEngine.InputModule.ALT_KEY)) {
+          if (input.keyAction("move_slow", TWEngine.InputModule.SHIFT_KEY)) {
             if (input.keyAction("turn_right", 'e')) rot = -SLOW_TURN_SPEED*display.getDelta();
             if (input.keyAction("turn_left", 'q')) rot =  SLOW_TURN_SPEED*display.getDelta();
           } else {
@@ -5673,10 +5673,16 @@ public class PixelRealm extends Screen {
           
           if (currentTool == TOOL_GARDENER) {
             
+            // Display tree preview
+            if (previewTree == null) {
+              previewTree = new TerrainPRObject(0,0,0, nextRandomTreeSize);
+            }
+            
             // Here, subtool is used to select the index of the tree texture, except it's a little weird:
             // Index 0 = random
             // Index 1-9 = tree texture at fixed size.
             if (input.keyActionOnce("next_subtool", ']')) {
+              sound.playSound("menu_select");
               subTool++;
               if (subTool > numTreeTextures) {
                 subTool = 0;
@@ -5689,9 +5695,13 @@ public class PixelRealm extends Screen {
               else {
                 previewTree.setImgIndex(nextRandomTreeIndex);
                 previewTree.setSize(nextRandomTreeSize);
+                
+                sound.stopSound("grow");
+                sound.stopSound("shrink");
               }
             }
             if (input.keyActionOnce("prev_subtool", '[')) {
+              sound.playSound("menu_select");
               subTool--;
               if (subTool < 0) {
                 subTool = numTreeTextures;
@@ -5704,16 +5714,30 @@ public class PixelRealm extends Screen {
               else {
                 previewTree.setImgIndex(nextRandomTreeIndex);
                 previewTree.setSize(nextRandomTreeSize);
+                
+                sound.stopSound("grow");
+                sound.stopSound("shrink");
               }
             }
             
-            if (input.keyAction("scale_up", '=')) {
-              manualTreeSize += 0.04f;
-              previewTree.setSize(manualTreeSize);
-            }
-            if (input.keyAction("scale_down", '-')) {
-              manualTreeSize -= 0.04f;
-              previewTree.setSize(manualTreeSize);
+            if (subTool != 0) {
+              
+              if (input.keyAction("scale_up", '=') && manualTreeSize <= 35f) {
+                sound.playSoundOnce("grow");
+                sound.stopSound("shrink");
+                manualTreeSize *= pow(1.01, display.getDelta());
+                previewTree.setSize(manualTreeSize);
+              }
+              else if (input.keyAction("scale_down", '-') && manualTreeSize > 0.1f) {
+                sound.playSoundOnce("shrink");
+                sound.stopSound("grow");
+                manualTreeSize *= pow(0.99, display.getDelta());
+                previewTree.setSize(manualTreeSize);
+              }
+              else {
+                sound.stopSound("grow");
+                sound.stopSound("shrink");
+              }
             }
           }
       }
@@ -5736,11 +5760,13 @@ public class PixelRealm extends Screen {
         if (!movementPaused) {
           // Some keyboard actions and controls (i dont need to explain that)
           if (input.keyAction("scale_up", '=')) {
+            sound.playSoundOnce("grow");
+            sound.stopSound("shrink");
             if (subTool == MORPHER_BULGE || subTool == MORPHER_FLAT) {
               morpherRadius *= pow(1.01, display.getDelta());
             }
             else if (subTool == MORPHER_BLOCK) {
-              if (input.keyAction("move_slow", TWEngine.InputModule.ALT_KEY)) {
+              if (input.keyAction("move_slow", TWEngine.InputModule.SHIFT_KEY)) {
                 morpherBlockHeight -= 2.*display.getDelta();
               }
               else {
@@ -5748,12 +5774,14 @@ public class PixelRealm extends Screen {
               }
             }
           }
-          if (input.keyAction("scale_down", '-')) {
+          else if (input.keyAction("scale_down", '-')) {
+            sound.playSoundOnce("shrink");
+            sound.stopSound("grow");
             if (subTool == MORPHER_BULGE || subTool == MORPHER_FLAT) {
               morpherRadius *= pow(0.99, display.getDelta());
             }
             else if (subTool == MORPHER_BLOCK) {
-              if (input.keyAction("move_slow", TWEngine.InputModule.ALT_KEY)) {
+              if (input.keyAction("move_slow", TWEngine.InputModule.SHIFT_KEY)) {
                 morpherBlockHeight += 2.*display.getDelta();
               }
               else {
@@ -5761,6 +5789,11 @@ public class PixelRealm extends Screen {
               }
             }
           }
+          else {
+            sound.stopSound("grow");
+            sound.stopSound("shrink");
+          }
+          
           if (input.keyActionOnce("next_subtool", ']')) {
             subTool++;
             if (subTool > 4) subTool = 1;
@@ -5775,6 +5808,11 @@ public class PixelRealm extends Screen {
         
         
         morpherRadius = min(max(morpherRadius, 25.), 2000.);
+        // (hate this so much)
+        if (morpherRadius <= 25.1f || morpherRadius >= 2000.1f) {
+            sound.stopSound("grow");
+            sound.stopSound("shrink");
+        }
         
         // Place cursor in front of player.
         float SELECT_FAR = 450.;
@@ -5895,7 +5933,7 @@ public class PixelRealm extends Screen {
                 
                 // Slow down morphing if shift pressed
                 float morphSpeed = 5.;
-                if (input.keyAction("move_slow", TWEngine.InputModule.ALT_KEY)) {
+                if (input.keyAction("move_slow", TWEngine.InputModule.SHIFT_KEY)) {
                   morphSpeed = 1.5;
                 }
                 
@@ -7157,6 +7195,9 @@ public class PixelRealm extends Screen {
     portalLight = 255.;
     portalCoolDown = 10.;
     
+    sound.stopSound("grow");
+    sound.stopSound("shrink");
+    
     // Before we do anything with files, we need to tell the refresher thread to take a quick nap.
     // Let's also update the list while we're at it.
     issueRefresherCommand(REFRESHER_PAUSE);
@@ -7447,6 +7488,12 @@ public class PixelRealm extends Screen {
     currRealm.renderTerrain();
     engine.timestamp("terrain");
     currRealm.runMorpherTool();
+    
+    if (input.keyActionOnce("menu", '\t')) {
+      sound.stopSound("grow");
+      sound.stopSound("shrink");
+    }
+    
     engine.timestamp("morpher");
     currRealm.renderPRObjects(); 
     engine.timestamp("PRObjects render");
@@ -7500,6 +7547,8 @@ public class PixelRealm extends Screen {
           else {
             switchToRealm (quickWarpRealms[i]);
           }
+          sound.stopSound("grow");
+          sound.stopSound("shrink");
           stats.increase("warps", 1);
           quickWarpIndex = i;
           sound.playSound("swish");
