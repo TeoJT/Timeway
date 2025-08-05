@@ -109,7 +109,8 @@ public class PixelRealmWithUI extends PixelRealm {
     statsExists = isAndroid() ? file.exists(getAndroidWriteableDir()+engine.STATS_FILE()) : file.exists(engine.APPPATH+engine.STATS_FILE());
 
     if (!statsExists) {
-      this.requestTutorial();
+      // No tutorial for now, it sucks. We can redesign the tutorial later.
+      //this.requestTutorial();
     }
   }
   

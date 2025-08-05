@@ -3883,6 +3883,12 @@ public class TWEngine {
       return true;
     }
     
+    public String[] getNamesListFromRecycle() {
+      for (int i = 0; i < recycleJson.size(); i++) {
+        recycleJson.getJSONObject(i);
+      }
+    }
+    
     public boolean copy(String src, String dest) {
       src = src.replaceAll("\\\\", "/");
       dest = dest.replaceAll("\\\\", "/");

@@ -1983,9 +1983,9 @@ public class PixelRealm extends Screen {
     }
     
     public int terrainTypeToInt() {
-      if (terrain instanceof SinesinesineTerrain) return 0;
-      else if (terrain instanceof LegacyTerrain) return 1;
-      else return 0;
+      if (terrain instanceof SinesinesineTerrain) { return 0; }
+      else if (terrain instanceof LegacyTerrain) { return 1; }
+      else { return 0; }
     }
     
     
