@@ -3750,24 +3750,12 @@ public class TWEngine {
         }
       }
       
-      // Recycle bin
-      if (!exists(APPPATH+RECYCLE_BIN_INFO)) {
-        recycleJson = new JSONArray();
-      }
-      else {
-        try {
-          recycleJson = loadJSONArray(APPPATH+RECYCLE_BIN_INFO);
-        }
-        catch (RuntimeException e) {
-          console.warn("Something went wrong with loading recycling bin info: "+e.getMessage());
-          recycleJson = new JSONArray();
-        }
-      }
     }
     
     public final String RECYCLE_BIN_PATH = "recyclebin/";
     public final String RECYCLE_BIN_INFO = RECYCLE_BIN_PATH+"recycle.json";
     private JSONArray recycleJson = null;
+    public boolean recycleJsonLoaded = false;
     
     public boolean loading = false;
     public int MAX_DISPLAY_FILES = 2048; 
@@ -3829,6 +3817,10 @@ public class TWEngine {
         return false;
       }
       
+      if (!exists(getDir(newPlace))) {
+        mkdir(getDir(newPlace));
+      }
+      
       try {
         File of = new File(oldPlace);
         File nf = new File(newPlace);
@@ -3861,14 +3853,32 @@ public class TWEngine {
       }
     }
     
+    private void recycleBinCheck() {
+      // Recycle bin
+      if (!exists(APPPATH+RECYCLE_BIN_INFO)) {
+        recycleJson = new JSONArray();
+        mkdir(APPPATH+RECYCLE_BIN_PATH);
+      }
+      else if (!recycleJsonLoaded) {
+        try {
+          recycleJson = loadJSONArray(APPPATH+RECYCLE_BIN_INFO);
+        }
+        catch (RuntimeException e) {
+          console.warn("Something went wrong with loading recycling bin info: "+e.getMessage());
+          recycleJson = new JSONArray();
+        }
+      }
+      recycleJsonLoaded = true;
+    }
     
     public boolean recycle(String oldLocation) {
-      String newName = nf(random(0, 99999999), 8, 0);
+      //String newName = nf(random(0, 99999999), 8, 0);
+      String newName = getIsolatedFilename(oldLocation)+"."+getExt(oldLocation);
       while (exists(APPPATH+RECYCLE_BIN_PATH+newName)) {
-        newName = nf(random(0, 99999999), 8, 0);
+        newName = getIsolatedFilename(oldLocation)+"-"+nf(random(0, 99999999), 8, 0)+"."+getExt(oldLocation);
       }
       
-      mkdir(APPPATH+RECYCLE_BIN_PATH);
+      recycleBinCheck();
       
       if (!mv(oldLocation, APPPATH+RECYCLE_BIN_PATH+newName)) {
         console.warn("Could not recycle "+getFilename(oldLocation)+", maybe file permissions denied?");
@@ -3883,13 +3893,29 @@ public class TWEngine {
       return true;
     }
     
-    //public String[] getNamesListFromRecycle() {
-    //  mkdir(APPPATH+RECYCLE_BIN_PATH);
+    private ArrayList<String> getAttribListFromRecycle(String attribName) {
+      recycleBinCheck();
       
-    //  for (int i = 0; i < recycleJson.size(); i++) {
-    //    recycleJson.getJSONObject(i);
-    //  }
-    //}
+      ArrayList<String> returnList = new ArrayList<String>();
+      
+      for (int i = 0; i < recycleJson.size(); i++) {
+        JSONObject item = recycleJson.getJSONObject(i);
+        
+        if (file.exists(APPPATH+RECYCLE_BIN_PATH+item.getString("name", "?"))) {
+          returnList.add(item.getString(attribName, ""));
+        }
+      }
+      
+      return returnList;
+    }
+    
+    public ArrayList<String> getNameListFromRecycle() {
+      return getAttribListFromRecycle("name");
+    }
+    
+    public ArrayList<String> getOldLocationListFromRecycle() {
+      return getAttribListFromRecycle("old_location");
+    }
     
     public boolean copy(String src, String dest) {
       src = src.replaceAll("\\\\", "/");
@@ -4301,6 +4327,8 @@ public class TWEngine {
         return "unknown_128";
       case FILE_TYPE_IMAGE:
         return "image_128";
+      case FILE_TYPE_DIRECTORY:
+        return "folder_128";
       case FILE_TYPE_PDF:
         return "doc_128";
       case FILE_TYPE_VIDEO:
@@ -4325,6 +4353,8 @@ public class TWEngine {
     }
   
     public FileType extToType(String ext) {
+      if (ext.equals(".")) return FileType.FILE_TYPE_DIRECTORY;
+      
       if (ext.equals("png")
         || ext.equals("jpg")
         || ext.equals("jpeg")
@@ -10333,6 +10363,7 @@ public enum PowerMode {
 public enum FileType {
   FILE_TYPE_UNKNOWN, 
     FILE_TYPE_IMAGE, 
+    FILE_TYPE_DIRECTORY, 
     FILE_TYPE_PDF,
     FILE_TYPE_VIDEO, 
     FILE_TYPE_MUSIC, 

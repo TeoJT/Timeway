@@ -959,8 +959,8 @@ public class Editor extends Screen {
     
     private void imageOptions() {
       
-      String[] labels = new String[3];
-      Runnable[] actions = new Runnable[3];
+      String[] labels = new String[5];
+      Runnable[] actions = new Runnable[5];
       
       labels[0] = "Copy";
       actions[0] = new Runnable() {public void run() {
@@ -969,9 +969,50 @@ public class Editor extends Screen {
         
       }};
       
-      
-      labels[1] = "Save";
+      labels[1] = "Flip horizontally";
       actions[1] = new Runnable() {public void run() {
+        if (editingPlaceable != null && editingPlaceable instanceof ImagePlaceable) {
+          ImagePlaceable im = (ImagePlaceable)editingPlaceable;
+          PImage img = display.getImg(im.imageName);
+          
+          PImage newImg = app.createImage(img.width, img.height, ARGB);
+          img.loadPixels();
+          newImg.loadPixels();
+          for (int y = 0; y < img.height; y++) {
+            for (int x = 0; x < img.width; x++) {
+              newImg.pixels[y * img.width + x] = img.pixels[y * img.width + (img.width-x-1)];
+            }
+          }
+          
+          display.systemImages.put(im.imageName, newImg);
+        }
+        
+      }};
+      
+      labels[2] = "Flip vertically";
+      actions[2] = new Runnable() {public void run() {
+        if (editingPlaceable != null && editingPlaceable instanceof ImagePlaceable) {
+          ImagePlaceable im = (ImagePlaceable)editingPlaceable;
+          PImage img = display.getImg(im.imageName);
+          
+          PImage newImg = app.createImage(img.width, img.height, ARGB);
+          img.loadPixels();
+          newImg.loadPixels();
+          for (int y = 0; y < img.height; y++) {
+            for (int x = 0; x < img.width; x++) {
+              newImg.pixels[y * img.width + x] = img.pixels[(img.height-y-1) * img.width + x];
+            }
+          }
+          newImg.updatePixels();
+          
+          display.systemImages.put(im.imageName, newImg);
+        }
+        
+      }};
+      
+      
+      labels[3] = "Save";
+      actions[3] = new Runnable() {public void run() {
           
         if (editingPlaceable != null && editingPlaceable instanceof ImagePlaceable) {
           ImagePlaceable im = (ImagePlaceable)editingPlaceable;
@@ -980,8 +1021,8 @@ public class Editor extends Screen {
           
       }};
       
-      labels[2] = "Delete";
-      actions[2] = new Runnable() {public void run() {
+      labels[4] = "Delete";
+      actions[4] = new Runnable() {public void run() {
           
         if (editingPlaceable != null) {
           placeableset.remove(editingPlaceable.id);
@@ -2401,7 +2442,7 @@ public class Editor extends Screen {
           }
           
           if (!camera.error.get() && camera.ready.get()) {
-            if (ui.button("snap", "snap_button_128", "")) {
+            if (ui.button("snap", "snap_button_128", "") || input.keyDownOnce(' ') || input.enterOnce) {
               sound.playSound("select_snap");
               stats.increase("photos_taken", 1);
               insertImage(camera.updateImage());

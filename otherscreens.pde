@@ -36,11 +36,11 @@ public class Updater extends Screen {
   
   public void upperBar() {
     super.upperBar();
-    textFont(engine.DEFAULT_FONT);
-    textSize(50);
-    textAlign(CENTER, TOP);
-    fill(0);
-    text("Update", WIDTH/2, 10);
+    app.textFont(engine.DEFAULT_FONT);
+    app.textSize(50);
+    app.textAlign(CENTER, TOP);
+    app.fill(0);
+    app.text("Update", WIDTH/2, 10);
   }
   
   public boolean button(String display, float x, float y) {
@@ -53,38 +53,38 @@ public class Updater extends Screen {
   public void content() {
     
     float x, y;
-    textFont(engine.DEFAULT_FONT);
-    textSize(50);
-    textAlign(LEFT, TOP);
-    fill(255);
+    app.textFont(engine.DEFAULT_FONT);
+    app.textSize(50);
+    app.textAlign(LEFT, TOP);
+    app.fill(255);
     x = 10;
     y = myUpperBarWeight+50;
-    text(headerText, x, y);
+    app.text(headerText, x, y);
     
-    textSize(30);
-    fill(255, 255, 200);
+    app.textSize(30);
+    app.fill(255, 255, 200);
     x = 10;
     y = myUpperBarWeight+100;
-    text(updateName, x, y);
+    app.text(updateName, x, y);
     
-    textSize(30);
-    fill(255);
+    app.textSize(30);
+    app.fill(255);
     x = 10;
     y = myUpperBarWeight+150;
-    text(displayMessage, x, y, WIDTH-x*2, 100);
+    app.text(displayMessage, x, y, WIDTH-x*2, 100);
     
-    textSize(20);
-    fill(255);
+    app.textSize(20);
+    app.fill(255);
     x = 10;
     y = myUpperBarWeight+250;
     float footerY = 150;
-    text(patchNotes, x, y, WIDTH-x*2, HEIGHT-myLowerBarWeight-y-footerY);
+    app.text(patchNotes, x, y, WIDTH-x*2, HEIGHT-myLowerBarWeight-y-footerY);
     
-    textSize(20);
-    fill(200);
+    app.textSize(20);
+    app.fill(200);
     x = 10;
     y = HEIGHT-myLowerBarWeight-footerY;
-    text(footerMessage, x, y, WIDTH-x*2, footerY);
+    app.text(footerMessage, x, y, WIDTH-x*2, footerY);
     
     if (button("Later", 0, HEIGHT-myLowerBarWeight-60)) {
       previousScreen();
@@ -568,6 +568,7 @@ public class HomeScreen extends Screen {
         boolean explorerButton = ui.basicButton("Explorer", display.WIDTH/2-400, (offY += 60), 800, 50);
         boolean settingsButton = ui.basicButton("Settings", display.WIDTH/2-400, (offY += 60), 800, 50);
         boolean creditsButton = ui.basicButton("Credits", display.WIDTH/2-400, (offY += 60), 800, 50);
+        boolean binButton = ui.basicButton("Recycle bin", display.WIDTH/2-400, (offY += 60), 800, 50);
         
         if (buttonOnce) {
           
@@ -599,7 +600,341 @@ public class HomeScreen extends Screen {
           }
         }
         
+        if (binButton) {
+          requestScreen(new RecycleBinScreen(engine));
+        }
+        
         gui.updateSpriteSystem();
         
     }
+}
+
+
+
+
+
+
+
+
+
+
+public class RecycleBinScreen extends Screen {
+  //private String currentDir = DEFAULT_DIR;
+  
+  private SpriteSystem gui;
+  
+  //DisplayableFile backButtonDisplayable = null;
+ 
+  private float scrollBottom = 0.0f;
+  private float prevMouseY = 0.0f;
+  private float scrollVelocity = 0f;
+  private boolean scrolling = false;
+  private boolean prompt = false;
+  private boolean itemExistsError = false;
+  private int itemToRestore = 0;
+  
+  private ArrayList<String> originalFilenames;
+  private ArrayList<String> names;
+  private ArrayList<String> originalExts;
+  private ArrayList<String> originalLocations;
+  private AtomicBoolean runChecker = new AtomicBoolean(true);
+  private AtomicBoolean pauseChecker = new AtomicBoolean(false);
+  private AtomicBoolean changeDetected = new AtomicBoolean(false);
+  
+  private final float ITEM_HEIGHT = 80f;
+  final float BOTTOM_SCROLL_EXTEND = 300;
+  
+  public RecycleBinScreen(TWEngine engine) {
+        super(engine);
+        
+        gui = new SpriteSystem(engine, engine.APPPATH+engine.PATH_SPRITES_ATTRIB()+"gui/recyclebin/");
+        ui.useSpriteSystem(gui);
+        gui.interactable = false;
+        
+    
+        myLowerBarColor   = color(50);
+        myUpperBarColor   = color(50);
+        myBackgroundColor = color(25);
+        myUpperBarWeight  = 80f;
+        myLowerBarWeight  = 120f;
+        
+        refresh();
+        startCheckerThread();
+  }
+  
+  private void startCheckerThread() {
+    Thread t1 = new Thread(new Runnable() {
+      public void run() {
+        try {
+          String lastModified = file.getLastModified(engine.APPPATH+file.RECYCLE_BIN_PATH);
+          
+          while (runChecker.get()) {
+            try {
+              Thread.sleep(1000);
+            }
+            catch (InterruptedException e) {
+              // we don't care.
+            }
+            
+            // Pause by just skipping the check.
+            if (pauseChecker.getAndSet(false)) {
+              lastModified = file.getLastModified(engine.APPPATH+file.RECYCLE_BIN_PATH);
+              continue;
+            }
+            
+            String newLastModified = file.getLastModified(engine.APPPATH+file.RECYCLE_BIN_PATH);
+            
+            if (!lastModified.equals(newLastModified)) {
+              lastModified = file.getLastModified(engine.APPPATH+file.RECYCLE_BIN_PATH);
+              changeDetected.set(true);
+            }
+          }
+        }
+        catch (NullPointerException e) {
+          
+        }
+      }
+    }
+    );
+    //t1.setDaemon(true);
+    t1.start();
+  }
+  
+  
+  private void refresh() {
+    file.recycleJsonLoaded = false;
+    originalLocations = file.getOldLocationListFromRecycle();
+    names = file.getNameListFromRecycle();
+    originalFilenames = new ArrayList<String>();
+    originalExts = new ArrayList<String>();
+    for (int i = 0; i < originalLocations.size(); i++) {
+      originalFilenames.add(i, file.getFilename(originalLocations.get(i)));
+      originalExts.add(i, file.getExt(originalFilenames.get(i)));
+    }
+    updateMenu();
+  }
+  
+  private void updateMenu() {
+    scrollBottom = max(0, (originalFilenames.size()*ITEM_HEIGHT-HEIGHT+BOTTOM_SCROLL_EXTEND));
+  }
+  
+  // Just use the default background
+  public void backg() {
+        app.fill(myBackgroundColor);
+        app.noStroke();
+        app.rect(0, 0, WIDTH, HEIGHT);
+  }
+  
+  public void upperBar() {
+    //display.shader("fabric", "color", 0.5,0.5,0.5,1., "intensity", 0.1);
+    super.upperBar();
+    //app.resetShader();
+    
+    app.fill(255);
+    app.textFont(engine.DEFAULT_FONT, 70f);
+    app.textAlign(LEFT, TOP);
+    app.text("Recycle bin", 100f, 10f);
+    
+    if (!prompt) {
+      if (ui.button("back", "back_arrow_128", "")) {
+        previousScreen();
+      }
+    }
+    gui.updateSpriteSystem();
+  }
+  
+  
+    
+  public void lowerBar() {
+    //display.shader("fabric", "color", 0.5,0.5,0.5,1., "intensity", 0.1);
+    super.lowerBar();
+    //display.resetShader();
+    
+    app.fill(255f, 127f, 127f);
+    app.textFont(engine.DEFAULT_FONT, 16f);
+    app.textAlign(CENTER, TOP);
+    
+    if (!prompt) {
+      float x = WIDTH*0.1f, y = HEIGHT-myLowerBarWeight+10f, wi = WIDTH*0.8f, hi = myLowerBarWeight;
+      app.text("For safety reasons, Timeway cannot permanently delete files in the recycle bin. If you wish to empty your recycling bin, please do so manually via your system's file explorer.\nClick here to open the recycle bin folder.",
+      x, y, wi, hi);
+      if (ui.mouseInArea(x, y, wi, hi) && input.primaryOnce) {
+        sound.playSound("select_any");
+        file.open(engine.APPPATH+file.RECYCLE_BIN_PATH);
+      }
+    }
+  }
+  
+  private void restore(int item) {
+    pauseChecker.set(true);
+    boolean success = file.mv(engine.APPPATH+file.RECYCLE_BIN_PATH+names.get(item), originalLocations.get(item));
+    
+    if (success) {
+      console.log("Restored \""+originalFilenames.get(itemToRestore)+"\".");
+      originalFilenames.remove(itemToRestore);
+      originalLocations.remove(itemToRestore);
+      names.remove(itemToRestore);
+      originalExts.remove(itemToRestore);
+      updateMenu();
+    }
+    else {
+      console.log("Failed to restore \""+originalFilenames.get(itemToRestore)+"\".");
+    }
+  }
+  
+  // Let's render our stuff.
+  public void content() {
+      // Scrolling logic 
+      // TODO: This should really be part of the engine code.
+      
+      
+      if (input.primaryOnce && input.mouseY() > myUpperBarWeight && input.mouseY() < HEIGHT-myLowerBarWeight) {
+        scrolling = true;
+      }
+      if (input.primaryReleased) {
+        scrolling = false;
+      }
+      
+      if (scrolling) {
+        power.setAwake();
+        scrollVelocity = (input.mouseY()-prevMouseY);
+      }
+      else {
+        scrollVelocity *= PApplet.pow(0.92, display.getDelta());
+      }
+      
+      prevMouseY = input.mouseY();
+      
+      if (!prompt) {
+        input.scrollOffset += scrollVelocity;
+        input.processScroll(0., scrollBottom+1.0);
+      }
+      
+      if (changeDetected.compareAndSet(true, false)) {
+        refresh();
+        console.log("Updated recycle bin.");
+      }
+      
+      if (originalFilenames.size() == 0) {
+        app.fill(100);
+        app.textFont(engine.DEFAULT_FONT, 40f);
+        app.textAlign(CENTER, TOP);
+        app.text("Recycle bin is empty.", WIDTH/2, myUpperBarWeight+200f);
+      }
+      
+      // DIsplay all the files
+      for (int i = 0; i < originalFilenames.size(); i++) {
+        if (originalFilenames.get(i) == null) continue;
+        
+        float x = 30f;
+        float y = myUpperBarWeight+30f+i*ITEM_HEIGHT+input.scrollOffset;
+        
+        // Don't bother rendering item if offscreen
+        if (y < -ITEM_HEIGHT || y > HEIGHT) continue;
+        
+        // Icon
+        float ICON_WIDTH = 58f;
+        display.img(file.extIcon(originalExts.get(i)), x, y, ICON_WIDTH, ICON_WIDTH);
+        
+        x += ICON_WIDTH+10f;
+        
+        // Filename
+        app.fill(255f);
+        app.textFont(engine.DEFAULT_FONT, 34f);
+        app.textAlign(LEFT, TOP);
+        if (originalFilenames.get(i).length() > 66) {
+          app.text(originalFilenames.get(i).substring(0, 64)+"...", x, y);
+        }
+        else {
+          app.text(originalFilenames.get(i), x, y);
+        }
+        
+        // Original location
+        app.fill(100f);
+        app.textFont(engine.DEFAULT_FONT, 20f);
+        
+        if (originalLocations.get(i).length() > 130) {
+          app.text(originalLocations.get(i).substring(0, 128)+"...", x, y+38f);
+        }
+        else {
+          app.text(originalLocations.get(i), x, y+38f);
+        }
+        
+        
+        // Restore button
+        float wi = 200f, hi = 50f;
+        
+        x = WIDTH-wi-60f;
+        y += 20f;
+        
+        app.stroke(255f);
+        app.strokeWeight(1f);
+        if (ui.mouseInArea(x, y, wi, hi) && !prompt) {
+          app.fill(160, 140, 200); 
+          
+          if (input.primaryOnce) {
+            sound.playSound("select_any");
+            prompt = true;
+            itemToRestore = i;
+            
+            // We can't move the item to its original location if another file already exists there.
+            if (file.exists(originalLocations.get(i))) {
+              itemExistsError = true;
+            }
+          }
+        }
+        else {
+          app.fill(160-40, 140-40, 200-40); 
+        }
+        
+        app.rect(x, y, wi, hi);
+        
+        // Text
+        app.fill(255);
+        app.textSize(36f);
+        app.text("Restore", x+25f, y+10f);
+      }
+      
+      // Restore item prompt (yes/no prompt)
+      if (prompt) {
+        gui.sprite("recyclebin_restore_back", "black");
+        
+        float x = gui.getSprite("recyclebin_restore_back").getX();
+        float y = gui.getSprite("recyclebin_restore_back").getY();
+        float wi = gui.getSprite("recyclebin_restore_back").getWidth();
+        app.textSize(24f);
+        app.textAlign(CENTER, TOP);
+        if (itemExistsError) {
+          app.text("Cannot restore \""+originalFilenames.get(itemToRestore)+"\" because a file already exists at \""+originalLocations.get(itemToRestore)+"\".", x, y+30f, wi, HEIGHT);
+          
+          if (ui.buttonVary("recyclebin_restore_ok", "cross_128", "Dismiss") || input.enterOnce) {
+            sound.playSound("select_any");
+            prompt = false;
+            itemExistsError = false;
+          }
+        }
+        else {
+          app.text("Restore \""+originalFilenames.get(itemToRestore)+"\"?", x, y+30f, wi, HEIGHT);
+          
+          gui.sprite("recyclebin_icontorestore", file.extIcon(originalExts.get(itemToRestore)));
+          
+          if (ui.buttonVary("recyclebin_restore_yes", "tick_128", "Yes") || input.enterOnce) {
+            sound.playSound("select_any");
+            prompt = false;
+            restore(itemToRestore);
+          }
+          if (ui.buttonVary("recyclebin_restore_no", "cross_128", "No")) {
+            sound.playSound("select_any");
+            prompt = false;
+          }
+        }
+      }
+      
+      engine.displayInputPrompt();
+  }
+  
+  
+  public void endScreenAnimation() {
+    runChecker.set(false);
+  }
 }

@@ -520,7 +520,13 @@ public class PixelRealmWithUI extends PixelRealm {
       super("", "back-fileoptionsmenu");
       this.probject = o;
       this.filename = file.getFilename(probject.dir);
-      this.title = this.filename;
+      
+      if (filename.length() > 38) {
+        this.title = filename.substring(0, 36)+"...";
+      }
+      else {
+        this.title = filename;
+      }
     }
     
     
