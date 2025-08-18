@@ -5692,15 +5692,17 @@ public class TWEngine {
 
 
   public Runnable doWhenPromptSubmitted = null;
-  public String promptText;
+  private String promptText;
+  public String promptInput;
   public boolean inputPromptShown = false;
   public String lastInput = "";
 
   public void beginInputPrompt(String prompt, Runnable doWhenSubmitted) {
-    input.prepareTyping();
+    input.cursorX = 0;
     inputPromptShown = true;
     input.addNewlineWhenEnterPressed = false;
     promptText = prompt;
+    promptInput = "";
     doWhenPromptSubmitted = doWhenSubmitted;
     openTouchKeyboard();
   }
@@ -5709,10 +5711,12 @@ public class TWEngine {
     if (inputPromptShown) {
       if (input.upOnce) {
         if (lastInput.length() > 0) {
-          input.keyboardMessage = lastInput;
-          input.cursorX = input.keyboardMessage.length();
+          promptInput = lastInput;
+          input.cursorX = promptInput.length();
         }
       }
+      
+      promptInput = input.getTyping(promptInput);
       
       float buttonwi = 200;
       boolean button = ui.basicButton("Enter", display.WIDTH/2-buttonwi/2, display.HEIGHT/2+50, buttonwi, 50f);
@@ -5721,12 +5725,12 @@ public class TWEngine {
         inputPromptShown = false;
         //if (input.keyboardMessage.length() <= 0) return;
         // Remove enter character at end
-        if (input.keyboardMessage.length() > 0) {
-          int ll = max(input.keyboardMessage.length()-1, 0);   // Don't allow it to go lower than 0
-          if (input.keyboardMessage.charAt(ll) == '\n') input.keyboardMessage = input.keyboardMessage.substring(0, ll);
+        if (promptInput.length() > 0) {
+          int ll = max(promptInput.length()-1, 0);   // Don't allow it to go lower than 0
+          if (promptInput.charAt(ll) == '\n') promptInput = promptInput.substring(0, ll);
         }
         doWhenPromptSubmitted.run();
-        lastInput = input.keyboardMessage;
+        lastInput = promptInput;
         closeTouchKeyboard();
       }
       
@@ -5738,7 +5742,7 @@ public class TWEngine {
       app.textFont(DEFAULT_FONT, 60);
       app.text(promptText, display.WIDTH/2, display.HEIGHT/2-100);
       app.textSize(30);
-      app.text(input.keyboardMessageDisplay(), display.WIDTH/2, display.HEIGHT/2);
+      app.text(input.keyboardMessageDisplay(promptInput), display.WIDTH/2, display.HEIGHT/2);
     }
   }
 
@@ -5927,10 +5931,10 @@ public class TWEngine {
   // the cmd system is completely different, because we're essentially just calling
   // some java executables.
   public CmdOutput runExecutableCommand(String... cmd) {
-    for (String c : cmd) {
-      print(c + " ");
-    }
-    println();
+    //for (String c : cmd) {
+    //  print(c + " ");
+    //}
+    //println();
     
     try {
       // Run the OS command
@@ -6302,13 +6306,13 @@ public class TWEngine {
     Runnable r = new Runnable() {
       public void run() {
         commandPromptShown = false;
-        runCommand(input.keyboardMessage);
+        runCommand(promptInput);
       }
     };
 
     beginInputPrompt("Enter command", r);
-    input.keyboardMessage = "/";
-    input.cursorX = input.keyboardMessage.length();
+    promptInput = "";
+    input.cursorX = promptInput.length();
   }
 
   private boolean commandEquals(String input, String expected) {
@@ -7632,6 +7636,9 @@ public class TWEngine {
     
     public int cursorX = 0;
     public String CURSOR_CHAR = "";
+    private char characterFired = 0;
+    
+    //public String keyboardMessage = "";
     
     public boolean mouseMoved = false;
     
@@ -7639,7 +7646,7 @@ public class TWEngine {
     public float   scroll = 0;
     public float   scrollSensitivity = 30.0;
     
-    public String keyboardMessage = "";
+    //public String keyboardMessage = "";
     public boolean addNewlineWhenEnterPressed = true;
     
     // used for one-time click
@@ -7652,6 +7659,8 @@ public class TWEngine {
     private char lastKeyPressed = 0;
     private int lastKeycodePressed = 0;
     private float holdKeyFrames = 0.;
+    private boolean keyFired = false;
+    private boolean typingDelay = false;
     
     private float cache_mouseX = 0.0;
     private float cache_mouseY = 0.0;
@@ -7830,78 +7839,6 @@ public class TWEngine {
       
       
       // ************TYPING*******************
-      boolean solidifyBlink = true;
-      
-      if (leftOnce) { 
-        cursorX--;
-        if (ctrlDown) {
-          boolean traversed = false;
-          while (ctrlTraversable()) {
-            cursorX--;
-            traversed = true;
-          }
-          if (traversed) cursorX++;
-        }
-      }
-      else if (rightOnce) {
-        cursorX++;
-        if (ctrlDown) {
-          while (ctrlTraversable()) {
-            cursorX++;
-          }
-        }
-      }
-      else if (upOnce) { 
-        // Start of current line
-        int startOfCurrLine = keyboardMessage.lastIndexOf('\n', cursorX)+1;
-        int dist = cursorX-startOfCurrLine;
-        
-        // start of prev line
-        int startOfPrevLine = keyboardMessage.lastIndexOf('\n', startOfCurrLine-2)+1;
-        
-        // Let's say for example you move your cursor like this:
-        //
-        // short
-        // A longer mess|ge hello world
-        // 
-        // short|
-        // A longer message hello world
-        //
-        // As you can see, "short" is not long enough to plonk the cursor into the new position,
-        // so it gets put at the start.
-        if (startOfCurrLine-startOfPrevLine < dist) {
-          cursorX = startOfCurrLine-1;
-        }
-        else {
-          cursorX = startOfPrevLine+dist;
-        }
-      }
-      else if (downOnce) { 
-        // Start of current line
-        int startOfThisLine = keyboardMessage.lastIndexOf('\n', cursorX-1)+1;
-        int startOfNextLine = keyboardMessage.indexOf('\n', cursorX)+1;
-        if (startOfNextLine != 0) {
-          int dist = cursorX-startOfThisLine;
-          cursorX = startOfNextLine+dist;
-        }
-      }
-      else if (keyOnce) {}
-      else solidifyBlink = false;
-      
-      // Paste text
-      // If you're wondering, need to use keys['v'] == 2 since there's a special exception when there's input prompts.
-      if (input.ctrlDown && keys['v'] == 2 && clipboard.isString()) {
-        String insert = clipboard.getText();
-        this.keyboardMessage = keyboardMessage.substring(0, cursorX) + insert + keyboardMessage.substring(cursorX);
-        cursorX += insert.length();
-      }
-      
-      if (solidifyBlink) {
-        blinkTime = 0.0;
-      }
-      cursorX = max(min(cursorX, keyboardMessage.length()), 0);
-    
-      blinkTime += display.getDelta();
   
       //*************MOUSE WHEEL*************
       if (rawScroll != 0) {
@@ -7913,13 +7850,114 @@ public class TWEngine {
     }
     
     
-    public void prepareTyping() {
-      keyboardMessage = "";
+    public void beginTyping() {
       cursorX = 0;
     }
     
-    private boolean ctrlTraversable() {
-      if (cursorX >= keyboardMessage.length()) {
+    
+    
+    public String getTyping(String str) {
+      boolean solidifyBlink = true;
+      
+      if (typingDelay) {
+        typingDelay = false;
+        keyFired = false;
+        return str;
+      }
+      
+      if (keyFired) {
+        if (leftDown) { 
+          cursorX--;
+          if (ctrlDown) {
+            boolean traversed = false;
+            while (ctrlTraversable(str)) {
+              cursorX--;
+              traversed = true;
+            }
+            if (traversed) cursorX++;
+          }
+        }
+        else if (rightDown) {
+          cursorX++;
+          if (ctrlDown) {
+            while (ctrlTraversable(str)) {
+              cursorX++;
+            }
+          }
+        }
+        else if (upOnce) { 
+          // Start of current line
+          int startOfCurrLine = str.lastIndexOf('\n', cursorX)+1;
+          int dist = cursorX-startOfCurrLine;
+          
+          // start of prev line
+          int startOfPrevLine = str.lastIndexOf('\n', startOfCurrLine-2)+1;
+          
+          // Let's say for example you move your cursor like this:
+          //
+          // short
+          // A longer mess|ge hello world
+          // 
+          // short|
+          // A longer message hello world
+          //
+          // As you can see, "short" is not long enough to plonk the cursor into the new position,
+          // so it gets put at the start.
+          if (startOfCurrLine-startOfPrevLine < dist) {
+            cursorX = startOfCurrLine-1;
+          }
+          else {
+            cursorX = startOfPrevLine+dist;
+          }
+        }
+        else if (downOnce) { 
+          // Start of current line
+          int startOfThisLine = str.lastIndexOf('\n', cursorX-1)+1;
+          int startOfNextLine = str.indexOf('\n', cursorX)+1;
+          if (startOfNextLine != 0) {
+            int dist = cursorX-startOfThisLine;
+            cursorX = startOfNextLine+dist;
+          }
+        }
+        else if (backspaceOnce) {
+          str = backspace(str);
+        }
+        else if (enterOnce) {
+          str = insert(str, '\n');
+        }
+        else if (characterFired >= 32 && characterFired != 127) {
+          str = insert(str, characterFired);
+          characterFired = 0;
+        }
+        else solidifyBlink = false;
+        
+        keyFired = false;
+      }
+      else {
+        solidifyBlink = false;
+      }
+      
+      // Paste text
+      // If you're wondering, need to use keys['v'] == 2 since there's a special exception when there's input prompts.
+      if (input.ctrlDown && keys['v'] == 2 && clipboard.isString()) {
+        String insert = clipboard.getText();
+        str = str.substring(0, cursorX) + insert + str.substring(cursorX);
+        cursorX += insert.length();
+      }
+      
+      if (solidifyBlink) {
+        blinkTime = 0.0;
+      }
+      cursorX = max(min(cursorX, str.length()), 0);
+    
+      blinkTime += display.getDelta();
+      
+      return str;
+    }
+    
+    
+    private boolean ctrlTraversable(String str) {
+      if (cursorX >= str.length()) {
         return false;
       }
       else if (cursorX == 0) {
@@ -7929,7 +7967,7 @@ public class TWEngine {
         cursorX = 0;
         return false;
       }
-      char c = keyboardMessage.charAt(cursorX);
+      char c = str.charAt(cursorX);
       return c != ' '
           && c != '\n'
           && c != '('
@@ -8022,10 +8060,6 @@ public class TWEngine {
       }
       return code;
     }
-    
-    public String keyboardMessageDisplay() {
-      return keyboardMessageDisplay(keyboardMessage);
-    }
   
     public boolean keyDown(char k) {
       if (inputPromptShown) return false;
@@ -8078,34 +8112,48 @@ public class TWEngine {
     public boolean keyActionOnce(String keybindName, char defaultKey) {
       char k = settings.getKeybinding(keybindName, defaultKey);
       
+      boolean val = false;
+      
       // Special keys/buttons
-      if (k == LEFT_CLICK)
-        return this.primaryOnce;
-      else if (k == RIGHT_CLICK)
-        return this.secondaryOnce;
-      else if (k == SHIFT_KEY)
-        return this.shiftOnce;
-      else if (k == ALTGR_KEY)
-        return this.altgrOnce;
-      else if (k == ALT_KEY)
-        return this.altOnce;
-      else if (k == CTRL_KEY)
-        return this.ctrlOnce;
+      if (k == LEFT_CLICK) {
+        val = this.primaryOnce;
+      }
+      else if (k == RIGHT_CLICK) {
+        val = this.secondaryOnce;
+      }
+      else if (k == SHIFT_KEY) {
+        val = this.shiftOnce;
+      }
+      else if (k == ALTGR_KEY) {
+        val = this.altgrOnce;
+      }
+      else if (k == ALT_KEY) {
+        val = this.altOnce;
+      }
+      else if (k == CTRL_KEY) {
+        val = this.ctrlOnce;
+      }
       else {
         // Otherwise just tell us if the key is down or not
-        return keyDownOnce(k);
+        val = keyDownOnce(k);
       }
+      
+      if (val) {
+        typingDelay = true;
+      }
+      
+      return val;
     }
     
-    private void backspace() {
-      backspaceOnce();
+    private String backspace(String str) {
+      str = backspaceOnce(str);
       
       if (ctrlDown) {
         int prevCursorX = cursorX;
         cursorX--;
         
         int backspacesCount = 0;
-        while (ctrlTraversable()) {
+        while (ctrlTraversable(str)) {
           cursorX--;
           backspacesCount++;
         }
@@ -8113,16 +8161,20 @@ public class TWEngine {
         cursorX = prevCursorX;
         
         for (int i = 0; i < backspacesCount; i++) {
-          backspaceOnce();
+          str = backspaceOnce(str);
         }
       }
+      
+      return str;
     }
   
-    private void backspaceOnce() {
-      if (this.keyboardMessage.length() > 0 && cursorX > 0)  {
-        this.keyboardMessage = keyboardMessage.substring(0, cursorX-1)+keyboardMessage.substring(cursorX);
+    private String backspaceOnce(String str) {
+      if (str.length() > 0 && cursorX > 0)  {
+        str = str.substring(0, cursorX-1)+str.substring(cursorX);
         cursorX--;
       }
+      
+      return str;
     }
     
     public float mouseX() {
@@ -8293,22 +8345,26 @@ public class TWEngine {
           case LEFT:
             leftDownCounter = 0;
             leftDown = true;
+            keyFired = true;
             break;
           case RIGHT:
             rightDownCounter = 0;
             rightDown = true;
+            keyFired = true;
             break;
           case UP:
             upDownCounter = 0;
             upDown = true;
+            keyFired = true;
             break;
           case DOWN:
             downDownCounter = 0;
             downDown = true;
+            keyFired = true;
             break;
           case BACKSPACE:
-            this.backspace();
             backspaceDown = true;
+            keyFired = true;
             break;
           case 77:  // Glitchy key which isn't supposed to do anything.
             
@@ -8316,17 +8372,19 @@ public class TWEngine {
         // 10 for android
       } else if ((kkey == ENTER || kkey == RETURN || int(kkey) == 10) && !ctrlDown) {
         if (this.addNewlineWhenEnterPressed) {
-          insert('\n');
+          characterFired = '\n';
         }
         enterDown = true;
+        keyFired = true;
         // 65535 67 for android
       }
       //else if (kkey == BACKSPACE) {    // Backspace
       //  this.backspace();
       //  backspaceDown = true;
       //}
-      else {
-        insert(kkey);
+      else if (kkey != 9) {
+        characterFired = kkey;
+        keyFired = true;
       }
       
       // And actually set the current pressed key state
@@ -8340,6 +8398,7 @@ public class TWEngine {
         actualKey = char(kkeyCode);
       }
       
+      
       int val = int(Character.toLowerCase(actualKey));
       
       if (val >= 1024) return;
@@ -8350,17 +8409,19 @@ public class TWEngine {
       stats.increase("keys_pressed", 1);
     }
   
-    public void insert(char c) {
+    public String insert(String str, char c) {
       // Remember, we now have a cursor.
       // If we're typing at the end, simply append char (like normal)
-      if (cursorX == keyboardMessage.length()) {
-        keyboardMessage += c;
+      if (cursorX == str.length()) {
+        str += c;
       }
       // Otherwise, add the char in between the text.
       else {
-        this.keyboardMessage = keyboardMessage.substring(0, cursorX) + c + keyboardMessage.substring(cursorX);
+        str = str.substring(0, cursorX) + c + str.substring(cursorX);
       }
       cursorX++;
+      
+      return str;
     }
   }
   // Cus why replace 9999999 lines of code when you can write 6 new lines of code that makes sure everything still works.

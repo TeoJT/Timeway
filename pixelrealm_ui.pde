@@ -561,10 +561,10 @@ public class PixelRealmWithUI extends PixelRealm {
   
         Runnable r = new Runnable() {
           public void run() {
-            if (input.keyboardMessage.length() == 0) {
+            if (engine.promptInput.length() == 0) {
               return;
             }
-            String newFilename = input.keyboardMessage;
+            String newFilename = engine.promptInput;
             
             String newPath = file.getDir(probject.dir)+"/"+newFilename;
             
@@ -630,7 +630,7 @@ public class PixelRealmWithUI extends PixelRealm {
   
         beginInputPrompt("Rename to:", r);
         if (probject.filename.contains(".")) {
-          input.keyboardMessage = "."+file.getExt(probject.filename);
+          engine.promptInput = "."+file.getExt(probject.filename);
           input.cursorX = 0;
         }
         //closeMenu();
@@ -667,7 +667,7 @@ public class PixelRealmWithUI extends PixelRealm {
       if (this.probject instanceof PixelRealmState.EntryFileObject) {
         if (ui.buttonVary("op-openreadonly", "lock_128", "Read only")) {
           sound.playSound("menu_select");
-          timewayEngine.file.openEntryReadonly(this.probject.dir);
+          file.openEntryReadonly(this.probject.dir);
           closeMenu();
         }
       }
@@ -708,18 +708,18 @@ public class PixelRealmWithUI extends PixelRealm {
 
       Runnable r = new Runnable() {
         public void run() {
-          if (input.keyboardMessage.length() == 0) {
+          if (engine.promptInput.length() == 0) {
             menuShown = false;
             return;
           }
-          String folderpath = currRealm.stateDirectory+input.keyboardMessage;
+          String folderpath = currRealm.stateDirectory+engine.promptInput;
           if (!file.exists(folderpath)) {
             issueRefresherCommand(REFRESHER_PAUSE);
             new File(folderpath).mkdirs();
             stats.increase("folders_created", 1);
           } else {
             sound.playSound("nope");
-            console.log(input.keyboardMessage+" already exists!");
+            console.log(engine.promptInput+" already exists!");
             menuShown = false;
             menu = null;
             return;
@@ -741,15 +741,15 @@ public class PixelRealmWithUI extends PixelRealm {
 
       Runnable r = new Runnable() {
         public void run() {
-          if (input.keyboardMessage.length() == 0) {
+          if (engine.promptInput.length() == 0) {
             menuShown = false;
             return;
           }
 
-          String path = currRealm.stateDirectory+input.keyboardMessage+"."+engine.ENTRY_EXTENSION;
+          String path = currRealm.stateDirectory+engine.promptInput+"."+engine.ENTRY_EXTENSION;
           if (file.exists(path)) {
             sound.playSound("nope");
-            console.log(input.keyboardMessage+" already exists!");
+            console.log(engine.promptInput+" already exists!");
             menuShown = false;
             menu = null;
             return;
@@ -1268,11 +1268,10 @@ public class PixelRealmWithUI extends PixelRealm {
     
     ArrayList<String> results = null;
     
-    int timeout = 10;
+    private String queryInput = "";
     
     public SearchPromptMenu() {
       super("", "back-search");
-      input.keyboardMessage = "";
       input.cursorX = 0;
     }
     
@@ -1327,13 +1326,15 @@ public class PixelRealmWithUI extends PixelRealm {
       
       display.clip(getX(), getY(), getWidth(), getHeight());
       
+      queryInput = input.getTyping(queryInput);
+      
       app.fill(255);
       app.textSize(40);
       app.textAlign(CENTER, TOP);
-      app.text(input.keyboardMessageDisplay(), getXmid(), getY()+100f);
+      app.text(input.keyboardMessageDisplay(queryInput), getXmid(), getY()+100f);
       
       if (input.keyOnce) {
-        results = indexer.search(input.keyboardMessage, currRealm.stateDirectory);
+        results = indexer.search(queryInput, currRealm.stateDirectory);
       }
       
       if (input.enterOnce && searchMenuTimeout <= 0) {

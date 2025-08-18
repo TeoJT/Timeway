@@ -76,6 +76,7 @@ void settings() {
     size(displayWidth, displayHeight, P2D);
     //size(900, 1800, P2D);
     //size(750, 1200, P2D);
+    //size(1920, 1080, P2D);
     smooth(1);
     pixelDensity(1);
     

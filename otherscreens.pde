@@ -376,11 +376,11 @@ public class Explorer extends Screen {
       // Here's some newer code.
       Runnable r = new Runnable() {
         public void run() {
-          if (input.keyboardMessage.length() <= 1) {
+          if (engine.promptInput.length() <= 1) {
             console.log("Please enter a valid entry name!");
             return;
           }
-          String entryname = file.currentDir+input.keyboardMessage+"."+engine.ENTRY_EXTENSION;
+          String entryname = file.currentDir+engine.promptInput+"."+engine.ENTRY_EXTENSION;
           new File(entryname).mkdirs();
           refreshDir();
           requestScreen(new Editor(engine, entryname));
@@ -395,11 +395,11 @@ public class Explorer extends Screen {
       
       Runnable r = new Runnable() {
         public void run() {
-          if (input.keyboardMessage.length() <= 1) {
+          if (engine.promptInput.length() <= 1) {
             console.log("Please enter a valid folder name!");
             return;
           }
-          String foldername = file.currentDir+input.keyboardMessage;
+          String foldername = file.currentDir+engine.promptInput;
           new File(foldername).mkdirs();
           refreshDir();
         }
@@ -550,7 +550,7 @@ public class HomeScreen extends Screen {
         app.fill(255, 255-(255*floatIn));
         app.text("by Teo Taylor", WIDTH/2, offY);
         
-        offY += 34;
+        //offY += 34;
         
         floatIn *= PApplet.pow(0.95, display.getDelta());
         
@@ -566,9 +566,9 @@ public class HomeScreen extends Screen {
         
         boolean pixelrealmButton = ui.basicButton("Pixel Realm", display.WIDTH/2-400, (offY += 60), 800, 50);
         boolean explorerButton = ui.basicButton("Explorer", display.WIDTH/2-400, (offY += 60), 800, 50);
+        boolean binButton = ui.basicButton("Recycle bin", display.WIDTH/2-400, (offY += 60), 800, 50);
         boolean settingsButton = ui.basicButton("Settings", display.WIDTH/2-400, (offY += 60), 800, 50);
         boolean creditsButton = ui.basicButton("Credits", display.WIDTH/2-400, (offY += 60), 800, 50);
-        boolean binButton = ui.basicButton("Recycle bin", display.WIDTH/2-400, (offY += 60), 800, 50);
         
         if (buttonOnce) {
           
@@ -629,6 +629,9 @@ public class RecycleBinScreen extends Screen {
   private float prevMouseY = 0.0f;
   private float scrollVelocity = 0f;
   private boolean scrolling = false;
+  private boolean scrolled = false;
+  private boolean accidentalClickPrevention = true;
+  private int clickTimeout = 0;
   private boolean prompt = false;
   private boolean itemExistsError = false;
   private int itemToRestore = 0;
@@ -726,6 +729,9 @@ public class RecycleBinScreen extends Screen {
   }
   
   public void upperBar() {
+    myUpperBarWeight  = 80f;
+    myLowerBarWeight  = 120f;
+    
     //display.shader("fabric", "color", 0.5,0.5,0.5,1., "intensity", 0.1);
     super.upperBar();
     //app.resetShader();
@@ -735,6 +741,7 @@ public class RecycleBinScreen extends Screen {
     app.textAlign(LEFT, TOP);
     app.text("Recycle bin", 100f, 10f);
     
+    ui.useSpriteSystem(gui);
     if (!prompt) {
       if (ui.button("back", "back_arrow_128", "")) {
         previousScreen();
@@ -758,7 +765,7 @@ public class RecycleBinScreen extends Screen {
       float x = WIDTH*0.1f, y = HEIGHT-myLowerBarWeight+10f, wi = WIDTH*0.8f, hi = myLowerBarWeight;
       app.text("For safety reasons, Timeway cannot permanently delete files in the recycle bin. If you wish to empty your recycling bin, please do so manually via your system's file explorer.\nClick here to open the recycle bin folder.",
       x, y, wi, hi);
-      if (ui.mouseInArea(x, y, wi, hi) && input.primaryOnce) {
+      if (ui.mouseInArea(x, y, wi, hi) && input.primaryOnce && clickAllowed()) {
         sound.playSound("select_any");
         file.open(engine.APPPATH+file.RECYCLE_BIN_PATH);
       }
@@ -782,55 +789,38 @@ public class RecycleBinScreen extends Screen {
     }
   }
   
-  // Let's render our stuff.
-  public void content() {
-      // Scrolling logic 
-      // TODO: This should really be part of the engine code.
-      
-      
-      if (input.primaryOnce && input.mouseY() > myUpperBarWeight && input.mouseY() < HEIGHT-myLowerBarWeight) {
-        scrolling = true;
-      }
-      if (input.primaryReleased) {
-        scrolling = false;
-      }
-      
-      if (scrolling) {
-        power.setAwake();
-        scrollVelocity = (input.mouseY()-prevMouseY);
-      }
-      else {
-        scrollVelocity *= PApplet.pow(0.92, display.getDelta());
-      }
-      
-      prevMouseY = input.mouseY();
-      
-      if (!prompt) {
-        input.scrollOffset += scrollVelocity;
-        input.processScroll(0., scrollBottom+1.0);
-      }
-      
-      if (changeDetected.compareAndSet(true, false)) {
-        refresh();
-        console.log("Updated recycle bin.");
-      }
-      
-      if (originalFilenames.size() == 0) {
-        app.fill(100);
-        app.textFont(engine.DEFAULT_FONT, 40f);
-        app.textAlign(CENTER, TOP);
-        app.text("Recycle bin is empty.", WIDTH/2, myUpperBarWeight+200f);
-      }
-      
-      // DIsplay all the files
-      for (int i = 0; i < originalFilenames.size(); i++) {
-        if (originalFilenames.get(i) == null) continue;
+  protected void displayItem(int i) {
+        if (originalFilenames.get(i) == null) return;
         
         float x = 30f;
         float y = myUpperBarWeight+30f+i*ITEM_HEIGHT+input.scrollOffset;
         
+        // Restore button
+        float wi = 200f, hi = 50f;
+        float RESTORE_BUTTON_X = WIDTH-wi-60f;
+        
+        // Open (preview) file if clicked
+        app.fill(255f);
+        if (ui.mouseInArea(x, y, RESTORE_BUTTON_X, ITEM_HEIGHT)) {
+          app.fill(210f);
+          if (input.primaryReleased && !scrolled && !accidentalClickPrevention && clickAllowed()) {
+            sound.playSound("select_any");
+            
+            String location = engine.APPPATH+file.RECYCLE_BIN_PATH+originalFilenames.get(i);
+            clickTimeout = 30;
+            
+            if (originalExts.get(i).equals(engine.ENTRY_EXTENSION)) {
+              file.openEntryReadonly(location);
+            }
+            else {
+              file.open(location);
+            }
+            
+          }
+        }
+        
         // Don't bother rendering item if offscreen
-        if (y < -ITEM_HEIGHT || y > HEIGHT) continue;
+        if (y < -ITEM_HEIGHT || y > HEIGHT) return;
         
         // Icon
         float ICON_WIDTH = 58f;
@@ -839,7 +829,6 @@ public class RecycleBinScreen extends Screen {
         x += ICON_WIDTH+10f;
         
         // Filename
-        app.fill(255f);
         app.textFont(engine.DEFAULT_FONT, 34f);
         app.textAlign(LEFT, TOP);
         if (originalFilenames.get(i).length() > 66) {
@@ -861,10 +850,9 @@ public class RecycleBinScreen extends Screen {
         }
         
         
-        // Restore button
-        float wi = 200f, hi = 50f;
         
-        x = WIDTH-wi-60f;
+        
+        x = RESTORE_BUTTON_X;
         y += 20f;
         
         app.stroke(255f);
@@ -872,10 +860,12 @@ public class RecycleBinScreen extends Screen {
         if (ui.mouseInArea(x, y, wi, hi) && !prompt) {
           app.fill(160, 140, 200); 
           
-          if (input.primaryOnce) {
+          if (input.primaryOnce  && clickAllowed()) {
             sound.playSound("select_any");
             prompt = true;
+            scrolling = false;
             itemToRestore = i;
+            clickTimeout = 5;
             
             // We can't move the item to its original location if another file already exists there.
             if (file.exists(originalLocations.get(i))) {
@@ -893,44 +883,129 @@ public class RecycleBinScreen extends Screen {
         app.fill(255);
         app.textSize(36f);
         app.text("Restore", x+25f, y+10f);
-      }
+  }
+  
+  protected void displayPrompt() {
+    // Restore item prompt (yes/no prompt)
+    if (prompt) {
+      gui.sprite("recyclebin_restore_back", "black");
       
-      // Restore item prompt (yes/no prompt)
-      if (prompt) {
-        gui.sprite("recyclebin_restore_back", "black");
+      float x = gui.getSprite("recyclebin_restore_back").getX();
+      float y = gui.getSprite("recyclebin_restore_back").getY();
+      float wi = gui.getSprite("recyclebin_restore_back").getWidth();
+      app.textSize(24f);
+      app.textAlign(CENTER, TOP);
+      if (itemExistsError) {
+        app.text("Cannot restore \""+originalFilenames.get(itemToRestore)+"\" because a file already exists at \""+originalLocations.get(itemToRestore)+"\".", x, y+30f, wi, HEIGHT);
         
-        float x = gui.getSprite("recyclebin_restore_back").getX();
-        float y = gui.getSprite("recyclebin_restore_back").getY();
-        float wi = gui.getSprite("recyclebin_restore_back").getWidth();
-        app.textSize(24f);
-        app.textAlign(CENTER, TOP);
-        if (itemExistsError) {
-          app.text("Cannot restore \""+originalFilenames.get(itemToRestore)+"\" because a file already exists at \""+originalLocations.get(itemToRestore)+"\".", x, y+30f, wi, HEIGHT);
-          
-          if (ui.buttonVary("recyclebin_restore_ok", "cross_128", "Dismiss") || input.enterOnce) {
-            sound.playSound("select_any");
-            prompt = false;
-            itemExistsError = false;
-          }
-        }
-        else {
-          app.text("Restore \""+originalFilenames.get(itemToRestore)+"\"?", x, y+30f, wi, HEIGHT);
-          
-          gui.sprite("recyclebin_icontorestore", file.extIcon(originalExts.get(itemToRestore)));
-          
-          if (ui.buttonVary("recyclebin_restore_yes", "tick_128", "Yes") || input.enterOnce) {
-            sound.playSound("select_any");
-            prompt = false;
-            restore(itemToRestore);
-          }
-          if (ui.buttonVary("recyclebin_restore_no", "cross_128", "No")) {
-            sound.playSound("select_any");
-            prompt = false;
-          }
+        if (ui.buttonVary("recyclebin_restore_ok", "cross_128", "Dismiss") || input.enterOnce) {
+          sound.playSound("select_any");
+          prompt = false;
+          itemExistsError = false;
+          accidentalClickPrevention = true;
         }
       }
+      else {
+        app.text("Restore \""+originalFilenames.get(itemToRestore)+"\"?", x, y+30f, wi, HEIGHT);
+        
+        gui.sprite("recyclebin_icontorestore", file.extIcon(originalExts.get(itemToRestore)));
+        
+        if (ui.buttonVary("recyclebin_restore_yes", "tick_128", "Yes") || input.enterOnce) {
+          sound.playSound("select_any");
+          prompt = false;
+          restore(itemToRestore);
+          clickTimeout = 5;
+          accidentalClickPrevention = true;
+        }
+        if (ui.buttonVary("recyclebin_restore_no", "cross_128", "No")) {
+          sound.playSound("select_any");
+          prompt = false;
+          accidentalClickPrevention = true;
+        }
+      }
+    }
+    
+    engine.displayInputPrompt();
+  }
+  
+  protected void baseLogic() {
+        
+    if (changeDetected.compareAndSet(true, false)) {
+      refresh();
+      console.log("Updated recycle bin.");
+    }
+    
+    if (originalFilenames.size() == 0) {
+      app.fill(100);
+      app.textFont(engine.DEFAULT_FONT, 40f);
+      app.textAlign(CENTER, TOP);
+      app.text("Recycle bin is empty.", WIDTH/2, myUpperBarWeight+200f);
+    }
+  }
+  
+  protected boolean clickAllowed() {
+    return clickTimeout < 0 && engine.currScreen == this;
+  }
+  
+  // Let's render our stuff.
+  public void content() {
+    
+      // Scrolling logic 
+      // TODO: This should really be part of the engine code.
+      if (input.primaryOnce && input.mouseY() > myUpperBarWeight && input.mouseY() < HEIGHT-myLowerBarWeight) {
+        scrolling = true;
+      }
+      if (input.primaryReleased) {
+        scrolling = false;
+      }
       
-      engine.displayInputPrompt();
+      if (scrolling) {
+        power.setAwake();
+        
+        scrollVelocity = (input.mouseY()-prevMouseY);
+        
+        if (input.mouseY()-prevMouseY != 0.0) {
+          scrolled = true;
+        }
+      }
+      else {
+        scrollVelocity *= PApplet.pow(0.92, display.getDelta());
+      }
+      if (!clickAllowed()) {
+        scrollVelocity = 0f;
+      }
+      
+      
+      prevMouseY = input.mouseY();
+      
+      
+      if (!prompt) {
+        input.scrollOffset += scrollVelocity;
+        input.processScroll(0., scrollBottom+1.0);
+      }
+      
+      baseLogic();
+      
+      // DIsplay all the files
+      for (int i = 0; i < originalFilenames.size(); i++) {
+        displayItem(i);
+      }
+        
+      displayPrompt();
+      
+      if (accidentalClickPrevention && input.primaryReleased) {
+        accidentalClickPrevention = false;
+      }
+      clickTimeout--;
+      if (input.primaryReleased) {
+        scrolled = false;
+      }
+  }
+  
+  
+  protected void previousReturnAnimation() {
+    startCheckerThread();
+    accidentalClickPrevention = true;
   }
   
   

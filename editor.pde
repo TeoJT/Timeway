@@ -1154,7 +1154,7 @@ public class Editor extends Screen {
 
 
     public class TextPlaceable extends Placeable {
-        public String text = "Sample text";
+        public String text = "";
         public float fontSize = DEFAULT_FONT_SIZE;
         public PFont fontStyle;
         public color textColor = DEFAULT_FONT_COLOR;
@@ -1191,7 +1191,7 @@ public class Editor extends Screen {
           
           String displayText = "";
           if (editing()) {
-              displayText = input.keyboardMessageDisplay();
+              displayText = input.keyboardMessageDisplay(text);
           }
           else {
               displayText = text;
@@ -1253,14 +1253,13 @@ public class Editor extends Screen {
                 // DO NOT allow the command prompt to appear by pressing '/' and make the current text we're writing disappear
                 // while writing text
                 engine.allowShowCommandPrompt = false;
-                text = input.keyboardMessage;
+                text = input.getTyping(text);
             }
             
             if (placeableSelected() || placeableSelectedSecondary()) {
                 engine.allowShowCommandPrompt = false;
                 editingPlaceable = this;
-                input.keyboardMessage = text;
-                input.cursorX = input.keyboardMessage.length();
+                input.cursorX = text.length();
                 selectedFontSize = this.fontSize;
             }
                 // Mini menu for text
@@ -1399,10 +1398,11 @@ public class Editor extends Screen {
 
             String displayText = "";
             if (editing()) {
-                displayText = input.keyboardMessageDisplay();
+              displayText = input.keyboardMessageDisplay(text);
             }
             else if (readOnly && modifyingField == this) {
-              displayText = text+" "+input.keyboardMessageDisplay();
+              inputText = input.getTyping(inputText);
+              displayText = text+" "+input.keyboardMessageDisplay(inputText);
             }
             else {
                 displayText = text+" "+inputText;
@@ -1437,13 +1437,11 @@ public class Editor extends Screen {
           if (myClick() && readOnly) {
               engine.allowShowCommandPrompt = false;
               modifyingField = this;
-              input.keyboardMessage = inputText;
-              input.cursorX = input.keyboardMessage.length();
+              input.cursorX = inputText.length();
           }
           
           if (modifyingField == this && readOnly) {
             input.addNewlineWhenEnterPressed = false;
-            inputText = input.keyboardMessage;
           }
           updateDimensions();
         }
@@ -1474,7 +1472,7 @@ public class Editor extends Screen {
 
             String displayText = "";
             if (editing()) {
-                displayText = input.keyboardMessageDisplay();
+                displayText = input.keyboardMessageDisplay(text);
             }
             else {
                 displayText = text;
@@ -1603,7 +1601,7 @@ public class Editor extends Screen {
 
             String displayText = "";
             if (editing()) {
-                displayText = input.keyboardMessageDisplay();
+                displayText = input.keyboardMessageDisplay(text);
             }
             else {
                 displayText = text;
@@ -1705,7 +1703,7 @@ public class Editor extends Screen {
 
             String displayText = "";
             if (editing()) {
-                displayText = input.keyboardMessageDisplay();
+                displayText = input.keyboardMessageDisplay(text);
             }
             else {
                 displayText = text;
@@ -1795,7 +1793,7 @@ public class Editor extends Screen {
 
             String displayText = "";
             if (editing()) {
-                displayText = input.keyboardMessageDisplay();
+                displayText = input.keyboardMessageDisplay(text);
             }
             else {
                 displayText = text;
@@ -2713,8 +2711,7 @@ public class Editor extends Screen {
         editingTextPlaceable.sprite.setY(y-input.scrollOffset);
         editingPlaceable = editingTextPlaceable;
         
-        input.keyboardMessage = initText;
-        input.cursorX = input.keyboardMessage.length();
+        input.cursorX = initText.length();
         editingTextPlaceable.updateDimensions();
         engine.allowShowCommandPrompt = false;
         stats.increase("text_created", 1);
