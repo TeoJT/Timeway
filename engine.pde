@@ -5390,6 +5390,11 @@ public class TWEngine {
         
         // raw code -> java file
         String fullCode = pluginBoilerplateCode_1+code+pluginBoilerplateCode_2;
+        
+        //println("--------------- FULL CODE START ----------------");
+        //println(fullCode);
+        //println("--------------- FULL CODE END ----------------");
+        
         app.saveStrings(javaFileOut, fullCode.split("\n"));
         
         
@@ -5483,9 +5488,13 @@ public class TWEngine {
       
       if (isWindows()) {
         javacPath = javapath+"/bin/javac.exe";
+        
+        // Try Processing 4.4.5 path instead.
+        if (!file.exists(javacPath)) javacPath = exepath+"/app/resources/jdk/bin/javac.exe";
       }
       else {
         javacPath = javapath+"/bin/javac";
+        if (!file.exists(javacPath)) javacPath = exepath+"/app/resources/jdk/bin/javac";
       }
       
       // Find the processing core so we can use PApplet in our plugin.
@@ -5497,6 +5506,10 @@ public class TWEngine {
       // for exported builds
       else if (file.exists(exepath+"/lib/core.jar")) {
         processingCorePath = exepath+"/lib/core.jar";
+      }
+      // For Processing 4.4.5 and beyond
+      else if (file.exists(exepath+"/app/resources/core/library/core.jar")) {
+        processingCorePath = exepath+"/app/resources/core/library/core.jar";
       }
       // Uhoh
       else {
@@ -5528,9 +5541,12 @@ public class TWEngine {
       
       if (isWindows()) {
         jarExePath = javapath+"/bin/jar.exe";
+        
+        if (!file.exists(jarExePath)) jarExePath = exepath+"/app/resources/jdk/bin/jar.exe";
       }
       else {
         jarExePath = javapath+"/bin/jar";
+        if (!file.exists(jarExePath)) jarExePath = exepath+"/app/resources/jdk/bin/jar";
       }
       
       // In our cachepath.
@@ -5911,6 +5927,11 @@ public class TWEngine {
   // the cmd system is completely different, because we're essentially just calling
   // some java executables.
   public CmdOutput runExecutableCommand(String... cmd) {
+    for (String c : cmd) {
+      print(c + " ");
+    }
+    println();
+    
     try {
       // Run the OS command
       Process process = Runtime.getRuntime().exec(cmd);
