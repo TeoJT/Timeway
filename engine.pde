@@ -676,32 +676,34 @@ public class TWEngine {
       powerModeSetTimeout = max(0, powerModeSetTimeout-1);
   
       // Rules:
-      // If plugged in or no battery, have it running at POWER_MODE_HIGH by default.
-      // If on battery, the rules are as follows:
       // - POWER_MODE_HIGH    60fps
       // - POWER_MODE_NORMAL  30fps
       // - POWER_MODE_SLEEPY  15 fps
       // - POWER_MODE_MINIMAL loop is turned off
   
-      // - POWER_MODE_HIGH if power is above 30% and average fps over 2 seconds is over 58
+      // - POWER_MODE_HIGH if average fps over 2 seconds is over 58
       // - POWER_MODE_NORMAL stays in 
-      // - POWER_MODE_SLEEPY if 30% or below and window isn't focussed
+      // - POWER_MODE_SLEEPY is used manually by screens when there isn't much movement on screen and shouldn't be used as an FPS setting
       // - POWER_MODE_MINIMAL if minimised
       // 
       // Go into 1fps mode
+      
   
       // If the window is not focused, don't even bother doing anything lol.
       
       
       if (app.focused) {
         if (!focusedMode) {
+          // Move out of minimized mode and continue normal power mode operation
           setPowerMode(prevPowerMode);
           focusedMode = true;
           putFPSSystemIntoGraceMode();
           sound.setNormalVolume();
+          input.accidentalClickPrevention();
         }
       } else if (allowMinimizedMode) {
         if (focusedMode) {
+          // Window is not focussed, move out of normal operation and go into minimized mode, saving power
           prevPowerMode = powerMode;
           setPowerMode(PowerMode.MINIMAL);
           focusedMode = false;
@@ -6311,7 +6313,7 @@ public class TWEngine {
     };
 
     beginInputPrompt("Enter command", r);
-    promptInput = "";
+    promptInput = "/";
     input.cursorX = promptInput.length();
   }
 
@@ -7623,10 +7625,20 @@ public class TWEngine {
   
   
   public class InputModule {
+    // Keywords:
+    // Primary- Left click, or normal tap on touchscreen devices
+    // Secondary- Right click, or hold on touchscreen devices (holding touchscreen functionality not implemented yet)
+    // Once- User clicks down and boolean becomes true for one frame, regardless how how long user holds down button for.
+    // Down- User clicks down, and stays true for as long as user holds button down.
+    // Released- Becomes true for one frame when user releases button.
+    // Solid- User must click down then release without moving mouse for this to come true for one frame.
+    
     
     // Mouse & keyboard
     public boolean primaryOnce = false;
     public boolean secondaryOnce = false;
+    public boolean primarySolid = false; 
+    public boolean secondarySolid = false;
     public boolean primaryDown = false;
     public boolean secondaryDown = false;
     public boolean primaryReleased = false;
@@ -7648,6 +7660,7 @@ public class TWEngine {
     
     //public String keyboardMessage = "";
     public boolean addNewlineWhenEnterPressed = true;
+    public int accidentalClickPreventionTimer = 0;
     
     // used for one-time click
     private boolean click = false;
@@ -7728,10 +7741,18 @@ public class TWEngine {
       
       
       //*************MOUSE CLICKING*************
-      // "Shouldn't it be (app.mouseButton == LEFT)?"
-      // One word. MacOS.
-      primaryDown = app.mousePressed && (app.mouseButton != RIGHT);
-      secondaryDown = (app.mousePressed &&  (app.mouseButton == RIGHT));
+      
+      // Ignore all registered clicks until one mouse down and mouse up event.
+      if (accidentalClickPreventionTimer <= 0) {
+        // "Shouldn't it be (app.mouseButton == LEFT)?"
+        // One word. MacOS.
+        primaryDown = app.mousePressed && (app.mouseButton != RIGHT);
+        secondaryDown = app.mousePressed &&  (app.mouseButton == RIGHT);
+      }
+      else {
+        primaryDown = false;
+        secondaryDown = false;
+      }
       
       // If the mouse begins click on the frame, this will be later updated to true.
       // Then next frame this will be set to false, and because of the one-click code,
@@ -7740,6 +7761,8 @@ public class TWEngine {
       secondaryOnce = false;
       primaryReleased = false;
       secondaryReleased = false;
+      primarySolid = false;
+      secondarySolid = false;
       keyOnce = false;
       
       normalClickTimeout -= display.getDelta();
@@ -7757,9 +7780,11 @@ public class TWEngine {
           normalClickTimeout = 15.;
         eventClick = false;
         
-        primaryOnce = (app.mouseButton != RIGHT);
-        
-        secondaryOnce = (app.mouseButton == RIGHT);
+        // Ignore triggering once clicks if accidental click prevention is on.
+        if (accidentalClickPreventionTimer <= 0) {
+          primaryOnce = (app.mouseButton != RIGHT);
+          secondaryOnce = (app.mouseButton == RIGHT);
+        }
         
         mouseMoved = false;
         clickStartX = mouseX();
@@ -7767,12 +7792,23 @@ public class TWEngine {
       }
       else if (!app.mousePressed && click) {
         click = false;
-        primaryReleased = (app.mouseButton != RIGHT);
-        secondaryReleased = (app.mouseButton == RIGHT);
         
         if (clickStartX != mouseX() || clickStartY != mouseY()) {
           mouseMoved = true;
         }
+        
+        // Ignore triggering release clicks if accidental click prevention is on.
+        // However, this is also our queue to deactivate accidentalClickPrevention, since a mouse down and up event has been completed.
+        if (accidentalClickPreventionTimer <= 0) {
+          primaryReleased = (app.mouseButton != RIGHT);
+          secondaryReleased = (app.mouseButton == RIGHT);
+          
+          primarySolid = primaryReleased && !mouseMoved;
+          secondarySolid = secondaryReleased && !mouseMoved;
+        }
+      }
+      else if (!app.mousePressed && accidentalClickPreventionTimer > 0) {
+        accidentalClickPreventionTimer--;
       }
   
   
@@ -7850,10 +7886,20 @@ public class TWEngine {
     }
     
     
+    public void accidentalClickPrevention() {
+      accidentalClickPreventionTimer = 2;
+      //primaryOnce = false;
+      //secondaryOnce = false;
+      //primaryReleased = false;
+      //secondaryReleased = false;
+      //primaryDown = false;
+      //secondaryDown = false;
+    }
+    
+    
     public void beginTyping() {
       cursorX = 0;
     }
-    
     
     
     public String getTyping(String str) {
@@ -8297,7 +8343,8 @@ public class TWEngine {
         else scrollOffset += input.scroll;
       }
     }
-      
+    
+    
     
     public void clickEventAction() {
       // We don't want to trigger a click if the normal clicking system receives a click.
@@ -8941,9 +8988,25 @@ public abstract class Screen {
       engine.power.resetFPSSystem();
       engine.allowShowCommandPrompt = true;
       engine.transitionDirection = RIGHT;
+      input.accidentalClickPrevention();
       //engine.setAwake();
     }
     //printStack();
+  }
+  
+  
+  protected boolean mouseWwithinContent() {
+    if (display == null || input == null) return false;
+    return input.mouseY() < display.HEIGHT-myLowerBarWeight && input.mouseY() > myUpperBarWeight;
+  }
+    
+  protected boolean mouseWithinUpperBar() {
+    return input.mouseY() <= myUpperBarWeight;
+  }
+  
+  protected boolean mouseWithinLowerBar() {
+    if (display == null || input == null) return false;
+    return input.mouseY() >= display.HEIGHT-myLowerBarWeight;
   }
 
   protected void previousScreen() {
@@ -8953,14 +9016,14 @@ public abstract class Screen {
       
       // Request screen but without stack pushing
       Screen prevScreen = this.engine.screenStack.pop();
-      if (engine.currScreen == this && engine.transitionScreens == false) {
-        engine.prevScreenTransition = engine.currScreen;
-        engine.currScreen = prevScreen;
-        prevScreen.startScreenTransition();
-        engine.power.resetFPSSystem();
-        engine.allowShowCommandPrompt = true;
+      //if (engine.currScreen == this && engine.transitionScreens == false) {
+      engine.prevScreenTransition = engine.currScreen;
+      engine.currScreen = prevScreen;
+      prevScreen.startScreenTransition();
+      engine.power.resetFPSSystem();
+      engine.allowShowCommandPrompt = true;
         //engine.setAwake();
-      }
+      //}
       
       engine.transitionDirection = LEFT;
       engine.power.setAwake();

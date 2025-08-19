@@ -630,8 +630,6 @@ public class RecycleBinScreen extends Screen {
   private float scrollVelocity = 0f;
   private boolean scrolling = false;
   private boolean scrolled = false;
-  private boolean accidentalClickPrevention = true;
-  private int clickTimeout = 0;
   private boolean prompt = false;
   private boolean itemExistsError = false;
   private int itemToRestore = 0;
@@ -765,7 +763,7 @@ public class RecycleBinScreen extends Screen {
       float x = WIDTH*0.1f, y = HEIGHT-myLowerBarWeight+10f, wi = WIDTH*0.8f, hi = myLowerBarWeight;
       app.text("For safety reasons, Timeway cannot permanently delete files in the recycle bin. If you wish to empty your recycling bin, please do so manually via your system's file explorer.\nClick here to open the recycle bin folder.",
       x, y, wi, hi);
-      if (ui.mouseInArea(x, y, wi, hi) && input.primaryOnce && clickAllowed()) {
+      if (ui.mouseInArea(x, y, wi, hi) && input.primaryOnce) {
         sound.playSound("select_any");
         file.open(engine.APPPATH+file.RECYCLE_BIN_PATH);
       }
@@ -801,13 +799,12 @@ public class RecycleBinScreen extends Screen {
         
         // Open (preview) file if clicked
         app.fill(255f);
-        if (ui.mouseInArea(x, y, RESTORE_BUTTON_X, ITEM_HEIGHT)) {
+        if (ui.mouseInArea(x, y, RESTORE_BUTTON_X-50f, ITEM_HEIGHT) && !prompt) {
           app.fill(210f);
-          if (input.primaryReleased && !scrolled && !accidentalClickPrevention && clickAllowed()) {
+          if (input.primarySolid && mouseWwithinContent()) {
             sound.playSound("select_any");
             
             String location = engine.APPPATH+file.RECYCLE_BIN_PATH+originalFilenames.get(i);
-            clickTimeout = 30;
             
             if (originalExts.get(i).equals(engine.ENTRY_EXTENSION)) {
               file.openEntryReadonly(location);
@@ -860,12 +857,11 @@ public class RecycleBinScreen extends Screen {
         if (ui.mouseInArea(x, y, wi, hi) && !prompt) {
           app.fill(160, 140, 200); 
           
-          if (input.primaryOnce  && clickAllowed()) {
+          if (input.primarySolid) {
             sound.playSound("select_any");
             prompt = true;
             scrolling = false;
             itemToRestore = i;
-            clickTimeout = 5;
             
             // We can't move the item to its original location if another file already exists there.
             if (file.exists(originalLocations.get(i))) {
@@ -902,7 +898,7 @@ public class RecycleBinScreen extends Screen {
           sound.playSound("select_any");
           prompt = false;
           itemExistsError = false;
-          accidentalClickPrevention = true;
+          input.accidentalClickPrevention();
         }
       }
       else {
@@ -914,13 +910,12 @@ public class RecycleBinScreen extends Screen {
           sound.playSound("select_any");
           prompt = false;
           restore(itemToRestore);
-          clickTimeout = 5;
-          accidentalClickPrevention = true;
+          input.accidentalClickPrevention();
         }
         if (ui.buttonVary("recyclebin_restore_no", "cross_128", "No")) {
           sound.playSound("select_any");
           prompt = false;
-          accidentalClickPrevention = true;
+          input.accidentalClickPrevention();
         }
       }
     }
@@ -943,10 +938,6 @@ public class RecycleBinScreen extends Screen {
     }
   }
   
-  protected boolean clickAllowed() {
-    return clickTimeout < 0 && engine.currScreen == this;
-  }
-  
   // Let's render our stuff.
   public void content() {
     
@@ -955,7 +946,7 @@ public class RecycleBinScreen extends Screen {
       if (input.primaryOnce && input.mouseY() > myUpperBarWeight && input.mouseY() < HEIGHT-myLowerBarWeight) {
         scrolling = true;
       }
-      if (input.primaryReleased) {
+      if (input.primaryReleased || input.accidentalClickPreventionTimer > 0) {
         scrolling = false;
       }
       
@@ -971,9 +962,9 @@ public class RecycleBinScreen extends Screen {
       else {
         scrollVelocity *= PApplet.pow(0.92, display.getDelta());
       }
-      if (!clickAllowed()) {
-        scrollVelocity = 0f;
-      }
+      //if (!clickAllowed()) {
+      //  scrollVelocity = 0f;
+      //}
       
       
       prevMouseY = input.mouseY();
@@ -992,20 +983,12 @@ public class RecycleBinScreen extends Screen {
       }
         
       displayPrompt();
-      
-      if (accidentalClickPrevention && input.primaryReleased) {
-        accidentalClickPrevention = false;
-      }
-      clickTimeout--;
-      if (input.primaryReleased) {
-        scrolled = false;
-      }
   }
   
   
   protected void previousReturnAnimation() {
     startCheckerThread();
-    accidentalClickPrevention = true;
+    input.accidentalClickPrevention();
   }
   
   
