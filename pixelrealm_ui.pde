@@ -393,10 +393,10 @@ public class PixelRealmWithUI extends PixelRealm {
       }
 
       // --- Pocket menu ---
-      //if (ui.buttonVary("pocket_menu", "new_entry_128", "Pockets")) {
-      //  sound.playSound("menu_select");
-      //  menu = new PocketMenu();
-      //}
+      if (ui.buttonVary("pocket_menu", "new_entry_128", "Pockets")) {
+        sound.playSound("menu_select");
+        menu = new PocketMenu();
+      }
       
       // Lighting menu
       
@@ -490,8 +490,8 @@ public class PixelRealmWithUI extends PixelRealm {
       if (ui.buttonVary("grabber_1", "grabber_tool_128", "Grabber")) {
         // Select the last item in the inventory if not already selected.
         if (globalHoldingObject == null) {
-          if (pockets.tail != null) {
-            globalHoldingObjectSlot = pockets.tail;
+          if (hotbar.tail != null) {
+            globalHoldingObjectSlot = hotbar.tail;
           }
         }
         currRealm.updateHoldingItem(globalHoldingObjectSlot);
@@ -840,22 +840,56 @@ public class PixelRealmWithUI extends PixelRealm {
   
   
   
-  
-  
-  
 
   class PocketMenu extends Menu {
 
     public void display() {
       displayBackground("back-pocketmenu");
+      
+      final float SLOTS_WI = 18f;
+      
+      gui.spriteVary("pocket_yourpocket", "nothing");
+      
+      float xxx = gui.getSprite("pocket_yourpocket").getX();
+      float yyy = gui.getSprite("pocket_yourpocket").getY();
+      float hii = gui.getSprite("pocket_yourpocket").getHeight();
+      
+      
+      app.fill(255f);
+      app.textFont(engine.DEFAULT_FONT, 40f);
+      app.textAlign(LEFT, TOP);
+      app.text("Your pockets", xxx+80f, yyy);
 
-      gui.spriteVary("pocket_line1", "white");
-      gui.spriteVary("pocket_line2", "white");
+      float gridx = xxx;
+      float gridy = yyy+60f;
+      float squarewihi = (getWidth()-90f)/SLOTS_WI;
+      
+      float bottom = 30*squarewihi;
+      
+      input.processScroll(10., bottom-hii+1f);
+      
+      display.clip(gridx, gridy, squarewihi*SLOTS_WI+5f, hii);
+      
+      for (float y = 0; y < 30; y++) {
+        
+        float actualy = gridy + y * squarewihi + input.scrollOffset;
+        
+        if (actualy > gridy-squarewihi && actualy < gridy+hii) {
+          for (float x = 0; x < SLOTS_WI; x += 1f) {
+            app.stroke(80f);
+            app.fill(67f, 127f);
+            app.strokeWeight(1f);
+            app.rect(gridx + x * squarewihi, actualy, squarewihi, squarewihi);
+          }
+        }
+      }
+      
+      display.noClip();
 
 
       if (ui.buttonVary("pocket_back", "back_arrow_128", "")) {
         sound.playSound("menu_select");
-        menu = new Menu();
+        menu = new MainMenu();
       }
     }
   }
@@ -1666,7 +1700,7 @@ public class PixelRealmWithUI extends PixelRealm {
       textAlign(LEFT, TOP);
       fill(255);
       text(globalHoldingObject.name, 15, this.height-140);
-      for (PocketItem p : pockets) {
+      for (PocketItem p : hotbar) {
         invy = this.height-80;
         if (p == globalHoldingObject) invy -= 20;
 

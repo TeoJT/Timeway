@@ -54,7 +54,7 @@ import java.util.concurrent.TimeUnit;
 public class TWEngine {
   //*****************CONSTANTS SETTINGS**************************
   // Info and versioning
-  private static final String VERSION     = "0.1.8";
+  private static final String VERSION     = "0.1.9";
   
   public String getAppName() {
     return "Timeway";
@@ -7931,7 +7931,7 @@ public class TWEngine {
             }
           }
         }
-        else if (upOnce) { 
+        else if (upDown) { 
           // Start of current line
           int startOfCurrLine = str.lastIndexOf('\n', cursorX)+1;
           int dist = cursorX-startOfCurrLine;
@@ -7956,7 +7956,7 @@ public class TWEngine {
             cursorX = startOfPrevLine+dist;
           }
         }
-        else if (downOnce) { 
+        else if (downDown) { 
           // Start of current line
           int startOfThisLine = str.lastIndexOf('\n', cursorX-1)+1;
           int startOfNextLine = str.indexOf('\n', cursorX)+1;
@@ -7965,10 +7965,10 @@ public class TWEngine {
             cursorX = startOfNextLine+dist;
           }
         }
-        else if (backspaceOnce) {
+        else if (backspaceDown) {
           str = backspace(str);
         }
-        else if (enterOnce) {
+        else if (enterDown) {
           str = insert(str, '\n');
         }
         else if (characterFired >= 32 && characterFired != 127) {
@@ -9994,7 +9994,7 @@ public final class SpriteSystem {
             }
             catch (NullPointerException e) {
                 //if (!suppressSpriteWarning)
-                //    console.bugWarn("Sprite "+name+" does not exist.");
+                    //console.bugWarn("Sprite "+name+" does not exist.");
                 return unusedSprite;
             }
         }

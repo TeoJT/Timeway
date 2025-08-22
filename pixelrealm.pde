@@ -180,7 +180,7 @@ public class PixelRealm extends Screen {
   private float animationTick = 0.;
   
   // Inventory//pocket
-  protected LinkedList<PocketItem> pockets   = new LinkedList<PocketItem>();
+  //protected PocketItem[] pockets;
   protected LinkedList<PocketItem> hotbar    = new LinkedList<PocketItem>();   // Items in hotbar are also in inventory.
   protected HashSet<String> pocketItemNames  = new HashSet<String>(); 
   protected PocketItem globalHoldingObject = null;
@@ -3460,9 +3460,9 @@ public class PixelRealm extends Screen {
           //prevRealm = currRealm;
           stats.increase("shortcut_portals_entered", 1);
           
-          if (shortcutName.equals("neon_2222")) {
-            requestScreen(new WorldLegacy(engine));
-          }
+          //if (shortcutName.equals("")) {
+          //  requestScreen(new WorldLegacy(engine));
+          //}
           gotoRealm(this.shortcutDir);
         }
       }
@@ -4210,7 +4210,7 @@ public class PixelRealm extends Screen {
         
       PocketItem p = new PocketItem(name, item, abstractObject);
       pocketItemNames.add(name);
-      ItemSlot<PocketItem> ii = pockets.add(p);
+      ItemSlot<PocketItem> ii = hotbar.add(p);
       return ii;
     }
     
@@ -4461,7 +4461,7 @@ public class PixelRealm extends Screen {
       // First reset all our lists.
       pocketObjects = new LinkedList<PRObject>();
       pocketItemNames = new HashSet<String>();
-      pockets = new LinkedList<PocketItem>();
+      hotbar = new LinkedList<PocketItem>();
       
       
       JSONObject somejson = new JSONObject();
@@ -4487,7 +4487,7 @@ public class PixelRealm extends Screen {
           // Add it to za lists
           pocketItemNames.add(f.getName());
           pocketObjects.add(fileObject);
-          globalHoldingObjectSlot = pockets.add(p);
+          globalHoldingObjectSlot = hotbar.add(p);
           
           // Yeet it into the void so we can't see it.
           throwItIntoTheVoid(fileObject);
@@ -6631,7 +6631,7 @@ public class PixelRealm extends Screen {
         else if (globalHoldingObjectSlot.prev != null) tmp = globalHoldingObjectSlot.prev;
         
         // Remove from inventory
-        pockets.remove(globalHoldingObjectSlot);
+        hotbar.remove(globalHoldingObjectSlot);
         // Remove from names
         pocketItemNames.remove(getHoldingName());
         
@@ -7209,7 +7209,7 @@ public class PixelRealm extends Screen {
     // Update inventory for moving realms (move files)
     boolean success = true;
     // Abort if unsuccessful.
-    for (PocketItem p : pockets) {
+    for (PocketItem p : hotbar) {
       success &= p.changeRealm(currRealm.stateDirectory);;
     }
     if (!success) {
@@ -7283,7 +7283,7 @@ public class PixelRealm extends Screen {
     // Update inventory for moving realms (move files)
     boolean success = true;
     // Abort if unsuccessful.
-    for (PocketItem p : pockets) {
+    for (PocketItem p : hotbar) {
       success &= p.changeRealm(currRealm.stateDirectory);;
     }
     if (!success) {
