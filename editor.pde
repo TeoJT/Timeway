@@ -893,6 +893,7 @@ public class Editor extends Screen {
     private JSONArray loadedJsonArray;
     protected boolean readOnly = false;
     private boolean forcedScrollBugFix = false;
+    public float scrollOffset;
     
     // X goes unused for now but could be useful later.
     private float extentX = 0.;
@@ -1144,7 +1145,7 @@ public class Editor extends Screen {
         }
 
         public void update() {
-            sprite.offmove(0, input.scrollOffset);
+            sprite.offmove(0, scrollOffset);
             if (visible) {
               display();
             }
@@ -1354,7 +1355,7 @@ public class Editor extends Screen {
         }
         
         public void update() {
-            sprite.offmove(0, input.scrollOffset);
+            sprite.offmove(0, scrollOffset);
             if (placeableSelectedSecondary()) {
               editingPlaceable = this;
               imageOptions();
@@ -1886,7 +1887,7 @@ public class Editor extends Screen {
         }
 
         autoScaleDown = settings.getBoolean("auto_scale_down", false);
-        input.scrollOffset = 0.;
+        scrollOffset = 0.;
         
         if (!full) {
           softwareRenderCanvas = app.createImage(480, 270, ARGB);
@@ -2628,7 +2629,7 @@ public class Editor extends Screen {
               if (editingTextPlaceable.text.length() == 0) {
                   placeableset.remove(editingPlaceable.id);
                   imagePlaceable.sprite.setX(x);
-                  imagePlaceable.sprite.setY(y-input.scrollOffset);
+                  imagePlaceable.sprite.setY(y-scrollOffset);
               }
               else {
                   imagePlaceable.sprite.setX(x);
@@ -2708,7 +2709,7 @@ public class Editor extends Screen {
         editingTextPlaceable.textColor = selectedColor;
         placeableSprites.selectedSprite = editingTextPlaceable.sprite;
         editingTextPlaceable.sprite.setX(x);
-        editingTextPlaceable.sprite.setY(y-input.scrollOffset);
+        editingTextPlaceable.sprite.setY(y-scrollOffset);
         editingPlaceable = editingTextPlaceable;
         
         input.cursorX = initText.length();
@@ -2728,13 +2729,13 @@ public class Editor extends Screen {
         // readonly doesn't have this bar and hence we should limit scroll at where the
         // ribbon bar normally is.
         if (forcedScrollBugFix) {
-          input.scrollOffset = -UPPER_BAR_DROP_WEIGHT;
+          scrollOffset = -UPPER_BAR_DROP_WEIGHT;
         }
         else {
           if (!readOnly)
-            input.processScroll(0., scrollLimitY);
+            scrollOffset = input.processScroll(scrollOffset, 0., scrollLimitY);
           else 
-            input.processScroll(-UPPER_BAR_DROP_WEIGHT, scrollLimitY);
+            scrollOffset = input.processScroll(scrollOffset, -UPPER_BAR_DROP_WEIGHT, scrollLimitY);
         }
           
         extentX = 0;
@@ -2985,7 +2986,7 @@ public class Editor extends Screen {
           }
         }
         prevMouseY = input.mouseY();
-        input.scrollOffset += scrollVelocity;
+        scrollOffset += scrollVelocity;
         
 
         
@@ -3181,7 +3182,7 @@ public class ReadOnlyEditor extends Editor {
   void setupp()
   {
     readOnly = true;
-    input.scrollOffset = -UPPER_BAR_DROP_WEIGHT;
+    scrollOffset = -UPPER_BAR_DROP_WEIGHT;
     
     readonlyEditorUI = new SpriteSystem(engine, engine.APPPATH+engine.PATH_SPRITES_ATTRIB()+"gui/readonlyeditor/");
     readonlyEditorUI.repositionSpritesToScale();
@@ -3242,7 +3243,7 @@ public class CreditsScreen extends ReadOnlyEditor {
   }
   
   public void content() {
-    input.scrollOffset -= display.getDelta()*0.7;
+    scrollOffset -= display.getDelta()*0.7;
     power.setAwake();
     super.content();
   }

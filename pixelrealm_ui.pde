@@ -1055,36 +1055,38 @@ public class PixelRealmWithUI extends PixelRealm {
       }
       
       public void display(float gridx, float gridy, float wi, float hii) {
-        final float SLOTS_WI = 18f;
+        final int SLOTS_WI = 18;
         
         // Vars for square size calculation.
         float squarewihi = (wi-90f)/SLOTS_WI;
+        int ly = int(grid.length/SLOTS_WI);
         
-        float bottom = 30*squarewihi;
+        float bottom = ly*squarewihi;
         
-        // Scroll
-        input.processScroll(10., bottom-hii+1f);
+        // Scroll, use special functionality in that we're always processing the scroll, but only receiving wheel inputs when
+        // mouse is in area. This will keep the grids animated even if we're switching between the grids
+        scroll = input.processScroll(scroll, 10f, bottom-hii+10f, ui.mouseInArea(gridx, gridy, squarewihi*SLOTS_WI+5f, hii));
         
         // Limit viewspace of grid
         display.clip(gridx, gridy, squarewihi*SLOTS_WI+5f, hii);
         
         // Now draw each square
-        int i = 0;
-        for (float y = 0; y < 30; y++) {
-          float actualy = gridy + y * squarewihi + input.scrollOffset+2f;
+        for (int y = 0; y < ly; y++) {
+          float actualy = gridy + y * squarewihi + scroll+2f;
           
           if (actualy > gridy-squarewihi && actualy < gridy+hii) {
-            for (float x = 0; x < SLOTS_WI; x += 1f) {
-              
-              app.stroke(80f);
-              
-              app.fill(67f, 127f);
-              app.strokeWeight(1f);
-              app.rect(gridx + x * squarewihi, actualy, squarewihi, squarewihi);
+            for (int x = 0; x < SLOTS_WI; x++) {
+              int i = y*SLOTS_WI+x;
               
               if (i >= grid.length) {
                 break;
               }
+              
+              app.stroke(80f);
+              app.fill(67f, 127f);
+              app.strokeWeight(1f);
+              app.rect(gridx + x * squarewihi, actualy, squarewihi, squarewihi);
+              
               
               app.noStroke();
               
@@ -1124,7 +1126,7 @@ public class PixelRealmWithUI extends PixelRealm {
                     originalGridLocation = this;
                     originalCellLocation = i;
                     grid[i] = null;
-                    doubleClickTimer = 12f;
+                    doubleClickTimer = 15f;
                   }
                 }
                 
@@ -1296,7 +1298,7 @@ public class PixelRealmWithUI extends PixelRealm {
       app.fill(255f);
       app.textFont(engine.DEFAULT_FONT, 40f);
       app.textAlign(LEFT, TOP);
-      app.text("Your pockets", xxx+80f, yyy);
+      app.text("Pocket", xxx+80f, yyy+20f);
       
       pocketsGrid.display(xxx, yyy+60f, getWidth(), hii);
       
@@ -1305,6 +1307,7 @@ public class PixelRealmWithUI extends PixelRealm {
       xxx = gui.getSprite("pocket_hotbar").getX();
       yyy = gui.getSprite("pocket_hotbar").getY();
       hii = gui.getSprite("pocket_hotbar").getHeight();
+      app.text("Hotbar", xxx+80f, yyy+20f);
       hotbarGrid.display(xxx, yyy+60f, getWidth(), hii);
       
       // This section of code must run after all grid display() calls.

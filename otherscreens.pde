@@ -239,6 +239,7 @@ public class Explorer extends Screen {
   SpriteSystem gui;
   private int numTimewayEntries;
   public  float scrollBottom = 0.0;
+  private float scrollOffset = 0f;
   
   public Explorer(TWEngine engine) {
         super(engine);
@@ -282,7 +283,7 @@ public class Explorer extends Screen {
       float textHeight = app.textAscent() + app.textDescent();
       float x = 50;
       float wi = TEXT_SIZE + 20;
-      float y = 150 + i*TEXT_SIZE+input.scrollOffset;
+      float y = 150 + i*TEXT_SIZE+scrollOffset;
       
       // Sorry not sorry
       try {
@@ -294,7 +295,7 @@ public class Explorer extends Screen {
             // if mouse is hovering over text and left click is pressed, go to this directory/open the file
             if (input.primaryOnce) {
               if (file.currentFiles[i].isDirectory())
-                input.scrollOffset = 0.;
+                scrollOffset = 0.;
                 
               file.open(file.currentFiles[i]);
             }
@@ -466,7 +467,7 @@ public class Explorer extends Screen {
         ui.loadingIcon(WIDTH/2, HEIGHT/2);
       }
       else {
-        input.processScroll(0., scrollBottom+1.0);
+        scrollOffset = input.processScroll(scrollOffset, 0., scrollBottom+1.0);
         renderDir();
       }
       
@@ -630,6 +631,7 @@ public class RecycleBinScreen extends Screen {
   private float scrollVelocity = 0f;
   private boolean scrolling = false;
   private boolean scrolled = false;
+  private float scrollOffset = 0f;
   private boolean prompt = false;
   private boolean itemExistsError = false;
   private int itemToRestore = 0;
@@ -791,7 +793,7 @@ public class RecycleBinScreen extends Screen {
         if (originalFilenames.get(i) == null) return;
         
         float x = 30f;
-        float y = myUpperBarWeight+30f+i*ITEM_HEIGHT+input.scrollOffset;
+        float y = myUpperBarWeight+30f+i*ITEM_HEIGHT+scrollOffset;
         
         // Restore button
         float wi = 200f, hi = 50f;
@@ -971,8 +973,8 @@ public class RecycleBinScreen extends Screen {
       
       
       if (!prompt) {
-        input.scrollOffset += scrollVelocity;
-        input.processScroll(0., scrollBottom+1.0);
+        scrollOffset += scrollVelocity;
+        scrollOffset = input.processScroll(scrollOffset, 0., scrollBottom+1.0);
       }
       
       baseLogic();

@@ -7675,7 +7675,6 @@ public class TWEngine {
     
     private float cache_mouseX = 0.0;
     private float cache_mouseY = 0.0;
-    public  float scrollOffset = 0.0;
     private float blinkTime = 0.0;
     
     public int keys[]       = new int[1024];
@@ -7875,11 +7874,16 @@ public class TWEngine {
       // ************TYPING*******************
   
       //*************MOUSE WHEEL*************
-      if (rawScroll != 0) {
-        scroll = rawScroll*-scrollSensitivity;
-      } else {
-        scroll *= 0.5;
-      }
+      //if (rawScroll != 0f) {
+      //} else {
+      //  scroll *= 0.5;
+      //}
+      
+      float scrollData = rawScroll*-scrollSensitivity;
+      
+      final float alpha = 0.20f;
+      scroll = (1.0f - alpha) * scroll + alpha * scrollData;
+      
       rawScroll = 0.;
     }
     
@@ -8300,50 +8304,41 @@ public class TWEngine {
     
     // TODO: This is old code. Need I say more?
     // It's also broken af.
-    public void processScroll(float top, float bottom) {
+    public float processScroll(float scrollOffset, float top, float bottom, boolean active) {
       final float ELASTIC_MAX = 100.;
       
-      if (scroll != 0.0) {
+      float localScroll = scroll;
+      if (!active) {
+         localScroll = 0f;
+      }
+      
+      if (localScroll != 0.0) {
         power.setAwake();
       }
       else {
         power.setSleepy();
       }
       
-      int n = 1;
-      switch (power.getPowerMode()) {
-            case HIGH:
-            n = 1;
-            break;
-            case NORMAL:
-            n = 2;
-            break;
-            case SLEEPY:
-            n = 4;
-            break;
-            case MINIMAL:
-            n = 1;
-            break;
+      if (scrollOffset > top) {
+          scrollOffset -= (scrollOffset-top)*0.1f*display.getDelta();
+          if (localScroll < 0.0) scrollOffset += localScroll*display.getDelta();
+          else scrollOffset += localScroll*(max(0.0, ((ELASTIC_MAX+top)-scrollOffset)/ELASTIC_MAX))*display.getDelta();
       }
-      
-      // Sorry not sorry
-      for (int i = 0; i < n; i++) {
-        if (scrollOffset > top) {
-            scrollOffset -= (scrollOffset-top)*0.1;
-            if (input.scroll < 0.0) scrollOffset += input.scroll;
-            else scrollOffset += input.scroll*(max(0.0, ((ELASTIC_MAX+top)-scrollOffset)/ELASTIC_MAX));
-        }
-        else if (-scrollOffset > bottom) {
-            // TODO: Actually get some pen and paper and make the elastic band edge work.
-            // This is just a placeholder so that it's usable.
-            scrollOffset = -bottom;
+      else if (-scrollOffset > bottom) {
           
-            //scrollOffset += (bottom-scrollOffset)*0.1;
-            //if (engine.scroll > 0.0) scrollOffset += engine.scroll;
-            //else scrollOffset += engine.scroll*(max(0.0, ((-scrollOffset)-(ELASTIC_MAX+bottom))/ELASTIC_MAX));
-        }
-        else scrollOffset += input.scroll;
+          // Finally completed the algorithm 2.5 years later.
+          scrollOffset += (-(scrollOffset+bottom))*0.1f*display.getDelta();
+          if (localScroll > 0.0) scrollOffset += localScroll*display.getDelta();
+          else scrollOffset += localScroll*max(0f, ((scrollOffset+bottom)+ELASTIC_MAX)/ELASTIC_MAX)*display.getDelta();
       }
+      else scrollOffset += localScroll*display.getDelta();
+      
+      return scrollOffset;
+    }
+    
+    
+    public float processScroll(float scrollOffset, float top, float bottom) {
+      return processScroll(scrollOffset, top, bottom, true);
     }
     
     

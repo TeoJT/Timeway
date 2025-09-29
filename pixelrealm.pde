@@ -3016,7 +3016,7 @@ public class PixelRealm extends Screen {
             
             Thread t1 = new Thread(new Runnable() {
               public void run() {
-                input.scrollOffset = -renderedEntry.UPPER_BAR_DROP_WEIGHT;
+                renderedEntry.scrollOffset = -renderedEntry.UPPER_BAR_DROP_WEIGHT;
                 renderedEntry.beginSoftwareRendering();
                 renderedEntry.renderPlaceables();
                 
