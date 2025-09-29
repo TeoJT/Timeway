@@ -3776,7 +3776,8 @@ public class KeybindSettingsScreen extends ReadOnlyEditor {
       "scale_up",
       "scale_down",
       "prev_directory",
-      "move_slow"
+      "move_slow",
+      "open_pocket"
   };
   
   private char[] defaultBindings = {
@@ -3799,7 +3800,8 @@ public class KeybindSettingsScreen extends ReadOnlyEditor {
       '=',
       '-',
       '\b',
-      TWEngine.InputModule.SHIFT_KEY
+      TWEngine.InputModule.SHIFT_KEY,
+      'i'
   };
   
   // Duplicate code but whatever.
@@ -3851,7 +3853,7 @@ public class KeybindSettingsScreen extends ReadOnlyEditor {
         display.imgCentre("keybinding_2_128", x+300f, y+130f);
       }
       
-      if (input.keyOnce || input.shiftOnce || input.ctrlOnce || input.altOnce) {
+      if (input.anyKeyOnce()) {
         enterInputPrompt = false;
         settings.setKeybinding(settingKey, input.getLastKeyPressed());
         getButton(settingKey).text = input.keyTextForm(input.getLastKeyPressed());

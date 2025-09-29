@@ -1191,7 +1191,7 @@ public class TWEngine {
     public void clip(float x, float y, float wi, float hi) {
       currentPG.imageMode(CORNER);
       if (currentPG == g) {
-        app.clip(x*displayScale, y*displayScale, wi*displayScale, hi*displayScale);
+        app.clip(x*displayScale+currScreen.screenx, y*displayScale+currScreen.screeny, wi*displayScale, hi*displayScale);
       }
       else {
         currentPG.clip(x, y, wi, hi);
@@ -4253,7 +4253,6 @@ public class TWEngine {
         || ext.equals("jpeg")
         || ext.equals("bmp")
         || ext.equals("gif")
-        || ext.equals("ico")
         || ext.equals("webm")
         || ext.equals("tiff")
         || ext.equals("tif"))
@@ -4362,7 +4361,6 @@ public class TWEngine {
         || ext.equals("jpeg")
         || ext.equals("bmp")
         || ext.equals("gif")
-        || ext.equals("ico")
         || ext.equals("webm")
         || ext.equals("tiff")
         || ext.equals("tif")) return FileType.FILE_TYPE_IMAGE;
@@ -8026,6 +8024,10 @@ public class TWEngine {
     
     public char getLastKeyPressed() {
       return lastKeyPressed;
+    }
+    
+    public boolean anyKeyOnce() {
+      return keyOnce || shiftOnce || ctrlOnce || altOnce || leftOnce || rightOnce || upOnce || downOnce;
     }
   
     // To be called by base sketch code.

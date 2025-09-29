@@ -33,7 +33,9 @@ float pixelate(float o, float res) {
     return (floor(o*res))/res;
 }
 
-
+float saw(float delta) {
+    return abs(delta)-floor(abs(delta));
+}
 
 
 void main(void)
@@ -52,20 +54,14 @@ void main(void)
 		
 		float aspect = (pixelRes.x/pixelRes.y);
 		vec2 tt = gl_FragCoord.xy/pixelRes.xy;
-		//tt.x *= 2.;
 		tt.y = 1.-tt.y;
-		
-		//st.x *= u_resolution.x/u_resolution.y;
-		//st *= 1.1;
-		//st.x *= 2.;
 		st.y -= 0.05;
 
 		
 		
 		float t = time*speed*PI;
-		//float t = (ti-floor(ti))*PI;
 		
-		tt.x += portalLookDir;
+		tt.x = saw(tt.x+portalLookDir);
 		
 		float wobble = cos((st.y+st.x)*frequency*2.+t) * intensity * sin(st.x*frequency + t);
 		

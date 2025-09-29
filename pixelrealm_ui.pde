@@ -140,7 +140,7 @@ public class PixelRealmWithUI extends PixelRealm {
       return cache_backX;
     }
     
-    private SpriteSystem gui() {
+    protected SpriteSystem gui() {
       return ui.getInUseSpriteSystem();
     }
 
@@ -358,7 +358,7 @@ public class PixelRealmWithUI extends PixelRealm {
     public void display() {
       super.display();
 
-      if (ui.buttonVary("menu_yes", "tick_128", "Yes")) {
+      if (ui.buttonVary("menu_yes", "tick_128", "Yes") || input.enterOnce) {
         sound.playSound("menu_select");
         menuShown = false;
         menu = null;
@@ -375,6 +375,127 @@ public class PixelRealmWithUI extends PixelRealm {
     }
   }
 
+
+
+
+
+
+  class ConflictMenu extends DialogMenu {
+    protected Runnable runWhenDeclined = null;
+    
+    private PixelRealmState.FileObject oldFile, newFile;
+
+    public ConflictMenu(String title, String txt, PixelRealmState.FileObject oldfileObject, PixelRealmState.FileObject newfileObject) {
+      super(title, "back-conflict", txt);
+      oldFile = oldfileObject;
+      newFile = newfileObject;
+      
+      console.log("oldfile "+oldFile.dir);
+      console.log("newfile "+newFile.dir);
+      
+      setEnterToContinue(false);
+    }
+
+
+    public void display() {
+      super.display();
+      
+      // Rename
+      if (ui.buttonVary("conflict_rename", "rename_256", "Rename")) {
+        sound.playSound("menu_select");
+        
+        Runnable r = new Runnable() {
+          public void run() {
+            if (engine.promptInput.length() == 0) {
+              return;
+            }
+            String newFilename = engine.promptInput;
+            
+            String newPath = file.directorify(file.getDir(oldFile.dir))+newFilename;
+            
+            if (file.exists(newPath)) {
+              menu = new DialogMenu("Can't rename file", "back-newrealm", "The filename is still the same. Could not place item in realm, please try again with a different name.");
+              return;
+            }
+            
+            issueRefresherCommand(REFRESHER_PAUSE);
+            if (file.mv(newFile.dir, newPath)) {
+              float x = newFile.x;
+              float y = newFile.y;
+              float z = newFile.z;
+              console.log("File renamed to "+file.getFilename(newPath));
+              currRealm.refreshFiles();
+              PixelRealmState.FileObject newf = currRealm.findFileObjectByName(newFilename);
+              newf.x = x;
+              newf.y = y;
+              newf.z = z;
+            }
+            else {
+              console.warn("Couldn't rename item. File might be in use.");
+            }
+            
+            sound.playSound("menu_select");
+            
+            closeMenu();
+          }
+        };
+  
+        beginInputPrompt("Rename to:", r);
+        if (newFile.filename.contains(".")) {
+          engine.promptInput = "."+file.getExt(newFile.filename);
+          input.cursorX = 0;
+        }
+        
+      }
+      
+      
+      // Replace
+      if (ui.buttonVary("conflict_replace", "replace_256", "Replace")) {
+        sound.playSound("menu_select");
+        
+        Runnable yes = new Runnable() {
+          public void run() {
+            issueRefresherCommand(REFRESHER_PAUSE);
+            
+            cassetteCheck(oldFile.filename);
+            
+            if (file.recycle(oldFile.dir)) {
+              currRealm.poofAt(oldFile);
+              oldFile.destroy();
+              sound.playSound("poof");
+              
+              currRealm.placeDownObject();
+            }
+            else {
+              console.warn("Failed to recycle item. File might be in use.");
+            }
+          }
+        };
+        
+        menu = new YesNoMenu("Replace", "The existing file will be moved to the recycle bin before being replaced by the moved file.\nDo you want to proceed?", yes);
+      }
+      
+      // Swap
+      //if (ui.buttonVary("conflict_swap", "swap_256", "Swap")) {
+      //  sound.playSound("menu_select");
+        
+      //  //float x = newFile.x;
+      //  //float y = newFile.y;
+      //  //float z = newFile.z;
+        
+      //  //int oldIndex = holdingItemIndex;
+      //  //currRealm.pickupItem(oldFile);
+        
+      //  closeMenu();
+      //}
+      
+      // Dismiss
+      if (ui.buttonVary("conflict_dismiss", "cross_128", "Dismiss")) {
+        sound.playSound("menu_select");
+        closeMenu();
+      }
+    }
+  } 
 
 
 
@@ -460,10 +581,8 @@ public class PixelRealmWithUI extends PixelRealm {
           menu = new DialogMenu("Can't use morpher", "back-newrealm", "This realm uses an older version and you can't use the gardener tool here. Please upgrade by selecting \"Terrain\" from the menu to use this tool.");
         }
         else {
-          currentTool = TOOL_GARDENER;
-          subTool = 0;
+          switchTool(TOOL_GARDENER);
           menuShown = false;
-          menu = null;
           sound.playSound("menu_select");
         }
       }
@@ -474,13 +593,7 @@ public class PixelRealmWithUI extends PixelRealm {
           menu = new DialogMenu("Can't use morpher", "back-newrealm", "This realm uses an older version and you can't use the morpher tool here. Please upgrade by selecting \"Terrain\" from the menu to use this tool.");
         }
         else {
-          currentTool = TOOL_MORPHER;
-          subTool = MORPHER_BULGE;
-          morpherBlockHeight = 0.;
-          morpherRadius = 150.;
-          
-          globalHoldingObjectSlot = null;
-          currRealm.updateHoldingItem(globalHoldingObjectSlot);
+          switchTool(TOOL_MORPHER);
           menuShown = false;
           sound.playSound("menu_select");
         }
@@ -489,22 +602,16 @@ public class PixelRealmWithUI extends PixelRealm {
       // --- Grabber tool ---
       if (ui.buttonVary("grabber_1", "grabber_tool_128", "Grabber")) {
         // Select the last item in the inventory if not already selected.
-        if (globalHoldingObject == null) {
-          if (hotbar.tail != null) {
-            globalHoldingObjectSlot = hotbar.tail;
-          }
-        }
-        currRealm.updateHoldingItem(globalHoldingObjectSlot);
-        currentTool = TOOL_GRABBER;
+        //currRealm.updateHoldingItem();
+        switchTool(TOOL_GRABBER);
         menuShown = false;
         sound.playSound("menu_select");
       }
 
       // --- No tool ---
       if (ui.buttonVary("notool_1", "notool_128", "No tool")) {
-        currentTool = TOOL_NORMAL;
-        globalHoldingObjectSlot = null;
-        currRealm.updateHoldingItem(globalHoldingObjectSlot);
+        //currRealm.updateHoldingItem(globalHoldingObjectSlot);
+        switchTool(TOOL_NORMAL);
         menuShown = false;
         sound.playSound("menu_select");
       }
@@ -512,53 +619,13 @@ public class PixelRealmWithUI extends PixelRealm {
   }
   
   
-  class FileOptionsMenu extends TitleMenu {
-    private String filename = "";
-    private PixelRealmState.FileObject probject = null;
-    
-    public FileOptionsMenu(PixelRealmState.FileObject o) {
-      super("", "back-fileoptionsmenu");
-      this.probject = o;
-      this.filename = file.getFilename(probject.dir);
-      
-      if (filename.length() > 38) {
-        this.title = filename.substring(0, 36)+"...";
-      }
-      else {
-        this.title = filename;
-      }
-    }
-    
-    
-    public void display() {
-      super.display();
-      if (ui.buttonVary("op-delete", "recycle_256", "Delete")) {
-        sound.playSound("menu_select");
-        
-        issueRefresherCommand(REFRESHER_PAUSE);
-        if (cassettePlaying.equals(this.filename)) {
-          sound.stopMusic();
-          sound.streamMusic(currRealm.musicPath);
-          cassettePlaying = "";
-          delay(100);  // Don't care about the delay you won't notice a thing (probably)
-        }
-        
-        if (file.recycle(probject.dir)) {
-          currRealm.poofAt(probject);
-          probject.destroy();
-          sound.playSound("poof");
-          console.log(filename+" moved to recycle bin.");
-        }
-        else {
-          console.warn("Failed to recycle item. File might be in use.");
-        }
-        
-        closeMenu();
-      }
-      if (ui.buttonVary("op-rename", "rename_256", "Rename")) {
-        sound.playSound("menu_select");
-        
+  private void renamePrompt(PixelRealmState.FileObject probject) {
+    renamePrompt(probject, file.directorify(file.getDir(probject.dir)));
+  }
   
+  
+  private void renamePrompt(PixelRealmState.FileObject probject, String newDir) {
+    
         Runnable r = new Runnable() {
           public void run() {
             if (engine.promptInput.length() == 0) {
@@ -566,7 +633,7 @@ public class PixelRealmWithUI extends PixelRealm {
             }
             String newFilename = engine.promptInput;
             
-            String newPath = file.getDir(probject.dir)+"/"+newFilename;
+            String newPath = newDir+newFilename;
             
             if (file.exists(newPath)) {
               //prompt("Can't rename file", newFilename+" already exists. Please choose a different name.");
@@ -633,6 +700,64 @@ public class PixelRealmWithUI extends PixelRealm {
           engine.promptInput = "."+file.getExt(probject.filename);
           input.cursorX = 0;
         }
+  }
+  
+  
+  private void cassetteCheck(String filename) {
+    if (cassettePlaying.equals(filename)) {
+      sound.stopMusic();
+      sound.streamMusic(currRealm.musicPath);
+      cassettePlaying = "";
+      delay(100);  // Don't care about the delay you won't notice a thing (probably)
+    }
+  }
+  
+  
+  class FileOptionsMenu extends TitleMenu {
+    private String filename = "";
+    private PixelRealmState.FileObject probject = null;
+    
+    public FileOptionsMenu(PixelRealmState.FileObject o) {
+      super("", "back-fileoptionsmenu");
+      this.probject = o;
+      this.filename = file.getFilename(probject.dir);
+      
+      if (filename.length() > 38) {
+        this.title = filename.substring(0, 36)+"...";
+      }
+      else {
+        this.title = filename;
+      }
+    }
+    
+    
+    
+    
+    public void display() {
+      super.display();
+      if (ui.buttonVary("op-delete", "recycle_256", "Delete")) {
+        sound.playSound("menu_select");
+        
+        issueRefresherCommand(REFRESHER_PAUSE);
+        
+        cassetteCheck(this.filename);
+        
+        if (file.recycle(probject.dir)) {
+          currRealm.poofAt(probject);
+          probject.destroy();
+          sound.playSound("poof");
+          console.log(filename+" moved to recycle bin.");
+        }
+        else {
+          console.warn("Failed to recycle item. File might be in use.");
+        }
+        
+        closeMenu();
+      }
+      if (ui.buttonVary("op-rename", "rename_256", "Rename")) {
+        sound.playSound("menu_select");
+        
+        renamePrompt(probject);
         //closeMenu();
       }
       if (ui.buttonVary("op-duplicate", "copy_256", "Duplicate")) {
@@ -840,59 +965,438 @@ public class PixelRealmWithUI extends PixelRealm {
   
   
   
+  // Pocket menu tab plans:
+  //  Hotbar
+  //  Realm assets
+  //  Files in Pixelrealm
 
   class PocketMenu extends Menu {
+    
+    private Grid pocketsGrid;
+    private Grid hotbarGrid;
+    
+    private JSONObject pocketInfo;
+    
+    private PocketItem draggingItem = null;
+    
+    // When the user moves an item in the grid, it might go back to the original position or swap places
+    // with another item. For this, we need to know the original location where the item moved from,
+    // which is kinda overly complicated since we need to know which grid and square ID we moved from.
+    private Grid originalGridLocation = null;
+    private int originalCellLocation = 0;
+    
+    protected int itemIndex = 0;
+    protected Grid currGrid = null;
+    private String promptMessage = null; // When this is null, prompt is hidden
+    
+    private String hoverLabel = null;
+    private color  hoverLabelColor = color(0);
+    
+    private boolean keyDelay = true;
+    private float doubleClickTimer = 0f;
+    
+    private class Grid {
+      private float scroll = 0;
+      private Runnable moveInAction = null;
+      
+      public PocketItem[] grid;
+      
+      public Grid(int size) {
+        grid = new PocketItem[size];
+      }
+      
+      // Runnable to execute when an item is placed into a cell in the grid.
+      public void setMoveInAction(Runnable r) {
+        moveInAction = r;
+      }
+      
+      public void insert(ArrayList<PocketItem> arr) {
+        for (int i = 0; i < arr.size(); i++) {
+          grid[i] = arr.get(i);
+        }
+      }
+      
+      private int findFreeSpot() {
+        for (int i = 0; i < grid.length; i++) {
+          if (grid[i] == null) {
+            return i;
+          }
+        }
+        // Hmmm... that could be a problem.
+        // We need some sort of unlimited size grid option.
+        return -1;
+      }
+      
+      public void load(int coll) {
+        file.mkdir(engine.APPPATH+engine.POCKET_PATH);
+        
+        File[] pocketFolder = (new File(engine.APPPATH+engine.POCKET_PATH)).listFiles();
+          for (File f : pocketFolder) {
+            String path = f.getAbsolutePath().replaceAll("\\\\", "/");
+            String name = file.getFilename(path);
+            if (name.equals(POCKET_INFO)) continue;
+            
+            JSONObject o = pocketInfo.getJSONObject(name);
+            if (o != null) {
+              // "coll" : 2  means it's in the hotbar
+              if (o.getInt("coll", 1) == coll) {
+                
+                int freeSpot = 0;
+                if (o.isNull("loc")) freeSpot = findFreeSpot();
+                
+                grid[o.getInt("loc", freeSpot)] = currRealm.loadPocketItem(path);
+              }
+            }
+            // If not found in the JSON file and we're loading the pocket, find a slot in the inventory for it.
+            else if (coll == 1) {
+              grid[findFreeSpot()] = currRealm.loadPocketItem(path);
+            }
+        }
+      }
+      
+      public void display(float gridx, float gridy, float wi, float hii) {
+        final float SLOTS_WI = 18f;
+        
+        // Vars for square size calculation.
+        float squarewihi = (wi-90f)/SLOTS_WI;
+        
+        float bottom = 30*squarewihi;
+        
+        // Scroll
+        input.processScroll(10., bottom-hii+1f);
+        
+        // Limit viewspace of grid
+        display.clip(gridx, gridy, squarewihi*SLOTS_WI+5f, hii);
+        
+        // Now draw each square
+        int i = 0;
+        for (float y = 0; y < 30; y++) {
+          float actualy = gridy + y * squarewihi + input.scrollOffset+2f;
+          
+          if (actualy > gridy-squarewihi && actualy < gridy+hii) {
+            for (float x = 0; x < SLOTS_WI; x += 1f) {
+              
+              app.stroke(80f);
+              
+              app.fill(67f, 127f);
+              app.strokeWeight(1f);
+              app.rect(gridx + x * squarewihi, actualy, squarewihi, squarewihi);
+              
+              if (i >= grid.length) {
+                break;
+              }
+              
+              app.noStroke();
+              
+              
+              // Here, we execute user input logic on the current item (as well as display it)
+              PocketItem pitem = grid[i];
+              if (pitem != null && pitem.item != null && pitem.item.img != null) {
+                pitem.displayIcon(gridx + x * squarewihi, actualy, squarewihi);
+              }
+              
+              // Mouse detect
+              if (ui.mouseInArea(gridx + x * squarewihi, actualy, squarewihi, squarewihi) && (input.mouseY() < gridy+hii) && (input.mouseY() >= gridy)) {
+                // Show item name
+                if (pitem != null) {
+                  hoverLabel = pitem.name;
+                  if (pitem.abstractObject) {
+                    hoverLabelColor = color(255, 130, 130, 255);
+                  }
+                  else {
+                    hoverLabelColor = color(255);
+                  }
+                  
+                  // TODO: Duplicate highlight color red and add "(duplicate)" when i fix that thing.
+                }
+                
+                // Highlight item
+                app.fill(255f, 60f);
+                app.rect(gridx + x * squarewihi, actualy, squarewihi, squarewihi);
+                
+                // Pick up item when clicked & held
+                if (input.primaryOnce && grid[i] != null && !promptShown()) {
+                  if (doubleClickTimer > 0f) {
+                    if (pitem != null) file.open(engine.APPPATH+engine.POCKET_PATH+pitem.name);
+                  }
+                  else {
+                    draggingItem = grid[i];
+                    originalGridLocation = this;
+                    originalCellLocation = i;
+                    grid[i] = null;
+                    doubleClickTimer = 12f;
+                  }
+                }
+                
+                // Drop an item into a cell when mouse released.
+                // If the cell is blank, place the item there.
+                // If the cell has an existing item, swap it.
+                // However, there will be exceptions with different file types later on.
+                if (draggingItem != null && input.primaryReleased && !promptShown()) {
+                  itemIndex = i;
+                  currGrid = this;
+                  if (moveInAction != null) {
+                    moveInAction.run();
+                  }
+                }
+              }
+              
+              i++;
+            }
+          }
+        }
+        
+        display.noClip();
+      }
+    }
+    
+    
+    
+    public PocketMenu() {
+      super();
+      
+      final int POCKET = 1;
+      final int HOTBAR = 2;
+      
+      // Open pocket info. Will be saved when window closes.
+      pocketInfo = openPocketsFile();
+      
+      // Initialise pocketsgrid
+      pocketsGrid = new Grid(300);
+      
+      // For pockets grid, this is the action we do when we drop an item in:
+      // - Move normally if not from another grid.
+      Runnable rpockets = new Runnable() {public void run() {
+        
+        // Only do this if we're moving from a different grid.
+        // No need to run pocketMove for items already in the pockets.
+        if (originalGridLocation == pocketsGrid) {
+          swapIfOccupied(HOTBAR);
+          moveItemToNewCell(POCKET);
+          
+          return;
+        }
+        
+        // Move the item
+        // This will effectively move the item from the current realm to the pockets folder.
+        rpause();
+        if (draggingItem.pocketMove(currRealm.stateDirectory)) {
+          // Valid move operation...
+          
+          // If there's an existing item in the cell...
+          // Swap places (move the item to the original cell)
+          swapIfOccupied(HOTBAR);
+          moveItemToNewCell(POCKET);
+        }
+        else {
+          // Error, show prompt, and return item to original cell...
+          returnDraggingItemToOriginalCell();
+          return;
+        }
+        
+      }};
+      pocketsGrid.setMoveInAction(rpockets);
+      
+      pocketsGrid.load(1);
+      
+      
+      
+      
+      
+      // Next our hotbar grid.
+      hotbarGrid = new Grid(64);
+      
+      Runnable rhotbar = new Runnable() {public void run() {
+        // Here, if we swap an item and it goes into the pocket, then this item will be required to 
+        // undergo the same operation as moving an item into the pocket.
+        if (currGrid.grid[itemIndex] != null) {        // Check we are moving it into an occupied slot
+          if (originalGridLocation == pocketsGrid) { // check that we are indeed moving it into the pockets grid and call pocketMove
+            rpause();
+            if (currGrid.grid[itemIndex].pocketMove(currRealm.stateDirectory)) {
+              swapIfOccupied(POCKET);         // Swap places
+              moveItemToNewCell(HOTBAR);      // Move the current item.
+            }
+            else {
+              returnDraggingItemToOriginalCell();
+              return;
+            }
+          }
+          else { // Condition here is that this is not the pockets grid. No need to call pocketMove.
+            swapIfOccupied(POCKET);
+            moveItemToNewCell(HOTBAR);
+          }
+        }
+        else {
+          moveItemToNewCell(HOTBAR);
+        }
+        
+      }};
+      hotbarGrid.setMoveInAction(rhotbar);
+      
+      // Process our hotbar and insert it into our grid
+      hotbarGrid.insert(hotbar);
+      
+      // Shouldn't need originalGridLocation but this is just to prevent a crash should there be a bug.
+      originalGridLocation = pocketsGrid;
+    }
+    
+    
+    
+    private void rpause() {
+      issueRefresherCommand(REFRESHER_PAUSE);
+    }
+    
+    private void moveItemToNewCell(int coll) {
+      currGrid.grid[itemIndex] = draggingItem;  // Move item
+      draggingItem = null;  // No more dragging
+      
+      // Save info (collection and the index)
+      JSONObject o = new JSONObject();
+      o.setInt("coll", coll);   // 1: pockets, 2: hotbar
+      if (coll == 1) o.setInt("loc", itemIndex);
+      pocketInfo.setJSONObject(currGrid.grid[itemIndex].name, o);
+    }
+    
+    private void swapIfOccupied(int swapColl) {
+      if (currGrid.grid[itemIndex] != null) {
+        originalGridLocation.grid[originalCellLocation] = currGrid.grid[itemIndex];
+        
+        // Save info (collection and the index)
+        JSONObject o = new JSONObject();
+        o.setInt("coll", swapColl);   // 1: pockets, 2: hotbar
+        if (swapColl == 1) o.setInt("loc", originalCellLocation);
+        pocketInfo.setJSONObject(originalGridLocation.grid[originalCellLocation].name, o);
+      }
+    }
+    
+    private void returnDraggingItemToOriginalCell() {
+      originalGridLocation.grid[originalCellLocation] = draggingItem;
+      draggingItem = null;
+    }
+    
+    private boolean promptShown() {
+      return promptMessage != null;
+    }
 
     public void display() {
+      // Background
       displayBackground("back-pocketmenu");
       
-      final float SLOTS_WI = 18f;
+      hoverLabel = null;
+      doubleClickTimer -= display.getDelta();
       
+      
+      // Pocket positioning in the form of a sprite
       gui.spriteVary("pocket_yourpocket", "nothing");
-      
       float xxx = gui.getSprite("pocket_yourpocket").getX();
       float yyy = gui.getSprite("pocket_yourpocket").getY();
       float hii = gui.getSprite("pocket_yourpocket").getHeight();
       
-      
+      // Title
       app.fill(255f);
       app.textFont(engine.DEFAULT_FONT, 40f);
       app.textAlign(LEFT, TOP);
       app.text("Your pockets", xxx+80f, yyy);
+      
+      pocketsGrid.display(xxx, yyy+60f, getWidth(), hii);
+      
+      
+      gui.spriteVary("pocket_hotbar", "nothing");
+      xxx = gui.getSprite("pocket_hotbar").getX();
+      yyy = gui.getSprite("pocket_hotbar").getY();
+      hii = gui.getSprite("pocket_hotbar").getHeight();
+      hotbarGrid.display(xxx, yyy+60f, getWidth(), hii);
+      
+      // This section of code must run after all grid display() calls.
+      if (draggingItem != null) {
+        draggingItem.displayIcon(input.mouseX()-32f, input.mouseY()-32f, 64f);
+        
+        // Mouse released outside of a grid square (snap back to the originalSquare)
+        if (input.primaryReleased) {
+          returnDraggingItemToOriginalCell();
+        }
+      }
 
-      float gridx = xxx;
-      float gridy = yyy+60f;
-      float squarewihi = (getWidth()-90f)/SLOTS_WI;
-      
-      float bottom = 30*squarewihi;
-      
-      input.processScroll(10., bottom-hii+1f);
-      
-      display.clip(gridx, gridy, squarewihi*SLOTS_WI+5f, hii);
-      
-      for (float y = 0; y < 30; y++) {
-        
-        float actualy = gridy + y * squarewihi + input.scrollOffset;
-        
-        if (actualy > gridy-squarewihi && actualy < gridy+hii) {
-          for (float x = 0; x < SLOTS_WI; x += 1f) {
-            app.stroke(80f);
-            app.fill(67f, 127f);
-            app.strokeWeight(1f);
-            app.rect(gridx + x * squarewihi, actualy, squarewihi, squarewihi);
-          }
+      // Back button
+      if (!promptShown()) {
+        if (ui.buttonVary("pocket_back", "back_arrow_128", "")) {
+          close();
+          sound.playSound("menu_select");
+          menu = new MainMenu();
         }
       }
       
-      display.noClip();
-
-
-      if (ui.buttonVary("pocket_back", "back_arrow_128", "")) {
-        sound.playSound("menu_select");
-        menu = new MainMenu();
+      if (input.keyActionOnce("open_pocket", 'i')) {
+        if (keyDelay) {
+          keyDelay = false;
+        }
+        else {
+          close();
+          menuShown = false;
+          menu = null;
+        }
+      }
+      
+      // Hover label
+      if (hoverLabel != null) {
+        app.noStroke();
+        app.fill(0, 0, 0, 180);
+        app.textFont(engine.DEFAULT_FONT, 26);
+        
+        float wi = app.textWidth(hoverLabel)+20f;
+        float hi = 34f;
+        float x  = input.mouseX();
+        float y  = input.mouseY()-hi;
+        
+        app.rect(x-10f, y-6f, wi, hi);
+        app.fill(hoverLabelColor);
+        app.text(hoverLabel, x, y);
+      }
+      
+      
+      // Prompt
+      if (promptMessage != null) {
+        gui().sprite("pockets_prompt_back", "darkgrey");
+        float xx = gui.getSprite("pockets_prompt_back").getX();
+        float yy = gui.getSprite("pockets_prompt_back").getY();
+        float wi = gui.getSprite("pockets_prompt_back").getWidth();
+        float hi = gui.getSprite("pockets_prompt_back").getHeight();
+        app.fill(255);
+        app.textFont(engine.DEFAULT_FONT, 24);
+        app.textAlign(CENTER, CENTER);
+        app.text(promptMessage, xx+20f, yy, wi-40f, hi-90);
+        
+        if (ui.button("pockets_prompt_close", "cross_128", "Dismiss")) {
+          sound.playSound("menu_select");
+          promptMessage = null;
+        }
       }
     }
+    
+    public void prompt(String message) {
+      sound.playSound("menu_prompt");
+      promptMessage = message;
+    }
+    
+    @Override
+    public void close() {
+      // TODO: 
+      // - update pocketObjects.
+      // - update hotbar
+      app.saveJSONObject(pocketInfo, engine.APPPATH+engine.POCKET_PATH+POCKET_INFO);
+      currRealm.loadHotbar();
+    }
   }
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
 
   class InputPromptMenu extends Menu {
     public void display() {
@@ -900,6 +1404,17 @@ public class PixelRealmWithUI extends PixelRealm {
       engine.displayInputPrompt();
     }
   }
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
 
   class NewRealmMenu extends TitleMenu {
     int tempIndex = -1;
@@ -1002,7 +1517,7 @@ public class PixelRealmWithUI extends PixelRealm {
       app.textSize(16);
       //String left = str(settings.getKeybinding("inventorySelectLeft"));
       //String right = str(settings.getKeybinding("inventorySelectRight"));
-      app.text("Navigate with "+input.keyTextForm(settings.getKeybinding("inventory_select_left", '<'))+" and "+input.keyTextForm(settings.getKeybinding("inventory_select_right", '>'))+" keys, press <enter/return> to confirm.", getXmid(), getYbottom()-40);
+      app.text("Navigate with left and right arrow keys, press <enter/return> to confirm.", getXmid(), getYbottom()-40);
 
       // Lil easter egg for the glitched realm
       if (previewName.equals("YOUR FAVOURITE REALM")) {
@@ -1017,7 +1532,7 @@ public class PixelRealmWithUI extends PixelRealm {
       boolean allow = (sound.loadingMusic() && tempIndex > 0) || !sound.loadingMusic();
       
       if (allow) {
-        if ((input.keyActionOnce("inventory_select_left", ',')
+        if ((input.leftOnce
           || ui.buttonVary("newrealm-prev", "back_arrow_128", ""))
           && coolDown <= 0f) {
           tempIndex--;
@@ -1026,7 +1541,7 @@ public class PixelRealmWithUI extends PixelRealm {
         }
       }
       
-      if ((input.keyActionOnce("inventory_select_right", '.')
+      if ((input.rightOnce
         || ui.buttonVary("newrealm-next", "forward_arrow_128", ""))
         && coolDown <= 0f) {
         tempIndex++;
@@ -1451,14 +1966,21 @@ public class PixelRealmWithUI extends PixelRealm {
   // Called from base pixelrealm
   private void errorPrompt(String title, String mssg) {
     if (gui == null) return;
-    DialogMenu m = new DialogMenu(title, "back-newrealm", mssg);
-    m.setAppearTimer(20);
-    menu = m;
-    menuShown = true;
+    
+    // The pockets menu has a special sub-menu showing the error.
+    if (menu instanceof PocketMenu) {
+      ((PocketMenu)menu).prompt(mssg);
+    }
+    else {
+      DialogMenu m = new DialogMenu(title, "back-newrealm", mssg);
+      m.setAppearTimer(20);
+      menu = m;
+      menuShown = true;
+    }
   }
 
   protected void promptPocketConflict(String filename) {
-    String txt = "You have a duplicate file in your pocket ("+filename+"). You can't move between realms with duplicate items in your pockets.";
+    String txt = "You have a duplicate file in your pocket ("+filename+"). Please drop or rename the duplicate item before continuing.";
     errorPrompt("Pocket conflict!", txt);
   }
 
@@ -1467,15 +1989,15 @@ public class PixelRealmWithUI extends PixelRealm {
     errorPrompt("Move failed", txt);
   }
 
-  protected void promptFileConflict(String filename) {
-    String txt = filename+" already exists in this realm.";
-    DialogMenu m = new DialogMenu("File conflict", "back-newrealm", txt);
+  protected void promptFileConflict(PixelRealmState.FileObject oldFile, PixelRealmState.FileObject newFile) {
+    String txt = newFile.filename+" already exists in this realm.\nYou can do the following:";
+    DialogMenu m = new ConflictMenu("File conflict", txt, oldFile, newFile);
     menu = m;
     menuShown = true;
   }
 
   protected void promptMoveAbstractObject(String filename) {
-    String txt = filename+" is a non-file item and can't be moved outside of its realm. Please place down the item here.";
+    String txt = filename+" is a non-file item and can't be moved outside of its realm.";
     errorPrompt("Move non-file item restricted", txt);
   }
 
@@ -1691,7 +2213,7 @@ public class PixelRealmWithUI extends PixelRealm {
     }
 
     // Display inventory
-    if (!menuShown && currentTool == TOOL_GRABBER && globalHoldingObject != null) {
+    if (!menuShown && currentTool == TOOL_GRABBER && currRealm.getHoldingItem() != null) {
       float invx = 10;
       float invy = this.height-80;
 
@@ -1699,10 +2221,10 @@ public class PixelRealmWithUI extends PixelRealm {
       textFont(engine.DEFAULT_FONT, 40);
       textAlign(LEFT, TOP);
       fill(255);
-      text(globalHoldingObject.name, 15, this.height-140);
+      text(currRealm.getHoldingItem().name, 15, this.height-140);
       for (PocketItem p : hotbar) {
         invy = this.height-80;
-        if (p == globalHoldingObject) invy -= 20;
+        if (p == currRealm.getHoldingItem()) invy -= 20;
 
         float x = invx;
         float y = invy;
@@ -1713,7 +2235,7 @@ public class PixelRealmWithUI extends PixelRealm {
         }
 
         if (p.item != null && p.item.img != null)
-          image(p.item.img.get(), x, y, 64, 64);
+          p.displayIcon(x, y, 64);
         invx += 70;
       }
 
@@ -1746,35 +2268,43 @@ public class PixelRealmWithUI extends PixelRealm {
     // Hacky way of allowing an exception for our input prompt menu's
     boolean tmp = engine.inputPromptShown;
     engine.inputPromptShown = false;
-    if (input.keyActionOnce("menu", '\t') && !engine.commandPromptShown) {
-      // Do not allow menu to be closed when set to be on.
-      if (menuShown && doNotAllowCloseMenu) {
-        engine.inputPromptShown = tmp;
-        return;
-      }
-
-      menuShown = !menuShown;
-      if (menuShown) {
-        menu = new MainMenu();
-      } else {
-        if (menu != null) menu.close();
+    if (!engine.commandPromptShown) {
+      if (input.keyActionOnce("menu", '\t')) {
+        // Do not allow menu to be closed when set to be on.
+        if (menuShown && doNotAllowCloseMenu) {
+          engine.inputPromptShown = tmp;
+          return;
+        }
+  
+        menuShown = !menuShown;
+        if (menuShown) {
+          menu = new MainMenu();
+        } else {
+          if (menu != null) menu.close();
+          engine.inputPromptShown = false;
+          tmp = false;
+        }
+  
+        // If we're editing a folder/entry name, pressing tab should make the menu disappear
+        // and then we can continue moving. If we forget to turn the inputPrompt off, the engine
+        // will think we're still typing and won't allow us to move.
         engine.inputPromptShown = false;
-        tmp = false;
+        if (menuShown)
+          sound.playSound("menu_appear");
       }
-
-      // If we're editing a folder/entry name, pressing tab should make the menu disappear
-      // and then we can continue moving. If we forget to turn the inputPrompt off, the engine
-      // will think we're still typing and won't allow us to move.
-      engine.inputPromptShown = false;
-      if (menuShown)
-        sound.playSound("menu_appear");
-    }
-    
-    searchMenuTimeout--;
-    if (input.keyActionOnce("search", '\n') && !engine.commandPromptShown && searchMenuTimeout <= 0 && !menuShown) {
-      menuShown = true;
-      menu = new SearchPromptMenu();
-      searchMenuTimeout = 10;
+      
+      searchMenuTimeout--;
+      if (input.keyActionOnce("search", '\n') && searchMenuTimeout <= 0 && !menuShown) {
+        menuShown = true;
+        menu = new SearchPromptMenu();
+        searchMenuTimeout = 10;
+      }
+      
+      if (input.keyActionOnce("open_pocket", 'i') && !menuShown) {
+        sound.playSound("menu_select");
+        menuShown = true;
+        menu = new PocketMenu();
+      }
     }
     
     engine.inputPromptShown = tmp;

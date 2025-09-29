@@ -30,6 +30,8 @@ public class PixelRealm extends Screen {
   final static int    MAX_CHUNKS_XZ = 32768;
   final static int    MAX_VIDEOS_ALLOWED = 0;
   final static int    NUM_POOF_FRAMES = 9;
+  public static final String POCKET_INFO = ".pocket_info.json";
+  
   
   // Movement/player constants.
   final static float BOB_SPEED = 0.4;
@@ -181,10 +183,11 @@ public class PixelRealm extends Screen {
   
   // Inventory//pocket
   //protected PocketItem[] pockets;
-  protected LinkedList<PocketItem> hotbar    = new LinkedList<PocketItem>();   // Items in hotbar are also in inventory.
-  protected HashSet<String> pocketItemNames  = new HashSet<String>(); 
-  protected PocketItem globalHoldingObject = null;
-  protected ItemSlot<PocketItem> globalHoldingObjectSlot = null;
+  protected ArrayList<PocketItem> hotbar = new ArrayList<PocketItem>();   // Items in hotbar are also in inventory.
+  protected int holdingItemIndex = 0;
+  //protected HashSet<String> pocketItemNames  = new HashSet<String>(); 
+  //protected PocketItem globalHoldingObject = null;
+  //protected ItemSlot<PocketItem> globalHoldingObjectSlot = null;
   
   // Debug-based variables.
   @SuppressWarnings("unused")
@@ -983,6 +986,7 @@ public class PixelRealm extends Screen {
       
       // Bind texture too (not necessary but I like to do it to be safe with performance)
       if (currQuadElementTexture != textureID) {
+        
         pgl.bindTexture(PGL.TEXTURE_2D, textureID);
         
         currQuadElementTexture = textureID;
@@ -1149,8 +1153,31 @@ public class PixelRealm extends Screen {
       // If there's a duplicate, it's ok for the time being, 
       // but if we exit the realm and try to sync the duplicate item,
       // throw a big fat error.
-      if (pocketItemNames.contains(name)) {
-        isDuplicate = true;
+      
+      for (PocketItem otheritem : hotbar) {
+        if (name.equals(otheritem.name)) isDuplicate = true;
+      }
+      
+      //if (pocketItemNames.contains(name)) {
+        
+      //}
+    }
+    
+    
+    public void displayIcon(float x, float y, float wihi) {
+      PImage ico = item.img.get();
+      
+      
+      if (item instanceof PixelRealmState.DirectoryPortal) {
+        float pixelreswi = float(ico.height)/float(ico.width);
+        display.shader("portal_pockets", "u_time", display.getTimeSecondsLoop(), "pixelRes", pixelreswi, 1f);
+        app.image(ico, x, y, wihi, wihi);
+        display.resetShader();
+      }
+      else {
+        float aspect = float(ico.height)/float(ico.width);
+        float offy = (wihi-(wihi*aspect))/2f;
+        app.image(ico, x, y+offy, wihi, wihi*aspect);
       }
     }
     
@@ -1161,12 +1188,19 @@ public class PixelRealm extends Screen {
     // returns false on this method.
     // Any file changes (e.g. mv to inventory) won't affect things.
     // This method handles specific-error cases using the upper pixelrealm_ui class.
-    public boolean changeRealm(String fro) {
+    public boolean pocketMove(String fro) {
       fro = file.directorify(fro);
       
       // Can't move abstract objects.
       if (abstractObject) {
-        promptMoveAbstractObject(name);
+        //console.log(name+" "+file.getFilename(fro));
+        if (name.equals(file.getFilename(file.getPrevDir(fro)))) {
+          // Just a quick change here to make it a little more clear which item we're talking about (the exit portal)
+          promptMoveAbstractObject("The exit portal");
+        }
+        else {
+          promptMoveAbstractObject(name);
+        }
         return false;
       }
       
@@ -1190,6 +1224,12 @@ public class PixelRealm extends Screen {
           }
         }
         
+        // Another duplicate check that is mostly temporary and I'll have a better solution soon.
+        if (file.exists(engine.APPPATH+engine.POCKET_PATH+name)) {
+          promptPocketConflict(name);
+          return false;
+        }
+        
         boolean success = file.mv(fro+name, engine.APPPATH+engine.POCKET_PATH+name);
         if (!success) {
           //console.warn("failed to move");
@@ -1211,7 +1251,7 @@ public class PixelRealm extends Screen {
   @SuppressWarnings("unused")
   protected void promptPocketConflict(String filename) {}
   @SuppressWarnings("unused")
-  protected void promptFileConflict(String filename) {}
+  protected void promptFileConflict(PixelRealmState.FileObject oldFile, PixelRealmState.FileObject newFile) {}
   @SuppressWarnings("unused")
   protected void promptMoveAbstractObject(String filename) {}
   @SuppressWarnings("unused")
@@ -1389,10 +1429,6 @@ public class PixelRealm extends Screen {
     private float lastPlacedPosZ = 0;
     private float exitPortalX = 0;
     private float exitPortalZ = 0;
-    
-    // Whenever we switch realms, we need to make sure this is being updated with the global
-    // state!
-    public PRObject holdingObject = null;
     
     // --- Realm textures & state ---
     // Initially defaults, gets loaded with realm-specific files (if exists) later.
@@ -3569,6 +3605,8 @@ public class PixelRealm extends Screen {
             element = new GLQuadElement(img, 0, wi, hi);
             elementRefreshRequired = false;
           }
+          scene.textureMode(NORMAL);
+          scene.textureWrap(REPEAT);
           billboard(element, x, y, z, 1f);
           
           if (tint != defaultTint) noTint();
@@ -3775,7 +3813,7 @@ public class PixelRealm extends Screen {
         //boolean withinYrange = (y-hi < playerY-
   
         if (lineLine(x1, z1, x2, z2, beamX1, beamZ1, beamX2, beamZ2)) {
-          if (this.myOrderingNode.val < closestVal && holdingObject != this) {
+          if (this.myOrderingNode.val < closestVal && getHoldingItemPRObject() != this) {
             closestVal = this.myOrderingNode.val;
             closestObject = this;
           }
@@ -4199,7 +4237,7 @@ public class PixelRealm extends Screen {
       }
     }
     
-    protected ItemSlot<PocketItem> addToPockets(PRObject item) {
+    protected PocketItem addToHotbar(PRObject item) {
       String name = getHoldingName(item);
       // Anything that isn't *the* physical file is abstract.
       boolean abstractObject = false;
@@ -4209,9 +4247,38 @@ public class PixelRealm extends Screen {
         abstractObject = true;
         
       PocketItem p = new PocketItem(name, item, abstractObject);
-      pocketItemNames.add(name);
-      ItemSlot<PocketItem> ii = hotbar.add(p);
-      return ii;
+      //pocketItemNames.add(name);
+      hotbar.add(p);
+      return p;
+    }
+    
+    protected PocketItem getHoldingItem(int index) {
+      try {
+        PocketItem k = hotbar.get(index);
+        if (k.item == null) {
+          return null; // Just to be safe.
+        }
+        return k;
+      }
+      catch (IndexOutOfBoundsException e) {
+        return null;
+      }
+    }
+    
+    protected PocketItem getHoldingItem() {
+      return getHoldingItem(holdingItemIndex);
+    }
+    
+    protected PRObject getHoldingItemPRObject(int index) {
+      PocketItem k = getHoldingItem(index);
+      if (k != null) {
+        return k.item;
+      }
+      return null;
+    }
+    
+    protected PRObject getHoldingItemPRObject() {
+      return getHoldingItemPRObject(holdingItemIndex);
     }
     
     private void throwItIntoTheVoid(PRObject o) {
@@ -4220,55 +4287,22 @@ public class PixelRealm extends Screen {
       o.z += 9999999.;
     }
     
+    
     protected void pickupItem(PRObject p) {
       promptPickedUpItem();  // This is for tutorial only
       
-      globalHoldingObjectSlot = addToPockets(p);
-      updateHoldingItem(globalHoldingObjectSlot);
+      addToHotbar(p);
+      updateHoldingItem(hotbar.size()-1);
       stats.increase("items_picked_up", 1);
     }
     
-    protected void updateHoldingItem(ItemSlot<PocketItem> newSlot) {
-      // So that it isn't just left there when we switch.
-      if (holdingObject != null) {
-        throwItIntoTheVoid(holdingObject);
+    protected void updateHoldingItem(int newIndex) {
+      if (getHoldingItem() != null) {
+        throwItIntoTheVoid(getHoldingItemPRObject());
       }
       
-      if (newSlot != null)
-        globalHoldingObject = newSlot.carrying;
-      else 
-        globalHoldingObject = null;
-      
-      if (globalHoldingObject != null) {
-        holdingObject = globalHoldingObject.item;
-        // Depends on our object and its state
-        // This case, it's an abstract object.
-        //if (globalHoldingObject.abstractObject) {
-        //  holdingObject = globalHoldingObject.item;
-        //}
-        //// Case: it's not syncd.
-        //// File is not in pockets and is instead still in the realm
-        //// we could technically cache it but let's just re-create the object.
-        //// It makes no difference.
-        //else if (!globalHoldingObject.syncd) {
-        //  // Recreate the FileObject in this realm.
-        //  holdingObject = createPRObject(file.directorify(stateDirectory)+globalHoldingObject.name);
-        //}
-        //// Otherwise, it is indeed in our pockets. 
-        //// Recreate it in this realm.
-        //else {
-        //  holdingObject = createPRObject(engine.APPPATH+engine.POCKET_PATH+globalHoldingObject.name);
-        //}
-      }
-      // Case: globalHoldingObject is null.
-      // Remember that globalHoldingObject is kind of cache more than anything. It relies on globalHoldingObjectSlot.
-      // So if globalHoldingObjectSlot is null, it means there's no more items in the inventory and yada yada
-      // I don't think there's anything else to do here.
-      else {
-        holdingObject = null;
-      }
+      holdingItemIndex = newIndex;
     }
-    
     
     
     
@@ -4457,44 +4491,71 @@ public class PixelRealm extends Screen {
         }
       }
       
-      // Oh, and we need to load our pocket objects
-      // First reset all our lists.
-      pocketObjects = new LinkedList<PRObject>();
-      pocketItemNames = new HashSet<String>();
-      hotbar = new LinkedList<PocketItem>();
+      
+      loadHotbar();
       
       
-      JSONObject somejson = new JSONObject();
-      
-      // Create pocket folder if it doesn't exist to prevent Timeway from sh*tting itself
-      if (!file.exists(engine.APPPATH+engine.POCKET_PATH)) new File(engine.APPPATH+engine.POCKET_PATH).mkdir();
-      
-      // For now, we can't put stuff into our pockets in android mode.
-      if (!isAndroid()) {
-        File[] pocketFolder = (new File(engine.APPPATH+engine.POCKET_PATH)).listFiles();
-        for (File f : pocketFolder) {
-          String path = f.getAbsolutePath();
-          
-          // Create actual file object
-          FileObject fileObject = createPRObject(path);
-          
-          fileObject.load(somejson);
-          
-          // Create pocket item
-          PocketItem p = new PocketItem(f.getName(), fileObject, false);
-          p.syncd = true;
-          
-          // Add it to za lists
-          pocketItemNames.add(f.getName());
-          pocketObjects.add(fileObject);
-          globalHoldingObjectSlot = hotbar.add(p);
-          
-          // Yeet it into the void so we can't see it.
-          throwItIntoTheVoid(fileObject);
+      updateHoldingItem(holdingItemIndex);
+    }
+    
+    
+    protected void loadHotbar() {
+      // This function is designed to be used during runtime, not just startup.
+      // Therefore clean previous pixelrealm objects.
+      if (hotbar != null) {
+        for (PocketItem pitem : hotbar) {
+          if (!pitem.abstractObject) {
+            pitem.item.destroy();
+          }
         }
       }
       
-      updateHoldingItem(globalHoldingObjectSlot);
+      // Oh, and we need to load our pocket objects
+      // First reset all our lists.
+      pocketObjects = new LinkedList<PRObject>();
+      //pocketItemNames = new HashSet<String>();
+      hotbar = new ArrayList<PocketItem>();
+      
+      JSONObject entries = openPocketsFile();
+      
+      
+      if (entries != null) {
+        // For now, we can't put stuff into our pockets in android mode.
+        if (!isAndroid()) {
+          File[] pocketFolder = (new File(engine.APPPATH+engine.POCKET_PATH)).listFiles();
+          for (File f : pocketFolder) {
+            String path = f.getAbsolutePath().replaceAll("\\\\", "/");
+            String name = file.getFilename(path);
+            if (name.equals(POCKET_INFO)) continue;
+            
+            JSONObject o = entries.getJSONObject(name);
+            // "coll" : 2  means it's in the hotbar
+            if (o != null && o.getInt("coll", 1) == 2) {
+              hotbar.add(loadPocketItem(path));
+            }
+          }
+        }
+      }
+    }
+    
+    protected PocketItem loadPocketItem(String path) {
+      // Create actual file object
+      FileObject fileObject = createPRObject(path);
+      
+      // Ya need to call load as you know.
+      fileObject.load(new JSONObject());
+      
+      // Create pocket item
+      PocketItem p = new PocketItem(file.getFilename(path), fileObject, false);
+      p.syncd = true;
+
+      // Add it to za lists
+      pocketObjects.add(p.item);
+      
+      // Yeet it into the void so we can't see it.
+      throwItIntoTheVoid(p.item);
+      
+      return p;
     }
     
     public boolean isNewRealm() {
@@ -5655,20 +5716,35 @@ public class PixelRealm extends Screen {
           
           
           // Sorry for the cluster of code but if you read it it's really simpleeeeeeeee
-          if (globalHoldingObjectSlot != null) {
-            if (input.keyActionOnce("inventory_select_left", ',') && globalHoldingObjectSlot.prev != null) {
-              launchWhenPlaced = false;
-              globalHoldingObjectSlot = globalHoldingObjectSlot.prev;
-              updateHoldingItem(globalHoldingObjectSlot);
-              sound.playSound("pickup");
-            }
+          //if (globalHoldingObjectSlot != null) {
+          //  if (input.keyActionOnce("inventory_select_left", ',') && globalHoldingObjectSlot.prev != null) {
+          //    launchWhenPlaced = false;
+          //    globalHoldingObjectSlot = globalHoldingObjectSlot.prev;
+          //    updateHoldingItem(globalHoldingObjectSlot);
+          //    sound.playSound("pickup");
+          //  }
             
-            if (input.keyActionOnce("inventory_select_right", '.') && globalHoldingObjectSlot.next != null) {
-              launchWhenPlaced = false;
-              globalHoldingObjectSlot = globalHoldingObjectSlot.next;
-              updateHoldingItem(globalHoldingObjectSlot);
-              sound.playSound("pickup");
-            }
+          //  if (input.keyActionOnce("inventory_select_right", '.') && globalHoldingObjectSlot.next != null) {
+          //    launchWhenPlaced = false;
+          //    globalHoldingObjectSlot = globalHoldingObjectSlot.next;
+          //    updateHoldingItem(globalHoldingObjectSlot);
+          //    sound.playSound("pickup");
+          //  }
+          //}
+          
+          if (getHoldingItem() != null) {
+            
+          }
+          
+          if (input.keyActionOnce("inventory_select_left", ',') && holdingItemIndex > 0) {
+            launchWhenPlaced = false;
+            updateHoldingItem(holdingItemIndex-1);
+            sound.playSound("pickup");
+          }
+          if (input.keyActionOnce("inventory_select_right", '.') && holdingItemIndex < hotbar.size()-1) {
+            launchWhenPlaced = false;
+            updateHoldingItem(holdingItemIndex+1);
+            sound.playSound("pickup");
           }
           
           if (currentTool == TOOL_GARDENER) {
@@ -6554,15 +6630,12 @@ public class PixelRealm extends Screen {
     
     
     
-    
-    
-    private void placeDownObject() {
-      if (globalHoldingObject != null && currRealm.holdingObject == null) console.bugWarn("placeDownObject: globalHoldingObject != null currRealm.holdingObject == null");
-      if (globalHoldingObject == null && currRealm.holdingObject != null) console.bugWarn("placeDownObject: globalHoldingObject == null currRealm.holdingObject != null");
-      if (globalHoldingObject != null && currRealm.holdingObject != null) {
+    protected void placeDownObject() {
+      if (getHoldingItem() != null) {
+        PocketItem pitem = getHoldingItem();
         
         // If it's abstract (or unsynced), there's no file to move.
-        if (globalHoldingObject.abstractObject || !globalHoldingObject.syncd) {
+        if (pitem.abstractObject || !pitem.syncd) {
           
         }
         // Perform file move operation.
@@ -6573,16 +6646,16 @@ public class PixelRealm extends Screen {
           // - Failed to move
           
           // Yes, it should already be directorified. But we play it safe here.
-          String fro = engine.APPPATH+engine.POCKET_PATH+globalHoldingObject.name;
-          String to = file.directorify(currRealm.stateDirectory)+globalHoldingObject.name;
+          String fro = engine.APPPATH+engine.POCKET_PATH+pitem.name;
+          String to = file.directorify(currRealm.stateDirectory)+pitem.name;
           // File is not in the pockets folder (for some reason)
           if (!file.exists(fro)) {
-            console.warn(globalHoldingObject.name+" is no longer in the pocket for some reason!");
-            currRealm.holdingObject.destroy();
+            console.warn(pitem.name+" is no longer in the pocket for some reason!");
+            pitem.item.destroy();
           }
           // File already exists
           else if (file.exists(to)) {
-            promptFileConflict(globalHoldingObject.name);
+            promptFileConflict(findFileObjectByName(file.getFilename(to)), (FileObject)pitem.item);
             // DO NOT DO any further actions here!!
             return;
           }
@@ -6591,7 +6664,7 @@ public class PixelRealm extends Screen {
           // handle Failed to move case.
           // If we continue from here, we guchii
           else if (!file.mv(fro, to)) {
-            promptFailedToMove(globalHoldingObject.name);
+            promptFailedToMove(pitem.name);
             // DO NOT DO any further actions here!!
             return;
           }
@@ -6600,14 +6673,14 @@ public class PixelRealm extends Screen {
           // Ooh, remember to add the file to the linkedlist.
           // I think that was the cause of a very annoying bug.
           // Also, due to if conditions earlier, this is guarenteed to NOT be an abstract object.
-          files.add((FileObject)holdingObject);
+          files.add((FileObject)pitem.item);
         }
         
         // Need to do a few things when we move files like that.a
         // But NOT if it's an abstract item! (i.e. exit portal)
-        if (!globalHoldingObject.abstractObject) {
-          if (holdingObject instanceof PixelRealmState.FileObject) {
-            PixelRealmState.FileObject obj = (PixelRealmState.FileObject)holdingObject;
+        if (!pitem.abstractObject) {
+          if (pitem.item instanceof PixelRealmState.FileObject) {
+            PixelRealmState.FileObject obj = (PixelRealmState.FileObject)pitem.item;
             obj.dir = file.directorify(currRealm.stateDirectory)+obj.filename;
           }
         }
@@ -6615,9 +6688,9 @@ public class PixelRealm extends Screen {
         
         // Open the file if requested (i.e. create new entry)
         if (launchWhenPlaced) {
-          if (currRealm.holdingObject instanceof FileObject) {
-            FileObject o = (FileObject)currRealm.holdingObject;
-            if (currRealm.holdingObject instanceof EntryFileObject) entryToReload = (EntryFileObject)currRealm.holdingObject;
+          if (pitem.item instanceof FileObject) {
+            FileObject o = (FileObject)pitem.item;
+            if (pitem.item instanceof EntryFileObject) entryToReload = (EntryFileObject)pitem.item;
             file.open(o.dir);
             currentTool = TOOL_NORMAL;
             launchWhenPlaced = false;
@@ -6625,27 +6698,26 @@ public class PixelRealm extends Screen {
         }
         
         
-        ItemSlot tmp = null;
-        // Switch to next item in the queue
-        if (globalHoldingObjectSlot.next != null) tmp = globalHoldingObjectSlot.next;
-        else if (globalHoldingObjectSlot.prev != null) tmp = globalHoldingObjectSlot.prev;
-        
         // Remove from inventory
-        hotbar.remove(globalHoldingObjectSlot);
+        hotbar.remove(holdingItemIndex);
+        if (holdingItemIndex >= hotbar.size()) {
+          holdingItemIndex = hotbar.size()-1;
+        }
+        if (holdingItemIndex < 0) {
+          holdingItemIndex = 0;
+        }
+        
         // Remove from names
-        pocketItemNames.remove(getHoldingName());
+        //pocketItemNames.remove(getHoldingName());
         
         // For the tutorial.
         promptPlonkedDownItem();
         
         // Simply setting it to null will "release"
         // the object, setting it in place.
-        holdingObject = null;
         
         // Set the new "holdingitem" to the item we switched to in the queue/hotbar.
-        globalHoldingObjectSlot = tmp;
-          
-        updateHoldingItem(globalHoldingObjectSlot);
+        updateHoldingItem(holdingItemIndex);
       }
     }
     
@@ -6755,7 +6827,7 @@ public class PixelRealm extends Screen {
       }
       
       // Plonking down objects
-      if (currentTool == TOOL_GRABBER && currRealm.holdingObject != null && secondaryAction  && !movementPaused) {
+      if (currentTool == TOOL_GRABBER && getHoldingItem() != null && secondaryAction  && !movementPaused) {
         issueRefresherCommand(REFRESHER_PAUSE);
         placeDownObject();
         sound.playSound("plonk");
@@ -6795,23 +6867,23 @@ public class PixelRealm extends Screen {
       // Holding object
       if (currentTool == TOOL_GRABBER) {
         // TODO: Subtools
-        if (holdingObject != null) {
-          holdingObject.x = cursorX;
-          holdingObject.z = cursorZ;
+        if (getHoldingItemPRObject() != null) {
+          getHoldingItemPRObject().x = cursorX;
+          getHoldingItemPRObject().z = cursorZ;
           
           // Fade the held object so we can actually see where we're going.
-          holdingObject.tint = color(255, 80);
+          getHoldingItemPRObject().tint = color(255, 80);
           if (onGround())
-            holdingObject.y = onSurface(cursorX, cursorZ);
+            getHoldingItemPRObject().y = onSurface(cursorX, cursorZ);
           else
-            holdingObject.y = playerY;
+            getHoldingItemPRObject().y = playerY;
             
-          if (holdingObject instanceof ImageFileObject) {
-            ImageFileObject imgobject = (ImageFileObject)holdingObject;
+          if (getHoldingItemPRObject() instanceof ImageFileObject) {
+            ImageFileObject imgobject = (ImageFileObject)getHoldingItemPRObject();
             imgobject.rot = direction+HALF_PI;
           }
-          else if (holdingObject instanceof MusicFileObject) {
-            MusicFileObject imgobject = (MusicFileObject)holdingObject;
+          else if (getHoldingItemPRObject() instanceof MusicFileObject) {
+            MusicFileObject imgobject = (MusicFileObject)getHoldingItemPRObject();
             imgobject.rotY = direction;
           }
         }
@@ -6864,7 +6936,7 @@ public class PixelRealm extends Screen {
     }
     
     private String getHoldingName() {
-      return getHoldingName(holdingObject);
+      return getHoldingName(getHoldingItemPRObject());
     }
     
     private int getCullDirection() {
@@ -7142,6 +7214,62 @@ public class PixelRealm extends Screen {
     return (uA >= 0 && uA <= 1 && uB >= 0 && uB <= 1);
   }
   
+  protected void switchTool(int tool) {
+    switch (tool) {
+      case TOOL_GARDENER:
+      currentTool = TOOL_GARDENER;
+      currRealm.updateHoldingItem(holdingItemIndex);
+      subTool = 0;
+      break;
+      case TOOL_MORPHER:
+      currRealm.updateHoldingItem(holdingItemIndex);
+      currentTool = TOOL_MORPHER;
+      subTool = MORPHER_BULGE;
+      morpherBlockHeight = 0.;
+      morpherRadius = 150.;
+      break;
+      case TOOL_GRABBER:
+      currentTool = TOOL_GRABBER;
+      currRealm.updateHoldingItem(holdingItemIndex);
+      break;
+      case TOOL_NORMAL:
+      currRealm.updateHoldingItem(holdingItemIndex);
+      currentTool = TOOL_NORMAL;
+      break;
+    }
+  }
+  
+  protected boolean saveHotbar() {
+    // Update inventory for moving realms (move files)
+    JSONObject entries = openPocketsFile();
+    boolean success = true;
+    // Abort if unsuccessful.
+    for (PocketItem p : hotbar) {
+      boolean localSuccess = p.pocketMove(currRealm.stateDirectory);
+      success &= localSuccess;
+      if (localSuccess) {
+        JSONObject o = new JSONObject();
+        o.setInt("coll", 2);   // 2 means hotbar
+        entries.setJSONObject(p.name, o);
+      }
+    }
+    // Note: There will probably be leftover entries that are no longer in our hotbar since we don't have logic
+    // for removing entries from the json file. However, we don't need to implement it and we don't need to worry
+    // about that because we only check it after iterating through a file.
+    // Of course, eventually it will be full of rubbish that we need to get rid of one way or another but I'll code
+    // that another day.
+    // Unless I've already coded it. Then this comment is obselete. And we all know that I'll of course forget to
+    // update this vague comment in the sea of code.
+    app.saveJSONObject(entries, engine.APPPATH+engine.POCKET_PATH+POCKET_INFO);
+    if (!success) {
+      // bump back the player lol.
+      bumpBack();
+      
+      return false;
+    }
+    return true;
+  }
+  
   protected void bumpBack() {
     portalCoolDown = 10.;
     sound.playSound("nope");
@@ -7206,20 +7334,15 @@ public class PixelRealm extends Screen {
     // Remember, calling pause will automatically update its lastmodified list too.
     
     
-    // Update inventory for moving realms (move files)
-    boolean success = true;
-    // Abort if unsuccessful.
-    for (PocketItem p : hotbar) {
-      success &= p.changeRealm(currRealm.stateDirectory);;
-    }
-    if (!success) {
-      // bump back the player lol.
-      bumpBack();
-      
+    if (!saveHotbar()) {
       return;
     }
     
+    
     // Save before we leave (I can't believe I forgot that)
+    // Edit 29/09/2025: I love looking through old comments that I left and seeing all the
+    // past pain and suffering in which I apparently spent ages trying to debug why a realm
+    // wasn't saving only to realise I forgot to add the function that does that very thing.
     currRealm.saveRealmJson();
     
     // Do caching here.
@@ -7266,12 +7389,29 @@ public class PixelRealm extends Screen {
       
     // so that our currently holding item doesn't disappear when we go into the next realm.
     if (currentTool == TOOL_GRABBER) {
-      currRealm.updateHoldingItem(globalHoldingObjectSlot);
+      currRealm.updateHoldingItem(holdingItemIndex);
     }
     
     indexer.startIndexingThread(to);
     
     System.gc();
+  }
+  
+  protected JSONObject openPocketsFile() {
+    // Create pocket folder if it doesn't exist to prevent Timeway from crashing itself
+    // TODO: replace with engine file function idk
+    if (!file.exists(engine.APPPATH+engine.POCKET_PATH)) new File(engine.APPPATH+engine.POCKET_PATH).mkdir();
+    
+    JSONObject json = new JSONObject();
+    if (file.exists(engine.APPPATH+engine.POCKET_PATH+POCKET_INFO)) {
+      try {
+        json = loadJSONObject(engine.APPPATH+engine.POCKET_PATH+POCKET_INFO);
+      }
+      catch (RuntimeException e) {
+        console.warn("Could not read pockets ("+e.getClass().getName()+")");
+      }
+    }
+    return json;
   }
   
   
@@ -7281,13 +7421,7 @@ public class PixelRealm extends Screen {
     refresherFilesList[0] = r.stateDirectory;
     
     // Update inventory for moving realms (move files)
-    boolean success = true;
-    // Abort if unsuccessful.
-    for (PocketItem p : hotbar) {
-      success &= p.changeRealm(currRealm.stateDirectory);;
-    }
-    if (!success) {
-      sound.playSound("nope");
+    if (!saveHotbar()) {
       return;
     }
     currRealm.saveRealmJson();
@@ -7302,7 +7436,7 @@ public class PixelRealm extends Screen {
     currRealm = r;
     currRealm.refreshFiles();
     // so that our currently holding item doesn't disappear when we go into the next realm.
-    currRealm.updateHoldingItem(globalHoldingObjectSlot);
+    currRealm.updateHoldingItem(holdingItemIndex);
     
   }
   
