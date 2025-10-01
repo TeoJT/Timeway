@@ -390,9 +390,6 @@ public class PixelRealmWithUI extends PixelRealm {
       oldFile = oldfileObject;
       newFile = newfileObject;
       
-      console.log("oldfile "+oldFile.dir);
-      console.log("newfile "+newFile.dir);
-      
       setEnterToContinue(false);
     }
 
@@ -514,10 +511,10 @@ public class PixelRealmWithUI extends PixelRealm {
       }
 
       // --- Pocket menu ---
-      if (ui.buttonVary("pocket_menu", "new_entry_128", "Pockets")) {
-        sound.playSound("menu_select");
-        menu = new PocketMenu();
-      }
+      //if (ui.buttonVary("pocket_menu", "new_entry_128", "Pockets")) {
+      //  sound.playSound("menu_select");
+      //  menu = new PocketMenu();
+      //}
       
       // Lighting menu
       
@@ -969,6 +966,10 @@ public class PixelRealmWithUI extends PixelRealm {
   //  Hotbar
   //  Realm assets
   //  Files in Pixelrealm
+  
+  // REMINDER NOTES THAT I REALLY HOPE YOU'LL SEE:
+  // - When removing items, remember- 
+  // pitem.item.destroy(); (the override method will remove it from the files list)
 
   class PocketMenu extends Menu {
     
@@ -1065,7 +1066,9 @@ public class PixelRealmWithUI extends PixelRealm {
         
         // Scroll, use special functionality in that we're always processing the scroll, but only receiving wheel inputs when
         // mouse is in area. This will keep the grids animated even if we're switching between the grids
-        scroll = input.processScroll(scroll, 10f, bottom-hii+10f, ui.mouseInArea(gridx, gridy, squarewihi*SLOTS_WI+5f, hii));
+        if (!promptShown()) {
+          scroll = input.processScroll(scroll, 10f, bottom-hii+10f, ui.mouseInArea(gridx, gridy, squarewihi*SLOTS_WI+5f, hii));
+        }
         
         // Limit viewspace of grid
         display.clip(gridx, gridy, squarewihi*SLOTS_WI+5f, hii);
@@ -1097,8 +1100,8 @@ public class PixelRealmWithUI extends PixelRealm {
                 pitem.displayIcon(gridx + x * squarewihi, actualy, squarewihi);
               }
               
-              // Mouse detect
-              if (ui.mouseInArea(gridx + x * squarewihi, actualy, squarewihi, squarewihi) && (input.mouseY() < gridy+hii) && (input.mouseY() >= gridy)) {
+              // Mouse hovers over square.
+              if (ui.mouseInArea(gridx + x * squarewihi, actualy, squarewihi, squarewihi) && (input.mouseY() < gridy+hii) && (input.mouseY() >= gridy) && !promptShown()) {
                 // Show item name
                 if (pitem != null) {
                   hoverLabel = pitem.name;
@@ -1117,10 +1120,12 @@ public class PixelRealmWithUI extends PixelRealm {
                 app.rect(gridx + x * squarewihi, actualy, squarewihi, squarewihi);
                 
                 // Pick up item when clicked & held
-                if (input.primaryOnce && grid[i] != null && !promptShown()) {
+                if (input.primaryOnce && grid[i] != null) {
+                  // If double-clicked, open file
                   if (doubleClickTimer > 0f) {
                     if (pitem != null) file.open(engine.APPPATH+engine.POCKET_PATH+pitem.name);
                   }
+                  // If single clicked, begin to drag & move file.
                   else {
                     draggingItem = grid[i];
                     originalGridLocation = this;
@@ -1507,52 +1512,10 @@ public class PixelRealmWithUI extends PixelRealm {
       sound.stopMusic();
       sound.streamMusic(currRealm.musicPath);
     }
-
-    public void display() {
-      super.display();
-      // Text settings from title should still be applied here.
-      app.textSize(22);
-      app.text("Select a template", getXmid(), getY()+90);
-
-      app.textAlign(CENTER, CENTER);
-      app.textSize(30);
-      app.text(previewName, getXmid(), getYmid());
-      app.textSize(16);
-      //String left = str(settings.getKeybinding("inventorySelectLeft"));
-      //String right = str(settings.getKeybinding("inventorySelectRight"));
-      app.text("Navigate with left and right arrow keys, press <enter/return> to confirm.", getXmid(), getYbottom()-40);
-
-      // Lil easter egg for the glitched realm
-      if (previewName.equals("YOUR FAVOURITE REALM")) {
-        app.noStroke();
-        app.fill(255);
-        int l = int(random(5, 30));
-        for (int i = 0; i < l; i++)
-          app.rect(random(getXmid()-200, getXmid()+200), random(getYmid()-20, getYmid()+20), random(10, 50), random(5, 20));
-      }
-
-      // Special condition to make sure we can't go to the last realm that isn't cached on our first playthrough
-      boolean allow = (sound.loadingMusic() && tempIndex > 0) || !sound.loadingMusic();
-      
-      if (allow) {
-        if ((input.leftOnce
-          || ui.buttonVary("newrealm-prev", "back_arrow_128", ""))
-          && coolDown <= 0f) {
-          tempIndex--;
-          if (tempIndex < 0) tempIndex = templates.size()-1;
-          preview(tempIndex);
-        }
-      }
-      
-      if ((input.rightOnce
-        || ui.buttonVary("newrealm-next", "forward_arrow_128", ""))
-        && coolDown <= 0f) {
-        tempIndex++;
-        if (tempIndex > templates.size()-1) tempIndex = 0;
-        preview(tempIndex);
-      }
-      if (input.enterOnce || ui.buttonVary("newrealm-confirm", "tick_128", "")) {
-        sound.playSound("menu_select");
+    
+    
+    private void createRealmFiles() {
+      sound.playSound("menu_select");
 
         // User didn't select any realm.
         if (tempIndex == -1) {
@@ -1623,6 +1586,69 @@ public class PixelRealmWithUI extends PixelRealm {
         menuShown = false;
         menu = null;
         stats.increase("realm_templates_created", 1);
+    }
+    
+
+    public void display() {
+      super.display();
+      // Text settings from title should still be applied here.
+      app.textSize(22);
+      app.text("Select a template", getXmid(), getY()+90);
+
+      app.textAlign(CENTER, CENTER);
+      app.textSize(30);
+      app.text(previewName, getXmid(), getYmid());
+      app.textSize(16);
+      //String left = str(settings.getKeybinding("inventorySelectLeft"));
+      //String right = str(settings.getKeybinding("inventorySelectRight"));
+      app.text("Navigate with left and right arrow keys, press <enter/return> to confirm.", getXmid(), getYbottom()-40);
+      
+      // Debug stuff mostly for making realm templates
+      //gui().sprite("realm name thing", "nothing");
+      //float xxx = gui().getSprite("realm name thing").getX();
+      //float yyy = gui().getSprite("realm name thing").getY();
+      //try {
+      //  app.text(file.getFilename(templates.get(tempIndex)), xxx, yyy);
+      //  if (ui.buttonVary("newrealm-goto", "folder_128", "Goto")) {
+      //    gotoRealm(templates.get(tempIndex));
+      //    menuShown = false;
+      //    menu = null;
+      //    return;
+      //  }
+      //}
+      //catch (IndexOutOfBoundsException e) {}
+      
+      // Lil easter egg for the glitched realm
+      if (previewName.equals("YOUR FAVOURITE REALM")) {
+        app.noStroke();
+        app.fill(255);
+        int l = int(random(5, 30));
+        for (int i = 0; i < l; i++)
+          app.rect(random(getXmid()-200, getXmid()+200), random(getYmid()-20, getYmid()+20), random(10, 50), random(5, 20));
+      }
+
+      // Special condition to make sure we can't go to the last realm that isn't cached on our first playthrough
+      boolean allow = (sound.loadingMusic() && tempIndex > 0) || !sound.loadingMusic();
+      
+      if (allow) {
+        if ((input.leftOnce
+          || ui.buttonVary("newrealm-prev", "back_arrow_128", ""))
+          && coolDown <= 0f) {
+          tempIndex--;
+          if (tempIndex < 0) tempIndex = templates.size()-1;
+          preview(tempIndex);
+        }
+      }
+      
+      if ((input.rightOnce
+        || ui.buttonVary("newrealm-next", "forward_arrow_128", ""))
+        && coolDown <= 0f) {
+        tempIndex++;
+        if (tempIndex > templates.size()-1) tempIndex = 0;
+        preview(tempIndex);
+      }
+      if (input.enterOnce || ui.buttonVary("newrealm-confirm", "tick_128", "")) {
+        createRealmFiles();
       }
 
       // Bug fix: immediately pausing movement causes cached sin and cos directions to be outdated
@@ -1630,6 +1656,11 @@ public class PixelRealmWithUI extends PixelRealm {
       // Delay the pausing of movement just a lil bit to let it update.
       movementPaused = (tmr++ > 2);
       if (coolDown > 0f) coolDown -= display.getDelta();
+    }
+    
+    @Override
+    public void close() {
+      createRealmFiles();
     }
   }
 
@@ -1878,7 +1909,7 @@ public class PixelRealmWithUI extends PixelRealm {
       
       display.clip(getX(), getY(), getWidth(), getHeight());
       
-      queryInput = input.getTyping(queryInput);
+      queryInput = input.getTyping(queryInput, false);
       
       app.fill(255);
       app.textSize(40);
@@ -1901,7 +1932,7 @@ public class PixelRealmWithUI extends PixelRealm {
         app.text(results.size()+" results.", getXmid(), getY()+160f);
         
         app.textSize(30);
-        float y = getY()+190f;
+        float y = getY()+200f;
         int count = 0;
         for (String result : results) {
           
@@ -1919,11 +1950,18 @@ public class PixelRealmWithUI extends PixelRealm {
           else {
             app.fill(255);
           }
-          app.text(file.getFilename(result), getXmid(), y);
+          String txt = file.getFilename(result);
+          if (txt.length() >= 43) {
+            app.text(txt.substring(0, 41)+"...", getXmid(), y);
+          }
+          else {
+            app.text(txt, getXmid(), y);
+          }
+          
           
           y += 30f;
           count++;
-          if (count > 6) break;
+          if (count > 4) break;
         }
       }
       
@@ -2271,8 +2309,7 @@ public class PixelRealmWithUI extends PixelRealm {
     // Hacky way of allowing an exception for our input prompt menu's
     boolean tmp = engine.inputPromptShown;
     engine.inputPromptShown = false;
-    if (!engine.commandPromptShown) {
-      if (input.keyActionOnce("menu", '\t')) {
+      if (!engine.commandPromptShown && input.keyActionOnce("menu", '\t')) {
         // Do not allow menu to be closed when set to be on.
         if (menuShown && doNotAllowCloseMenu) {
           engine.inputPromptShown = tmp;
@@ -2297,18 +2334,17 @@ public class PixelRealmWithUI extends PixelRealm {
       }
       
       searchMenuTimeout--;
-      if (input.keyActionOnce("search", '\n') && searchMenuTimeout <= 0 && !menuShown) {
+      if (!engine.commandPromptShown && !menuShown && searchMenuTimeout <= 0 && input.keyActionOnce("search", '\n')) {
         menuShown = true;
         menu = new SearchPromptMenu();
         searchMenuTimeout = 10;
       }
       
-      if (input.keyActionOnce("open_pocket", 'i') && !menuShown) {
-        sound.playSound("menu_select");
-        menuShown = true;
-        menu = new PocketMenu();
+      if (!engine.commandPromptShown && !menuShown && input.keyActionOnce("open_pocket", 'i')) {
+        //sound.playSound("menu_select");
+        //menuShown = true;
+        //menu = new PocketMenu();
       }
-    }
     
     engine.inputPromptShown = tmp;
     // Allow the command prompt to be shown only if the menu isn't displayed.

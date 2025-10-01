@@ -8,7 +8,7 @@ import java.util.Iterator;
 import java.io.RandomAccessFile;
 
 // ---- The Pixel Realm screen -----
-// Your folders are realms, your hard drive is a universe.
+// Your folders are realms, your computer's drive is a universe.
 //
 // There are two parts to it:
 // - The screen which contains things like the canvas, default textures, constants, and basically
@@ -820,6 +820,7 @@ public class PixelRealm extends Screen {
       }  
       return node;
     }
+    
   
     public ItemSlot remove(ItemSlot node) {
       if (node == head)
@@ -1468,9 +1469,9 @@ public class PixelRealm extends Screen {
     protected LinkedList<PRObject> ordering = new LinkedList<PRObject>();
     
     // Not necessary lists here, just useful and faster.
-    protected LinkedList<FileObject> files = new LinkedList<FileObject>();
+    protected HashSet<FileObject> files = new HashSet<FileObject>();
     
-    protected LinkedList<PRObject> pocketObjects = new LinkedList<PRObject>();
+    protected HashSet<PRObject> pocketObjects = new HashSet<PRObject>();
     
     public ArrayList<TWEngine.UIModule.CustomNode> lookAndFeelUINodes = new ArrayList<TWEngine.UIModule.CustomNode>();
     public TWEngine.UIModule.CustomSlider ambientSlider;
@@ -2582,6 +2583,12 @@ public class PixelRealm extends Screen {
         PRObject.setFloat("z", this.z);
         PRObject.setFloat("scale", this.size/BACKWARD_COMPAT_SCALE);
         return PRObject;
+      }
+      
+      @Override
+      public void destroy() {
+        super.destroy();
+        files.remove(this);
       }
       
       public void scaleUp(float amount) {
@@ -4249,6 +4256,7 @@ public class PixelRealm extends Screen {
       PocketItem p = new PocketItem(name, item, abstractObject);
       //pocketItemNames.add(name);
       hotbar.add(p);
+      pocketObjects.add(p.item);
       return p;
     }
     
@@ -4342,7 +4350,7 @@ public class PixelRealm extends Screen {
       stats.increase("refreshes", 1);
       // Reset memory usage
       memUsage.set(0);
-      files = new LinkedList<FileObject>();
+      files = new HashSet<FileObject>();
       ordering = new LinkedList<PRObject>();
       
       // Reload everything!
@@ -4512,7 +4520,7 @@ public class PixelRealm extends Screen {
       
       // Oh, and we need to load our pocket objects
       // First reset all our lists.
-      pocketObjects = new LinkedList<PRObject>();
+      pocketObjects = new HashSet<PRObject>();
       //pocketItemNames = new HashSet<String>();
       hotbar = new ArrayList<PocketItem>();
       
@@ -4551,6 +4559,7 @@ public class PixelRealm extends Screen {
 
       // Add it to za lists
       pocketObjects.add(p.item);
+      //if (p.item instanceof FileObject) files.add((FileObject)p.item);
       
       // Yeet it into the void so we can't see it.
       throwItIntoTheVoid(p.item);
@@ -6670,7 +6679,7 @@ public class PixelRealm extends Screen {
           }
           // If we get past this point we gutch!!
           
-          // Ooh, remember to add the file to the linkedlist.
+          // Ooh, remember to add the file.
           // I think that was the cause of a very annoying bug.
           // Also, due to if conditions earlier, this is guarenteed to NOT be an abstract object.
           files.add((FileObject)pitem.item);
@@ -6697,15 +6706,16 @@ public class PixelRealm extends Screen {
           }
         }
         
-        
         // Remove from inventory
         hotbar.remove(holdingItemIndex);
+        pocketObjects.remove(pitem.item);
         if (holdingItemIndex >= hotbar.size()) {
           holdingItemIndex = hotbar.size()-1;
         }
         if (holdingItemIndex < 0) {
           holdingItemIndex = 0;
         }
+        
         
         // Remove from names
         //pocketItemNames.remove(getHoldingName());
@@ -7851,12 +7861,16 @@ public class PixelRealm extends Screen {
     }
   }
   
+  private float openDoubleClick = 0f;
+  
   public void upperBar() {
     super.upperBar();
     display.recordRendererTime();
     app.textAlign(LEFT, TOP);
     app.fill(0);
     app.textFont(engine.DEFAULT_FONT, 36);
+    
+    openDoubleClick -= display.getDelta();
     
     if (currRealm == null) return;
     
@@ -7887,8 +7901,14 @@ public class PixelRealm extends Screen {
         ui.createOptionsMenu(labels, actions);
       }
       else if (input.primaryOnce) {
-        console.log("Path copied!");
-        clipboard.copyString(currRealm.stateDirectory);
+        if (openDoubleClick > 0f) {
+          file.open(currRealm.stateDirectory);
+        }
+        else {
+          console.log("Path copied!");
+          clipboard.copyString(currRealm.stateDirectory);
+          openDoubleClick = 15f;
+        }
       }
     }
     else {

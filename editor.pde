@@ -1254,7 +1254,7 @@ public class Editor extends Screen {
                 // DO NOT allow the command prompt to appear by pressing '/' and make the current text we're writing disappear
                 // while writing text
                 engine.allowShowCommandPrompt = false;
-                text = input.getTyping(text);
+                text = input.getTyping(text, true);
             }
             
             if (placeableSelected() || placeableSelectedSecondary()) {
@@ -1402,7 +1402,7 @@ public class Editor extends Screen {
               displayText = input.keyboardMessageDisplay(text);
             }
             else if (readOnly && modifyingField == this) {
-              inputText = input.getTyping(inputText);
+              inputText = input.getTyping(inputText, false);
               displayText = text+" "+input.keyboardMessageDisplay(inputText);
             }
             else {

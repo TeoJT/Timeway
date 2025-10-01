@@ -5709,14 +5709,15 @@ public class TWEngine {
 
   public void displayInputPrompt() {
     if (inputPromptShown) {
+      
+      promptInput = input.getTyping(promptInput, false);
+      
       if (input.upOnce) {
         if (lastInput.length() > 0) {
           promptInput = lastInput;
-          input.cursorX = promptInput.length();
+          input.cursorX = lastInput.length();
         }
       }
-      
-      promptInput = input.getTyping(promptInput);
       
       float buttonwi = 200;
       boolean button = ui.basicButton("Enter", display.WIDTH/2-buttonwi/2, display.HEIGHT/2+50, buttonwi, 50f);
@@ -5726,8 +5727,8 @@ public class TWEngine {
         //if (input.keyboardMessage.length() <= 0) return;
         // Remove enter character at end
         if (promptInput.length() > 0) {
-          int ll = max(promptInput.length()-1, 0);   // Don't allow it to go lower than 0
-          if (promptInput.charAt(ll) == '\n') promptInput = promptInput.substring(0, ll);
+          //int ll = max(promptInput.length()-1, 0);   // Don't allow it to go lower than 0
+          //if (promptInput.charAt(ll) == '\n') promptInput = promptInput.substring(0, ll);
         }
         doWhenPromptSubmitted.run();
         lastInput = promptInput;
@@ -7722,6 +7723,10 @@ public class TWEngine {
     public static final char CTRL_KEY = 4;
     public static final char ALT_KEY = 5;
     public static final char ALTGR_KEY = 6;
+    public static final char LEFT_KEY = 7;
+    public static final char RIGHT_KEY = 17;
+    public static final char UP_KEY = 12;
+    public static final char DOWN_KEY = 16;
     
     
     public InputModule() {
@@ -7903,8 +7908,12 @@ public class TWEngine {
       cursorX = 0;
     }
     
+    //public String getTyping(String str) {
+      
+    //}
     
-    public String getTyping(String str) {
+    
+    public String getTyping(String str, boolean includeEnter) {
       boolean solidifyBlink = true;
       
       if (typingDelay) {
@@ -7971,7 +7980,9 @@ public class TWEngine {
           str = backspace(str);
         }
         else if (enterDown) {
-          str = insert(str, '\n');
+          if (includeEnter) {
+            str = insert(str, '\n');
+          }
         }
         else if (characterFired >= 32 && characterFired != 127) {
           str = insert(str, characterFired);
@@ -8125,6 +8136,10 @@ public class TWEngine {
       
       int val = int(Character.toLowerCase(k));
       
+      if (val > keys.length) {
+        return false;
+      }
+      
       //if (keys[val] > 0) {
       //  console.log(val);
       //}
@@ -8135,6 +8150,7 @@ public class TWEngine {
   
     public boolean keyAction(String keybindName, char defaultKey) {
       char k = settings.getKeybinding(keybindName, defaultKey);
+      
       
       // Special keys/buttons
       if (k == LEFT_CLICK)
@@ -8149,6 +8165,14 @@ public class TWEngine {
         return this.altDown;
       else if (k == ALTGR_KEY)
         return this.altgrDown;
+      else if (k == UP_KEY)
+        return this.upDown;
+      else if (k == DOWN_KEY)
+        return this.downDown;
+      else if (k == LEFT_KEY)
+        return this.leftDown;
+      else if (k == RIGHT_KEY)
+        return this.rightDown;
       else 
         // Otherwise just tell us if the key is down or not
         return keyDown(k);
@@ -8163,6 +8187,7 @@ public class TWEngine {
   
     public boolean keyActionOnce(String keybindName, char defaultKey) {
       char k = settings.getKeybinding(keybindName, defaultKey);
+      //println(keybindName, int(settings.getKeybinding(keybindName, defaultKey)), int(defaultKey));
       
       boolean val = false;
       
@@ -8178,6 +8203,18 @@ public class TWEngine {
       }
       else if (k == ALTGR_KEY) {
         val = this.altgrOnce;
+      }
+      else if (k == UP_KEY) {
+        val = this.upOnce;
+      }
+      else if (k == DOWN_KEY) {
+        val =  this.downOnce;
+      }
+      else if (k == LEFT_KEY) {
+        val =  this.leftOnce;
+      }
+      else if (k == RIGHT_KEY) {
+        val =  this.rightOnce;
       }
       else if (k == ALT_KEY) {
         val = this.altOnce;
@@ -8275,6 +8312,18 @@ public class TWEngine {
         break;
         case ALTGR_KEY:
         text = "Alt Gr";
+        break;
+        case UP_KEY:
+        text = "Up arrow";
+        break;
+        case DOWN_KEY:
+        text = "Down arrow";
+        break;
+        case LEFT_KEY:
+        text = "Left arrow";
+        break;
+        case RIGHT_KEY:
+        text = "Right arrow";
         break;
         case CTRL_KEY:
         text = "Ctrl";
@@ -8390,21 +8439,25 @@ public class TWEngine {
             leftDownCounter = 0;
             leftDown = true;
             keyFired = true;
+            lastKeyPressed = LEFT_KEY;
             break;
           case RIGHT:
             rightDownCounter = 0;
             rightDown = true;
             keyFired = true;
+            lastKeyPressed = RIGHT_KEY;
             break;
           case UP:
             upDownCounter = 0;
             upDown = true;
             keyFired = true;
+            lastKeyPressed = UP_KEY;
             break;
           case DOWN:
             downDownCounter = 0;
             downDown = true;
             keyFired = true;
+            lastKeyPressed = DOWN_KEY;
             break;
           case BACKSPACE:
             backspaceDown = true;
