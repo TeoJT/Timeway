@@ -166,6 +166,7 @@ public class TWEngine {
   public boolean focusedMode = true;
   public boolean lowMemory = false;
   public boolean enableCaching = true;
+  private SpriteSystem dummySpriteSystem;
   
   
   
@@ -2344,6 +2345,23 @@ public class TWEngine {
         return button(name, texture, displayText);
       }
     }
+    
+    public boolean buttonVaryOnce(String name, String texture, String displayText) {
+      if (display.phoneMode) {
+        return buttonOnce(name+"-phone", texture, displayText);
+      }
+      else {
+        return buttonOnce(name, texture, displayText);
+      }
+    }
+    
+    public boolean buttonOnce(String name, String texture, String displayText) {
+      SpriteSystem.Sprite sprite = currentSpritePlaceholderSystem.getSprite(name);
+      boolean clik = button(name, texture, displayText);
+      if (sprite.clicked) return false;
+      if (clik) sprite.clicked = true;
+      return clik;
+    }
   
     public boolean button(String name, String texture, String displayText) {
   
@@ -2364,7 +2382,6 @@ public class TWEngine {
       // Full brightness when not hovering
       app.tint(255, guiFade);
       app.fill(255, guiFade);
-  
       // To click:
       // - Must not be in a minimenu
       // - Must not be in gui move sprite / edit mode.
@@ -2467,9 +2484,8 @@ public class TWEngine {
     
     public SpriteSystem getInUseSpriteSystem() {
       if (currentSpritePlaceholderSystem == null) {
-        // TODO: Return a blank spritesystem so that we don't crash.
-        console.warn("No sprite system currently in use!");
-        return null;
+        console.bugWarnOnce("getInUseSpriteSystem: No sprite system currently in use!");
+        return dummySpriteSystem;
       }
       return currentSpritePlaceholderSystem;
     }
@@ -3023,9 +3039,9 @@ public class TWEngine {
                   // Bug fix: mp3 sampleRate() doesn't seem to be very accurate
                   // for mp3 files
                   // TODO: Read mp3/ogg header data and determine samplerate there.
-                  if (ext.equals("mp3")) {
-                    samplerate = 48000;
-                  }
+                  //if (ext.equals("mp3")) {
+                  //  samplerate = 48000;
+                  //}
                   
                   saveAsWav(s, samplerate, cachedFilePathFinal);
                   s.removeFromCache();
@@ -4253,7 +4269,7 @@ public class TWEngine {
         || ext.equals("jpeg")
         || ext.equals("bmp")
         || ext.equals("gif")
-        || ext.equals("webm")
+        //|| ext.equals("webm")
         || ext.equals("tiff")
         || ext.equals("tif"))
         return true;
@@ -4361,7 +4377,7 @@ public class TWEngine {
         || ext.equals("jpeg")
         || ext.equals("bmp")
         || ext.equals("gif")
-        || ext.equals("webm")
+        //|| ext.equals("webm")
         || ext.equals("tiff")
         || ext.equals("tif")) return FileType.FILE_TYPE_IMAGE;
   
@@ -4857,13 +4873,14 @@ public class TWEngine {
       else if (ext.equals("bmp")) {
         return getBMPUncompressedSize(path);
       }
-      else if (ext.equals("tiff")) {
+      else if (ext.equals("tiff") || ext.equals("ico") || ext.equals("webm")) {
         // TODO: size estimation for tiff
-        return 99999;
+        return 0;
       }
       else {
         console.bugWarn("getImageUncompressedSize: file format ("+ext+" is not an image format.");
-        return Integer.MAX_VALUE;
+        //return Integer.MAX_VALUE;
+        return 0;
       }
     }
   }
@@ -5685,6 +5702,9 @@ public class TWEngine {
   public void startScreen(Screen screen) {
     // Create dummy screen
     dummyScreen = new DummyScreen(this);
+    
+    // I'm sorry this is here. But I don't know where else to put it.
+    dummySpriteSystem = new SpriteSystem(this);
     
     // Init loading screen.
     currScreen = screen;
@@ -9338,6 +9358,7 @@ public final class SpriteSystem {
             
             public int spriteOrder;
             public boolean allowResizing = true;
+            public boolean clicked = false;
             
             public float repositionDragStartX;
             public float repositionDragStartY;

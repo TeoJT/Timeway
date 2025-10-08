@@ -19,6 +19,7 @@ abstract class EditorCapture {
   public abstract void turnOffCamera();
   public abstract void switchNextCamera();
   public abstract PImage updateImage();
+  public abstract int numberDevices();
 }
 
 class PCapture extends EditorCapture {
@@ -155,6 +156,10 @@ class PCapture extends EditorCapture {
     }
   }
   
+  public int numberDevices() {
+    return cameraDevices.length;
+  }
+  
   public void turnOffCamera() {
     if (capture != null) capture.stop();
   }
@@ -176,8 +181,14 @@ class DCapture extends EditorCapture implements java.beans.PropertyChangeListene
     engine = e;
   }
   
-  // Lmao don't care I'm using Java 8 in 2023 dangit
+  // Lmao don't care 
   @SuppressWarnings("deprecation")
+  private boolean isCamera(DSFilterInfo dsi) {
+    return (dsi.getType() == DEVICE_CAMERA
+    && !dsi.getName().contains("OBS Virtual Camera")  // This will make timeway crash.
+    );
+  }
+  
   public void setup() {
     ready.set(false);
     error.set(false);
@@ -188,9 +199,10 @@ class DCapture extends EditorCapture implements java.beans.PropertyChangeListene
       
       for (int y = 0; y < dsi.length; y++) {
         for (int x = 0; x < dsi[y].length; x++) {
-          println("("+x+", "+y+") "+dsi[y][x].getName(), dsi[y][x].getType());
-          if (dsi[y][x].getType() == DEVICE_CAMERA)
+          if (isCamera(dsi[y][x])) {
+            //println("("+x+", "+y+") "+dsi[y][x].getName(), dsi[y][x].getType());
             cameraDevices.add(dsi[y][x]);
+          }
         }
       }
       
@@ -272,6 +284,10 @@ class DCapture extends EditorCapture implements java.beans.PropertyChangeListene
       
       ready.set(true);
     }
+  }
+  
+  public int numberDevices() {
+    return cameraDevices.size();
   }
  
   public PImage updateImage() {
@@ -2308,7 +2324,7 @@ public class Editor extends Screen {
           app.textFont(engine.DEFAULT_FONT);
   
           //************BACK BUTTON************
-          if (ui.button("back", "back_arrow_128", "Save & back")) {
+          if (ui.buttonOnce("back", "back_arrow_128", "Save & back")) {
             try {
                saveEntryJSON();
                if (engine.getPrevScreen() instanceof Explorer) {
@@ -2454,10 +2470,12 @@ public class Editor extends Screen {
             // TODO: Add some automatic "position at bottom" function to the messy class.
             gui.getSprite("snap").setY(HEIGHT-myLowerBarWeight+20);
             
-            if (ui.button("camera_flip", "flip_camera_128", "Switch camera")) {
-              sound.playSound("select_any");
-              preparingCameraMessage = "Switching camera...";
-              camera.switchNextCamera();
+            if (camera.numberDevices() > 1) {
+              if (ui.button("camera_flip", "flip_camera_128", "Switch camera")) {
+                sound.playSound("select_any");
+                preparingCameraMessage = "Switching camera...";
+                camera.switchNextCamera();
+              }
             }
             gui.getSprite("camera_flip").setY(HEIGHT-myLowerBarWeight+10);
           }
@@ -3201,7 +3219,7 @@ public class ReadOnlyEditor extends Editor {
     // display our very small ui
     ui.useSpriteSystem(readonlyEditorUI);
     
-    if (ui.buttonVary("back-button", "back_arrow_128", "Back")) {
+    if (ui.buttonVaryOnce("back-button", "back_arrow_128", "Back")) {
       // This only exists because we can only have one prev screen at a time
       // and I swear to god I hate this and this is gonna get changed sooner or later.
       // In fact I may call this with a TODO.

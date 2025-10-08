@@ -1176,9 +1176,17 @@ public class PixelRealm extends Screen {
         display.resetShader();
       }
       else {
-        float aspect = float(ico.height)/float(ico.width);
-        float offy = (wihi-(wihi*aspect))/2f;
-        app.image(ico, x, y+offy, wihi, wihi*aspect);
+        if (ico.width > ico.height) {
+          float aspect = float(ico.height)/float(ico.width);
+          float offy = (wihi-(wihi*aspect))/2f;
+          app.image(ico, x, y+offy, wihi, wihi*aspect);
+          
+        }
+        else {
+          float aspect = float(ico.width)/float(ico.height);
+          float offx = (wihi-(wihi*aspect))/2f;
+          app.image(ico, x+offx, y, wihi*aspect, wihi);
+        }
       }
     }
     
@@ -4008,17 +4016,20 @@ public class PixelRealm extends Screen {
       
         //  (osize*ohi)/phi=psize
         float ohi = 0f;
-        if (o instanceof TerrainPRObject) {
-          ohi = (float)o.img.getHeight(((TerrainPRObject)o).imgIndex%numTreeTextures);
-        }
-        else if (o instanceof DirectoryPortal || o instanceof ShortcutPortal) {
-          ohi = 221f;
-        }
-        else {
-          ohi = (float)o.img.getHeight();
+        float psize = 1f;
+        if (o.img != null) {
+          if (o instanceof TerrainPRObject) {
+            ohi = (float)o.img.getHeight(((TerrainPRObject)o).imgIndex%numTreeTextures);
+          }
+          else if (o instanceof DirectoryPortal || o instanceof ShortcutPortal) {
+            ohi = 221f;
+          }
+          else {
+            ohi = (float)o.img.getHeight();
+          } 
+          psize = (o.size*ohi)/IMG_POOF_HEIGHT;
         }
         
-        float psize = (o.size*ohi)/IMG_POOF_HEIGHT;
         
         if (psize > 6f) psize = 1f; // Some PRObjects are stupidly tall. Let's just have a small poof so the poof is still visible.
         
@@ -7918,7 +7929,19 @@ public class PixelRealm extends Screen {
     app.text(currRealm.stateDirectory, 10, 10);
     
     if (currRealm.memOverload) {
-      display.img("error", WIDTH-myUpperBarWeight-10f, 0f, myUpperBarWeight, myUpperBarWeight);
+      float xx = WIDTH-myUpperBarWeight-10f;
+      float yy = 0f;
+      display.img("error", xx, yy, myUpperBarWeight, myUpperBarWeight);
+      if (ui.mouseInArea(xx, yy, myUpperBarWeight, myUpperBarWeight)) {
+        app.noStroke();
+        app.fill(0, 127);
+        float wi = 280f;
+        app.rect(WIDTH-wi-myUpperBarWeight, yy, wi, 150f);
+        app.fill(255f);
+        app.textFont(engine.DEFAULT_FONT, 20f);
+        app.textAlign(LEFT, TOP);
+        app.text("Some files couldn't be loaded because the memory limit has been reached.", WIDTH-wi+10f-myUpperBarWeight, yy+10f, wi-20f, HEIGHT);
+      }
     }
     else if (loading > 0 || sound.loadingMusic()) {
       ui.loadingIcon(WIDTH-myUpperBarWeight/2-10, myUpperBarWeight/2, myUpperBarWeight);

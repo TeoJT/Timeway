@@ -511,10 +511,10 @@ public class PixelRealmWithUI extends PixelRealm {
       }
 
       // --- Pocket menu ---
-      //if (ui.buttonVary("pocket_menu", "new_entry_128", "Pockets")) {
-      //  sound.playSound("menu_select");
-      //  menu = new PocketMenu();
-      //}
+      if (ui.buttonVary("pocket_menu", "new_entry_128", "Pockets")) {
+        sound.playSound("menu_select");
+        menu = new PocketMenu();
+      }
       
       // Lighting menu
       
@@ -2341,9 +2341,9 @@ public class PixelRealmWithUI extends PixelRealm {
       }
       
       if (!engine.commandPromptShown && !menuShown && input.keyActionOnce("open_pocket", 'i')) {
-        //sound.playSound("menu_select");
-        //menuShown = true;
-        //menu = new PocketMenu();
+        sound.playSound("menu_select");
+        menuShown = true;
+        menu = new PocketMenu();
       }
     
     engine.inputPromptShown = tmp;

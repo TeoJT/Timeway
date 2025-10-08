@@ -160,7 +160,7 @@ public class Benchmark extends Screen {
   
   public void upperBar() {
     super.upperBar();
-    if (ui.button("back", "back_arrow_128", "")) {
+    if (ui.buttonOnce("back", "back_arrow_128", "")) {
       previousScreen();
     }
     gui.updateSpriteSystem();
@@ -322,54 +322,12 @@ public class Explorer extends Screen {
     scrollBottom = max(0, (file.currentFiles.length*TEXT_SIZE-HEIGHT+BOTTOM_SCROLL_EXTEND));
   }
   
-  // THIS IS COPIED from the editor tab.
-  // TODO: make this use one script from the engine or something.
-  // For the time being let's just have it copy+pasted here.
-  private boolean button(String name, String texture, String displayText) {
-
-        // This doesn't change at all.
-        // I just wanna keep it in case it comes in useful later on.
-        boolean guiClickable = true;
-
-        // Don't want our messy code to spam the console lol.
-        gui.suppressSpriteWarning = true;
-
-        boolean hover = false;
-
-        // Full brightness when not hovering
-        app.tint(255);
-        app.fill(255);
-
-        // To click:
-        // - Must not be in a minimenu
-        // - Must not be in gui move sprite / edit mode.
-        // - also the guiClickable thing.
-        if (gui.buttonHover(name) && guiClickable && !gui.interactable) {
-
-            // Slight gray to indicate hover
-            app.tint(210);
-            app.fill(210);
-            hover = true;
-        }
-
-        // Display the button, will be affected by the hover color.
-        gui.button(name, texture, displayText);
-        app.noTint();
-
-        // Don't have "the boy who called wolf", situation, turn back on warnings
-        // for genuine troubleshooting.
-        gui.suppressSpriteWarning = false;
-
-        // Only when the button is actually clicked.
-        return hover && input.primaryOnce;
-    }
-    
-  
   
   private void renderGui() {
+    ui.useSpriteSystem(gui);
     
     //************NEW ENTRY************
-    if (button("new_entry", "new_entry_128", "New entry")) {
+    if (ui.button("new_entry", "new_entry_128", "New entry")) {
       // Man this code here is ANCIENT
       //String newName = file.currentDir+engine.appendZeros(numTimewayEntries, 5)+"."+engine.ENTRY_EXTENSION;
       //requestScreen(new Editor(engine, newName));
@@ -392,7 +350,7 @@ public class Explorer extends Screen {
     }
     
     //************NEW FOLDER************
-    if (button("new_folder", "new_folder_128", "New folder")) {
+    if (ui.button("new_folder", "new_folder_128", "New folder")) {
       
       Runnable r = new Runnable() {
         public void run() {
@@ -420,7 +378,7 @@ public class Explorer extends Screen {
     //}
     
     //***********BACK BUTTON***********
-    if (button("back", "back_arrow_128", "")) {
+    if (ui.buttonOnce("back", "back_arrow_128", "")) {
       previousScreen();
     }
     
@@ -565,15 +523,12 @@ public class HomeScreen extends Screen {
         app.fill(255);
         app.text(TWEngine.VERSION, 10, HEIGHT-myLowerBarWeight-30);
         
-        boolean pixelrealmButton = ui.basicButton("Pixel Realm", display.WIDTH/2-400, (offY += 60), 800, 50);
-        boolean explorerButton = ui.basicButton("Explorer", display.WIDTH/2-400, (offY += 60), 800, 50);
-        boolean binButton = ui.basicButton("Recycle bin", display.WIDTH/2-400, (offY += 60), 800, 50);
-        boolean settingsButton = ui.basicButton("Settings", display.WIDTH/2-400, (offY += 60), 800, 50);
-        boolean creditsButton = ui.basicButton("Credits", display.WIDTH/2-400, (offY += 60), 800, 50);
+        boolean pixelrealmButton = ui.basicButton("Pixel Realm", display.WIDTH/2-400, (offY += 60), 800, 50) && buttonOnce;
+        boolean explorerButton = ui.basicButton("Explorer", display.WIDTH/2-400, (offY += 60), 800, 50) && buttonOnce;
+        boolean binButton = ui.basicButton("Recycle bin", display.WIDTH/2-400, (offY += 60), 800, 50) && buttonOnce;
+        boolean settingsButton = ui.basicButton("Settings", display.WIDTH/2-400, (offY += 60), 800, 50) && buttonOnce;
+        boolean creditsButton = ui.basicButton("Credits", display.WIDTH/2-400, (offY += 60), 800, 50) && buttonOnce;
         
-        if (buttonOnce) {
-          
-        }
         
         if (pixelrealmButton) {
           PixelRealmWithUI pixelrealm = new PixelRealmWithUI(engine, engine.DEFAULT_DIR);
@@ -743,7 +698,7 @@ public class RecycleBinScreen extends Screen {
     
     ui.useSpriteSystem(gui);
     if (!prompt) {
-      if (ui.button("back", "back_arrow_128", "")) {
+      if (ui.buttonOnce("back", "back_arrow_128", "")) {
         previousScreen();
       }
     }
