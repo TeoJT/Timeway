@@ -54,7 +54,7 @@ import java.util.concurrent.TimeUnit;
 public class TWEngine {
   //*****************CONSTANTS SETTINGS**************************
   // Info and versioning
-  private static final String VERSION     = "0.1.9";
+  private static final String VERSION     = "0.2.0";
   
   public String getAppName() {
     return "Timeway";
@@ -4272,6 +4272,17 @@ public class TWEngine {
         //|| ext.equals("webm")
         || ext.equals("tiff")
         || ext.equals("tif"))
+        return true;
+      else
+        return false;
+    }
+    
+    public boolean isAudioFile(String path) {
+      String ext = getExt(path);
+      if (ext.equals("wav")
+        || ext.equals("mp3")
+        || ext.equals("flac")
+        || ext.equals("ogg"))
         return true;
       else
         return false;

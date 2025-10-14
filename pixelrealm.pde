@@ -1146,6 +1146,15 @@ public class PixelRealm extends Screen {
     
     public boolean isDuplicate = false;
     
+    // Sometimes, we just gotta have weird hacks in weird places in our code which results in 
+    // weird constructors with weird purposes.
+    public boolean isWeird = false;
+    
+    public PocketItem(String name, boolean isWeird) {
+      this.name = name;
+      this.isWeird = isWeird;
+    }
+    
     public PocketItem(String name, PixelRealmState.PRObject item, boolean abstractObject) {
       this.name = name;
       this.abstractObject = abstractObject;
@@ -1166,8 +1175,18 @@ public class PixelRealm extends Screen {
     
     
     public void displayIcon(float x, float y, float wihi) {
-      PImage ico = item.img.get();
+      PImage ico = null;
       
+      // Quick fix for now
+      if (item instanceof PixelRealmState.MusicFileObject) {
+        ico = display.getImg("media_128");
+      }
+      else if (item.img != null) {
+        ico = item.img.get();
+      }
+      else {
+        ico = display.getImg("unknown_128");
+      }
       
       if (item instanceof PixelRealmState.DirectoryPortal) {
         float pixelreswi = float(ico.height)/float(ico.width);
@@ -1197,11 +1216,13 @@ public class PixelRealm extends Screen {
     // returns false on this method.
     // Any file changes (e.g. mv to inventory) won't affect things.
     // This method handles specific-error cases using the upper pixelrealm_ui class.
-    public boolean pocketMove(String fro) {
+    public boolean pocketMove(String fro, String newName) {
       fro = file.directorify(fro);
       
       // Can't move abstract objects.
-      if (abstractObject) {
+      // Also adding isWeird to this condition because... well, it should never happen,
+      // but if we're trying to move a weird item, then we seriously messed something up in our code.
+      if (abstractObject || isWeird) {
         //console.log(name+" "+file.getFilename(fro));
         if (name.equals(file.getFilename(file.getPrevDir(fro)))) {
           // Just a quick change here to make it a little more clear which item we're talking about (the exit portal)
@@ -1234,12 +1255,12 @@ public class PixelRealm extends Screen {
         }
         
         // Another duplicate check that is mostly temporary and I'll have a better solution soon.
-        if (file.exists(engine.APPPATH+engine.POCKET_PATH+name)) {
-          promptPocketConflict(name);
+        if (file.exists(engine.APPPATH+engine.POCKET_PATH+newName)) {
+          promptPocketConflict(newName);
           return false;
         }
         
-        boolean success = file.mv(fro+name, engine.APPPATH+engine.POCKET_PATH+name);
+        boolean success = file.mv(fro+name, engine.APPPATH+engine.POCKET_PATH+newName);
         if (!success) {
           //console.warn("failed to move");
           //console.warn("to: "+engine.APPPATH+engine.POCKET_PATH+name);
@@ -1249,10 +1270,16 @@ public class PixelRealm extends Screen {
         }
         // At this point, the file should be moved therefore it is now sync'd with the memory
         // as we move realms.
+        name = newName;
         this.syncd = true;
       }
       
       return true;
+    }
+    
+    
+    public boolean pocketMove(String fro) {
+      return pocketMove(fro, name);
     }
   }
   
@@ -2358,7 +2385,7 @@ public class PixelRealm extends Screen {
         
         // TODO: more efficient to move it out of display() and do proper init code.
         if (treeGLElements[i] == null) {
-          treeGLElements[i] = new GLQuadElement(img, i);
+          treeGLElements[i] = new GLQuadElement(img_tree, i);
         }
         
         useEnvironmentShader();
@@ -2857,10 +2884,7 @@ public class PixelRealm extends Screen {
       
       
       public void interationAction() {
-        sound.stopMusic();
-        sound.streamMusic(this.dir);
-        cassettePlaying = this.filename;
-        console.log("Now playing "+this.filename);
+        playCassette(this.dir);
       }
       
       
@@ -6650,50 +6674,66 @@ public class PixelRealm extends Screen {
     
     
     
+    
+    protected boolean moveFromPocket(PocketItem pitem, String newpath) {
+      // If it's abstract (or unsynced), there's no file to move.
+      if (pitem.abstractObject || !pitem.syncd) {
+        
+      }
+      // Perform file move operation.
+      else {
+        // Catch the following errors:
+        // - File is not in the pockets folder (for some reason)
+        // - File already exists
+        // - Failed to move
+        
+        // Yes, it should already be directorified. But we play it safe here.
+        String fro = engine.APPPATH+engine.POCKET_PATH+pitem.name;
+        String to = newpath;
+        // File is not in the pockets folder (for some reason)
+        if (!file.exists(fro)) {
+          console.warn(pitem.name+" is no longer in the pocket for some reason!");
+          
+          // Commenting this out cus that seems like a bad idea if pitem.item is nulled out but pitem still exists in memory bound to some object.
+          //pitem.item.destroy();
+        }
+        // File already exists
+        else if (file.exists(to)) {
+          promptFileConflict(findFileObjectByName(file.getFilename(to)), (FileObject)pitem.item);
+          // DO NOT DO any further actions here!!
+          return false;
+        }
+        // Perform the move!
+        // ... in an if statement.
+        // handle Failed to move case.
+        // If we continue from here, we guchii
+        else if (!file.mv(fro, to)) {
+          promptFailedToMove(pitem.name);
+          // DO NOT DO any further actions here!!
+          return false;
+        }
+        // If we get past this point we gutch!!
+        
+        pitem.name = file.getFilename(newpath);
+        
+      }
+      return true;
+    }
+    
+    
+    
     protected void placeDownObject() {
       if (getHoldingItem() != null) {
         PocketItem pitem = getHoldingItem();
         
-        // If it's abstract (or unsynced), there's no file to move.
-        if (pitem.abstractObject || !pitem.syncd) {
-          
-        }
-        // Perform file move operation.
-        else {
-          // Catch the following errors:
-          // - File is not in the pockets folder (for some reason)
-          // - File already exists
-          // - Failed to move
-          
-          // Yes, it should already be directorified. But we play it safe here.
-          String fro = engine.APPPATH+engine.POCKET_PATH+pitem.name;
-          String to = file.directorify(currRealm.stateDirectory)+pitem.name;
-          // File is not in the pockets folder (for some reason)
-          if (!file.exists(fro)) {
-            console.warn(pitem.name+" is no longer in the pocket for some reason!");
-            pitem.item.destroy();
-          }
-          // File already exists
-          else if (file.exists(to)) {
-            promptFileConflict(findFileObjectByName(file.getFilename(to)), (FileObject)pitem.item);
-            // DO NOT DO any further actions here!!
-            return;
-          }
-          // Perform the move!
-          // ... in an if statement.
-          // handle Failed to move case.
-          // If we continue from here, we guchii
-          else if (!file.mv(fro, to)) {
-            promptFailedToMove(pitem.name);
-            // DO NOT DO any further actions here!!
-            return;
-          }
-          // If we get past this point we gutch!!
-          
+        if (moveFromPocket(pitem, file.directorify(currRealm.stateDirectory)+pitem.name)) {
           // Ooh, remember to add the file.
           // I think that was the cause of a very annoying bug.
           // Also, due to if conditions earlier, this is guarenteed to NOT be an abstract object.
           files.add((FileObject)pitem.item);
+        }
+        else {
+          return;
         }
         
         // Need to do a few things when we move files like that.a
@@ -7435,6 +7475,13 @@ public class PixelRealm extends Screen {
     return json;
   }
   
+  
+  protected void playCassette(String path) {
+    sound.stopMusic();
+    sound.streamMusic(path);
+    cassettePlaying = file.getFilename(path);
+    console.log("Now playing "+file.getFilename(path));
+  }
   
   
   protected void switchToRealm(PixelRealmState r) {
