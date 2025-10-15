@@ -1173,6 +1173,26 @@ public class PixelRealm extends Screen {
       //}
     }
     
+    public String getPath() {
+      if (item instanceof PixelRealmState.FileObject) {
+        return ((PixelRealmState.FileObject)item).dir;
+      }
+      else {
+        console.bugWarn("getPath: Trying to get path of an abstract PocketItem "+name+".");
+        return "";
+      }
+    }
+    
+    public void updatePath(String newPath) {
+      if (item instanceof PixelRealmState.FileObject) {
+        ((PixelRealmState.FileObject)item).dir = newPath;
+        ((PixelRealmState.FileObject)item).filename = file.getFilename(newPath);
+      }
+      else {
+        console.bugWarn("updatePath: Trying to update path of an abstract PocketItem "+name+".");
+      }
+    }
+    
     
     public void displayIcon(float x, float y, float wihi) {
       PImage ico = null;
@@ -1270,6 +1290,7 @@ public class PixelRealm extends Screen {
         }
         // At this point, the file should be moved therefore it is now sync'd with the memory
         // as we move realms.
+        updatePath(engine.APPPATH+engine.POCKET_PATH+newName);
         name = newName;
         this.syncd = true;
       }
@@ -6713,7 +6734,7 @@ public class PixelRealm extends Screen {
           return false;
         }
         // If we get past this point we gutch!!
-        
+        pitem.updatePath(newpath);
         pitem.name = file.getFilename(newpath);
         
       }

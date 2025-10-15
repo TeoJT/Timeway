@@ -1028,7 +1028,7 @@ public class PixelRealmWithUI extends PixelRealm {
         }
       }
       
-      private int findFreeSpot() {
+      private int findFreeCell() {
         for (int i = 0; i < grid.length; i++) {
           if (grid[i] == null) {
             return i;
@@ -1037,6 +1037,10 @@ public class PixelRealmWithUI extends PixelRealm {
         // Hmmm... that could be a problem.
         // We need some sort of unlimited size grid option.
         return -1;
+      }
+      
+      public void insertIntoFreeCell(PocketItem pitem) {
+        grid[findFreeCell()] = pitem;
       }
       
       public void load(int coll) {
@@ -1054,14 +1058,14 @@ public class PixelRealmWithUI extends PixelRealm {
               if (o.getInt("coll", 1) == coll) {
                 
                 int freeSpot = 0;
-                if (o.isNull("loc")) freeSpot = findFreeSpot();
+                if (o.isNull("loc")) freeSpot = findFreeCell();
                 
                 grid[o.getInt("loc", freeSpot)] = currRealm.loadPocketItem(path);
               }
             }
             // If not found in the JSON file and we're loading the pocket, find a slot in the inventory for it.
             else if (coll == 1) {
-              grid[findFreeSpot()] = currRealm.loadPocketItem(path);
+              grid[findFreeCell()] = currRealm.loadPocketItem(path);
             }
         }
       }
@@ -1165,6 +1169,7 @@ public class PixelRealmWithUI extends PixelRealm {
                 app.fill(255f, 60f);
                 app.rect(gridx + x * squarewihi, actualy, squarewihi, squarewihi);
                 
+                
                 //if (input.primaryOnce) {
                 //  console.log(i);
                 //}
@@ -1190,6 +1195,39 @@ public class PixelRealmWithUI extends PixelRealm {
                     grid[i] = null;
                     doubleClickTimer = 15f;
                   }
+                }
+                
+                
+                // Show options when right-clicked.
+                if (input.secondaryOnce && grid[i] != null && pitem != null) {
+                  String[] labels = new String[1];
+                  Runnable[] actions = new Runnable[1];
+                  
+                  //labels[0] = "Duplicate";
+                  //actions[0] = new Runnable() {public void run() {
+                  //    //String newname = duplicateCheck(pitem.name);
+                      
+                      
+                  //}};
+                  final int index = i;
+                  
+                  labels[0] = "Delete";
+                  actions[0] = new Runnable() {public void run() {
+                      rpause();
+                      boolean success = file.recycle(pitem.getPath());
+                      
+                      if (!success) {
+                        console.warn("Could not recycle "+pitem.name);
+                      }
+                      else {
+                        grid[index] = null;
+                      }
+                      
+                  }};
+                  
+                  
+                  
+                  ui.createOptionsMenu(labels, actions);
                 }
                 
                 // Drop an item into a cell when mouse released.
@@ -1275,9 +1313,10 @@ public class PixelRealmWithUI extends PixelRealm {
             if (file.getIsolatedFilename(file.unhide(draggingItem.name)).equals("pixelrealm-tree-"+i)) moveName = "Tree-"+i+"."+ext;
             if (file.getIsolatedFilename(file.unhide(draggingItem.name)).equals("pixelrealm-terrain_object-"+i)) moveName = "Tree-"+i+"."+ext;
           }
+          
+          moveName = duplicateCheck(moveName);
         }
         
-        // TODO: If for example Sky-2.png already exists, rename it to Sky-2 (1).png, or Sky-2 (1) (1).png etc.
         
         // Move the item
         // This will effectively move the item from the current realm to the pockets folder.
@@ -1466,6 +1505,22 @@ public class PixelRealmWithUI extends PixelRealm {
       
       // Shouldn't need originalGridLocation but this is just to prevent a crash should there be a bug.
       originalGridLocation = pocketsGrid;
+    }
+    
+    // Rename the file if a duplicate exists in the pocket.
+    // If for example Sky-2.png already exists, rename it to Sky-2 (1).png, or Sky-2 (2).png etc.
+    private String duplicateCheck(String original) {
+      String filename = file.getIsolatedFilename(original);
+      String ext = file.getExt(original);
+      
+      String newname = original;
+      int i = 1;
+      while (file.exists(engine.APPPATH+engine.POCKET_PATH+newname)) {
+        newname = filename+" ("+i+")."+ext;
+        i++;
+      }
+      
+      return newname;
     }
     
     
