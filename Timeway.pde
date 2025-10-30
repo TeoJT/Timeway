@@ -5,7 +5,9 @@ import java.io.PrintWriter;
 
 /**
 *********************************** Timeway ***********************************
-*                       Your computer is your universe.                        
+*                       Your computer is your universe.    
+*
+*                               by Téo Taylor
 * 
 * Visit https://teojt.github.io/timeway.html for more info on Timeway.
 * 

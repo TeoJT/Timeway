@@ -1187,6 +1187,7 @@ public class PixelRealm extends Screen {
       if (item instanceof PixelRealmState.FileObject) {
         ((PixelRealmState.FileObject)item).dir = newPath;
         ((PixelRealmState.FileObject)item).filename = file.getFilename(newPath);
+        name = file.getFilename(newPath);
       }
       else {
         console.bugWarn("updatePath: Trying to update path of an abstract PocketItem "+name+".");
@@ -2279,6 +2280,11 @@ public class PixelRealm extends Screen {
         // In non-modifyTerrain mode, terrain uses PShapes stored in GPU memory (fast but rigid, to change tile data you must re-generate entire chunk)
         if (!modifyTerrain) {
           try {
+            
+          //pshapeChunk.beginShape(QUAD);
+          //pshapeChunk.texture(img_grass.get());
+          //pshapeChunk.endShape(QUAD);
+          
             scene.shape(pshapeChunk);
           }
           catch (RuntimeException e) {
@@ -6720,6 +6726,7 @@ public class PixelRealm extends Screen {
         }
         // File already exists
         else if (file.exists(to)) {
+          //console.log(to);
           promptFileConflict(findFileObjectByName(file.getFilename(to)), (FileObject)pitem.item);
           // DO NOT DO any further actions here!!
           return false;

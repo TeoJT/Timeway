@@ -998,6 +998,7 @@ public class PixelRealmWithUI extends PixelRealm {
     private boolean keyDelay = true;
     private float doubleClickTimer = 0f;
     private boolean switchToGrabberOnExit = false;
+    private boolean rpauseOnce = true;
     
     private int selectedTab = 0;
     
@@ -1020,6 +1021,12 @@ public class PixelRealmWithUI extends PixelRealm {
       // Runnable to execute when an item is placed into a cell in the grid.
       public void setMoveInAction(Runnable r) {
         moveInAction = r;
+      }
+      
+      public void runMoveInAction() {
+        if (moveInAction != null) {
+          moveInAction.run();
+        }
       }
       
       public void insert(ArrayList<PocketItem> arr) {
@@ -1237,9 +1244,8 @@ public class PixelRealmWithUI extends PixelRealm {
                 if (draggingItem != null && input.primaryReleased && !promptShown()) {
                   itemIndex = i;
                   currGrid = this;
-                  if (moveInAction != null) {
-                    moveInAction.run();
-                  }
+                  rpauseOnce = true;
+                  runMoveInAction();
                 }
               }
               
@@ -1275,11 +1281,13 @@ public class PixelRealmWithUI extends PixelRealm {
       pocketsGrid = new Grid(300);
       
       Runnable rpockets = new Runnable() {public void run() {
+        // Just to avoid the refresher twice when swapping.
+        itemToSwap = null;
         
         // Only do the rest of this run statement if we're moving from a different grid.
         // No need to run pocketMove for items already in the pockets.
         if (originalGridLocation == pocketsGrid) {
-          swapIfOccupied();
+          beginSwapIfOccupied();
           moveItemToNewCell(POCKET);
           
           return;
@@ -1321,19 +1329,22 @@ public class PixelRealmWithUI extends PixelRealm {
         // Move the item
         // This will effectively move the item from the current realm to the pockets folder.
         rpause();
+        
+        // If we mess around wtih pocketMove, we MUST set syncd to false otherwise it wont move at all.
+        draggingItem.syncd = false;
         if (draggingItem.pocketMove(currRealm.stateDirectory, moveName)) {
           // Valid move operation...
           
-          
-          // If we're in hotbar etc then we don't do anything extra. If we're interacting with the realms grid however,
+          // If we're moving from hotbar etc then we don't do anything extra. If we're interacting with the realms grid however,
           // we're refreshing the realm assets.
           // Definitely not the most efficient approach in terms of performance.
           // But certainly the most secure and bug-free.
           if (originalGridLocation == realmGrid) {
-            if (currGrid.grid[itemIndex] != null) {
-              prompt("Not implemented yet!");
-              return;
-            }
+            //if (currGrid.grid[itemIndex] != null) {
+            //  prompt("Not implemented yet!");
+            //  return;
+            //}
+            beginSwapIfOccupied();
             
             // Refresh
             currRealm.loadRealmAssets();
@@ -1347,16 +1358,17 @@ public class PixelRealmWithUI extends PixelRealm {
           else {
             // If there's an existing item in the cell...
             // Swap places (move the item to the original cell)
-            swapIfOccupied();
+            beginSwapIfOccupied();
             moveItemToNewCell(POCKET);
           }
         }
         else {
-          // Error, show prompt, and return item to original cell...
+          // Error, show prompt (done by pocketMove), and return item to original cell...
           returnDraggingItemToOriginalCell();
           return;
         }
         
+        performSwap();
       }};
       pocketsGrid.setMoveInAction(rpockets);
       
@@ -1370,13 +1382,14 @@ public class PixelRealmWithUI extends PixelRealm {
       hotbarGrid = new Grid(64);
       
       Runnable rhotbar = new Runnable() {public void run() {
+        itemToSwap = null;
         // Here, if we swap an item and it goes into the pocket, then this item will be required to 
         // undergo the same operation as moving an item into the pocket.
         if (currGrid.grid[itemIndex] != null) {        // Check we are moving it into an occupied slot
           if (originalGridLocation == pocketsGrid) { // check that we are indeed moving it into the pockets grid and call pocketMove
             rpause();
             if (currGrid.grid[itemIndex].pocketMove(currRealm.stateDirectory)) {
-              swapIfOccupied();         // Swap places
+              beginSwapIfOccupied();         // Swap places
               moveItemToNewCell(HOTBAR);      // Move the current item.
               switchToGrabberOnExit = true;
             }
@@ -1386,7 +1399,7 @@ public class PixelRealmWithUI extends PixelRealm {
             }
           }
           else { // Condition here is that this is not the pockets grid (it's a different cell in the same grid). No need to call pocketMove.
-            swapIfOccupied();
+            beginSwapIfOccupied();
             moveItemToNewCell(HOTBAR);
           }
         }
@@ -1396,6 +1409,7 @@ public class PixelRealmWithUI extends PixelRealm {
           switchToGrabberOnExit = true;
         }
         
+        performSwap();
       }};
       hotbarGrid.setMoveInAction(rhotbar);
       
@@ -1436,34 +1450,64 @@ public class PixelRealmWithUI extends PixelRealm {
       
       // This one is complex, because here we're actually moving an item out of the pockets.
       Runnable rrealmgrid = new Runnable() {public void run() {
-        // Swapping item in realm grid
-        if (currGrid.grid[itemIndex] != null) {        // Check we are moving it into an occupied slot
-          //if (originalGridLocation == pocketsGrid) { // check that we are indeed moving it into the pockets grid and call pocketMove
-          //  rpause();
-          //  if (currGrid.grid[itemIndex].pocketMove(currRealm.stateDirectory)) {
-          //    swapIfOccupied();         // Swap places
-          //    moveItemToNewCell(HOTBAR);      // Move the current item.
-          //  }
-          //  else {
-          //    returnDraggingItemToOriginalCell();
-          //    return;
-          //  }
-          //}
-          //else { // Condition here is that this is not the pockets grid. No need to call pocketMove.
-          //  swapIfOccupied();
-          //  moveItemToNewCell(HOTBAR);
-          //}
-          returnDraggingItemToOriginalCell();
-          prompt("Not implemented yet!");
-        }
-        // Here, the cell is empty, move into new cell.
-        else {
-          if (moveIntoRealmFileSlot()) {
-            moveItemToNewCell(REALM);
+        itemToSwap = null;
+        
+        // Perform initial slot check first
+        // dont ask why its a string lmao.
+        String slotCheckRes = checkRealmFileSlot();
+        if (slotCheckRes != null) { // Non-null means success.
+          
+          // Now we need to know whether we're moving from pocket to realm grids
+          // or swapping 2 items in the realm grid.
+          // Swapping 2 items in the realm grid comes with complications.
+          
+          // Swap 2 items in realm grid
+          if (originalGridLocation == realmGrid && currGrid == realmGrid) {
+            // Don't do anything if it's the same cell (click and then immediately release)
+            if (originalCellLocation != itemIndex) {
+              rpause();
+              if (currGrid.grid[itemIndex] == null) {
+                // Move the file (that's right, we're directly moving it)
+                boolean success = file.mv(draggingItem.getPath(), file.directorify(currRealm.stateDirectory)+slotCheckRes);
+                if (success) {
+                  draggingItem.updatePath(file.directorify(currRealm.stateDirectory)+slotCheckRes);
+                  moveItemToNewCell(REALM);
+                  // Refresh dir
+                  currRealm.loadRealmAssets();
+                }
+                else {
+                  returnDraggingItemToOriginalCell();
+                  prompt("Move failed.");
+                }
+              }
+              else {
+                returnDraggingItemToOriginalCell();
+                prompt("Swapping not yet implemented!");
+              }
+            }
           }
+          
+          // Move item from pocket (potential swapping)
           else {
-            returnDraggingItemToOriginalCell();
+            realmGridSwap();
+            
+            // rename the file to .pixelrealm- (etc), if successful move item and perform swaps if necessary.
+            if (moveIntoRealmFileSlot()) {
+              moveItemToNewCell(REALM);
+            }
+            else {
+              // If the move fails, we have a complicated situation because if we swapped the file, there's no easy way to
+              // undo those changes. At least not without getting tangled in spaghetti code.
+              // Easiest thing to do is to refresh the whole menu. It won't be as good as undoing it, but the swapped item
+              // will be in a different slot in the pockets and all our items will be displayed correctly (without cells overlapping)
+              // at the very least.
+              returnDraggingItemToOriginalCell();
+              // TODO: implement refresh functionality.
+            }
           }
+        }
+        else { // If realm asset slot check fails.
+          returnDraggingItemToOriginalCell();
         }
         
       }};
@@ -1524,6 +1568,28 @@ public class PixelRealmWithUI extends PixelRealm {
     }
     
     
+    // For the realm grid specifically, because of problems with duplicate item names,
+    // we need to complete the move of the swapped item first before we finish with our own item.
+    // So that's exactly what this method does here. Of course, we need to restore our prior state before we continue.
+    private void realmGridSwap() {
+      // Temporarily store state
+      int originalcelllocation_temp = originalCellLocation;
+      int itemIndex_temp = itemIndex;
+      Grid orignalgrid_temp = originalGridLocation;
+      Grid currGrid_temp = currGrid;
+      PocketItem dragging_temp = draggingItem;
+      
+      beginSwapIfOccupied();
+      performSwap();
+      
+      originalCellLocation = originalcelllocation_temp;
+      itemIndex = itemIndex_temp;
+      originalGridLocation = orignalgrid_temp;
+      currGrid = currGrid_temp;
+      draggingItem = dragging_temp;
+    }
+    
+    
     // Type: [0 = image] [1 = music] [2 = plugin file]
     private PocketItem createRealmAssetPocketItem(String filenameWithoutExt, int type) {
       String pathwithoutext = currRealm.stateDirectory+filenameWithoutExt;
@@ -1562,8 +1628,8 @@ public class PixelRealmWithUI extends PixelRealm {
       return createRealmAssetPocketItem(filenameWithoutExt, 0);
     }
     
-    
-    private boolean moveIntoRealmFileSlot() {
+    // Returns null if check failed, returns new name when check succeeds.
+    private String checkRealmFileSlot() {
       String ext = file.getExt(draggingItem.name);
       String newName = "";
       
@@ -1573,7 +1639,7 @@ public class PixelRealmWithUI extends PixelRealm {
         // Additionally, perform an additional check to see if it's 1500 pixels wide.
         if (!file.isImage(draggingItem.name)) {
           prompt("Only image file types can go into this slot.");
-          return false;
+          return null;
         }
         
         newName = ".pixelrealm-sky-"+str(itemIndex-SKY_TEXTURE_SLOT+1)+"."+ext;
@@ -1583,7 +1649,7 @@ public class PixelRealmWithUI extends PixelRealm {
         // Additionally perform check to enxure image is not too big (but it's ok if it's tall).
         if (!file.isImage(draggingItem.name)) {
           prompt("Only image file types can go into this slot.");
-          return false;
+          return null;
         }
         
         newName = ".pixelrealm-tree-"+str(itemIndex-TREE_TEXTURE_SLOT+1)+"."+ext;
@@ -1592,7 +1658,7 @@ public class PixelRealmWithUI extends PixelRealm {
         // This file must be an image type
         if (!file.isImage(draggingItem.name)) {
           prompt("Only image file types can go into this slot.");
-          return false;
+          return null;
         }
         
         newName = ".pixelrealm-grass."+ext;
@@ -1602,20 +1668,29 @@ public class PixelRealmWithUI extends PixelRealm {
         // Additionally, perform an additional check to see if it's 1500 pixels wide.
         if (!file.isAudioFile(draggingItem.name)) {
           prompt("Only audio file types can go into this slot.");
-          return false;
+          return null;
         }
         
         newName = ".pixelrealm-bgm."+ext;
       }
       else if (itemIndex == PLUGIN_SLOT) {
           prompt("Not supported yet, sorry!");
-          return false;
+          return null;
       }
       else {
         console.bugWarn("moveIntoRealmFileSlot: Unknown cell "+itemIndex);
+        return null;
       }
       
+      return newName;
+    }
+    
+    
+    private boolean moveIntoRealmFileSlot() {
+      String newName = checkRealmFileSlot();
+      if (newName == null) return false;
       rpause();
+      
       // Checks passed from this point onwards.
       // Move item and if it fails, return false once again.
       if (!currRealm.moveFromPocket(draggingItem, file.directorify(currRealm.stateDirectory)+newName)) {
@@ -1634,7 +1709,10 @@ public class PixelRealmWithUI extends PixelRealm {
     }
     
     private void rpause() {
-      issueRefresherCommand(REFRESHER_PAUSE);
+      if (rpauseOnce) {
+        issueRefresherCommand(REFRESHER_PAUSE);
+        rpauseOnce = false;
+      }
     }
     
     private void moveItemToNewCell(int coll) {
@@ -1658,25 +1736,57 @@ public class PixelRealmWithUI extends PixelRealm {
       pocketInfo.setJSONObject(currGrid.grid[itemIndex].name, o);
     }
     
-    private void swapIfOccupied() {
+    private void performSwap() {
+      if (itemToSwap != null) {
+        // In order to perform the swap, we must move the item into originalGridLocation
+        
+        // Gotta have those variables before we run them
+        int originalcelllocation_temp = originalCellLocation;
+        int itemIndex_temp = itemIndex;
+        Grid orignalgrid_temp = originalGridLocation;
+        Grid currGrid_temp = currGrid;
+        
+        // Set the variables so we can perform the opposite grid's moveIn action.
+        draggingItem = itemToSwap;
+        originalGridLocation = currGrid_temp;
+        currGrid = orignalgrid_temp;
+        originalCellLocation = itemIndex_temp;
+        itemIndex = originalcelllocation_temp;
+        
+        orignalgrid_temp.runMoveInAction();
+        //currGrid.grid[itemIndex]
+      }
+    }
+    
+    private PocketItem itemToSwap = null;
+    
+    private void beginSwapIfOccupied() {
+      // If the cell is occupied
       if (currGrid.grid[itemIndex] != null) {
-        originalGridLocation.grid[originalCellLocation] = currGrid.grid[itemIndex];
+        itemToSwap = currGrid.grid[itemIndex];   // Store temporarily for performSwap later on
+        //currGrid.grid[itemIndex] = null;   // Not needed but it's good to have the mindset that this cell should really be empty.
+                                           // Don't worry, it's stored in itemToSwap.
         
-        int swapColl = -1;
-        if (originalGridLocation == hotbarGrid) {
-          swapColl = HOTBAR;
-        }
-        else if (originalGridLocation == pocketsGrid) {
-          swapColl = POCKET;
-        }
+        // TODO: If all works well, delete commented area.
         
-        if (swapColl == -1) return;
+        // Swap places (move item to original cell)
+        //originalGridLocation.grid[originalCellLocation] = currGrid.grid[itemIndex];
         
-        // Save info (collection and the index)
-        JSONObject o = new JSONObject();
-        o.setInt("coll", swapColl);   // 1: pockets, 2: hotbar
-        if (swapColl == 1) o.setInt("loc", originalCellLocation);
-        pocketInfo.setJSONObject(originalGridLocation.grid[originalCellLocation].name, o);
+        //int swapColl = -1;
+        //if (originalGridLocation == hotbarGrid) {
+        //  swapColl = HOTBAR;
+        //}
+        //else if (originalGridLocation == pocketsGrid) {
+        //  swapColl = POCKET;
+        //}
+        
+        //if (swapColl == -1) return;
+        
+        //// Save info (collection and the index)
+        //JSONObject o = new JSONObject();
+        //o.setInt("coll", swapColl);   // 1: pockets, 2: hotbar
+        //if (swapColl == 1) o.setInt("loc", originalCellLocation);
+        //pocketInfo.setJSONObject(originalGridLocation.grid[originalCellLocation].name, o);
       }
     }
     
@@ -1733,7 +1843,7 @@ public class PixelRealmWithUI extends PixelRealm {
           app.fill(160*0.75f, 140*0.75f, 200*0.75f);
         }
         // Brighter highlight if hovering (click to select tab)
-        else if (ui.mouseInArea(xxx+(i*200f), yyy-BAR_TAB_HEIGHT, 200f, BAR_TAB_HEIGHT-1f)) {
+        else if (ui.mouseInArea(xxx+(i*200f), yyy-BAR_TAB_HEIGHT, 200f, BAR_TAB_HEIGHT-1f) && promptMessage == null) {
           app.fill(55f);
           if (input.primaryOnce) {
             selectedTab = i;
