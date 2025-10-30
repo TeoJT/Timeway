@@ -68,7 +68,7 @@ public class Startup extends Screen {
 
             ui.loadingIcon(WIDTH/2, HEIGHT*0.8);
             
-            // TODO: add loading notes, including "caching CPU canvas"
+            // TODO: add loading notes
         }
         // Logo fade out as the screen moves away.
         else {

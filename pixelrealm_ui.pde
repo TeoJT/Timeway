@@ -1048,6 +1048,14 @@ public class PixelRealmWithUI extends PixelRealm {
         }
       }
       
+      public void reset() {
+        for (int i = 0; i < grid.length; i++) {
+          if (grid[i] != null && !grid[i].isWeird) {
+            grid[i] = null;
+          }
+        }
+      }
+      
       public void insert(ArrayList<PocketItem> arr) {
         for (int i = 0; i < arr.size(); i++) {
           grid[i] = arr.get(i);
@@ -1207,7 +1215,7 @@ public class PixelRealmWithUI extends PixelRealm {
                     hoverLabelColor = color(255);
                   }
                   
-                  // TODO: Duplicate highlight color red and add "(duplicate)" when i fix that thing.
+                  // TODO: Duplicate highlight color red and add "(duplicate)" when i fix that thing.refresh();
                 }
                 
                 // Highlight item
@@ -1307,6 +1315,34 @@ public class PixelRealmWithUI extends PixelRealm {
     final int GROUND_TEXTURE_SLOT = 42;
     final int MUSIC_SLOT = 60;
     final int PLUGIN_SLOT = 96;
+    
+    public void refresh() {
+      console.log("Refresh");
+      // Save first
+      app.saveJSONObject(pocketInfo, engine.APPPATH+engine.POCKET_PATH+POCKET_INFO);
+      
+      try {
+        // Reload first!
+        currRealm.loadHotbar();
+        pocketInfo = openPocketsFile();
+        
+        
+        // Pocket
+        pocketsGrid.reset();
+        pocketsGrid.load(1);
+        
+        // Hotbar
+        hotbarGrid.reset();
+        hotbarGrid.insert(hotbar);
+        
+        // Realm
+        realmGrid.reset();
+        loadRealmGrid();
+      }
+      catch (PocketPanicException e) {
+        handlePocketPanic(e);
+      }
+    }
     
     public PocketMenu() {
       super();
@@ -1489,6 +1525,8 @@ public class PixelRealmWithUI extends PixelRealm {
       
       // This one is complex, because here we're actually moving an item out of the pockets.
       Runnable rrealmgrid = new Runnable() {public void run() {
+        boolean isSwap = false; // For properly calling refresh() when slot check fails during file swap.
+        if (itemToSwap != null) isSwap = true;
         itemToSwap = null;
         
         // Perform initial slot check first
@@ -1550,10 +1588,9 @@ public class PixelRealmWithUI extends PixelRealm {
                 // We'll get the prompt automatically from checkRealmFileSlot.
                 if (rename2 == null) {
                   returnDraggingItemToOriginalCell();
+                  refresh();
                   return;
                 }
-                
-                // TODO: If an error happens at any stage, refresh the files (and possibly move to the "Items in folder" tab.)
                 
                 // Rename to Placeholder name (renaming file 1)
                 String dir = file.directorify(currRealm.stateDirectory);
@@ -1561,6 +1598,7 @@ public class PixelRealmWithUI extends PixelRealm {
                 if (!file.mv(file1.getPath(), placeholderName)) {
                   returnDraggingItemToOriginalCell();
                   prompt("There was an error while swapping the items.");
+                  refresh();
                   return;
                 }
                 
@@ -1568,6 +1606,7 @@ public class PixelRealmWithUI extends PixelRealm {
                 if (!file.mv(file2.getPath(), dir+rename2)) {
                   returnDraggingItemToOriginalCell();
                   prompt("There was an error while swapping the items.");
+                  refresh();
                   return;
                 }
                 
@@ -1575,6 +1614,7 @@ public class PixelRealmWithUI extends PixelRealm {
                 if (!file.mv(placeholderName, dir+rename1)) {
                   returnDraggingItemToOriginalCell();
                   prompt("There was an error while swapping the items.");
+                  refresh();
                   return;
                 }
                 
@@ -1605,17 +1645,28 @@ public class PixelRealmWithUI extends PixelRealm {
               // will be in a different slot in the pockets and all our items will be displayed correctly (without cells overlapping)
               // at the very least.
               returnDraggingItemToOriginalCell();
-              // TODO: implement refresh functionality.
+              refresh();
             }
           }
         }
         else { // If realm asset slot check fails.
           returnDraggingItemToOriginalCell();
+          if (isSwap) {
+            refresh();
+          }
         }
         
       }};
       realmGrid.setMoveInAction(rrealmgrid);
       
+      loadRealmGrid();
+      
+      // Shouldn't need originalGridLocation but this is just to prevent a crash should there be a bug.
+      originalGridLocation = pocketsGrid;
+    }
+    
+    
+    private void loadRealmGrid() {
       
       // Setup the realm grid with existing items already in the pixelrealm.
       
@@ -1649,9 +1700,6 @@ public class PixelRealmWithUI extends PixelRealm {
       realmGrid.grid[MUSIC_SLOT] = createRealmAssetPocketItem(".pixelrealm-bgm", 1); // the 1 argument means it's a music file instead of a texture.
       
       // Annnnnd I'll do plugins later.
-      
-      // Shouldn't need originalGridLocation but this is just to prevent a crash should there be a bug.
-      originalGridLocation = pocketsGrid;
     }
     
     // Rename the file if a duplicate exists in the pocket.
@@ -1876,26 +1924,6 @@ public class PixelRealmWithUI extends PixelRealm {
         //currGrid.grid[itemIndex] = null;   // Not needed but it's good to have the mindset that this cell should really be empty.
                                            // Don't worry, it's stored in itemToSwap.
         
-        // TODO: If all works well, delete commented area.
-        
-        // Swap places (move item to original cell)
-        //originalGridLocation.grid[originalCellLocation] = currGrid.grid[itemIndex];
-        
-        //int swapColl = -1;
-        //if (originalGridLocation == hotbarGrid) {
-        //  swapColl = HOTBAR;
-        //}
-        //else if (originalGridLocation == pocketsGrid) {
-        //  swapColl = POCKET;
-        //}
-        
-        //if (swapColl == -1) return;
-        
-        //// Save info (collection and the index)
-        //JSONObject o = new JSONObject();
-        //o.setInt("coll", swapColl);   // 1: pockets, 2: hotbar
-        //if (swapColl == 1) o.setInt("loc", originalCellLocation);
-        //pocketInfo.setJSONObject(originalGridLocation.grid[originalCellLocation].name, o);
       }
     }
     
@@ -2003,6 +2031,15 @@ public class PixelRealmWithUI extends PixelRealm {
         }
       }
       
+      // Debug only pretty much (though would be neat to find a little corner for it at some point)
+      //if (!promptShown()) {
+      //  if (ui.buttonVary("pocket_refresh", "swap_256", "Refresh")) {
+      //    sound.playSound("menu_select");
+      //    refresh();
+      //  }
+      //}
+      
+      
       // Hide menu when pocket menu button pressed.
       // The keydelay thing is just so that the menu doesn't immediately disappear on the same frame as it appearing when pressing
       // 'i' to make it appear.
@@ -2062,9 +2099,6 @@ public class PixelRealmWithUI extends PixelRealm {
     // When the menu closes, we need to save our pocket configuration and reload the hotbar.
     @Override
     public void close() {
-      // TODO: 
-      // - update pocketObjects.
-      // - update hotbar
       app.saveJSONObject(pocketInfo, engine.APPPATH+engine.POCKET_PATH+POCKET_INFO);
       currRealm.loadHotbar();
       if (switchToGrabberOnExit) {
@@ -2081,20 +2115,23 @@ public class PixelRealmWithUI extends PixelRealm {
       menu = new PocketMenu();
     }
     catch (PocketPanicException e) {
-      switch (e.getErr()) {
-        case PocketPanicException.ERR_TOO_FULL:
-        Runnable r = new Runnable() {
-          public void run() {
-            file.open(engine.APPPATH+engine.POCKET_PATH);
-          }
-        };
-        menu = new DialogMenu("Pocket load error", "back-newrealm", "Your pockets are too full and could not be loaded. Please remove some items from the pocket folder.", r);
-        break;
-        case PocketPanicException.ERR_UNKNOWN:
-        prompt("Unknown error", "An unknown problem occured while trying to open the pockets. You may need to remove all files from the pocket folder.");
-        break;
-      }
-      
+      handlePocketPanic(e);
+    }
+  }
+  
+  private void handlePocketPanic(PocketPanicException e) {
+    switch (e.getErr()) {
+      case PocketPanicException.ERR_TOO_FULL:
+      Runnable r = new Runnable() {
+        public void run() {
+          file.open(engine.APPPATH+engine.POCKET_PATH);
+        }
+      };
+      menu = new DialogMenu("Pocket load error", "back-newrealm", "Your pockets are too full and could not be loaded. Please remove some items from the pocket folder.", r);
+      break;
+      case PocketPanicException.ERR_UNKNOWN:
+      prompt("Unknown error", "An unknown problem occured while trying to open the pockets. You may need to remove all files from the pocket folder.");
+      break;
     }
   }
   
