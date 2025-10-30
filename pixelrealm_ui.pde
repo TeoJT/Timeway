@@ -513,7 +513,7 @@ public class PixelRealmWithUI extends PixelRealm {
       // --- Pocket menu ---
       if (ui.buttonVary("pocket_menu", "new_entry_128", "Pockets")) {
         sound.playSound("menu_select");
-        menu = new PocketMenu();
+        openPocketMenu();
       }
       
       // Lighting menu
@@ -961,6 +961,23 @@ public class PixelRealmWithUI extends PixelRealm {
   
   
   
+    
+    
+  // Just our own exception class to get the heckk outta here when things go wrong while loading.
+  private class PocketPanicException extends RuntimeException {
+    public static final int ERR_UNKNOWN = 0;
+    public static final int ERR_TOO_FULL = 1;
+    private int err = 0;
+    public PocketPanicException(int err) {
+      super();
+      this.err = err;
+    }
+    
+    public int getErr() {
+      return err;
+    }
+  }
+  
   
   // Pocket menu tab plans:
   //  Hotbar
@@ -1005,6 +1022,8 @@ public class PixelRealmWithUI extends PixelRealm {
     // dummy pocketitems for some weird quirks for the grid
     private PocketItem blankCellDummy = new PocketItem("blank", true);
     
+    
+    
     private class Grid {
       private float scroll = 0;
       private Runnable moveInAction = null;
@@ -1041,10 +1060,12 @@ public class PixelRealmWithUI extends PixelRealm {
             return i;
           }
         }
-        // Hmmm... that could be a problem.
-        // We need some sort of unlimited size grid option.
-        return -1;
+        
+        // If we cannot find a free cell, time to raise the alarms.
+        // And by that, I mean open a prompt and tell the user to solve the problem themselves.
+        throw new PocketPanicException(PocketPanicException.ERR_TOO_FULL);
       }
+      
       
       public void insertIntoFreeCell(PocketItem pitem) {
         grid[findFreeCell()] = pitem;
@@ -1053,6 +1074,9 @@ public class PixelRealmWithUI extends PixelRealm {
       public void load(int coll) {
         file.mkdir(engine.APPPATH+engine.POCKET_PATH);
         
+        HashSet<Integer> takenCells = new HashSet<Integer>();
+        
+        // God I really need to move this functionality to the engine code.
         File[] pocketFolder = (new File(engine.APPPATH+engine.POCKET_PATH)).listFiles();
           for (File f : pocketFolder) {
             String path = f.getAbsolutePath().replaceAll("\\\\", "/");
@@ -1067,12 +1091,26 @@ public class PixelRealmWithUI extends PixelRealm {
                 int freeSpot = 0;
                 if (o.isNull("loc")) freeSpot = findFreeCell();
                 
-                grid[o.getInt("loc", freeSpot)] = currRealm.loadPocketItem(path);
+                // If an item has the same cell location as another item, it will simply override the previous item,
+                // making it appear as if it never existed in the dir (even tho it does exist in the pockets folder)
+                // so overlaps need to be dealt with.
+                // There are points in the program (especially with swapping files in the realms tab) where files might
+                // be moved to the same cells as other items because of nested moves and errors occuring, so this is
+                // pretty important when those errors occur.
+                int cell = o.getInt("loc", freeSpot);
+                if (takenCells.contains(cell)) { 
+                  // Space taken, find a random spot instead.
+                  cell = findFreeCell();
+                }
+                grid[cell] = currRealm.loadPocketItem(path);
+                takenCells.add(cell);
               }
             }
             // If not found in the JSON file and we're loading the pocket, find a slot in the inventory for it.
             else if (coll == 1) {
-              grid[findFreeCell()] = currRealm.loadPocketItem(path);
+              int cell = findFreeCell();
+              grid[cell] = currRealm.loadPocketItem(path);
+              takenCells.add(cell);
             }
         }
       }
@@ -1290,6 +1328,7 @@ public class PixelRealmWithUI extends PixelRealm {
           beginSwapIfOccupied();
           moveItemToNewCell(POCKET);
           
+          performSwap();
           return;
         }
         
@@ -1458,7 +1497,7 @@ public class PixelRealmWithUI extends PixelRealm {
         if (slotCheckRes != null) { // Non-null means success.
           
           // Now we need to know whether we're moving from pocket to realm grids
-          // or swapping 2 items in the realm grid.
+          // or moving an item in the realm grid (not moving it from the pocket grid)
           // Swapping 2 items in the realm grid comes with complications.
           
           // Swap 2 items in realm grid
@@ -1466,6 +1505,12 @@ public class PixelRealmWithUI extends PixelRealm {
             // Don't do anything if it's the same cell (click and then immediately release)
             if (originalCellLocation != itemIndex) {
               rpause();
+              
+              // There are 2 different ways we move it here:
+              // 1. Move to an empty slot in the realmGrid
+              // 2. Swap 2 items in realmGrid.
+              
+              // 1. Move to empty slot
               if (currGrid.grid[itemIndex] == null) {
                 // Move the file (that's right, we're directly moving it)
                 boolean success = file.mv(draggingItem.getPath(), file.directorify(currRealm.stateDirectory)+slotCheckRes);
@@ -1480,9 +1525,67 @@ public class PixelRealmWithUI extends PixelRealm {
                   prompt("Move failed.");
                 }
               }
+              
+              // 2. Swap items.
+              // Complicated, because we can't just swap filenames.
+              // We have to go:
+              // .pixelrealm-tree-1.png .pixelrealm-tree-2.png         Start
+              // temp (1).png .pixelrealm-tree-2.png                   Placeholder name
+              // temp (1).png .pixelrealm-tree-1                       Rename the second
+              // .pixelrealm-tree-2 .pixelrealm-tree-1                 Rename the file with the placeholder name (first file)
+              // Done!
+              
+              // If you think the placeholdername is overly complicated (i.e. why don't we just rename it to something like ".pixelrealm-tree-2.temp"??),
+              // the reason is because if the move fails, then we'll need to undo our actions (which results in messy overly complex code), and if that fails,
+              // we'll need to undo the undoing, etc. Too messy, too complicated.
+              // So, should it fail, naming it to temp (1).png will keep the file visible, and will give the user the chance to fix the problem, without
+              // worrying about hidden files and such.
               else {
-                returnDraggingItemToOriginalCell();
-                prompt("Swapping not yet implemented!");
+                PocketItem file1 = draggingItem;
+                PocketItem file2 = currGrid.grid[itemIndex];
+                String rename1 = slotCheckRes;
+                String rename2 = checkRealmFileSlot(file2, originalCellLocation);
+                
+                // Of course we need to check second item is going into valid swap space.
+                // We'll get the prompt automatically from checkRealmFileSlot.
+                if (rename2 == null) {
+                  returnDraggingItemToOriginalCell();
+                  return;
+                }
+                
+                // TODO: If an error happens at any stage, refresh the files (and possibly move to the "Items in folder" tab.)
+                
+                // Rename to Placeholder name (renaming file 1)
+                String dir = file.directorify(currRealm.stateDirectory);
+                String placeholderName = file.duplicateCheck(dir+"Temp"+file.getExt(file1.name));
+                if (!file.mv(file1.getPath(), placeholderName)) {
+                  returnDraggingItemToOriginalCell();
+                  prompt("There was an error while swapping the items.");
+                  return;
+                }
+                
+                // Rename the second
+                if (!file.mv(file2.getPath(), dir+rename2)) {
+                  returnDraggingItemToOriginalCell();
+                  prompt("There was an error while swapping the items.");
+                  return;
+                }
+                
+                //Rename the file with the placeholder name (first file)
+                if (!file.mv(placeholderName, dir+rename1)) {
+                  returnDraggingItemToOriginalCell();
+                  prompt("There was an error while swapping the items.");
+                  return;
+                }
+                
+                file1.updatePath(dir+rename1);
+                file2.updatePath(dir+rename2);
+                
+                originalGridLocation.grid[originalCellLocation] = file2;
+                moveItemToNewCell(REALM);
+                
+                // Refresh dir
+                currRealm.loadRealmAssets();
               }
             }
           }
@@ -1553,6 +1656,8 @@ public class PixelRealmWithUI extends PixelRealm {
     
     // Rename the file if a duplicate exists in the pocket.
     // If for example Sky-2.png already exists, rename it to Sky-2 (1).png, or Sky-2 (2).png etc.
+    // Also yes I added it to the file module in the engine code but I wanna keep this one here
+    // cus I don't wanna break things and can't be bothered to remove duplicate code.
     private String duplicateCheck(String original) {
       String filename = file.getIsolatedFilename(original);
       String ext = file.getExt(original);
@@ -1628,57 +1733,61 @@ public class PixelRealmWithUI extends PixelRealm {
       return createRealmAssetPocketItem(filenameWithoutExt, 0);
     }
     
-    // Returns null if check failed, returns new name when check succeeds.
     private String checkRealmFileSlot() {
-      String ext = file.getExt(draggingItem.name);
+      return checkRealmFileSlot(draggingItem, itemIndex);
+    }
+    
+    // Returns null if check failed, returns new name when check succeeds.
+    private String checkRealmFileSlot(PocketItem itemToCheck, int index) {
+      String ext = file.getExt(itemToCheck.name);
       String newName = "";
       
       // First, check if the moving file type is the correct type for the slot.
-      if (itemIndex >= SKY_TEXTURE_SLOT && itemIndex < SKY_TEXTURE_SLOT+9) {
+      if (index >= SKY_TEXTURE_SLOT && index < SKY_TEXTURE_SLOT+9) {
         // This file must be an image type
         // Additionally, perform an additional check to see if it's 1500 pixels wide.
-        if (!file.isImage(draggingItem.name)) {
+        if (!file.isImage(itemToCheck.name)) {
           prompt("Only image file types can go into this slot.");
           return null;
         }
         
-        newName = ".pixelrealm-sky-"+str(itemIndex-SKY_TEXTURE_SLOT+1)+"."+ext;
+        newName = ".pixelrealm-sky-"+str(index-SKY_TEXTURE_SLOT+1)+"."+ext;
       }
-      else if (itemIndex >= TREE_TEXTURE_SLOT && itemIndex < TREE_TEXTURE_SLOT+9) {
+      else if (index >= TREE_TEXTURE_SLOT && index < TREE_TEXTURE_SLOT+9) {
         // This file must be an image type
         // Additionally perform check to enxure image is not too big (but it's ok if it's tall).
-        if (!file.isImage(draggingItem.name)) {
+        if (!file.isImage(itemToCheck.name)) {
           prompt("Only image file types can go into this slot.");
           return null;
         }
         
-        newName = ".pixelrealm-tree-"+str(itemIndex-TREE_TEXTURE_SLOT+1)+"."+ext;
+        newName = ".pixelrealm-tree-"+str(index-TREE_TEXTURE_SLOT+1)+"."+ext;
       }
-      else if (itemIndex == GROUND_TEXTURE_SLOT) {
+      else if (index == GROUND_TEXTURE_SLOT) {
         // This file must be an image type
-        if (!file.isImage(draggingItem.name)) {
+        if (!file.isImage(itemToCheck.name)) {
           prompt("Only image file types can go into this slot.");
           return null;
         }
         
         newName = ".pixelrealm-grass."+ext;
       }
-      else if (itemIndex == MUSIC_SLOT) {
+      else if (index == MUSIC_SLOT) {
         // This file must be a music type
         // Additionally, perform an additional check to see if it's 1500 pixels wide.
-        if (!file.isAudioFile(draggingItem.name)) {
+        if (!file.isAudioFile(itemToCheck.name)) {
           prompt("Only audio file types can go into this slot.");
           return null;
         }
         
         newName = ".pixelrealm-bgm."+ext;
       }
-      else if (itemIndex == PLUGIN_SLOT) {
+      else if (index == PLUGIN_SLOT) {
           prompt("Not supported yet, sorry!");
           return null;
       }
       else {
-        console.bugWarn("moveIntoRealmFileSlot: Unknown cell "+itemIndex);
+        console.bugWarn("moveIntoRealmFileSlot: Unknown cell "+index);
         return null;
       }
       
@@ -1917,7 +2026,7 @@ public class PixelRealmWithUI extends PixelRealm {
         
         float wi = app.textWidth(hoverLabel)+20f;
         float hi = 34f;
-        float x  = input.mouseX();
+        float x  = max(min(input.mouseX(), WIDTH-wi), 0f);
         float y  = input.mouseY()-hi;
         
         app.rect(x-10f, y-6f, wi, hi);
@@ -1965,6 +2074,29 @@ public class PixelRealmWithUI extends PixelRealm {
   }
   
   
+  
+  
+  private void openPocketMenu() {
+    try {
+      menu = new PocketMenu();
+    }
+    catch (PocketPanicException e) {
+      switch (e.getErr()) {
+        case PocketPanicException.ERR_TOO_FULL:
+        Runnable r = new Runnable() {
+          public void run() {
+            file.open(engine.APPPATH+engine.POCKET_PATH);
+          }
+        };
+        menu = new DialogMenu("Pocket load error", "back-newrealm", "Your pockets are too full and could not be loaded. Please remove some items from the pocket folder.", r);
+        break;
+        case PocketPanicException.ERR_UNKNOWN:
+        prompt("Unknown error", "An unknown problem occured while trying to open the pockets. You may need to remove all files from the pocket folder.");
+        break;
+      }
+      
+    }
+  }
   
   
   
@@ -2916,7 +3048,7 @@ public class PixelRealmWithUI extends PixelRealm {
       if (!engine.commandPromptShown && !menuShown && input.keyActionOnce("open_pocket", 'i')) {
         sound.playSound("menu_select");
         menuShown = true;
-        menu = new PocketMenu();
+        openPocketMenu();
       }
     
     engine.inputPromptShown = tmp;

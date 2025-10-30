@@ -4442,6 +4442,22 @@ public class TWEngine {
       if (name.charAt(0) == '.') name = name.substring(1);
       return dir+name;
     }
+    
+    // Returns full path with renamed if duplicate (e.g. duplicate (1).png, duplicate (2).png etc)
+    public String duplicateCheck(String path) {
+      String dir = file.directorify(getDir(path));
+      String filename = getIsolatedFilename(path);
+      String ext = getExt(path);
+      
+      String newpath = path;
+      int i = 1;
+      while (exists(newpath)) {
+        newpath = dir+filename+" ("+i+")."+ext;
+        i++;
+      }
+      
+      return newpath;
+    }
   
     // Opens the dir and populates the currentFiles list.
     public void openDir(String dirName) {

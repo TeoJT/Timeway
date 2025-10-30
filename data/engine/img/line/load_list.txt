@@ -1,5 +1,0 @@
-engine/img/line/line_1.png
-engine/img/line/line_2.png
-engine/img/line/line_3.png
-engine/img/line/line_4.png
-engine/img/line/line_5.png

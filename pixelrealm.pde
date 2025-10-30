@@ -2274,6 +2274,12 @@ public class PixelRealm extends Screen {
         return j;
       }
       
+      public void updateTexture() {
+        pshapeChunk.beginShape(QUAD);
+        pshapeChunk.texture(img_grass.get());
+        pshapeChunk.endShape(QUAD);
+      }
+      
       boolean blink = true;
       public void renderChunk() {
         // In modifyTerrain mode, terrain is re-generated every frame (slow but dynamic, used for previewing custom terrain)
@@ -2281,9 +2287,6 @@ public class PixelRealm extends Screen {
         if (!modifyTerrain) {
           try {
             
-          //pshapeChunk.beginShape(QUAD);
-          //pshapeChunk.texture(img_grass.get());
-          //pshapeChunk.endShape(QUAD);
           
             scene.shape(pshapeChunk);
           }
@@ -5314,7 +5317,6 @@ public class PixelRealm extends Screen {
       treeGLElements = new GLQuadElement[9];
       
       
-      
       // Classic backwards compatibility for old realms
       // that had a field as the default realm.
       if (version.equals("1.0")) {
@@ -5328,6 +5330,10 @@ public class PixelRealm extends Screen {
       String ppath = dir+REALM_GRASS;
       
       img_grass = new RealmTextureUV((PImage)getRealmFile(DEFAULT_GRASS, ppath+".png", ppath+".jpg", ppath+".bmp"));
+      
+      // If chunks already exist we need to update the textures on every chunk.
+      // Kinda dumb but maybe I can expose Processing functionality later on so that we don't need this.
+      if (chunks != null) updateTerrainTexture();
       
       /// here we search for the terrain objects textures from the dir.
       ArrayList<PImage> imgs = new ArrayList<PImage>();
@@ -6472,6 +6478,12 @@ public class PixelRealm extends Screen {
         if (unifiedShader != null && pgl != null) unifiedShader.consumeUniforms();
         
         currShaderMode = MODE_STANDARD;
+      }
+    }
+    
+    public void updateTerrainTexture() {
+      for (TerrainChunkV2 ch : chunks.values()) {
+        ch.updateTexture();
       }
     }
     
