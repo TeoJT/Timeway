@@ -6755,7 +6755,7 @@ public class PixelRealm extends Screen {
         // If we get past this point we gutch!!
         pitem.updatePath(newpath);
         pitem.name = file.getFilename(newpath);
-        
+        pitem.syncd = false; // No longer in our inventory, therefore not synced.
       }
       return true;
     }

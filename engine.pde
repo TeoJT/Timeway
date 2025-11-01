@@ -3971,7 +3971,6 @@ public class TWEngine {
             while ((length = fis.read(buffer)) > 0) {
                 fos.write(buffer, 0, length);
             }
-            System.out.println("File copied successfully.");
             
             fis.close();
             fos.close();
@@ -3999,7 +3998,7 @@ public class TWEngine {
           }
         }
         catch (IOException e) {
-          console.warn(e.getMessage());
+          console.warn("Copy failed: "+e.getMessage());
           return false;
         }
       }
@@ -4260,6 +4259,31 @@ public class TWEngine {
     public int fileSize(String path) {
       File f = new File(path);
       return isAndroid() ? 10000 : (int)f.length();
+    }
+    
+    public String duplicateFile(String path) {
+      return duplicateFile(path, path);
+    }
+    
+    public String duplicateFile(String path, String newPath) {
+      String ext = "";
+      String filename = getFilename(newPath);
+      if (filename.contains(".")) ext = "."+getExt(filename);
+      
+      String name = getIsolatedFilename(filename);
+      String dir = directorify(getDir(newPath));
+      String copyPath = dir+name+" - copy";
+      while (exists(copyPath+ext)) {
+        copyPath += " - copy";
+      }
+      copyPath += ext;
+      
+      if (copy(path, copyPath)) {
+        return copyPath;
+      }
+      else {
+        return null;
+      }
     }
     
     public boolean isImage(String path) {
@@ -4748,7 +4772,9 @@ public class TWEngine {
             int[] dimensions = { width, height };
             return dimensions;
         } else {
-            throw new IOException("Not a valid PNG image");
+          // Not a valid PNG
+          int[] someValue = {0, 0};
+          return someValue;
         }
     }
 
@@ -4775,6 +4801,7 @@ public class TWEngine {
     
     public int getPNGUncompressedSize(String path) {
       try {
+        
         int[] widthheight = getPNGImageDimensions(path);
         int wi = widthheight[0];
         int hi = widthheight[1];
@@ -4824,7 +4851,9 @@ public class TWEngine {
                 }
             } else {
               stream.close();
-                throw new IOException("Not a valid JPEG image");
+              // Not a valid JPEG
+              int[] someValue = {0, 0};
+              return someValue;
             }
     }
 
@@ -7680,6 +7709,7 @@ public class TWEngine {
     // Solid- User must click down then release without moving mouse for this to come true for one frame.
     
     
+    // TODO: add primaryOnceDelayed and etc
     // Mouse & keyboard
     public boolean primaryOnce = false;
     public boolean secondaryOnce = false;

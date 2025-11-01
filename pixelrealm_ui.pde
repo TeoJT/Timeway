@@ -18,8 +18,13 @@ public class PixelRealmWithUI extends PixelRealm {
   private SpriteSystem gui = null;
   private Menu menu = null;
   private boolean touchControlsEnabled = false;
+  
+  // We have this outside the pocket class because it's nice for it to remember which tab we're on.
+  private int selectedPocketTab = 0;
 
-
+  
+  // Dear god I really need to re-do this entire tutorial at some point.
+  
   private String[] dm_welcome = {
     "Welcome to "+engine.getAppName()+".",
     "Your folders are your realms.",
@@ -511,12 +516,11 @@ public class PixelRealmWithUI extends PixelRealm {
       }
 
       // --- Pocket menu ---
-      if (ui.buttonVary("pocket_menu", "new_entry_128", "Pockets")) {
+      if (ui.buttonVary("pocket_menu", "pockets_128", "Pockets")) {
         sound.playSound("menu_select");
         openPocketMenu();
       }
       
-      // Lighting menu
       
       // --- Command menu (for phone) ---
       if (display.phoneMode) {
@@ -757,31 +761,26 @@ public class PixelRealmWithUI extends PixelRealm {
         renamePrompt(probject);
         //closeMenu();
       }
-      if (ui.buttonVary("op-duplicate", "copy_256", "Duplicate")) {
+      if (ui.buttonVary("op-duplicate", "copy_256", "Copy")) {
         sound.playSound("menu_select");
         
-        String ext = "";
-        if (probject.filename.contains(".")) ext = "."+file.getExt(probject.filename);
         
-        String dir = file.directorify(file.getDir(probject.dir));
-        String name = file.getIsolatedFilename(probject.filename);
-        String copyPath = dir+name+" - copy";
-        while (file.exists(copyPath+ext)) {
-          copyPath += " - copy";
-        }
-        copyPath += ext;
         
         // TODO: Files may take a while to copy. Run this in a separate thread.
         issueRefresherCommand(REFRESHER_PAUSE);
-        if (file.copy(probject.dir, copyPath)) {
+        
+        String copypath = file.duplicateFile(probject.dir);
+        if (copypath != null) {
           console.log("Duplicated "+probject.filename+".");
-
-          currRealm.createPRObjectAndPickup(copyPath);
+  
+          currRealm.createPRObjectAndPickup(copypath);
           currentTool = TOOL_GRABBER;
         }
         else {
           console.warn("Failed to duplicate file.");
         }
+        
+        
         
         closeMenu();
       }
@@ -987,6 +986,8 @@ public class PixelRealmWithUI extends PixelRealm {
   // REMINDER NOTES THAT I REALLY HOPE YOU'LL SEE:
   // - When removing items, remember- 
   // pitem.item.destroy(); (the override method will remove it from the files list)
+  
+  // TODO: There is a bug where hotbar is cleared after closing menu.
 
   class PocketMenu extends Menu {
     
@@ -1004,8 +1005,8 @@ public class PixelRealmWithUI extends PixelRealm {
     // which is kinda overly complicated since we need to know which grid and square ID we moved from.
     private Grid originalGridLocation = null;
     private int originalCellLocation = 0;
-    
     protected int itemIndex = 0;
+    private boolean stickItemToMouse = false;
     protected Grid currGrid = null;
     private String promptMessage = null; // When this is null, prompt is hidden
     
@@ -1017,7 +1018,6 @@ public class PixelRealmWithUI extends PixelRealm {
     private boolean switchToGrabberOnExit = false;
     private boolean rpauseOnce = true;
     
-    private int selectedTab = 0;
     
     // dummy pocketitems for some weird quirks for the grid
     private PocketItem blankCellDummy = new PocketItem("blank", true);
@@ -1027,6 +1027,7 @@ public class PixelRealmWithUI extends PixelRealm {
     private class Grid {
       private float scroll = 0;
       private Runnable moveInAction = null;
+      private Runnable shiftMoveToAction = null;
       
       // Set this if you want a lil space between your rows.
       public float verticalSpacing = 0f;
@@ -1040,6 +1041,9 @@ public class PixelRealmWithUI extends PixelRealm {
       // Runnable to execute when an item is placed into a cell in the grid.
       public void setMoveInAction(Runnable r) {
         moveInAction = r;
+      }
+      public void setShiftMoveToAction(Runnable r) {
+        shiftMoveToAction = r;
       }
       
       public void runMoveInAction() {
@@ -1156,7 +1160,6 @@ public class PixelRealmWithUI extends PixelRealm {
         
         // Limit viewspace of grid
         display.clip(gridx, gridy, squarewihi*SLOTS_WI+5f, hii);
-        
         // Now draw each square
         for (int y = 0; y < ly; y++) {
           float actualy = gridy + y * (squarewihi + verticalSpacing) + scroll+2f;
@@ -1227,11 +1230,21 @@ public class PixelRealmWithUI extends PixelRealm {
                 //  console.log(i);
                 //}
                 
+                
                 // Pick up item when clicked & held
-                if (input.primaryOnce && grid[i] != null) {
-                  // If double-clicked, open file
+                if (input.primaryOnce && grid[i] != null && !stickItemToMouse) {
                   
-                  if (doubleClickTimer > 0f && pitem != null && pitem.item != null && pitem.item instanceof PixelRealmState.FileObject) {
+                  // If shift pressed, run special move action.
+                  if (input.shiftDown) {
+                    console.log("Shift-click action");
+                    draggingItem = grid[i];
+                    originalGridLocation = this;
+                    originalCellLocation = i;
+                    grid[i] = null;
+                    if (shiftMoveToAction != null) shiftMoveToAction.run();
+                  }
+                  // If double-clicked, open file
+                  else if (doubleClickTimer > 0f && pitem != null && pitem.item != null && pitem.item instanceof PixelRealmState.FileObject) {
                     // TODO: This is an awful solution.
                     if (pitem.item instanceof PixelRealmState.MusicFileObject) {
                       playCassette(((PixelRealmState.FileObject)pitem.item).dir);
@@ -1245,27 +1258,37 @@ public class PixelRealmWithUI extends PixelRealm {
                     draggingItem = grid[i];
                     originalGridLocation = this;
                     originalCellLocation = i;
-                    grid[i] = null;
                     doubleClickTimer = 15f;
+                    grid[i] = null;
                   }
                 }
                 
                 
                 // Show options when right-clicked.
                 if (input.secondaryOnce && grid[i] != null && pitem != null) {
-                  String[] labels = new String[1];
-                  Runnable[] actions = new Runnable[1];
+                  String[] labels = new String[2];
+                  Runnable[] actions = new Runnable[2];
                   
-                  //labels[0] = "Duplicate";
-                  //actions[0] = new Runnable() {public void run() {
-                  //    //String newname = duplicateCheck(pitem.name);
+                  labels[0] = "Copy";
+                  actions[0] = new Runnable() {public void run() {
+                      rpause();
                       
+                      String name = file.getFilename(pitem.getPath());
+                      String copypath = file.duplicateFile(pitem.getPath(), engine.APPPATH+engine.POCKET_PATH+renamePixelrealmFile(name));
+                      if (copypath != null) {
+                        console.log("Duplicated "+pitem.name+".");
+                        draggingItem = currRealm.loadPocketItem(copypath);
+                        stickItemToMouse = true;
+                      }
+                      else {
+                        console.warn("Failed to duplicate file.");
+                      }
                       
-                  //}};
+                  }};
                   final int index = i;
                   
-                  labels[0] = "Delete";
-                  actions[0] = new Runnable() {public void run() {
+                  labels[1] = "Delete";
+                  actions[1] = new Runnable() {public void run() {
                       rpause();
                       boolean success = file.recycle(pitem.getPath());
                       
@@ -1273,6 +1296,7 @@ public class PixelRealmWithUI extends PixelRealm {
                         console.warn("Could not recycle "+pitem.name);
                       }
                       else {
+                        console.log(pitem.name+" moved to recycle bin.");
                         grid[index] = null;
                       }
                       
@@ -1283,14 +1307,24 @@ public class PixelRealmWithUI extends PixelRealm {
                   ui.createOptionsMenu(labels, actions);
                 }
                 
+                boolean drop = false;
+                
                 // Drop an item into a cell when mouse released.
                 // If the cell is blank, place the item there.
                 // If the cell has an existing item, swap it.
                 // However, there will be exceptions with different file types later on.
-                if (draggingItem != null && input.primaryReleased && !promptShown()) {
+                if (stickItemToMouse) {
+                  drop = (draggingItem != null && input.primaryOnce && !promptShown() && grid[i] == null);
+                }
+                else {
+                  drop = (draggingItem != null && input.primaryReleased && !promptShown());
+                }
+                
+                if (drop) {
                   itemIndex = i;
                   currGrid = this;
                   rpauseOnce = true;
+                  stickItemToMouse = false;
                   runMoveInAction();
                 }
               }
@@ -1317,7 +1351,6 @@ public class PixelRealmWithUI extends PixelRealm {
     final int PLUGIN_SLOT = 96;
     
     public void refresh() {
-      console.log("Refresh");
       // Save first
       app.saveJSONObject(pocketInfo, engine.APPPATH+engine.POCKET_PATH+POCKET_INFO);
       
@@ -1352,7 +1385,7 @@ public class PixelRealmWithUI extends PixelRealm {
       pocketInfo = openPocketsFile();
       
       // Initialise pocketsgrid
-      pocketsGrid = new Grid(300);
+      pocketsGrid = new Grid(288);
       
       Runnable rpockets = new Runnable() {public void run() {
         // Just to avoid the refresher twice when swapping.
@@ -1371,16 +1404,14 @@ public class PixelRealmWithUI extends PixelRealm {
         // if we're moving from the realm tab, we do an extra step:
         // rename the file. Simply changing pocketItem.name will do the trick (I hope)
         String moveName = draggingItem.name;
-        boolean moveMusic = false;
+        //boolean moveMusic = false;
         if (originalGridLocation == realmGrid) {
-          String ext = file.getExt(draggingItem.name);
+          moveName = renamePixelrealmFile(draggingItem.name);
+          moveName = duplicateCheck(moveName);
           
-          if (file.getIsolatedFilename(file.unhide(draggingItem.name)).equals("pixelrealm-sky")) moveName = "Sky-1."+ext;
-          if (file.getIsolatedFilename(file.unhide(draggingItem.name)).equals("pixelrealm-grass")) moveName = "Grass."+ext;
-          
-          if (file.getIsolatedFilename(file.unhide(draggingItem.name)).equals("pixelrealm-bgm")) {
-            moveName = "BGM."+ext;
-            // Release music handles while we're at it.
+          // Release music handles while we're at it.
+          if (moveName.contains("BGM")) {
+            //moveMusic = true;
             sound.stopMusic();
             if (currRealm.versionCompatibility == 1) {
               sound.streamMusic(engine.APPPATH+REALM_BGM_DEFAULT_LEGACY);
@@ -1388,16 +1419,7 @@ public class PixelRealmWithUI extends PixelRealm {
             else if (currRealm.versionCompatibility >= 2) {
               sound.streamMusic(engine.APPPATH+REALM_BGM_DEFAULT);
             }
-            moveMusic = true;
           }
-          
-          for (int i = 1; i <= 9; i++) {
-            if (file.getIsolatedFilename(file.unhide(draggingItem.name)).equals("pixelrealm-sky-"+i)) moveName = "Sky-"+i+"."+ext;
-            if (file.getIsolatedFilename(file.unhide(draggingItem.name)).equals("pixelrealm-tree-"+i)) moveName = "Tree-"+i+"."+ext;
-            if (file.getIsolatedFilename(file.unhide(draggingItem.name)).equals("pixelrealm-terrain_object-"+i)) moveName = "Tree-"+i+"."+ext;
-          }
-          
-          moveName = duplicateCheck(moveName);
         }
         
         
@@ -1405,8 +1427,7 @@ public class PixelRealmWithUI extends PixelRealm {
         // This will effectively move the item from the current realm to the pockets folder.
         rpause();
         
-        // If we mess around wtih pocketMove, we MUST set syncd to false otherwise it wont move at all.
-        draggingItem.syncd = false;
+        
         if (draggingItem.pocketMove(currRealm.stateDirectory, moveName)) {
           // Valid move operation...
           
@@ -1424,9 +1445,9 @@ public class PixelRealmWithUI extends PixelRealm {
             // Refresh
             currRealm.loadRealmAssets();
             
-            if (moveMusic) {
-              sound.streamMusicWithFade(currRealm.musicPath);
-            }
+            //if (moveMusic) {
+              //sound.streamMusicWithFade(currRealm.musicPath);
+            //}
             
             moveItemToNewCell(POCKET);
           }
@@ -1743,6 +1764,24 @@ public class PixelRealmWithUI extends PixelRealm {
     }
     
     
+    private String renamePixelrealmFile(String name) {
+      String moveName = name;
+      String ext = file.getExt(name);
+      if (file.getIsolatedFilename(file.unhide(name)).equals("pixelrealm-sky")) moveName = "Sky-1."+ext;
+      if (file.getIsolatedFilename(file.unhide(name)).equals("pixelrealm-grass")) moveName = "Grass."+ext;
+      
+      if (file.getIsolatedFilename(file.unhide(name)).equals("pixelrealm-bgm")) moveName = "BGM."+ext;
+      
+      for (int i = 1; i <= 9; i++) {
+        if (file.getIsolatedFilename(file.unhide(name)).equals("pixelrealm-sky-"+i)) moveName = "Sky-"+i+"."+ext;
+        if (file.getIsolatedFilename(file.unhide(name)).equals("pixelrealm-tree-"+i)) moveName = "Tree-"+i+"."+ext;
+        if (file.getIsolatedFilename(file.unhide(name)).equals("pixelrealm-terrain_object-"+i)) moveName = "Tree-"+i+"."+ext;
+      }
+      
+      return moveName;
+    }
+    
+    
     // Type: [0 = image] [1 = music] [2 = plugin file]
     private PocketItem createRealmAssetPocketItem(String filenameWithoutExt, int type) {
       String pathwithoutext = currRealm.stateDirectory+filenameWithoutExt;
@@ -1936,7 +1975,7 @@ public class PixelRealmWithUI extends PixelRealm {
       return promptMessage != null;
     }
     
-    private final String[] tabTitles = { "Hotbar", "Realm", "Folder files" };
+    private final String[] tabTitles = { "Hotbar", "Realm" };
 
     public void display() {
       // Background
@@ -1956,7 +1995,7 @@ public class PixelRealmWithUI extends PixelRealm {
       app.fill(255f);
       app.textFont(engine.DEFAULT_FONT, 40f);
       app.textAlign(LEFT, TOP);
-      app.text("Pocket", xxx+80f, yyy+20f);
+      app.text("Pocket", xxx+80f, yyy+5f);
       
       // Pockets grid
       pocketsGrid.display(xxx, yyy+60f, getWidth(), hii);
@@ -1976,14 +2015,14 @@ public class PixelRealmWithUI extends PixelRealm {
         app.strokeWeight(1);
         
         // Purple highlight if selected
-        if (i == selectedTab) {
+        if (i == selectedPocketTab) {
           app.fill(160*0.75f, 140*0.75f, 200*0.75f);
         }
         // Brighter highlight if hovering (click to select tab)
         else if (ui.mouseInArea(xxx+(i*200f), yyy-BAR_TAB_HEIGHT, 200f, BAR_TAB_HEIGHT-1f) && promptMessage == null) {
           app.fill(55f);
           if (input.primaryOnce) {
-            selectedTab = i;
+            selectedPocketTab = i;
           }
         }
         // Default grey
@@ -1994,13 +2033,13 @@ public class PixelRealmWithUI extends PixelRealm {
         // Draw tab and text.
         app.rect(xxx+(i*200f), yyy-BAR_TAB_HEIGHT, 200f, BAR_TAB_HEIGHT);
         app.fill(255);
-        app.text(tabTitles[i], xxx+(i*200f)+10f, yyy-BAR_TAB_HEIGHT+5f);
+        app.text(tabTitles[i], xxx+(i*200f)+10f, yyy-BAR_TAB_HEIGHT+7f);
       }
       
       // Outer grid 
       // This can either be hotbar, realm assets, or folder files.
       // Hotbar grid.
-      switch (selectedTab) {
+      switch (selectedPocketTab) {
         case 0:
         hotbarGrid.display(xxx, yyy, getWidth(), hii);
         break;
@@ -2017,7 +2056,7 @@ public class PixelRealmWithUI extends PixelRealm {
         draggingItem.displayIcon(input.mouseX()-32f, input.mouseY()-32f, 64f);
         
         // Mouse released outside of a grid square (snap back to the originalSquare)
-        if (input.primaryReleased) {
+        if (input.primaryReleased && !stickItemToMouse) {
           returnDraggingItemToOriginalCell();
         }
       }
