@@ -1088,7 +1088,7 @@ public class Editor extends Screen {
         insertText("Button", engine.mouseX(), engine.mouseY()-20, TYPE_BUTTON);
       }};
       
-      ui.createOptionsMenu(labels, actions);
+      //ui.createOptionsMenu(labels, actions);
     }
     
     
@@ -1502,7 +1502,7 @@ public class Editor extends Screen {
             float hi = sprite.getHeight();
             
             if (ui.buttonImg("nothing", x, y, wi, hi)) {
-              sound.playSound("select_any");
+              sound.playSound("switch_interact");
               // Switch state and init switch animation.
               state = !state;
               animationInverted = 1f;
@@ -2378,7 +2378,7 @@ public class Editor extends Screen {
               else {
                   selectedFontSize += 2;
               }
-              sound.playSound("select_bigger");
+              sound.playSound("select_any");
           }
   
           //************SMALLER FONT************
@@ -2397,7 +2397,7 @@ public class Editor extends Screen {
               if (selectedFontSize < MIN_FONT_SIZE) {
                   selectedFontSize = MIN_FONT_SIZE;
               }
-              sound.playSound("select_smaller");
+              sound.playSound("select_any");
           }
   
           //************FONT SIZE************
@@ -2965,12 +2965,15 @@ public class Editor extends Screen {
         }
         
         
-        if (input.keyDownOnce(char(127))) {
-          if (editingPlaceable != null) {
-            placeableset.remove(editingPlaceable.id);
-            changesMade = true;
-          }
-        }
+        // I HATE THE DELETE KEY!!!!!!!!!!!!
+        // (I'll re-enable it when undoing is eventually added)
+        
+        //if (input.keyDownOnce(char(127))) {
+        //  if (editingPlaceable != null) {
+        //    placeableset.remove(editingPlaceable.id);
+        //    changesMade = true;
+        //  }
+        //}
         
         renderPlaceables();
 
@@ -3225,7 +3228,7 @@ public class ReadOnlyEditor extends Editor {
       // In fact I may call this with a TODO.
       // TODO: Please change this. A weak spot that makes the editor class non-modular.
       if (!(engine.getPrevScreen() instanceof PixelRealmWithUI)) {
-        sound.stopMusic();
+        //sound.stopMusic();
         previousScreen();
         //requestScreen(new Startup(engine));
       }
@@ -3543,7 +3546,7 @@ public class SettingsScreen extends ReadOnlyEditor {
     
     
     if (getButton("keybind_settings").clicked) {
-      sound.playSound("select_any");
+      sound.playSound("select_general");
       requestScreen(new KeybindSettingsScreen(engine));
     }
   }
@@ -3897,7 +3900,7 @@ public class KeybindSettingsScreen extends ReadOnlyEditor {
       app.text("Are you sure you want to reset to defaults?\nThis cannot be undone.", x+315f, y+50f);
       
       if (ui.buttonVary("keybindings_reset_yes", "tick_128", "Yes")) {
-        sound.playSound("select_any");
+        sound.playSound("select_general");
         resetPrompt = false;
         for (int i = 0; i < keybindings.length; i++) {
           settings.setKeybinding(keybindings[i], defaultBindings[i]);
@@ -3920,7 +3923,7 @@ public class KeybindSettingsScreen extends ReadOnlyEditor {
       }
       
       if (getButton("reset_button").clicked) {
-        sound.playSound("select_any");
+        sound.playSound("select_general");
         resetPrompt = true;
       }
     }

@@ -453,6 +453,8 @@ public class Explorer extends Screen {
 
 public class HomeScreen extends Screen {
     private SpriteSystem gui = null;
+    
+    private static final String INTRO_MUSIC_PATH = "/engine/music/timeway_theme.mp3";
 
     public HomeScreen(TWEngine engine) {
         super(engine);
@@ -462,6 +464,8 @@ public class HomeScreen extends Screen {
         
         gui = new SpriteSystem(engine, engine.APPPATH+engine.PATH_SPRITES_ATTRIB()+"gui/homescreen/");
         gui.interactable = false;
+        
+        sound.streamMusicWithFade(engine.APPPATH+INTRO_MUSIC_PATH);
     }
 
 
@@ -523,41 +527,47 @@ public class HomeScreen extends Screen {
         app.fill(255);
         app.text(TWEngine.VERSION, 10, HEIGHT-myLowerBarWeight-30);
         
-        boolean pixelrealmButton = ui.basicButton("Pixel Realm", display.WIDTH/2-400, (offY += 60), 800, 50) && buttonOnce;
-        boolean explorerButton = ui.basicButton("Explorer", display.WIDTH/2-400, (offY += 60), 800, 50) && buttonOnce;
-        boolean binButton = ui.basicButton("Recycle bin", display.WIDTH/2-400, (offY += 60), 800, 50) && buttonOnce;
-        boolean settingsButton = ui.basicButton("Settings", display.WIDTH/2-400, (offY += 60), 800, 50) && buttonOnce;
-        boolean creditsButton = ui.basicButton("Credits", display.WIDTH/2-400, (offY += 60), 800, 50) && buttonOnce;
+        boolean pixelrealmButton = ui.basicButton("Pixel Realm", display.WIDTH/2-400, (offY += 60), 800, 50); // && buttonOnce;
+        boolean explorerButton = ui.basicButton("Explorer", display.WIDTH/2-400, (offY += 60), 800, 50); // && buttonOnce;
+        boolean binButton = ui.basicButton("Recycle bin", display.WIDTH/2-400, (offY += 60), 800, 50); // && buttonOnce;
+        boolean settingsButton = ui.basicButton("Settings", display.WIDTH/2-400, (offY += 60), 800, 50); // && buttonOnce;
+        boolean creditsButton = ui.basicButton("Credits", display.WIDTH/2-400, (offY += 60), 800, 50); // && buttonOnce;
         
         
         if (pixelrealmButton) {
           PixelRealmWithUI pixelrealm = new PixelRealmWithUI(engine, engine.DEFAULT_DIR);
           requestScreen(pixelrealm);
           buttonOnce = false;
+          sound.playSound("select_general");
         }
         
         if (explorerButton) {
           requestScreen(new Explorer(engine));
           buttonOnce = false;
+          sound.playSound("select_general");
         }
         
         if (settingsButton) {
           requestScreen(new SettingsScreen(engine));
           buttonOnce = false;
+          sound.playSound("select_general");
         }
         
         if (creditsButton) {
           if (file.exists(engine.APPPATH+CreditsScreen.CREDITS_PATH)) {
             requestScreen(new CreditsScreen(engine));
             buttonOnce = false;
+            sound.playSound("select_general");
           }
           else {
             console.warn("Credits file is missing.");
+            sound.playSound("select_any");
           }
         }
         
         if (binButton) {
           requestScreen(new RecycleBinScreen(engine));
+          sound.playSound("select_general");
         }
         
         gui.updateSpriteSystem();
@@ -721,7 +731,7 @@ public class RecycleBinScreen extends Screen {
       app.text("For safety reasons, Timeway cannot permanently delete files in the recycle bin. If you wish to empty your recycling bin, please do so manually via your system's file explorer.\nClick here to open the recycle bin folder.",
       x, y, wi, hi);
       if (ui.mouseInArea(x, y, wi, hi) && input.primaryOnce) {
-        sound.playSound("select_any");
+        sound.playSound("select_general");
         file.open(engine.APPPATH+file.RECYCLE_BIN_PATH);
       }
     }
@@ -740,7 +750,7 @@ public class RecycleBinScreen extends Screen {
       updateMenu();
     }
     else {
-      console.log("Failed to restore \""+originalFilenames.get(itemToRestore)+"\".");
+      console.log("Failed to restore \""+originalFilenames.get(itemToRestore)+"\": "+file.getFileError());
     }
   }
   
@@ -815,7 +825,7 @@ public class RecycleBinScreen extends Screen {
           app.fill(160, 140, 200); 
           
           if (input.primarySolid) {
-            sound.playSound("select_any");
+            sound.playSound("select_general");
             prompt = true;
             scrolling = false;
             itemToRestore = i;
@@ -852,7 +862,7 @@ public class RecycleBinScreen extends Screen {
         app.text("Cannot restore \""+originalFilenames.get(itemToRestore)+"\" because a file already exists at \""+originalLocations.get(itemToRestore)+"\".", x, y+30f, wi, HEIGHT);
         
         if (ui.buttonVary("recyclebin_restore_ok", "cross_128", "Dismiss") || input.enterOnce) {
-          sound.playSound("select_any");
+          sound.playSound("select_general");
           prompt = false;
           itemExistsError = false;
           input.accidentalClickPrevention();
@@ -864,7 +874,7 @@ public class RecycleBinScreen extends Screen {
         gui.sprite("recyclebin_icontorestore", file.extIcon(originalExts.get(itemToRestore)));
         
         if (ui.buttonVary("recyclebin_restore_yes", "tick_128", "Yes") || input.enterOnce) {
-          sound.playSound("select_any");
+          sound.playSound("select_general");
           prompt = false;
           restore(itemToRestore);
           input.accidentalClickPrevention();

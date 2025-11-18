@@ -315,7 +315,7 @@ public class PixelRealm extends Screen {
     
     
     currRealm = new PixelRealmState(dir, startRealm);
-    sound.streamMusicWithFade(currRealm.musicPath);
+    streamMusicWithFade(currRealm.musicPath);
   }
   
   public PixelRealm(TWEngine engine) {
@@ -2691,17 +2691,14 @@ public class PixelRealm extends Screen {
             
             // Ram usage. When loading, we don't want to exceed the limit.
             // Depends on our RAM settings.
-            long maxRam = TWEngine.MAX_RAM_NORMAL;
-            if (engine.lowMemory) {
-              maxRam = TWEngine.MAX_RAM_LIMITED;
-            }
-            int maxRamKB = (int)(maxRam/1024L);
+            
             
             // Don't want garbage to cause an OutOfMemoryException.
             // So if we reach the max limit, stall and beg the garbage collector to free up some memory.
             // Only do it so many times before giving up.
+            int maxMemkb = engine.getMaxMemKB();
             int count = 0;
-            while (engine.getUsedMemKB() > maxRamKB) {
+            while (engine.getUsedMemKB() > maxMemkb) {
               count++;
               // Randomness since threads might give up at the same time and end up overloading the memory all at once.
               if (count > (int)random(10, 25)) {
@@ -2710,7 +2707,7 @@ public class PixelRealm extends Screen {
               }
               
               //console.log("Garbage collector beg "+maxRamKB+ " "+engine.getUsedMemKB());
-              println("beg");
+              //println("beg");
               System.gc();
               try {
                 Thread.sleep(100);
@@ -4575,19 +4572,37 @@ public class PixelRealm extends Screen {
     protected void loadHotbar() {
       // This function is designed to be used during runtime, not just startup.
       // Therefore clean previous pixelrealm objects.
+      // Also, I'm applying a bug fix here.
+      // If you call this function while you still have unsynced items in your hotbar,
+      // then these items are cleared from your hotbar as if you just suddenly dropped them.
+      // Very annoying.
+      // Keep items that are unsynced in the hotbar, because they're not in the pockets folder
+      // so there's no risk of loading them twice.
+      // Also, we're not creating a new list, we're removing all the old items from it. So we need
+      // to pull the whole "deleting while iterating through a list" 
       if (hotbar != null) {
+        ArrayList<PocketItem> deleteList = new ArrayList<PocketItem>();
         for (PocketItem pitem : hotbar) {
-          if (!pitem.abstractObject) {
+          // Remove synced items only since they'll reappear once they're loaded from pockets folder.
+          if (!pitem.abstractObject && pitem.syncd) {
+            deleteList.add(pitem);
             pitem.item.destroy();
           }
         }
+        
+        // Now delete all the items from hotbar
+        for (PocketItem pitem : deleteList) {
+          hotbar.remove(pitem);
+        }
+      }
+      else {
+        hotbar = new ArrayList<PocketItem>();
       }
       
       // Oh, and we need to load our pocket objects
       // First reset all our lists.
       pocketObjects = new HashSet<PRObject>();
       //pocketItemNames = new HashSet<String>();
-      hotbar = new ArrayList<PocketItem>();
       
       JSONObject entries = openPocketsFile();
       
@@ -5813,7 +5828,7 @@ public class PixelRealm extends Screen {
             
           }
           
-          if (input.keyActionOnce("inventory_select_left", ',') && holdingItemIndex > 0) {
+          if (input.keyActionOnce("inventory_select_left", ',') && holdingItemIndex > 0 && holdingItemIndex < hotbar.size()) {
             launchWhenPlaced = false;
             updateHoldingItem(holdingItemIndex-1);
             sound.playSound("pickup");
@@ -7485,7 +7500,7 @@ public class PixelRealm extends Screen {
     
     // Creating a new realm won't start the music automatically cus we like manual bug-free control.
     if (!cassettePlaying()) {
-      sound.streamMusicWithFade(currRealm.musicPath);
+      streamMusicWithFade(currRealm.musicPath);
     }
       
     // so that our currently holding item doesn't disappear when we go into the next realm.
@@ -7496,6 +7511,13 @@ public class PixelRealm extends Screen {
     indexer.startIndexingThread(to);
     
     System.gc();
+  }
+  
+  protected void streamMusicWithFade(String path) {
+    if (!cassettePlaying.equals("")) {
+      cassettePlaying = "";
+    }
+    sound.streamMusicWithFade(path);
   }
   
   protected JSONObject openPocketsFile() {
@@ -7537,7 +7559,7 @@ public class PixelRealm extends Screen {
     //cassettePlaying = "";
     
     if (!cassettePlaying()) {
-      sound.streamMusicWithFade(r.musicPath);
+      streamMusicWithFade(r.musicPath);
     }
     
     portalCoolDown = 10.;

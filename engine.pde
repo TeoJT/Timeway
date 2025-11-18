@@ -1750,7 +1750,8 @@ public class TWEngine {
         public MiniMenu() {
             power.setAwake();
             yappear = 1.;
-            sound.playSound("fade_in");
+            //sound.playSound("fade_in");
+            sound.playSound("multiple_choice");
         }
         
         public MiniMenu(float x, float y) {
@@ -1771,7 +1772,8 @@ public class TWEngine {
                 disappear = true;
                 power.setSleepy();
                 yappear = 1.;
-                sound.playSound("fade_out");
+                //sound.playSound("fade_out");
+                sound.playSound("multiple_choice");
             }
         }
 
@@ -2719,8 +2721,13 @@ public class TWEngine {
       }
       
       public void jump(float pos) {
-        if (mode == CACHED) cachedMusic.jump(pos); 
-        else if (mode == STREAM && !DISABLE_GSTREAMER) streamMusic.jump(pos);
+        try {
+          if (mode == CACHED) cachedMusic.jump(pos); 
+          else if (mode == STREAM && !DISABLE_GSTREAMER) streamMusic.jump(pos);
+        }
+        catch (RuntimeException e) {
+          console.warn("Caught failed seek operation");
+        }
         // Since android loops we don't need to worry about this (for now).
       }
       
@@ -3782,6 +3789,7 @@ public class TWEngine {
     public String fileSelected = null;
     public boolean fileSelectSuccess = false;
     public boolean selectingFile = false;
+    private String fileOperationErrorMessage = "";
     public Object objectToSave;
     private HashSet<String> everything = new HashSet<String>();
     
@@ -3828,10 +3836,17 @@ public class TWEngine {
       }
     }
     
+    
+    public String getFileError() {
+      return fileOperationErrorMessage;
+    }
+    
+    
     public boolean mv(String oldPlace, String newPlace) {
       // We know we're merely accessing a fake filesystem now in android.
       if (isAndroid() && (oldPlace.charAt(0) != '/' || newPlace.charAt(0) != '/')) {
         console.bugWarn("You can't move files to/from the assets folder! It's read-only!");
+        fileOperationErrorMessage = newPlace+"cannot move read-only files";
         return false;
       }
       
@@ -3839,22 +3854,32 @@ public class TWEngine {
         mkdir(getDir(newPlace));
       }
       
+      
       try {
         File of = new File(oldPlace);
         File nf = new File(newPlace);
         if (nf.exists()) {
+           fileOperationErrorMessage = newPlace+" already exists.";
            return false;
         }
         if (of.exists()) {
-          of.renameTo(nf);
+          boolean success = of.renameTo(nf);
+          
+          if (!success) {
+            fileOperationErrorMessage = "file may be in use.";
+            //console.warn("Failed to move "+getFilename(oldPlace)+", file may be in use.");
+            return false;
+          }
+          
           // If the file is cached, move the cached file too to avoid stalling and creating duplicate cache
           moveCache(oldPlace, newPlace);
         } else if (!of.exists()) {
+          fileOperationErrorMessage = oldPlace+" doesn't exist.";
           return false;
         }
       }
       catch (SecurityException e) {
-        console.warn(e.getMessage());
+        fileOperationErrorMessage = "file permission denied.";
         return false;
       }
       return true;
@@ -3899,7 +3924,7 @@ public class TWEngine {
       recycleBinCheck();
       
       if (!mv(oldLocation, APPPATH+RECYCLE_BIN_PATH+newName)) {
-        console.warn("Could not recycle "+getFilename(oldLocation)+", maybe file permissions denied?");
+        console.warn("Could not recycle "+getFilename(oldLocation)+": "+getFileError());
         return false;
       }
       
@@ -5706,7 +5731,7 @@ public class TWEngine {
     
     // First, load the essential stuff.
     
-    //loadAsset(APPPATH+SOUND_PATH()+"intro.wav");
+    loadAsset(APPPATH+SOUND_PATH()+"intro.wav");
     loadAsset(APPPATH+IMG_PATH()+"logo.png");
     loadAllAssets(APPPATH+IMG_PATH()+"loadingmorph/");
     // We need to load shaders on the main thread.
@@ -5971,6 +5996,14 @@ public class TWEngine {
     }
   }
     
+    
+  public int getMaxMemKB() {
+    long maxRam = TWEngine.MAX_RAM_NORMAL;
+    if (lowMemory) {
+      maxRam = TWEngine.MAX_RAM_LIMITED;
+    }
+    return (int)(maxRam/1024L);
+  }
   
 
     
@@ -6405,8 +6438,8 @@ public class TWEngine {
   
   public void toggleUnfocusedMusic() {
     playWhileUnfocused = !playWhileUnfocused;
-    if (playWhileUnfocused) console.log("Background music (while focused) enabled.");
-    else console.log("Background music (while focused) disabled.");
+    if (playWhileUnfocused) console.log("Minimized background music enabled.");
+    else console.log("Minimized background music disabled.");
   }
 
 
@@ -8851,6 +8884,7 @@ public class TWEngine {
   public void requestScreen(Screen screen) {
     if (currScreen != null) {
       currScreen.requestScreen(screen);
+      sound.playSound("multiple_choice");
     }
   }
   

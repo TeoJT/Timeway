@@ -433,7 +433,7 @@ public class PixelRealmWithUI extends PixelRealm {
               newf.z = z;
             }
             else {
-              console.warn("Couldn't rename item. File might be in use.");
+              console.warn("Couldn't rename item: "+file.getFileError());
             }
             
             sound.playSound("menu_select");
@@ -571,7 +571,7 @@ public class PixelRealmWithUI extends PixelRealm {
       // -- Home screen --
       if (ui.buttonVary("home_screen", "home_128", "Home screen")) {
         requestScreen(new HomeScreen(engine));
-        sound.stopMusic();
+        //sound.stopMusic();
         menu = null;
         menuShown = false;
       }
@@ -669,7 +669,7 @@ public class PixelRealmWithUI extends PixelRealm {
                     console.log("Swapped file names "+file.getFilename(oldpath)+" and "+file.getFilename(newPath));
                   }
                   else {
-                    console.warn("Couldn't swap file names, maybe files in use?");
+                    console.warn("Couldn't swap file names: "+file.getFileError());
                   }
                   closeMenu();
                 }
@@ -687,7 +687,7 @@ public class PixelRealmWithUI extends PixelRealm {
               console.log("File renamed to "+file.getFilename(newPath));
             }
             else {
-              console.warn("Couldn't rename item. File might be in use.");
+              console.warn("Couldn't rename item: "+file.getFileError());
             }
             
             sound.playSound("menu_select");
@@ -1260,6 +1260,7 @@ public class PixelRealmWithUI extends PixelRealm {
                     originalCellLocation = i;
                     doubleClickTimer = 15f;
                     grid[i] = null;
+                    sound.playSound("pocket_pickup");
                   }
                 }
                 
@@ -1298,6 +1299,7 @@ public class PixelRealmWithUI extends PixelRealm {
                       else {
                         console.log(pitem.name+" moved to recycle bin.");
                         grid[index] = null;
+                        sound.playSound("poof");
                       }
                       
                   }};
@@ -1581,7 +1583,7 @@ public class PixelRealmWithUI extends PixelRealm {
                 }
                 else {
                   returnDraggingItemToOriginalCell();
-                  prompt("Move failed.");
+                  prompt("Move failed: "+file.getFileError());
                 }
               }
               
@@ -1618,7 +1620,7 @@ public class PixelRealmWithUI extends PixelRealm {
                 String placeholderName = file.duplicateCheck(dir+"Temp"+file.getExt(file1.name));
                 if (!file.mv(file1.getPath(), placeholderName)) {
                   returnDraggingItemToOriginalCell();
-                  prompt("There was an error while swapping the items.");
+                  prompt("There was an error while swapping the items: "+file.getFileError());
                   refresh();
                   return;
                 }
@@ -1626,7 +1628,7 @@ public class PixelRealmWithUI extends PixelRealm {
                 // Rename the second
                 if (!file.mv(file2.getPath(), dir+rename2)) {
                   returnDraggingItemToOriginalCell();
-                  prompt("There was an error while swapping the items.");
+                  prompt("There was an error while swapping the items: "+file.getFileError());
                   refresh();
                   return;
                 }
@@ -1634,7 +1636,7 @@ public class PixelRealmWithUI extends PixelRealm {
                 //Rename the file with the placeholder name (first file)
                 if (!file.mv(placeholderName, dir+rename1)) {
                   returnDraggingItemToOriginalCell();
-                  prompt("There was an error while swapping the items.");
+                  prompt("There was an error while swapping the items: "+file.getFileError());
                   refresh();
                   return;
                 }
@@ -1898,7 +1900,7 @@ public class PixelRealmWithUI extends PixelRealm {
       
       // Play music if that's what was changed
       if (itemIndex == MUSIC_SLOT) {
-        sound.streamMusicWithFade(file.directorify(currRealm.stateDirectory)+newName);
+        streamMusicWithFade(file.directorify(currRealm.stateDirectory)+newName);
       }
       
       return true;
@@ -1914,6 +1916,7 @@ public class PixelRealmWithUI extends PixelRealm {
     private void moveItemToNewCell(int coll) {
       currGrid.grid[itemIndex] = draggingItem;  // Move item
       draggingItem = null;  // No more dragging
+      sound.playSound("pocket_placedown");
       
       //int coll = -1;
       //if (currGrid == hotbarGrid) {
@@ -1951,6 +1954,7 @@ public class PixelRealmWithUI extends PixelRealm {
         
         orignalgrid_temp.runMoveInAction();
         //currGrid.grid[itemIndex]
+        sound.playSound("swish", 2f);
       }
     }
     
@@ -1969,6 +1973,7 @@ public class PixelRealmWithUI extends PixelRealm {
     private void returnDraggingItemToOriginalCell() {
       originalGridLocation.grid[originalCellLocation] = draggingItem;
       draggingItem = null;
+      sound.playSound("pocket_placedown");
     }
     
     private boolean promptShown() {
@@ -2023,6 +2028,7 @@ public class PixelRealmWithUI extends PixelRealm {
           app.fill(55f);
           if (input.primaryOnce) {
             selectedPocketTab = i;
+            sound.playSound("submenu_"+str(i+1));
           }
         }
         // Default grey
@@ -2352,7 +2358,7 @@ public class PixelRealmWithUI extends PixelRealm {
           
           
           if (!file.copy(src, dest+filename)) {
-            prompt("Copy error", "An error occured while copying realm template files. Maybe permissions are denied?");
+            prompt("Copy error", "An error occured while copying realm template files: "+file.getFileError());
             // Return here so the menu stays open.
             return;
           }
@@ -2802,7 +2808,7 @@ public class PixelRealmWithUI extends PixelRealm {
   }
 
   protected void promptFailedToMove(String filename) {
-    String txt = "Failed to move "+filename+". Maybe permissions denied?";
+    String txt = "Failed to move "+filename+": "+file.getFileError();
     errorPrompt("Move failed", txt);
   }
 
@@ -3161,9 +3167,9 @@ public class PixelRealmWithUI extends PixelRealm {
     if (backmusicClicked) {
       engine.toggleUnfocusedMusic();
       if (engine.playWhileUnfocused) 
-        sound.playSound("select_bigger");
+        sound.playSound("select_general");
       else
-        sound.playSound("select_smaller");
+        sound.playSound("select_general");
     }
     
     if (musicInfo.length() > 0 && menuShown && menu != null && menu instanceof NewRealmMenu) {

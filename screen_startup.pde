@@ -40,28 +40,14 @@ public class Startup extends Screen {
 
     }
     
-    int before = 0;
+    private int before = 0;
 
     public void content() {
         
-        switch (engine.power.getPowerMode()) {
-          case HIGH:
-          timeFromStart++;
-          break;
-          case NORMAL:
-          timeFromStart += 2;
-          break;
-          case SLEEPY:
-          timeFromStart += 4;
-          break;
-          case MINIMAL:
-          timeFromStart++;
-          break;
-        }
         
         // Yup we deliberately make the loading time longer just so we can display the logo
         // long enough lol.
-        if (engine.isLoading() || timeFromStart < 30) {
+        if (engine.isLoading() || display.getTime() < 1f) {
             floatIn *= 0.9;
             app.tint(255, 255-(255*floatIn));
             display.imgCentre("logo", WIDTH/2, HEIGHT/2 - floatIn*100);
