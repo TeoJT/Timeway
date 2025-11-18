@@ -6753,6 +6753,7 @@ public class PixelRealm extends Screen {
         }
         // File already exists
         else if (file.exists(to)) {
+          console.log("file conflict");
           //console.log(to);
           promptFileConflict(findFileObjectByName(file.getFilename(to)), (FileObject)pitem.item);
           // DO NOT DO any further actions here!!
@@ -7539,7 +7540,8 @@ public class PixelRealm extends Screen {
   
   
   protected void playCassette(String path) {
-    sound.stopMusic();
+    sound.forceStopMusic();
+    delay(100);
     sound.streamMusic(path);
     cassettePlaying = file.getFilename(path);
     console.log("Now playing "+file.getFilename(path));

@@ -3315,6 +3315,21 @@ public class TWEngine {
       }
     }
     
+    // This is such a bad solution omg.
+    // Rest assured that this will be replaced in due time.
+    public void forceStopMusic() {
+      if (streamerMusic != null) {
+        // We use pause instead of stop because stop can cause crashes
+        streamerMusic.stop();
+          
+        streamerMusic = null;
+      }
+      if (streamerMusicFadeTo != null) {
+        streamerMusicFadeTo.stop();
+        streamerMusicFadeTo = null;
+      }
+    }
+    
     public void pauseMusic() {
       if (streamerMusic != null) {
         streamerMusic.pause();
@@ -3841,6 +3856,27 @@ public class TWEngine {
       return fileOperationErrorMessage;
     }
     
+    // yea i used ai for this but hey it gets the job done.
+    public boolean isValidWindowsFilename(String name) {
+        if (name == null || name.isEmpty()) return false;
+    
+        // 1. Invalid characters: \ / : * ? " < > |
+        // 2. Cannot end with space or dot
+        // 3. Cannot be a reserved Windows device name
+        String invalidChars = ".*[\\\\/:*?\"<>|].*";
+        if (name.matches(invalidChars)) return false;
+    
+        // Ends with space or dot
+        if (name.matches(".*[ .]$")) return false;
+    
+        // Reserved device names (case-insensitive)
+        // CON, PRN, AUX, NUL, COM1–COM9, LPT1–LPT9
+        if (name.matches("(?i)^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$")) return false;
+    
+        return true;
+    }
+
+    
     
     public boolean mv(String oldPlace, String newPlace) {
       // We know we're merely accessing a fake filesystem now in android.
@@ -3850,10 +3886,16 @@ public class TWEngine {
         return false;
       }
       
+      // Check for invalid characters
+      if (isWindows() && !isValidWindowsFilename(getFilename(newPlace))) {
+        fileOperationErrorMessage = "invalid filename.";
+        return false;
+      }
+      
+      // Create dir if it doesn't already exist.
       if (!exists(getDir(newPlace))) {
         mkdir(getDir(newPlace));
       }
-      
       
       try {
         File of = new File(oldPlace);

@@ -1009,6 +1009,9 @@ public class PixelRealmWithUI extends PixelRealm {
     private boolean stickItemToMouse = false;
     protected Grid currGrid = null;
     private String promptMessage = null; // When this is null, prompt is hidden
+    private boolean showInputField = false;
+    private String promptInput = "";
+    private Runnable promptInputRunWhenEnter = null;
     
     private String hoverLabel = null;
     private color  hoverLabelColor = color(0);
@@ -1267,46 +1270,72 @@ public class PixelRealmWithUI extends PixelRealm {
                 
                 // Show options when right-clicked.
                 if (input.secondaryOnce && grid[i] != null && pitem != null) {
-                  String[] labels = new String[2];
-                  Runnable[] actions = new Runnable[2];
                   
-                  labels[0] = "Copy";
-                  actions[0] = new Runnable() {public void run() {
-                      rpause();
-                      
-                      String name = file.getFilename(pitem.getPath());
-                      String copypath = file.duplicateFile(pitem.getPath(), engine.APPPATH+engine.POCKET_PATH+renamePixelrealmFile(name));
-                      if (copypath != null) {
-                        console.log("Duplicated "+pitem.name+".");
-                        draggingItem = currRealm.loadPocketItem(copypath);
-                        stickItemToMouse = true;
-                      }
-                      else {
-                        console.warn("Failed to duplicate file.");
-                      }
-                      
-                  }};
-                  final int index = i;
-                  
-                  labels[1] = "Delete";
-                  actions[1] = new Runnable() {public void run() {
-                      rpause();
-                      boolean success = file.recycle(pitem.getPath());
-                      
-                      if (!success) {
-                        console.warn("Could not recycle "+pitem.name);
-                      }
-                      else {
-                        console.log(pitem.name+" moved to recycle bin.");
-                        grid[index] = null;
-                        sound.playSound("poof");
-                      }
-                      
-                  }};
-                  
-                  
-                  
-                  ui.createOptionsMenu(labels, actions);
+                  if (!pitem.abstractObject) {
+                    String[] labels = new String[3];
+                    Runnable[] actions = new Runnable[3];
+                    
+                    labels[0] = "Copy";
+                    actions[0] = new Runnable() {public void run() {
+                        rpause();
+                        
+                        String name = file.getFilename(pitem.getPath());
+                        String copypath = file.duplicateFile(pitem.getPath(), engine.APPPATH+engine.POCKET_PATH+renamePixelrealmFile(name));
+                        if (copypath != null) {
+                          console.log("Duplicated "+pitem.name+".");
+                          draggingItem = currRealm.loadPocketItem(copypath);
+                          stickItemToMouse = true;
+                        }
+                        else {
+                          console.warn("Failed to duplicate file.");
+                        }
+                        
+                    }};
+                    final int index = i;
+                    
+                    labels[1] = "Delete";
+                    actions[1] = new Runnable() {public void run() {
+                        rpause();
+                        boolean success = file.recycle(pitem.getPath());
+                        
+                        if (!success) {
+                          console.warn("Could not recycle "+pitem.name);
+                        }
+                        else {
+                          console.log(pitem.name+" moved to recycle bin.");
+                          grid[index] = null;
+                          sound.playSound("poof");
+                        }
+                        
+                    }};
+                                      
+                    labels[2] = "Rename";
+                    actions[2] = new Runnable() {public void run() {
+                        rpause();
+                        console.log("Not implemented yet!");
+                        showInputField = true;
+                        promptMessage = "Rename to:";
+                        showInputField = true;
+                        
+                        if (pitem.name.contains(".")) {
+                          promptInput = "."+file.getExt(pitem.name);
+                          input.cursorX = 0;
+                        }
+                        else {
+                          promptInput = "";
+                        }
+                        
+                        promptInputRunWhenEnter = new Runnable() {
+                          public void run() {
+                            final PocketItem thisitem = pitem;
+                            renameFileAction(promptInput, thisitem);
+                          }
+                        };
+                    }};
+                    
+                    
+                    ui.createOptionsMenu(labels, actions);
+                  }
                 }
                 
                 boolean drop = false;
@@ -1743,6 +1772,55 @@ public class PixelRealmWithUI extends PixelRealm {
       return newname;
     }
     
+    private void renameFileAction(String newFilename, PocketItem item) {
+        
+        // Nothing means don't do anything.
+        if (newFilename.length() == 0) {
+          promptMessage = null;
+          return;
+        }
+        
+        // Make new path with new input name.
+        String newPath = file.directorify(file.getDir(item.getPath()))+newFilename;
+        
+        // File already exists (note: not really mandatory but not really a reason to remove it either)
+        if (file.exists(newPath)) {
+          prompt("The filename is still the same. Could not place item in realm, please try again with a different name.");
+          return;
+        }
+        
+        // Renaming file causes modification in dir, prevent realm refresh.
+        // Ok this is dumb but we kinda have to force the refresher otherwise it won't actually refresh.
+        // Yeah...
+        rpauseOnce = true;
+        rpause();
+        
+        // Attempt rename
+        String oldName = item.name;
+        if (file.mv(item.getPath(), newPath)) {
+          console.log("File renamed to "+file.getFilename(newPath));
+          item.updatePath(newPath);
+          
+          // Also must update the json pocket info with the new name
+          // Honestly, if we implemented it perfectly, we would have to pass indexes
+          // and collections and honestly it's not worth it, so if we don't have this
+          // information, then it doesn't matter if the renamed item is misplaced.
+          JSONObject jsonitem = pocketInfo.getJSONObject(oldName);
+          if (jsonitem != null) {
+            // At this point the name will be updated.
+            pocketInfo.setJSONObject(item.name, jsonitem);
+          }
+          
+          
+          promptMessage = null;     // Close minimenu.
+        }
+        else {
+          prompt("Couldn't rename item: "+file.getFileError());
+        }
+        
+        sound.playSound("menu_select");
+    }
+    
     
     // For the realm grid specifically, because of problems with duplicate item names,
     // we need to complete the move of the swapped item first before we finish with our own item.
@@ -2088,14 +2166,16 @@ public class PixelRealmWithUI extends PixelRealm {
       // Hide menu when pocket menu button pressed.
       // The keydelay thing is just so that the menu doesn't immediately disappear on the same frame as it appearing when pressing
       // 'i' to make it appear.
-      if (input.keyActionOnce("open_pocket", 'i')) {
-        if (keyDelay) {
-          keyDelay = false;
-        }
-        else {
-          close();
-          menuShown = false;
-          menu = null;
+      if (promptMessage == null) {
+        if (input.keyActionOnce("open_pocket", 'i')) {
+          if (keyDelay) {
+            keyDelay = false;
+          }
+          else {
+            close();
+            menuShown = false;
+            menu = null;
+          }
         }
       }
       
@@ -2119,6 +2199,7 @@ public class PixelRealmWithUI extends PixelRealm {
       
       // Prompt (this appears when a pocketMove() operation fails) 
       if (promptMessage != null) {
+        // Display background
         gui().sprite("pockets_prompt_back", "darkgrey");
         float xx = gui.getSprite("pockets_prompt_back").getX();
         float yy = gui.getSprite("pockets_prompt_back").getY();
@@ -2126,18 +2207,45 @@ public class PixelRealmWithUI extends PixelRealm {
         float hi = gui.getSprite("pockets_prompt_back").getHeight();
         app.fill(255);
         app.textFont(engine.DEFAULT_FONT, 24);
+        
+        // Display prompt text (make it higher when there's a prompt shown)
         app.textAlign(CENTER, CENTER);
         app.text(promptMessage, xx+20f, yy, wi-40f, hi-90);
         
-        if (ui.button("pockets_prompt_close", "cross_128", "Dismiss")) {
-          sound.playSound("menu_select");
-          promptMessage = null;
+        // Display input field.
+        if (showInputField) {
+          promptInput = input.getTyping(promptInput, false);
+          app.textAlign(CENTER, CENTER);
+          app.text(input.keyboardMessageDisplay(promptInput), xx+wi*0.5f, yy+hi*0.70f);
+          
+          
+          // Dismiss button (input prompt shown)
+          if (ui.button("pockets_prompt_close_inputshown", "cross_128", "Dismiss")) {
+            sound.playSound("menu_select");
+            promptMessage = null;
+          }
+          
+          // Ok button (input prompt shown)
+          boolean okbutton = ui.button("pockets_prompt_ok_inputshown", "tick_128", "OK");
+          if (okbutton || input.enterOnce && promptInputRunWhenEnter != null) {
+            promptInputRunWhenEnter.run();
+          }
         }
+        
+        // Dismiss button (no input prompt)
+        else {
+          if (ui.button("pockets_prompt_close", "cross_128", "Dismiss")) {
+            sound.playSound("menu_select");
+            promptMessage = null;
+          }
+        }
+        
       }
     }
     
     public void prompt(String message) {
       sound.playSound("menu_prompt");
+      showInputField = false;
       promptMessage = message;
     }
     
@@ -2791,7 +2899,7 @@ public class PixelRealmWithUI extends PixelRealm {
     if (gui == null) return;
     
     // The pockets menu has a special sub-menu showing the error.
-    if (menu instanceof PocketMenu) {
+    if (menuShown && menu instanceof PocketMenu) {
       ((PocketMenu)menu).prompt(mssg);
     }
     else {
@@ -2813,7 +2921,7 @@ public class PixelRealmWithUI extends PixelRealm {
   }
 
   protected void promptFileConflict(PixelRealmState.FileObject oldFile, PixelRealmState.FileObject newFile) {
-    if (menu instanceof PocketMenu) {
+    if (menuShown && menu instanceof PocketMenu) {
       errorPrompt("File conflict", "There is a duplicate file in this folder ("+newFile.filename+").");
     }
     else {
@@ -3062,8 +3170,9 @@ public class PixelRealmWithUI extends PixelRealm {
           y += app.random(-5, 5);
         }
 
-        if (p.item != null && p.item.img != null)
+        if (p.item != null)
           p.displayIcon(x, y, 64);
+          
         invx += 70;
       }
 
@@ -3096,7 +3205,8 @@ public class PixelRealmWithUI extends PixelRealm {
     // Hacky way of allowing an exception for our input prompt menu's
     boolean tmp = engine.inputPromptShown;
     engine.inputPromptShown = false;
-      if (!engine.commandPromptShown && input.keyActionOnce("menu", '\t')) {
+    if (!engine.commandPromptShown && !ui.miniMenuShown()) {
+      if (input.keyActionOnce("menu", '\t')) {
         // Do not allow menu to be closed when set to be on.
         if (menuShown && doNotAllowCloseMenu) {
           engine.inputPromptShown = tmp;
@@ -3119,19 +3229,20 @@ public class PixelRealmWithUI extends PixelRealm {
         if (menuShown)
           sound.playSound("menu_appear");
       }
+    }
       
-      searchMenuTimeout--;
-      if (!engine.commandPromptShown && !menuShown && searchMenuTimeout <= 0 && input.keyActionOnce("search", '\n')) {
-        menuShown = true;
-        menu = new SearchPromptMenu();
-        searchMenuTimeout = 10;
-      }
-      
-      if (!engine.commandPromptShown && !menuShown && input.keyActionOnce("open_pocket", 'i')) {
-        sound.playSound("menu_select");
-        menuShown = true;
-        openPocketMenu();
-      }
+    searchMenuTimeout--;
+    if (!engine.commandPromptShown && !menuShown && searchMenuTimeout <= 0 && input.keyActionOnce("search", '\n')) {
+      menuShown = true;
+      menu = new SearchPromptMenu();
+      searchMenuTimeout = 10;
+    }
+    
+    if (!engine.commandPromptShown && !menuShown && input.keyActionOnce("open_pocket", 'i')) {
+      sound.playSound("menu_select");
+      menuShown = true;
+      openPocketMenu();
+    }
     
     engine.inputPromptShown = tmp;
     // Allow the command prompt to be shown only if the menu isn't displayed.
