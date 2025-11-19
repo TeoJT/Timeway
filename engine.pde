@@ -3959,6 +3959,10 @@ public class TWEngine {
     public boolean recycle(String oldLocation) {
       //String newName = nf(random(0, 99999999), 8, 0);
       String newName = getIsolatedFilename(oldLocation)+"."+getExt(oldLocation);
+      if (isDirectory(oldLocation)) {
+        newName = getIsolatedFilename(oldLocation);
+      }
+      
       while (exists(APPPATH+RECYCLE_BIN_PATH+newName)) {
         newName = getIsolatedFilename(oldLocation)+"-"+nf(random(0, 99999999), 8, 0)+"."+getExt(oldLocation);
       }
@@ -3966,7 +3970,6 @@ public class TWEngine {
       recycleBinCheck();
       
       if (!mv(oldLocation, APPPATH+RECYCLE_BIN_PATH+newName)) {
-        console.warn("Could not recycle "+getFilename(oldLocation)+": "+getFileError());
         return false;
       }
       
@@ -6250,7 +6253,7 @@ public class TWEngine {
       textFont(DEFAULT_FONT, 30);
       text("Downloading...", x1-wi+128, y1+10, wi*2-128, hi);
       textSize(20);
-      text("You can continue using "+getAppName()+" while updating.", x1-wi+128, y1+50, wi*2-128, hi);
+      text("You can continue using Timeway while updating.", x1-wi+128, y1+50, wi*2-128, hi);
       // Process bar
       fill(0, 127);
       rect(x1-wi+128+10, y1+hi-15, (float(downloadPercent)/100.)*((wi*2)-128-30), 3);
@@ -6311,7 +6314,7 @@ public class TWEngine {
       textFont(DEFAULT_FONT, 30);
       text("Extracting...", x1-wi+128, y1+10, wi*2-128, hi);
       textSize(20);
-      text(getAppName()+" will restart in the new version shortly.", x1-wi+128, y1+50, wi*2-128, hi);
+      text("Timeway will restart in the new version shortly.", x1-wi+128, y1+50, wi*2-128, hi);
       
       downloadPercent = completionPercent.get();
       // Process bar
@@ -6343,14 +6346,14 @@ public class TWEngine {
           if (f.exists()) {
             updatePhase = 0;
             //Process p = Runtime.getRuntime().exec(newVersion);
-            String cmd = "start \""+getAppName()+"\" /d \""+file.getDir(newVersion).replaceAll("/", "\\\\")+"\" \""+file.getFilename(newVersion)+"\"";
+            String cmd = "start \"Timeway\" /d \""+file.getDir(newVersion).replaceAll("/", "\\\\")+"\" \""+file.getFilename(newVersion)+"\"";
             console.log(cmd);
             runExecutableCommand(cmd);
             delay(500);
             exit();
           }
           else {
-            console.warn("New version of "+getAppName()+" could not be found, please close "+getAppName()+" and open new version manually.");
+            console.warn("New version of Timeway could not be found, please close "+getAppName()+" and open new version manually.");
             console.log("The new version should be somewhere in "+newVersion);
             updatePhase = 0;
           }
@@ -6735,12 +6738,12 @@ public class TWEngine {
       boolean update = true;
       try {
         update &= updateInfo.getString("type", "").equals("update");
-        update &= !updateInfo.getString("version", "").equals(VERSION);
+        update &= !updateInfo.getString("version", "").equals(getVersion());
         JSONArray compatibleVersion = updateInfo.getJSONArray("compatible-versions");
 
         boolean compatible = false;
         for (int i = 0; i < compatibleVersion.size(); i++) {
-          compatible |= compatibleVersion.getString(i).equals(VERSION);
+          compatible |= compatibleVersion.getString(i).equals(getVersion());
         }
         compatible |= updateInfo.getBoolean("update-if-incompatible", false);
         compatible |= updateInfo.getBoolean("update-if-uncompatible", false);    // Oops I made a typo at one point
@@ -9071,9 +9074,9 @@ public class TWEngine {
 public abstract class Screen {
   protected final float UPPER_BAR_WEIGHT = 50;
   protected final float LOWER_BAR_WEIGHT = 50;
-  protected final color UPPER_BAR_DEFAULT_COLOR = color(200);
-  protected final color LOWER_BAR_DEFAULT_COLOR = color(200);
-  protected final color DEFAULT_BACKGROUND_COLOR = color(50);
+  protected final color UPPER_BAR_DEFAULT_COLOR = color(205,200,215);
+  protected final color LOWER_BAR_DEFAULT_COLOR = color(205,200,215);
+  protected final color DEFAULT_BACKGROUND_COLOR = color(52,50,56);
 
   protected final int NONE = 0;
   protected final int START = 1;
@@ -10435,6 +10438,18 @@ public final class SpriteSystem {
           else {
             this.sprite(nameAndID, nameAndID);
           }
+        }
+        
+        public void offMoveSprite(String identifier, float x, float y) {
+          if (engine.display.phoneMode) {
+            identifier += "-phone";
+          }
+          
+          if (!spriteExists(identifier)) {
+              addSprite(identifier, "nothing");
+            }
+            Sprite s = getSprite(identifier);
+            s.offmove(x, y);
         }
 
         public void spriteVary(String identifier, String image) {

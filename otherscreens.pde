@@ -2,7 +2,7 @@ public class Updater extends Screen {
   String updateName = "";
   String headerText = "An update is available!";
   String displayMessage = "This update contains the following additions, changes, and/or fixes:\n";
-  String footerMessage = "Downloading and installing will run in the background as "+engine.getAppName()+" runs, so please leave Timeway running until the update completes. Don't worry, none of your personal data will be modified.";
+  String footerMessage = "Downloading and installing will run in the background as Timeway runs, so please leave Timeway running until the update completes. Don't worry, none of your personal data will be modified.";
   String patchNotes = "";
   boolean startedMusic = false;
   JSONObject updateInfo;
@@ -458,9 +458,9 @@ public class HomeScreen extends Screen {
 
     public HomeScreen(TWEngine engine) {
         super(engine);
-        myBackgroundColor = color(10);
-        myUpperBarColor = color(50);
-        myLowerBarColor = color(50);
+        myBackgroundColor = color(10, 10, 11);
+        myUpperBarColor = 0xFF37353A;
+        myLowerBarColor = 0xFF37353A;
         
         gui = new SpriteSystem(engine, engine.APPPATH+engine.PATH_SPRITES_ATTRIB()+"gui/homescreen/");
         gui.interactable = false;
@@ -500,6 +500,20 @@ public class HomeScreen extends Screen {
         gui.spriteVary("homescreen-title");
         app.noTint();
         
+        // Lil icons floating around the logo
+        gui.spriteVary("twicon-1");
+        gui.spriteVary("twicon-2");
+        gui.spriteVary("twicon-3");
+        gui.spriteVary("twicon-4");
+        
+        float t = display.getTime()*0.03f;
+        
+        // float animation.
+        gui.offMoveSprite("twicon-1", 0f, sin(t)*20f);
+        gui.offMoveSprite("twicon-2", 0f, sin(t*1.1f+1.28975f)*15f);
+        gui.offMoveSprite("twicon-3", 0f, sin(t*0.9f+2.709723f)*12f);
+        gui.offMoveSprite("twicon-4", 0f, sin(t*1.3f+2.0)*10f);
+        
         //gui.getSprite("homescreen-title").move(0f, 
         
         SpriteSystem.Sprite logoSprite = gui.getSprite("homescreen-title");
@@ -509,9 +523,9 @@ public class HomeScreen extends Screen {
         app.textAlign(CENTER, CENTER);
         app.textFont(engine.DEFAULT_FONT, 34);
         app.fill(0, 255-(255*floatIn));
-        app.text("by Teo Taylor", WIDTH/2-3, offY);
+        app.text("by Téo Taylor", WIDTH/2-3, offY);
         app.fill(255, 255-(255*floatIn));
-        app.text("by Teo Taylor", WIDTH/2, offY);
+        app.text("by Téo Taylor", WIDTH/2, offY);
         
         //offY += 34;
         
@@ -523,15 +537,20 @@ public class HomeScreen extends Screen {
         app.textAlign(LEFT, CENTER);
         app.textFont(engine.DEFAULT_FONT, 30);
         app.fill(0);
-        app.text(TWEngine.VERSION, 10-3, HEIGHT-myLowerBarWeight-30-3);
+        app.text("v"+engine.getVersion(), 10-3, HEIGHT-myLowerBarWeight-30-3);
         app.fill(255);
-        app.text(TWEngine.VERSION, 10, HEIGHT-myLowerBarWeight-30);
+        app.text("v"+engine.getVersion(), 10, HEIGHT-myLowerBarWeight-30);
         
-        boolean pixelrealmButton = ui.basicButton("Pixel Realm", display.WIDTH/2-400, (offY += 60), 800, 50); // && buttonOnce;
-        boolean explorerButton = ui.basicButton("Explorer", display.WIDTH/2-400, (offY += 60), 800, 50); // && buttonOnce;
-        boolean binButton = ui.basicButton("Recycle bin", display.WIDTH/2-400, (offY += 60), 800, 50); // && buttonOnce;
-        boolean settingsButton = ui.basicButton("Settings", display.WIDTH/2-400, (offY += 60), 800, 50); // && buttonOnce;
-        boolean creditsButton = ui.basicButton("Credits", display.WIDTH/2-400, (offY += 60), 800, 50); // && buttonOnce;
+        float barwi = 800f;
+        if (display.phoneMode) {
+          barwi = 600f;
+        }
+        
+        boolean pixelrealmButton = ui.basicButton("Pixel Realm", display.WIDTH/2-barwi*0.5f, (offY += 60), barwi, 50); // && buttonOnce;
+        boolean explorerButton = ui.basicButton("Explorer", display.WIDTH/2-barwi*0.5f, (offY += 60), barwi, 50); // && buttonOnce;
+        boolean binButton = ui.basicButton("Recycle bin", display.WIDTH/2-barwi*0.5f, (offY += 60), barwi, 50); // && buttonOnce;
+        boolean settingsButton = ui.basicButton("Settings", display.WIDTH/2-barwi*0.5f, (offY += 60), barwi, 50); // && buttonOnce;
+        boolean creditsButton = ui.basicButton("Credits", display.WIDTH/2-barwi*0.5f, (offY += 60), barwi, 50); // && buttonOnce;
         
         
         if (pixelrealmButton) {
@@ -620,9 +639,9 @@ public class RecycleBinScreen extends Screen {
         gui.interactable = false;
         
     
-        myLowerBarColor   = color(50);
-        myUpperBarColor   = color(50);
-        myBackgroundColor = color(25);
+        myLowerBarColor   = color(52,50,56);
+        myUpperBarColor   = color(52,50,56);
+        myBackgroundColor = color(26, 25, 25);
         myUpperBarWeight  = 80f;
         myLowerBarWeight  = 120f;
         

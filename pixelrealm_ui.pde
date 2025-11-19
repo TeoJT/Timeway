@@ -26,7 +26,7 @@ public class PixelRealmWithUI extends PixelRealm {
   // Dear god I really need to re-do this entire tutorial at some point.
   
   private String[] dm_welcome = {
-    "Welcome to "+engine.getAppName()+".",
+    "Welcome to Timeway.",
     "Your folders are your realms.",
     "Your computer is your universe.",
     "But first, let me show you the ropes.",
@@ -72,7 +72,7 @@ public class PixelRealmWithUI extends PixelRealm {
     "Remember, all the items you see in your realms are files on your computer.",
     "Portals resemble folders. Walk into them to go to enter the folder, or \"realm\".",
     "You should be able to figure out the rest yourself, it's not too complicated.",
-    engine.getAppName()+" is an ongoing project. There may be bugs and missing features.",
+    "Timeway is an ongoing project. There may be bugs and missing features.",
     "But there are many more things to come.",
     "In the meantime, I hope you enjoy this demo."
   };
@@ -91,8 +91,8 @@ public class PixelRealmWithUI extends PixelRealm {
   public PixelRealmWithUI(TWEngine engine, String dir) {
     super(engine, dir);
     
-    myUpperBarColor = color(130);
-    myLowerBarColor = color(130);
+    myUpperBarColor = color(123, 119, 128);
+    myLowerBarColor = myUpperBarColor;
     
     
     // Ugh. whatever.
@@ -469,7 +469,7 @@ public class PixelRealmWithUI extends PixelRealm {
               currRealm.placeDownObject();
             }
             else {
-              console.warn("Failed to recycle item. File might be in use.");
+              console.warn("Failed to recycle item: "+file.getFileError());
             }
           }
         };
@@ -703,7 +703,7 @@ public class PixelRealmWithUI extends PixelRealm {
         }
   }
   
-  
+  // Stops the cassette music from playing if the specified file is indeed playing.
   private void cassetteCheck(String filename) {
     if (cassettePlaying.equals(filename)) {
       sound.stopMusic();
@@ -742,7 +742,6 @@ public class PixelRealmWithUI extends PixelRealm {
         issueRefresherCommand(REFRESHER_PAUSE);
         
         cassetteCheck(this.filename);
-        
         if (file.recycle(probject.dir)) {
           currRealm.poofAt(probject);
           probject.destroy();
@@ -750,7 +749,7 @@ public class PixelRealmWithUI extends PixelRealm {
           console.log(filename+" moved to recycle bin.");
         }
         else {
-          console.warn("Failed to recycle item. File might be in use.");
+          console.warn("Failed to recycle item: "+file.getFileError());
         }
         
         closeMenu();
@@ -1034,6 +1033,8 @@ public class PixelRealmWithUI extends PixelRealm {
       
       // Set this if you want a lil space between your rows.
       public float verticalSpacing = 0f;
+      public boolean refreshRealmWhenFileDeletedFlag = false;  // This is used as a cheap way to refresh the realm when a realm asset is deleted in the realm grid.
+      public boolean allowRename = true;  // Another cheap way to allow/disallow renaming in the realm grid.
       
       public PocketItem[] grid;
       
@@ -1272,8 +1273,19 @@ public class PixelRealmWithUI extends PixelRealm {
                 if (input.secondaryOnce && grid[i] != null && pitem != null) {
                   
                   if (!pitem.abstractObject) {
-                    String[] labels = new String[3];
-                    Runnable[] actions = new Runnable[3];
+                    
+                    // If we're in the realm grid (or allowRename is false), only create 2 options (ommitting the "rename" option)
+                    String[] labels;
+                    Runnable[] actions;
+                    
+                    if (allowRename) {
+                      labels = new String[3];
+                      actions = new Runnable[3];
+                    }
+                    else {
+                      labels = new String[2];
+                      actions = new Runnable[2];
+                    }
                     
                     labels[0] = "Copy";
                     actions[0] = new Runnable() {public void run() {
@@ -1295,43 +1307,60 @@ public class PixelRealmWithUI extends PixelRealm {
                     
                     labels[1] = "Delete";
                     actions[1] = new Runnable() {public void run() {
+                        // Sound file check:
+                        cassetteCheck(pitem.name);
+                        
+                        // Checks for .pixelrealm-bgm
+                        // If the music is playing in the background, stop that music.
+                        if (currRealm.musicPath.equals(pitem.getPath())) {
+                          playDefaultMusic();
+                        }
+                        
+                        
                         rpause();
                         boolean success = file.recycle(pitem.getPath());
                         
                         if (!success) {
-                          console.warn("Could not recycle "+pitem.name);
+                          console.warn("Could not recycle "+pitem.name+": "+file.getFileError());
                         }
                         else {
+                          // Destroy probject associated with pitem
+                          if (pitem.item != null) pitem.item.destroy();
+                          
                           console.log(pitem.name+" moved to recycle bin.");
                           grid[index] = null;
                           sound.playSound("poof");
+                          
+                          if (refreshRealmWhenFileDeletedFlag) currRealm.loadRealmAssets();
                         }
                         
                     }};
-                                      
-                    labels[2] = "Rename";
-                    actions[2] = new Runnable() {public void run() {
-                        rpause();
-                        console.log("Not implemented yet!");
-                        showInputField = true;
-                        promptMessage = "Rename to:";
-                        showInputField = true;
-                        
-                        if (pitem.name.contains(".")) {
-                          promptInput = "."+file.getExt(pitem.name);
-                          input.cursorX = 0;
-                        }
-                        else {
-                          promptInput = "";
-                        }
-                        
-                        promptInputRunWhenEnter = new Runnable() {
-                          public void run() {
-                            final PocketItem thisitem = pitem;
-                            renameFileAction(promptInput, thisitem);
+                    
+                    // Only add to options if renaming is allowed as a grid option.
+                    if (allowRename) {
+                      labels[2] = "Rename";
+                      actions[2] = new Runnable() {public void run() {
+                          rpause();
+                          showInputField = true;
+                          promptMessage = "Rename to:";
+                          showInputField = true;
+                          
+                          if (pitem.name.contains(".")) {
+                            promptInput = "."+file.getExt(pitem.name);
+                            input.cursorX = 0;
                           }
-                        };
-                    }};
+                          else {
+                            promptInput = "";
+                          }
+                          
+                          promptInputRunWhenEnter = new Runnable() {
+                            public void run() {
+                              final PocketItem thisitem = pitem;
+                              renameFileAction(promptInput, thisitem);
+                            }
+                          };
+                      }};
+                    }
                     
                     
                     ui.createOptionsMenu(labels, actions);
@@ -1443,13 +1472,7 @@ public class PixelRealmWithUI extends PixelRealm {
           // Release music handles while we're at it.
           if (moveName.contains("BGM")) {
             //moveMusic = true;
-            sound.stopMusic();
-            if (currRealm.versionCompatibility == 1) {
-              sound.streamMusic(engine.APPPATH+REALM_BGM_DEFAULT_LEGACY);
-            }
-            else if (currRealm.versionCompatibility >= 2) {
-              sound.streamMusic(engine.APPPATH+REALM_BGM_DEFAULT);
-            }
+            playDefaultMusic();
           }
         }
         
@@ -1551,6 +1574,8 @@ public class PixelRealmWithUI extends PixelRealm {
       realmGrid = new Grid(18*6);
       
       realmGrid.verticalSpacing = 9f;
+      realmGrid.refreshRealmWhenFileDeletedFlag = true;
+      realmGrid.allowRename = false;
       
       // Setup the labels and slots.
       realmGrid.setLabelledCell(0,"Sky texture");   
@@ -2058,6 +2083,16 @@ public class PixelRealmWithUI extends PixelRealm {
       return promptMessage != null;
     }
     
+    private void playDefaultMusic() {
+      sound.stopMusic();
+      if (currRealm.versionCompatibility == 1) {
+        sound.streamMusic(engine.APPPATH+REALM_BGM_DEFAULT_LEGACY);
+      }
+      else if (currRealm.versionCompatibility >= 2) {
+        sound.streamMusic(engine.APPPATH+REALM_BGM_DEFAULT);
+      }
+    }
+    
     private final String[] tabTitles = { "Hotbar", "Realm" };
 
     public void display() {
@@ -2166,17 +2201,15 @@ public class PixelRealmWithUI extends PixelRealm {
       // Hide menu when pocket menu button pressed.
       // The keydelay thing is just so that the menu doesn't immediately disappear on the same frame as it appearing when pressing
       // 'i' to make it appear.
-      if (promptMessage == null) {
+      if (promptMessage == null && !keyDelay) {
         if (input.keyActionOnce("open_pocket", 'i')) {
-          if (keyDelay) {
-            keyDelay = false;
-          }
-          else {
-            close();
-            menuShown = false;
-            menu = null;
-          }
+          close();
+          menuShown = false;
+          menu = null;
         }
+      }
+      else {
+        keyDelay = false;
       }
       
       // Hover label

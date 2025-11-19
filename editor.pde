@@ -1916,7 +1916,7 @@ public class Editor extends Screen {
           canvasScale = app.width/(WIDTH*display.getScale());
         }
 
-        myLowerBarColor   = 0xFF4c4945;
+        myLowerBarColor   = 0xFF37353A;
         myUpperBarColor   = myLowerBarColor;
         myBackgroundColor = BACKGROUND_COLOR;
         //myBackgroundColor = color(255,0,0);
@@ -2570,7 +2570,7 @@ public class Editor extends Screen {
       green(myUpperBarColor)/255. ,
       blue(myUpperBarColor)/255. ,
       1. , 
-      "intensity", 0.1);
+      "intensity", 0.03f);
     }
 
     // I don't think you'll really need to modify this code much.

@@ -40,7 +40,6 @@ public class Startup extends Screen {
 
     }
     
-    private int before = 0;
 
     public void content() {
         
@@ -82,9 +81,9 @@ public class Startup extends Screen {
         app.textAlign(CENTER, CENTER);
         app.textFont(engine.DEFAULT_FONT, 34);
         app.fill(0, 255-(255*floatIn));
-        app.text("by Teo Taylor", WIDTH/2-3, HEIGHT/2+150-3);
+        app.text("by Téo Taylor", WIDTH/2-3, HEIGHT/2+150-3);
         app.fill(255, 255-(255*floatIn));
-        app.text("by Teo Taylor", WIDTH/2, HEIGHT/2+150);
+        app.text("by Téo Taylor", WIDTH/2, HEIGHT/2+150);
         
         
         // First time startup
@@ -100,9 +99,9 @@ public class Startup extends Screen {
         app.textAlign(LEFT, CENTER);
         app.textFont(engine.DEFAULT_FONT, 30);
         app.fill(0, 255-(255*floatIn));
-        app.text(TWEngine.VERSION, 10-3, HEIGHT-30-3);
+        app.text("v"+engine.getVersion(), 10-3, HEIGHT-30-3);
         app.fill(255, 255-(255*floatIn));
-        app.text(TWEngine.VERSION, 10, HEIGHT-30);
+        app.text("v"+engine.getVersion(), 10, HEIGHT-30);
         
         stats.recordTime("time_in_startscreen");
     }

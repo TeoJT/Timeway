@@ -1,0 +1,17 @@
+{
+  "h": 512,
+  "vy0": 0,
+  "vx1": 768,
+  "vy2": 512,
+  "vx0": 0,
+  "vy1": 0,
+  "mode": "SINGLE",
+  "vx3": 0,
+  "vx2": 768,
+  "vy3": 512,
+  "w": 768,
+  "name": "homescreen-title-phone",
+  "x": 0,
+  "y": 0,
+  "locked": false
+}

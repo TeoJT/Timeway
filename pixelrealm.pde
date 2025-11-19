@@ -1270,7 +1270,7 @@ public class PixelRealm extends Screen {
         if (item instanceof PixelRealmState.DirectoryPortal) {
           PixelRealmState.DirectoryPortal p = (PixelRealmState.DirectoryPortal)item;
           if (file.countFiles(p.dir) > FOLDER_SIZE_LIMIT) {
-            prompt("Folder size limit", name+" has over "+str(FOLDER_SIZE_LIMIT)+" files in it. As a safety precaution, "+engine.getAppName()+" won't move large folders.", 20);
+            prompt("Folder size limit", name+" has over "+str(FOLDER_SIZE_LIMIT)+" files in it. As a safety precaution, Timeway won't move large folders.", 20);
             return false;
           }
         }
@@ -7427,12 +7427,17 @@ public class PixelRealm extends Screen {
     
     // Prevent the player going into directories that would make Timeway implode on itself
     if (file.directorify(to).equals(file.directorify(engine.APPPATH+engine.POCKET_PATH))) {
-      prompt("Nice try", "You can't go into "+engine.getAppName()+"'s pocket directory. Doing so would cause a paradox.", 20);
+      prompt("Nice try", "You can't go into Timeway's pocket directory. Doing so would cause a paradox.", 20);
       bumpBack();
       return;
     }
     if (file.directorify(to).equals(file.directorify(engine.CACHE_PATH))) {
-      prompt("Nice try", "You can't go into "+engine.getAppName()+"'s cache directory. Doing so would cause a paradox.", 20);
+      prompt("Nice try", "You can't go into Timeway's cache directory. Doing so would cause a paradox.", 20);
+      bumpBack();
+      return;
+    }
+    if (file.directorify(to).equals(file.directorify(engine.APPPATH+file.RECYCLE_BIN_PATH))) {
+      prompt("Nice try", "You can't go into Timeway's recycle bin directory. Doing so would cause a paradox.", 20);
       bumpBack();
       return;
     }
