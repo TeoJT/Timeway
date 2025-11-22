@@ -1262,6 +1262,7 @@ public class PixelRealm extends Screen {
         // Can't move files that have the same filename as another file
         // in the pocket.
         if (isDuplicate) {
+          console.log("isDuplicate");
           promptPocketConflict(name);
           return false;
         }
@@ -1277,6 +1278,7 @@ public class PixelRealm extends Screen {
         
         // Another duplicate check that is mostly temporary and I'll have a better solution soon.
         if (file.exists(engine.APPPATH+engine.POCKET_PATH+newName)) {
+          console.log("genuine conflict");
           promptPocketConflict(newName);
           return false;
         }
@@ -3245,6 +3247,7 @@ public class PixelRealm extends Screen {
         
         // Depends on our image format:
         if (file.getExt(this.filename).equals("gif") && showExperimentalGifs) cacheFlag = false;
+        
           
         addRequestToQueue(dir, MAX_CACHE_SIZE);
       }

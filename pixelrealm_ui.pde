@@ -771,8 +771,9 @@ public class PixelRealmWithUI extends PixelRealm {
         String copypath = file.duplicateFile(probject.dir);
         if (copypath != null) {
           console.log("Duplicated "+probject.filename+".");
-  
-          currRealm.createPRObjectAndPickup(copypath);
+          
+          // Call load here on our new probject so that yknow it loads (bug fix)
+          currRealm.createPRObjectAndPickup(copypath).load(new JSONObject());
           currentTool = TOOL_GRABBER;
         }
         else {
@@ -1070,7 +1071,7 @@ public class PixelRealmWithUI extends PixelRealm {
         }
       }
       
-      private int findFreeCell() {
+      public int findFreeCell() {
         for (int i = 0; i < grid.length; i++) {
           if (grid[i] == null) {
             return i;
@@ -1234,17 +1235,20 @@ public class PixelRealmWithUI extends PixelRealm {
                 //  console.log(i);
                 //}
                 
-                
                 // Pick up item when clicked & held
-                if (input.primaryOnce && grid[i] != null && !stickItemToMouse) {
+                if ((input.primaryOnce || (input.shiftDown && input.primaryDown)) && grid[i] != null && !stickItemToMouse) {
                   
                   // If shift pressed, run special move action.
                   if (input.shiftDown) {
-                    console.log("Shift-click action");
+                    //console.log("Shift-click action");
                     draggingItem = grid[i];
                     originalGridLocation = this;
                     originalCellLocation = i;
                     grid[i] = null;
+                    
+                    rpauseOnce = true;
+                    stickItemToMouse = false;
+                    
                     if (shiftMoveToAction != null) shiftMoveToAction.run();
                   }
                   // If double-clicked, open file
@@ -1279,16 +1283,29 @@ public class PixelRealmWithUI extends PixelRealm {
                     Runnable[] actions;
                     
                     if (allowRename) {
+                      labels = new String[4];
+                      actions = new Runnable[4];
+                    }
+                    else {
                       labels = new String[3];
                       actions = new Runnable[3];
                     }
-                    else {
-                      labels = new String[2];
-                      actions = new Runnable[2];
-                    }
                     
-                    labels[0] = "Copy";
+                    labels[0] = "Open";
                     actions[0] = new Runnable() {public void run() {
+                        if (pitem.item instanceof PixelRealmState.MusicFileObject) {
+                          playCassette(((PixelRealmState.FileObject)pitem.item).dir);
+                        }
+                        else {
+                          file.open(((PixelRealmState.FileObject)pitem.item).dir);
+                        }
+                    }};
+                    
+                    
+                    
+                    labels[1] = "Copy";
+                    actions[1] = new Runnable() {public void run() {
+                        rpauseOnce = true;
                         rpause();
                         
                         String name = file.getFilename(pitem.getPath());
@@ -1303,10 +1320,13 @@ public class PixelRealmWithUI extends PixelRealm {
                         }
                         
                     }};
+                    
+                    
+                    
                     final int index = i;
                     
-                    labels[1] = "Delete";
-                    actions[1] = new Runnable() {public void run() {
+                    labels[2] = "Delete";
+                    actions[2] = new Runnable() {public void run() {
                         // Sound file check:
                         cassetteCheck(pitem.name);
                         
@@ -1316,7 +1336,8 @@ public class PixelRealmWithUI extends PixelRealm {
                           playDefaultMusic();
                         }
                         
-                        
+                        // Dum rpause bypass thing
+                        rpauseOnce = true;
                         rpause();
                         boolean success = file.recycle(pitem.getPath());
                         
@@ -1326,6 +1347,8 @@ public class PixelRealmWithUI extends PixelRealm {
                         else {
                           // Destroy probject associated with pitem
                           if (pitem.item != null) pitem.item.destroy();
+                          // Remove item from hotbar (because tho hotbar will reload it will keep unsynced items)
+                          hotbar.remove(pitem);
                           
                           console.log(pitem.name+" moved to recycle bin.");
                           grid[index] = null;
@@ -1336,10 +1359,11 @@ public class PixelRealmWithUI extends PixelRealm {
                         
                     }};
                     
+                    
                     // Only add to options if renaming is allowed as a grid option.
                     if (allowRename) {
-                      labels[2] = "Rename";
-                      actions[2] = new Runnable() {public void run() {
+                      labels[3] = "Rename";
+                      actions[3] = new Runnable() {public void run() {
                           rpause();
                           showInputField = true;
                           promptMessage = "Rename to:";
@@ -1522,6 +1546,110 @@ public class PixelRealmWithUI extends PixelRealm {
       }};
       pocketsGrid.setMoveInAction(rpockets);
       
+      
+      // When the user shift clicks the item, we move from pockets to whichever tab is selected:
+      
+      // - Hotbar tab: simply find a free spot and call it a day.
+      
+      // - Realm tab: depends on the file:
+      //   - wide (1500 pixels) image:   sky tab
+      //   - small and has transparency: tree tab
+      //   - otherwise: grass tab
+      //   - If grass tab is already full: find any free tab, sky, tree.
+      //   - Music file: obviously the music slot.
+      //   - No slots are available: console message and don't do anything.
+      Runnable shiftMovePocketsAction = new Runnable() {public void run() {
+        final int TAB_HOTBAR = 0;
+        final int TAB_REALM  = 1;
+        final int TAB_FILES  = 2;
+        
+        
+        switch (selectedPocketTab) {
+          case TAB_HOTBAR:
+          try {
+            // We gotta set these for ourselves.
+            itemIndex = hotbarGrid.findFreeCell();
+            currGrid = hotbarGrid;
+            moveItemToNewCell(HOTBAR);
+            
+            switchToGrabberOnExit = true;
+          }
+          catch (PocketPanicException e) {
+            // Do nothing and just print an exception thing.
+            console.log("No more space in hotbar!");
+          }
+          break;
+          
+          case TAB_REALM:
+          currGrid = realmGrid;
+          itemIndex = -1;
+          
+          // Images
+          if (file.isImage(draggingItem.name) && (draggingItem.item instanceof PixelRealmState.ImageFileObject)) {
+            PImage img = ((PixelRealmState.ImageFileObject)draggingItem.item).img.get();
+            
+            
+            // Time for some analysis
+            // Check for width of 1500
+            // Except the image we're checking is actually cached.
+            // So instead, check for 512x75 or 512x102
+            if (img.width == 512 && (img.height == 75 || img.height == 102)) {
+              // sky 
+              itemIndex = realmGridFindFreeSlot(SKY_TEXTURE_SLOT, SKY_TEXTURE_SLOT+9);
+            }
+            else if (img.width <= 256 && img.height <= 256 && hasTransparency(img)) {
+              // tree 
+              itemIndex = realmGridFindFreeSlot(TREE_TEXTURE_SLOT, TREE_TEXTURE_SLOT+9);
+            }
+            else if (realmGrid.grid[GROUND_TEXTURE_SLOT] == null) {
+              itemIndex = GROUND_TEXTURE_SLOT;
+            }
+            
+            // Attempt to find any slot to place the item in if no condition above could be met (or the slots were full).
+            if (itemIndex == -1) {
+              itemIndex = realmGridFindFreeSlot(SKY_TEXTURE_SLOT, SKY_TEXTURE_SLOT+9);
+              if (itemIndex == -1) itemIndex = realmGridFindFreeSlot(TREE_TEXTURE_SLOT, TREE_TEXTURE_SLOT+9);
+              if (itemIndex == -1 && realmGrid.grid[GROUND_TEXTURE_SLOT] == null) itemIndex = GROUND_TEXTURE_SLOT;
+            }
+            
+            
+          }
+          // End image check
+          
+          else if (file.isAudioFile(draggingItem.name)) {
+            if (currGrid.grid[MUSIC_SLOT] == null) itemIndex = MUSIC_SLOT;
+          }
+          
+          // Slot has been found
+          if (itemIndex != -1) {
+            // rename the file to .pixelrealm- (etc), if successful move item and perform swaps if necessary.
+            if (moveIntoRealmFileSlot()) {
+              moveItemToNewCell(REALM);
+            }
+            else {
+              // If the move fails, we have a complicated situation because if we swapped the file, there's no easy way to
+              // undo those changes. At least not without getting tangled in spaghetti code.
+              // Easiest thing to do is to refresh the whole menu. It won't be as good as undoing it, but the swapped item
+              // will be in a different slot in the pockets and all our items will be displayed correctly (without cells overlapping)
+              // at the very least.
+              returnDraggingItemToOriginalCell();
+              refresh();
+            }
+          }
+          // Typical indicator of all slots being full
+          else {
+            console.log("No available slots!");
+          }
+            
+          break;
+          case TAB_FILES:
+          
+          break;
+        }
+      }};
+      
+      pocketsGrid.setShiftMoveToAction(shiftMovePocketsAction);
+      
       pocketsGrid.load(1);
       
       
@@ -1529,7 +1657,7 @@ public class PixelRealmWithUI extends PixelRealm {
       
       
       // Next our hotbar grid.
-      hotbarGrid = new Grid(64);
+      hotbarGrid = new Grid(54);
       
       Runnable rhotbar = new Runnable() {public void run() {
         itemToSwap = null;
@@ -1562,6 +1690,32 @@ public class PixelRealmWithUI extends PixelRealm {
         performSwap();
       }};
       hotbarGrid.setMoveInAction(rhotbar);
+      
+      
+      Runnable shiftMoveHotbarAction = new Runnable() {public void run() {
+        String moveName = draggingItem.name;
+        currGrid = pocketsGrid;
+        
+        try {
+          // We gotta set these for ourselves.
+          itemIndex = pocketsGrid.findFreeCell();
+          currGrid = pocketsGrid;
+          
+          // Move item into pocket (will sync item if unsynced)
+          rpause();
+          if (draggingItem.pocketMove(currRealm.stateDirectory, moveName)) {
+            moveItemToNewCell(POCKET);
+          }
+          else {
+            // Nothing... pocketMove will show the prompt.
+          }
+        }
+        catch (PocketPanicException e) {
+          console.log("No more space in pockets!");
+        }
+      }};
+      hotbarGrid.setShiftMoveToAction(shiftMoveHotbarAction);
+      
       
       // Process our hotbar and insert it into our grid
       hotbarGrid.insert(hotbar);
@@ -1736,10 +1890,62 @@ public class PixelRealmWithUI extends PixelRealm {
       }};
       realmGrid.setMoveInAction(rrealmgrid);
       
+      
+      
+      Runnable shiftMoveRealmAction = new Runnable() {public void run() {
+        String moveName = draggingItem.name;
+        currGrid = pocketsGrid;
+        
+        try {
+          // We gotta set these for ourselves.
+          itemIndex = pocketsGrid.findFreeCell();
+          currGrid = pocketsGrid;
+          
+          // Move item into pocket (will sync item if unsynced)
+          moveName = renamePixelrealmFile(draggingItem.name);
+          moveName = duplicateCheck(moveName);
+          if (moveName.contains("BGM")) {
+            playDefaultMusic();
+          }
+          rpause();
+          
+          if (draggingItem.pocketMove(currRealm.stateDirectory, moveName)) {
+            moveItemToNewCell(POCKET);
+            currRealm.loadRealmAssets();
+          }
+          else {
+            // Don't do anything here, prompt will appear automatically...
+          }
+        }
+        catch (PocketPanicException e) {
+          console.log("No more space in pockets!");
+        }
+      }};
+      realmGrid.setShiftMoveToAction(shiftMoveRealmAction);
+      
+      
       loadRealmGrid();
       
       // Shouldn't need originalGridLocation but this is just to prevent a crash should there be a bug.
       originalGridLocation = pocketsGrid;
+    }
+    
+    
+    private boolean hasTransparency(PImage img) {
+      img.loadPixels();
+      for (int i = 0; i < img.pixels.length; i++) {
+        if (alpha(img.pixels[i]) < 128) {
+          return true;
+        }
+      }
+      return false;
+    }
+    
+    private int realmGridFindFreeSlot(int from, int to) {
+      for (int i = from; i < to; i++) {
+        if (realmGrid.grid[i] == null) return i; 
+      }
+      return -1;
     }
     
     
