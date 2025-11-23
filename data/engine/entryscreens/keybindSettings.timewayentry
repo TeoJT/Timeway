@@ -151,6 +151,17 @@
     "size": 30,
     "x": 711,
     "color_hex": "FFFFFFFF",
+    "y": 1696,
+    "ID": "open_pocket",
+    "text": "Open pocket",
+    "type": 8,
+    "button_color_hover": "FF8D70B5"
+  },
+  {
+    "button_color": "FF614D7D",
+    "size": 30,
+    "x": 711,
+    "color_hex": "FFFFFFFF",
     "y": 917,
     "ID": "turn_right",
     "text": "Turn right",
@@ -214,17 +225,6 @@
     "y": 1960,
     "ID": "scale_down",
     "text": "Shrink",
-    "type": 8,
-    "button_color_hover": "FF8D70B5"
-  },
-  {
-    "button_color": "FF614D7D",
-    "size": 30,
-    "x": 711,
-    "color_hex": "FFFFFFFF",
-    "y": 1696,
-    "ID": "open_pocket",
-    "text": "Open pocket",
     "type": 8,
     "button_color_hover": "FF8D70B5"
   },
@@ -332,9 +332,9 @@
     "size": 16,
     "x": 157,
     "color_hex": "FF909090",
-    "y": 1853,
+    "y": 1852,
     "ID": "30680692",
-    "text": "The following are used by the morpher tool.",
+    "text": "The following are used by the morpher and gardener tools.",
     "type": 1
   },
   {

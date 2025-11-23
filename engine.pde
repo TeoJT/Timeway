@@ -1644,6 +1644,13 @@ public class TWEngine {
             prevScreenTransition = null;
           }
           
+          // If the screen is marked as having no back option,
+          // then there's no point keeping it in the stack as it
+          // traps useless memory.
+          if (currScreen.clearPreviousScreens) {
+            screenStack.hardClear();
+          }
+          
           //console.log("END");
   
           // If we're just getting started, we need to get a feel for the framerate since we don't want to start
@@ -2185,11 +2192,26 @@ public class TWEngine {
         return 40.;
       }
       
+      // Duplicate but using sound.
+      public void detectUserInput() {
+        if (usingNode == null && inBox() && input.primaryOnce) {
+          usingNode = this;
+          sound.loopSound("scroller");
+        }
+        if (usingNode != null && !input.primaryDown) {
+          usingNode = null;
+          sound.stopSound("scroller");
+        }
+      }
+      
       protected void getSliderVal() {
         if (usingNode == this) {
           app.stroke(160);
+          float percentBefore = valFloat/max;  // Used for sound.
           valFloat = min+((mouseX()-x-CONTROL_X)/(wi-CONTROL_X))*(max-min);
           valFloat = min(max(valFloat, min), max);
+          float percentage = valFloat/max;     // Used for sound.
+          sound.setSoundVolume("scroller", min(pow(abs(percentage-percentBefore)*200f, 2f), 1.0f));
           power.setAwake();
         }
         else if (usingNode == null) {
@@ -2249,6 +2271,7 @@ public class TWEngine {
       }
     }
     
+    private int scrollerOnceSoundResetTime = 0;
     
     public class CustomSliderInt extends CustomSlider {
       
@@ -2260,6 +2283,16 @@ public class TWEngine {
       public void setVal(int val) {
         this.valFloat = (float)val;
         valInt = round(valFloat);
+      }
+      
+      
+      public void detectUserInput() {
+        if (usingNode == null && inBox() && input.primaryOnce) {
+          usingNode = this;
+        }
+        if (usingNode != null && !input.primaryDown) {
+          usingNode = null;
+        }
       }
       
       @Override
@@ -2282,7 +2315,16 @@ public class TWEngine {
         app.noStroke();
         app.fill(255);
         
+        int valIntBefore = valInt;
         valInt = round(valFloat);
+        if (valInt != valIntBefore && scrollerOnceSoundResetTime <= 0) {
+          sound.stopSound("scroller");
+          sound.playSound("scroller_once");
+          scrollerOnceSoundResetTime = 9;
+        }
+        scrollerOnceSoundResetTime--;
+        
+        
         float percentage = (round(valFloat)-min)/(max-min);
         app.rect(x+CONTROL_X+percentage*(wi-CONTROL_X)-5, y-15, 10, 30);
       }
@@ -3879,6 +3921,8 @@ public class TWEngine {
     
     
     public boolean mv(String oldPlace, String newPlace) {
+      //console.log("MOVE");
+      //Thread.dumpStack();
       // We know we're merely accessing a fake filesystem now in android.
       if (isAndroid() && (oldPlace.charAt(0) != '/' || newPlace.charAt(0) != '/')) {
         console.bugWarn("You can't move files to/from the assets folder! It's read-only!");
@@ -9105,6 +9149,7 @@ public abstract class Screen {
   protected color myBackgroundColor = DEFAULT_BACKGROUND_COLOR;
   protected float myUpperBarWeight = UPPER_BAR_WEIGHT;
   protected float myLowerBarWeight = LOWER_BAR_WEIGHT;
+  public    boolean clearPreviousScreens = false;
   
   protected float WIDTH = 0.;
   protected float HEIGHT = 0.;
@@ -9235,6 +9280,10 @@ public abstract class Screen {
       engine.power.setAwake();
     }
     //printStack();
+  }
+  
+  protected void noReturn() {
+    clearPreviousScreens = true;
   }
 
 
@@ -10305,7 +10354,7 @@ public final class SpriteSystem {
         }
 
         public void emptySpriteStack() {
-            spritesStack.empty();
+            spritesStack.clear();
         }
 
         private void renderSprite(Sprite s) {
@@ -10572,7 +10621,7 @@ public final class SpriteSystem {
                       }
                   }
                   selectedSprite = highestSelected;
-                  selectedSprites.empty();
+                  selectedSprites.clear();
                 }
             }
             
@@ -10670,7 +10719,13 @@ public final class SpriteSystem {
           return top+1; 
       }
       
-      public void empty() {
+      public void clear() {
+          top = -1;
+      }
+      
+      // Destroys the objects in the stack instead of simply setting the top variable.
+      public void hardClear() {
+          S = new Object[capacity];
           top = -1;
       }
   

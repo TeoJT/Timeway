@@ -458,6 +458,8 @@ public class HomeScreen extends Screen {
 
     public HomeScreen(TWEngine engine) {
         super(engine);
+        noReturn();
+        
         myBackgroundColor = color(10, 10, 11);
         myUpperBarColor = 0xFF37353A;
         myLowerBarColor = 0xFF37353A;
@@ -466,6 +468,7 @@ public class HomeScreen extends Screen {
         gui.interactable = false;
         
         sound.streamMusicWithFade(engine.APPPATH+INTRO_MUSIC_PATH);
+        //sound.stopMusic();
     }
 
 
@@ -814,19 +817,20 @@ public class RecycleBinScreen extends Screen {
         // Filename
         app.textFont(engine.DEFAULT_FONT, 34f);
         app.textAlign(LEFT, TOP);
-        if (originalFilenames.get(i).length() > 66) {
-          app.text(originalFilenames.get(i).substring(0, 64)+"...", x, y);
+        if (originalFilenames.get(i).length() > 56) {
+          app.text(originalFilenames.get(i).substring(0, 56)+"...", x, y);
         }
         else {
           app.text(originalFilenames.get(i), x, y);
         }
+        //console.log(originalFilenames.get(i).length() +", "+originalLocations.get(i).length());
         
         // Original location
         app.fill(100f);
         app.textFont(engine.DEFAULT_FONT, 20f);
         
-        if (originalLocations.get(i).length() > 130) {
-          app.text(originalLocations.get(i).substring(0, 128)+"...", x, y+38f);
+        if (originalLocations.get(i).length() > 96) {
+          app.text(originalLocations.get(i).substring(0, 96)+"...", x, y+38f);
         }
         else {
           app.text(originalLocations.get(i), x, y+38f);

@@ -158,7 +158,7 @@ void setup() {
     //println("ShowcrashScreen: ", sketch_showCrashScreen);
     sketch_ERR_LOG_PATH = sketchPath()+"/data/error_log.txt";
     
-    // Create the engine.
+    // Startup the engine.
     timewayEngine = new TWEngine(this);
     
     // Set the starting point for the engine.
@@ -169,7 +169,7 @@ void setup() {
     
     // Print a lil information to the terminal as a bonus :P
     println("\n***** "+timewayEngine.getAppName()+" "+timewayEngine.getVersion()+" *****");
-    println("by Teo Taylor\n\n");
+    println("by Téo Taylor\n\n");
     
     // Self-explainatory.
     requestAndroidPermissions();

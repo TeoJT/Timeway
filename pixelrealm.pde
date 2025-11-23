@@ -30,6 +30,7 @@ public class PixelRealm extends Screen {
   final static int    MAX_CHUNKS_XZ = 32768;
   final static int    MAX_VIDEOS_ALLOWED = 0;
   final static int    NUM_POOF_FRAMES = 9;
+  public final static int    HOTBAR_LIMIT = 54;
   public static final String POCKET_INFO = ".pocket_info.json";
   
   
@@ -194,9 +195,8 @@ public class PixelRealm extends Screen {
   private int operationCount = 0;
   
   // Memory protection (TODO: Move to engine)
-  private AtomicLong memUsage = new AtomicLong(0);
-  private boolean memExceeded = false;
-  private boolean showMemUsage = false;
+  protected AtomicLong memUsage = new AtomicLong(0);
+  protected boolean memExceeded = false;
   private int loading = 0;
   private int MAX_LOADER_THREADS;
   private AtomicInteger loadThreadsUsed = new AtomicInteger(0);
@@ -222,6 +222,7 @@ public class PixelRealm extends Screen {
   // i.e. canvas creation, asset loading etc should only be done ONCE.
   public PixelRealm(TWEngine engine, String dir) {
     super(engine);
+    noReturn();
     
     // --- Load default assets ---
     REALM_SKY_DEFAULT = display.getImg("pixelrealm-sky");
@@ -1358,22 +1359,17 @@ public class PixelRealm extends Screen {
               }
               catch (InterruptedException e) {
                 // When interrupted, this means we're issuing a command.
-                switch (refresherCommand.getAndSet(0)) {
+                // No need to set it to 0; this list only reads commands if the
+                // thread is interrupted, not every cycle.
+                switch (refresherCommand.get()) {
                   case 0:
                   // Do nothing.
                   break;
                   case REFRESHER_PAUSE:
                   // Pause for 100ms.
-                  try {
-                    Thread.sleep(100);
-                  }
-                  catch (InterruptedException e2) {
-                    // There really shouldn't be another command issued while in this state.
-                    console.bugWarn("refresherThread: You're still issuing commands while paused! Slow down!");
-                  }
-                  // Then we need to update our lastmodified list.
+                  // we need to update our lastmodified list.
                   needsUpdate = true;
-                  break;
+                  continue;
                   case REFRESHER_LONGPAUSE:
                   try {
                     // Wait until interrupt called.
@@ -1386,7 +1382,6 @@ public class PixelRealm extends Screen {
                   needsUpdate = true;
                   break;
                   case REFRESHER_TERMINATE:
-                  console.log("REFRESHER_TERMINATE");
                   active = false;
                   break;
                   case REFRESHER_RESTART:
@@ -6282,7 +6277,7 @@ public class PixelRealm extends Screen {
       float chunkz = floor(playerZ/tt.getGroundSize())+1.; 
   
       // This only uses a single cycle, dw.
-      legacy_terrainObjects.empty();
+      legacy_terrainObjects.clear();
       
       
       display.recordRendererTime();
@@ -6906,9 +6901,14 @@ public class PixelRealm extends Screen {
         if (primaryAction && !movementPaused) {
           switch (currentTool) {
             case TOOL_GRABBER: {
-              FileObject p = (FileObject)closestObject;
-              pickupItem(p);
-              sound.playSound("pickup");
+              if (hotbar.size() < HOTBAR_LIMIT) {
+                FileObject p = (FileObject)closestObject;
+                pickupItem(p);
+                sound.playSound("pickup");
+              }
+              else {
+                console.log("No more space in hotbar!");
+              }
             }
             break;
             case TOOL_NORMAL: {
@@ -7641,13 +7641,18 @@ public class PixelRealm extends Screen {
   
   public void displayMemUsageBar() {
     display.recordRendererTime();
-    long used = (Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory());
+    long used = (memUsage.get());
     //float percentage = (float)used/(float)MAX_MEM_USAGE;
-    long total = Runtime.getRuntime().totalMemory();
+    //long total = Runtime.getRuntime().totalMemory();
+    long total = MAX_MEM_USAGE;
     float percentage = (float)used/(float)total;
+    
+    // Self-note: Of all the places you wrote unmaintainable code it had to be here, huh?
+    final float offy = 65f;
+    
     noStroke();
     fill(0, 0, 0, 127);
-    rect(100, myUpperBarWeight+20, (WIDTH-200.), 50);
+    rect(100, myUpperBarWeight+20+offy, (WIDTH-200.), 50);
     
     if (memExceeded)
       fill(255, 50, 50); // Mem full.
@@ -7655,11 +7660,11 @@ public class PixelRealm extends Screen {
       fill(255, 140, 20); // Low mem
     else 
       fill(50, 50, 255);  // Normal
-    rect(100, myUpperBarWeight+20, (WIDTH-200.)*percentage, 50);
+    rect(100, myUpperBarWeight+20+offy, (WIDTH-200.)*percentage, 50);
     fill(255);
     textFont(engine.DEFAULT_FONT, 30);
     textAlign(LEFT, CENTER);
-    text("Mem: "+(used/1024)+" kb / "+(total/1024)+" kb", 105, myUpperBarWeight+45);
+    text("Tracked mem: "+(used/1024)+" kb / "+(total/1024)+" kb", 105, myUpperBarWeight+45+offy);
     display.recordLogicTime();
   }
   
@@ -7798,10 +7803,6 @@ public class PixelRealm extends Screen {
     engine.timestamp("display scene");
     
     display.recordLogicTime();
-    
-    
-    if (showMemUsage)
-      displayMemUsageBar();
       
     // Quickwarp controls (outside of player controls because we need non-state
     // class to run it)

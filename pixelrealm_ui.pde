@@ -512,7 +512,13 @@ public class PixelRealmWithUI extends PixelRealm {
       // --- Creator menu ---
       if (ui.buttonVary("creator_1", "new_entry_128", "Creator")) {
         sound.playSound("menu_select");
-        menu = new CreatorMenu();
+        
+        if (hotbar.size() < HOTBAR_LIMIT) {
+          menu = new CreatorMenu();
+        }
+        else {
+          errorPrompt("Hotbar full", "Your hotbar is full! Please remove some items from your hotbar before creating new files.", 0);
+        }
       }
 
       // --- Pocket menu ---
@@ -764,22 +770,24 @@ public class PixelRealmWithUI extends PixelRealm {
         sound.playSound("menu_select");
         
         
-        
         // TODO: Files may take a while to copy. Run this in a separate thread.
-        issueRefresherCommand(REFRESHER_PAUSE);
-        
-        String copypath = file.duplicateFile(probject.dir);
-        if (copypath != null) {
-          console.log("Duplicated "+probject.filename+".");
-          
-          // Call load here on our new probject so that yknow it loads (bug fix)
-          currRealm.createPRObjectAndPickup(copypath).load(new JSONObject());
-          currentTool = TOOL_GRABBER;
+        if (hotbar.size() < HOTBAR_LIMIT) {
+          issueRefresherCommand(REFRESHER_PAUSE);
+          String copypath = file.duplicateFile(probject.dir);
+          if (copypath != null) {
+            console.log("Duplicated "+probject.filename+".");
+            
+            // Call load here on our new probject so that yknow it loads (bug fix)
+            currRealm.createPRObjectAndPickup(copypath).load(new JSONObject());
+            currentTool = TOOL_GRABBER;
+          }
+          else {
+            errorPrompt("Could not copy", "Failed to copy the item. Maybe permissions have been denied?");
+          }
         }
         else {
-          console.warn("Failed to duplicate file.");
+          console.log("Your hotbar is full! Remove some items from your hotbar before creating new files.");
         }
-        
         
         
         closeMenu();
@@ -812,14 +820,25 @@ public class PixelRealmWithUI extends PixelRealm {
 
 
       if (ui.buttonVary("newfolder", "new_folder_128", "New folder")) {
-        sound.playSound("menu_select");
-        newFolder();
+        if (hotbar.size() < HOTBAR_LIMIT) {
+          sound.playSound("menu_select");
+          newFolder();
+        }
+        else {
+          errorPrompt("Hotbar full", "Your hotbar is full! Please remove some items before creating a shortcut.");
+        }
+          
       }
 
       if (ui.buttonVary("newshortcut", "create_shortcut_128", "New shortcut")) {
-        sound.playSound("menu_select");
-        issueRefresherCommand(REFRESHER_PAUSE);
-        ((PixelRealmState.ShortcutPortal)currRealm.createPRObjectAndPickup(currRealm.createShortcut())).loadShortcut();
+        if (hotbar.size() < HOTBAR_LIMIT) {
+          sound.playSound("menu_select");
+          issueRefresherCommand(REFRESHER_PAUSE);
+          ((PixelRealmState.ShortcutPortal)currRealm.createPRObjectAndPickup(currRealm.createShortcut())).loadShortcut();
+        }
+        else {
+          console.log("Your hotbar is full! Please remove some items before creating a shortcut.");
+        }
         menuShown = false;
       }
     }
@@ -830,7 +849,6 @@ public class PixelRealmWithUI extends PixelRealm {
       Runnable r = new Runnable() {
         public void run() {
           if (engine.promptInput.length() == 0) {
-            menuShown = false;
             return;
           }
           String folderpath = currRealm.stateDirectory+engine.promptInput;
@@ -854,7 +872,13 @@ public class PixelRealmWithUI extends PixelRealm {
         }
       };
 
-      beginInputPrompt("Folder name:", r);
+      if (hotbar.size() < HOTBAR_LIMIT) {
+        beginInputPrompt("Folder name:", r);
+      }
+      else {
+        console.log("Your hotbar is full! Please remove some items before creating a shortcut.");
+      }
+      menuShown = false;
     }
 
     public void newEntry() {
@@ -900,7 +924,13 @@ public class PixelRealmWithUI extends PixelRealm {
         }
       };
 
-      beginInputPrompt("Entry name:", r);
+      if (hotbar.size() < HOTBAR_LIMIT) {
+        beginInputPrompt("Entry name:", r);
+      }
+      else {
+        console.log("Your hotbar is full! Please remove some items before creating an entry.");
+      }
+      menuShown = false;
     }
   }
   
@@ -949,7 +979,7 @@ public class PixelRealmWithUI extends PixelRealm {
         };
 
         if (currRealm.terraformWarning) {
-          menu = new YesNoMenu("Warning", "Modifying the terrain generator will reset all terrain data in this realm.\nContinue?", ryes, rno);
+          menu = new YesNoMenu("Warning", "Modifying the terrain generator will reset all the terrain in this realm.\nContinue?", ryes, rno);
         } else {
           menu = new CustomiseTerrainMenu();
           menuShown = true;
@@ -1019,7 +1049,9 @@ public class PixelRealmWithUI extends PixelRealm {
     private boolean keyDelay = true;
     private float doubleClickTimer = 0f;
     private boolean switchToGrabberOnExit = false;
-    private boolean rpauseOnce = true;
+    private boolean preventShiftClick = false;
+    
+    private long prevMemUsage = 0L;
     
     
     // dummy pocketitems for some weird quirks for the grid
@@ -1163,6 +1195,8 @@ public class PixelRealmWithUI extends PixelRealm {
           scroll = input.processScroll(scroll, 10f, bottom-hii+10f, ui.mouseInArea(gridx, gridy, (squarewihi + verticalSpacing)*SLOTS_WI+5f, hii));
         }
         
+        if (!input.primaryDown) preventShiftClick = false;
+        
         // Limit viewspace of grid
         display.clip(gridx, gridy, squarewihi*SLOTS_WI+5f, hii);
         // Now draw each square
@@ -1240,16 +1274,18 @@ public class PixelRealmWithUI extends PixelRealm {
                   
                   // If shift pressed, run special move action.
                   if (input.shiftDown) {
-                    //console.log("Shift-click action");
-                    draggingItem = grid[i];
-                    originalGridLocation = this;
-                    originalCellLocation = i;
-                    grid[i] = null;
-                    
-                    rpauseOnce = true;
-                    stickItemToMouse = false;
-                    
-                    if (shiftMoveToAction != null) shiftMoveToAction.run();
+                    // The !preventShiftClick prevents the action from executing every frame.
+                    if (!preventShiftClick) {
+                      //console.log("Shift-click action");
+                      draggingItem = grid[i];
+                      originalGridLocation = this;
+                      originalCellLocation = i;
+                      grid[i] = null;
+                      
+                      stickItemToMouse = false;
+                      
+                      if (shiftMoveToAction != null) shiftMoveToAction.run();
+                    }
                   }
                   // If double-clicked, open file
                   else if (doubleClickTimer > 0f && pitem != null && pitem.item != null && pitem.item instanceof PixelRealmState.FileObject) {
@@ -1305,9 +1341,8 @@ public class PixelRealmWithUI extends PixelRealm {
                     
                     labels[1] = "Copy";
                     actions[1] = new Runnable() {public void run() {
-                        rpauseOnce = true;
                         rpause();
-                        
+                      
                         String name = file.getFilename(pitem.getPath());
                         String copypath = file.duplicateFile(pitem.getPath(), engine.APPPATH+engine.POCKET_PATH+renamePixelrealmFile(name));
                         if (copypath != null) {
@@ -1325,8 +1360,15 @@ public class PixelRealmWithUI extends PixelRealm {
                     
                     final int index = i;
                     
-                    labels[2] = "Delete";
-                    actions[2] = new Runnable() {public void run() {
+                    // We want delete (the unsafest option) to always be at the bottom, but sometimes "rename" can appear instead,
+                    // so shuffle it to the bottom so "rename" can take its place.
+                    int labelPos = 2;
+                    if (allowRename) labelPos = 3;
+                    
+                    labels[labelPos] = "Delete";
+                    actions[labelPos] = new Runnable() {public void run() {
+                        rpause();
+                      
                         // Sound file check:
                         cassetteCheck(pitem.name);
                         
@@ -1336,9 +1378,6 @@ public class PixelRealmWithUI extends PixelRealm {
                           playDefaultMusic();
                         }
                         
-                        // Dum rpause bypass thing
-                        rpauseOnce = true;
-                        rpause();
                         boolean success = file.recycle(pitem.getPath());
                         
                         if (!success) {
@@ -1362,8 +1401,8 @@ public class PixelRealmWithUI extends PixelRealm {
                     
                     // Only add to options if renaming is allowed as a grid option.
                     if (allowRename) {
-                      labels[3] = "Rename";
-                      actions[3] = new Runnable() {public void run() {
+                      labels[2] = "Rename";
+                      actions[2] = new Runnable() {public void run() {
                           rpause();
                           showInputField = true;
                           promptMessage = "Rename to:";
@@ -1407,7 +1446,6 @@ public class PixelRealmWithUI extends PixelRealm {
                 if (drop) {
                   itemIndex = i;
                   currGrid = this;
-                  rpauseOnce = true;
                   stickItemToMouse = false;
                   runMoveInAction();
                 }
@@ -1461,9 +1499,17 @@ public class PixelRealmWithUI extends PixelRealm {
       }
     }
     
+    private void rpause() {
+      issueRefresherCommand(REFRESHER_PAUSE);
+    }
+    
     public PocketMenu() {
       super();
       
+      // Outofmem protection features can prevent our files from loading
+      // if we open and close the menu too much. So we must restore the state
+      // of memusage when we close the menu.
+      prevMemUsage = memUsage.get();
       
       // Open pocket info. Will be saved when window closes.
       pocketInfo = openPocketsFile();
@@ -1485,6 +1531,8 @@ public class PixelRealmWithUI extends PixelRealm {
           return;
         }
         
+        
+        
         // if we're moving from the realm tab, we do an extra step:
         // rename the file. Simply changing pocketItem.name will do the trick (I hope)
         String moveName = draggingItem.name;
@@ -1500,12 +1548,10 @@ public class PixelRealmWithUI extends PixelRealm {
           }
         }
         
+        rpause();
         
         // Move the item
         // This will effectively move the item from the current realm to the pockets folder.
-        rpause();
-        
-        
         if (draggingItem.pocketMove(currRealm.stateDirectory, moveName)) {
           // Valid move operation...
           
@@ -1577,6 +1623,8 @@ public class PixelRealmWithUI extends PixelRealm {
           catch (PocketPanicException e) {
             // Do nothing and just print an exception thing.
             console.log("No more space in hotbar!");
+            returnDraggingItemToOriginalCell();
+            preventShiftClick = true;
           }
           break;
           
@@ -1622,6 +1670,7 @@ public class PixelRealmWithUI extends PixelRealm {
           
           // Slot has been found
           if (itemIndex != -1) {
+            rpause();
             // rename the file to .pixelrealm- (etc), if successful move item and perform swaps if necessary.
             if (moveIntoRealmFileSlot()) {
               moveItemToNewCell(REALM);
@@ -1639,6 +1688,8 @@ public class PixelRealmWithUI extends PixelRealm {
           // Typical indicator of all slots being full
           else {
             console.log("No available slots!");
+            returnDraggingItemToOriginalCell();
+            preventShiftClick = true;
           }
             
           break;
@@ -1657,7 +1708,7 @@ public class PixelRealmWithUI extends PixelRealm {
       
       
       // Next our hotbar grid.
-      hotbarGrid = new Grid(54);
+      hotbarGrid = new Grid(HOTBAR_LIMIT);
       
       Runnable rhotbar = new Runnable() {public void run() {
         itemToSwap = null;
@@ -1712,6 +1763,8 @@ public class PixelRealmWithUI extends PixelRealm {
         }
         catch (PocketPanicException e) {
           console.log("No more space in pockets!");
+          returnDraggingItemToOriginalCell();
+          preventShiftClick = true;
         }
       }};
       hotbarGrid.setShiftMoveToAction(shiftMoveHotbarAction);
@@ -1863,6 +1916,7 @@ public class PixelRealmWithUI extends PixelRealm {
           
           // Move item from pocket (potential swapping)
           else {
+            rpause();
             realmGridSwap();
             
             // rename the file to .pixelrealm- (etc), if successful move item and perform swaps if necessary.
@@ -1907,8 +1961,8 @@ public class PixelRealmWithUI extends PixelRealm {
           if (moveName.contains("BGM")) {
             playDefaultMusic();
           }
-          rpause();
           
+          rpause();
           if (draggingItem.pocketMove(currRealm.stateDirectory, moveName)) {
             moveItemToNewCell(POCKET);
             currRealm.loadRealmAssets();
@@ -1919,6 +1973,8 @@ public class PixelRealmWithUI extends PixelRealm {
         }
         catch (PocketPanicException e) {
           console.log("No more space in pockets!");
+          returnDraggingItemToOriginalCell();
+          preventShiftClick = true;
         }
       }};
       realmGrid.setShiftMoveToAction(shiftMoveRealmAction);
@@ -1928,6 +1984,7 @@ public class PixelRealmWithUI extends PixelRealm {
       
       // Shouldn't need originalGridLocation but this is just to prevent a crash should there be a bug.
       originalGridLocation = pocketsGrid;
+      
     }
     
     
@@ -2021,9 +2078,6 @@ public class PixelRealmWithUI extends PixelRealm {
         }
         
         // Renaming file causes modification in dir, prevent realm refresh.
-        // Ok this is dumb but we kinda have to force the refresher otherwise it won't actually refresh.
-        // Yeah...
-        rpauseOnce = true;
         rpause();
         
         // Attempt rename
@@ -2215,13 +2269,6 @@ public class PixelRealmWithUI extends PixelRealm {
       return true;
     }
     
-    private void rpause() {
-      if (rpauseOnce) {
-        issueRefresherCommand(REFRESHER_PAUSE);
-        rpauseOnce = false;
-      }
-    }
-    
     private void moveItemToNewCell(int coll) {
       currGrid.grid[itemIndex] = draggingItem;  // Move item
       draggingItem = null;  // No more dragging
@@ -2299,7 +2346,7 @@ public class PixelRealmWithUI extends PixelRealm {
       }
     }
     
-    private final String[] tabTitles = { "Hotbar", "Realm" };
+    private final String[] tabTitles = { "Hotbar", "Realm" /*, "Files"*/ };
 
     public void display() {
       // Background
@@ -2491,11 +2538,20 @@ public class PixelRealmWithUI extends PixelRealm {
     // When the menu closes, we need to save our pocket configuration and reload the hotbar.
     @Override
     public void close() {
+      // Save pocket info file
       app.saveJSONObject(pocketInfo, engine.APPPATH+engine.POCKET_PATH+POCKET_INFO);
+      
+      // Reload hotbar
       currRealm.loadHotbar();
+      
+      // Equip grabber
       if (switchToGrabberOnExit) {
         switchTool(TOOL_GRABBER);
       }
+      
+      
+      // Restore old memusage state
+      memUsage.set(prevMemUsage);
     }
   }
   
@@ -3134,7 +3190,7 @@ public class PixelRealmWithUI extends PixelRealm {
 
 
   // Called from base pixelrealm
-  private void errorPrompt(String title, String mssg) {
+  private void errorPrompt(String title, String mssg, int delay) {
     if (gui == null) return;
     
     // The pockets menu has a special sub-menu showing the error.
@@ -3143,10 +3199,14 @@ public class PixelRealmWithUI extends PixelRealm {
     }
     else {
       DialogMenu m = new DialogMenu(title, "back-newrealm", mssg);
-      m.setAppearTimer(20);
+      m.setAppearTimer(delay);
       menu = m;
       menuShown = true;
     }
+  }
+  
+  private void errorPrompt(String title, String mssg) {
+    errorPrompt(title, mssg, 20);
   }
 
   protected void promptPocketConflict(String filename) {
@@ -3497,6 +3557,10 @@ public class PixelRealmWithUI extends PixelRealm {
     this.runMenu();
     this.runGUI();
     this.runTutorial();
+    
+    if (engine.showMemUsage)
+      displayMemUsageBar();
+    
     if (tutorialStage == 0) runPlugin(MODE_UI);
     gui.updateSpriteSystem();
   }
