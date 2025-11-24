@@ -877,8 +877,8 @@ public class PixelRealmWithUI extends PixelRealm {
       }
       else {
         console.log("Your hotbar is full! Please remove some items before creating a shortcut.");
+        menuShown = false;
       }
-      menuShown = false;
     }
 
     public void newEntry() {
@@ -929,8 +929,8 @@ public class PixelRealmWithUI extends PixelRealm {
       }
       else {
         console.log("Your hotbar is full! Please remove some items before creating an entry.");
+        menuShown = false;
       }
-      menuShown = false;
     }
   }
   
