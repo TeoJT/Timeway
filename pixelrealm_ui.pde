@@ -1384,10 +1384,7 @@ public class PixelRealmWithUI extends PixelRealm {
                           console.warn("Could not recycle "+pitem.name+": "+file.getFileError());
                         }
                         else {
-                          // Destroy probject associated with pitem
-                          if (pitem.item != null) pitem.item.destroy();
-                          // Remove item from hotbar (because tho hotbar will reload it will keep unsynced items)
-                          hotbar.remove(pitem);
+                          removeFromHotbar(pitem);
                           
                           console.log(pitem.name+" moved to recycle bin.");
                           grid[index] = null;
@@ -1555,31 +1552,22 @@ public class PixelRealmWithUI extends PixelRealm {
         if (draggingItem.pocketMove(currRealm.stateDirectory, moveName)) {
           // Valid move operation...
           
-          // If we're moving from hotbar etc then we don't do anything extra. If we're interacting with the realms grid however,
-          // we're refreshing the realm assets.
+          // Bug fix: if we're moving from the hotbar, remove that item from the hotbar since it won't be cleared
+          // when loadhotbar() is called again on menu close.
+          if (originalGridLocation == hotbarGrid) {
+            removeFromHotbar(draggingItem);
+          }
+          
+          // If there's an existing item in the cell...
+          // Swap places (move the item to the original cell)
+          beginSwapIfOccupied();
+          moveItemToNewCell(POCKET);
+          
+          // If we're moving from the realms grid, refresh assets
           // Definitely not the most efficient approach in terms of performance.
           // But certainly the most secure and bug-free.
           if (originalGridLocation == realmGrid) {
-            //if (currGrid.grid[itemIndex] != null) {
-            //  prompt("Not implemented yet!");
-            //  return;
-            //}
-            beginSwapIfOccupied();
-            
-            // Refresh
             currRealm.loadRealmAssets();
-            
-            //if (moveMusic) {
-              //sound.streamMusicWithFade(currRealm.musicPath);
-            //}
-            
-            moveItemToNewCell(POCKET);
-          }
-          else {
-            // If there's an existing item in the cell...
-            // Swap places (move the item to the original cell)
-            beginSwapIfOccupied();
-            moveItemToNewCell(POCKET);
           }
         }
         else {
@@ -1755,6 +1743,7 @@ public class PixelRealmWithUI extends PixelRealm {
           // Move item into pocket (will sync item if unsynced)
           rpause();
           if (draggingItem.pocketMove(currRealm.stateDirectory, moveName)) {
+            removeFromHotbar(draggingItem);
             moveItemToNewCell(POCKET);
           }
           else {
@@ -1987,6 +1976,12 @@ public class PixelRealmWithUI extends PixelRealm {
       
     }
     
+    private void removeFromHotbar(PocketItem pitem) {
+      // Destroy probject associated with pitem
+      if (pitem.item != null) pitem.item.destroy();
+      // Remove item from hotbar (because tho hotbar will reload it will keep unsynced items)
+      hotbar.remove(pitem);
+    }
     
     private boolean hasTransparency(PImage img) {
       img.loadPixels();
