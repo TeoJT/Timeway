@@ -3256,6 +3256,12 @@ public class PixelRealmWithUI extends PixelRealm {
     menuShown = true;
   }
   
+  @Override
+  protected void refresh() {
+    super.refresh();
+    if (menu != null && menu.getClass() == PocketMenu.class) ((PocketMenu)menu).refresh();
+  }
+  
 
 
 
@@ -3487,9 +3493,9 @@ public class PixelRealmWithUI extends PixelRealm {
       textFont(engine.DEFAULT_FONT, 40);
       textAlign(LEFT, TOP);
       fill(0);
-      text("x "+currRealm.playerX+ "  y "+currRealm.playerY+"  z "+currRealm.playerZ, 20-2, myUpperBarWeight+100-2);
+      text("x "+currRealm.playerX+ "  y "+currRealm.playerY+"  z "+currRealm.playerZ, 20-2, myUpperBarWeight+130-2);
       fill(255);
-      text("x "+currRealm.playerX+ "  y "+currRealm.playerY+"  z "+currRealm.playerZ, 20, myUpperBarWeight+100);
+      text("x "+currRealm.playerX+ "  y "+currRealm.playerY+"  z "+currRealm.playerZ, 20, myUpperBarWeight+130);
     }
   }
 
@@ -3601,7 +3607,7 @@ public class PixelRealmWithUI extends PixelRealm {
       display.imgCentre("music", x-wi-30, y, 40, 40);
       app.noTint();
 
-      if (musicURL.length() > 0 && engine.mouseY() > y && input.primaryOnce) {
+      if (musicURL.length() > 0 && input.mouseY() > (HEIGHT-myLowerBarWeight) && input.primaryOnce) {
         app.link(musicURL);
       }
     } 

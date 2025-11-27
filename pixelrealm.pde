@@ -3560,9 +3560,9 @@ public class PixelRealm extends Screen {
           //prevRealm = currRealm;
           stats.increase("shortcut_portals_entered", 1);
           
-          //if (shortcutName.equals("")) {
-          //  requestScreen(new WorldLegacy(engine));
-          //}
+          if (shortcutName.equals("TeoJT")) {
+            requestScreen(new WorldLegacy(engine));
+          }
           gotoRealm(this.shortcutDir);
         }
       }
@@ -7580,6 +7580,10 @@ public class PixelRealm extends Screen {
     
   }
   
+  protected void refresh() {
+    currRealm.refreshEverything();
+  }
+  
   
   // This took bloody ages to figure out so it better work 100% of the timeee
   // Update: turns out I didn't need to use this function but I'm gonna leave it here
@@ -7714,7 +7718,7 @@ public class PixelRealm extends Screen {
     runMultithreadedLoader();
     if (refreshRealm.getAndSet(false) == true) {
       console.log("Change detected, refreshing realm.");
-      currRealm.refreshEverything();
+      refresh();
     }
     
     //This function assumes you have not called portal.beginDraw().
@@ -8270,7 +8274,7 @@ class WorldLegacy extends Screen {
   float MAX_RANDOM_HEIGHT=500; 
   float WATER_LEVEL=300; 
   float VARI=0.0009;
-  float HILL_WIDTH=300; 
+  float HILL_WIDTH=100; 
   float MOUNTAIN_FREQUENCY=3.; 
   float LOW_DIPS_REQUENCY=0.5; 
   float HIGHEST_MOUNTAIN=1500; 

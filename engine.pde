@@ -437,7 +437,6 @@ public class TWEngine {
     
   // Power modes
     public PowerMode powerMode = PowerMode.HIGH;
-    private boolean noBattery = false;
     private boolean sleepyMode = false;
     private boolean dynamicFramerate = true;
     private boolean powerSaver = false;
@@ -559,34 +558,6 @@ public class TWEngine {
     
     public boolean getPowerSaver() { return powerSaver; }
     
-    public class NoBattery extends RuntimeException {
-      public NoBattery(String message) {
-        super(message);
-      }
-    }
-  
-    public void updateBatteryStatus() {
-      //powerStatus = new Kernel32.SYSTEM_POWER_STATUS();
-      //Kernel32.INSTANCE.GetSystemPowerStatus(powerStatus);
-    }
-  
-    public int batteryPercentage() throws NoBattery {
-      //String str = powerStatus.getBatteryLifePercent();
-      String str = "100";
-      str = str.substring(0, str.length()-1);
-      try {
-        int percent = Integer.parseInt(str);
-        return percent;
-      }
-      catch (NumberFormatException ex) {
-        throw new NoBattery("Battery not found..? ("+str+")");
-      }
-    }
-  
-    public boolean isCharging() {
-      //return (powerStatus.getACLineStatusString().equals("Online"));
-      return false;
-    }
   
     public void updatePowerModeNow() {
       lastPowerCheck = millis();
@@ -594,7 +565,7 @@ public class TWEngine {
   
     public void setSleepy() {
       if (dynamicFramerate) {
-        if (!isCharging() && !noBattery && !sleepyMode) {
+        if (!sleepyMode) {
           sleepyMode = true;
           powerModeBefore = getPowerMode();
           lastPowerCheck = millis()+POWER_CHECK_INTERVAL;
@@ -728,12 +699,6 @@ public class TWEngine {
           setPowerMode(PowerMode.SLEEPY);
         }
       }
-      //if (!isCharging() && !noBattery && sleepyMode) {
-      //  prevPowerMode = powerMode;
-      //  fpsTrackingMode = SLEEPY;
-      //  setPowerMode(PowerMode.SLEEPY);
-      //  return;
-      //}
       
       if (sleepyMode) return;
         
@@ -6848,8 +6813,6 @@ public class TWEngine {
     private boolean force = false;
     public boolean debugInfo = false;
     PFont consoleFont;
-    public BasicUI basicui;
-    private boolean enableBasicUI = false;
 
     private class ConsoleLine {
       private int interval = 0;
@@ -6862,16 +6825,7 @@ public class TWEngine {
         interval = 0;
         this.message = "";
         this.pos = initialPos;
-        basicui = new BasicUI();
       }
-
-      //public void enableUI() {
-      //  enableBasicUI = true;
-      //}
-
-      //public void disableUI() {
-      //  enableBasicUI = false;
-      //}
 
       public void move() {
         this.pos++;
@@ -6992,9 +6946,6 @@ public class TWEngine {
 
     public void display(boolean doDisplay) {
       if (doDisplay) {
-        //pushMatrix();
-        //scale
-        //popMatrix();
         for (int i = 0; i < totalLines; i++) {
           this.consoleLine[i].display();
         }
@@ -7044,9 +6995,6 @@ public class TWEngine {
     }
     public void warn(String message) {
       this.consolePrint("WARNING "+message, color(255, 200, 30));
-      //if (enableBasicUI) {
-      //  this.basicui.showWarningWindow(message);
-      //}
     }
     public void bugWarn(String message) {
       this.consolePrint("BUG WARNING "+message, color(255, 102, 102));
@@ -7082,71 +7030,6 @@ public class TWEngine {
       if (this.timeout == 0)
         this.info(message);
       this.timeout = messageDelay;
-    }
-  }
-
-
-
-  // BasicUI class part of the console class.
-  // Might go unused. It was part of the sketchypad
-  // project in order to provide warnings to dumb people.
-  class BasicUI {
-
-
-    public BasicUI() {
-    }
-
-    private boolean displayingWindow = false;
-    private float offsetX = 0, offsetY = 0;
-    private float radius = 30;
-    private String message = "hdasklfhwea ewajgf awfkgwe fehwafg eawhjfgew ajfghewafg jehwafgghaf hewafgaehjfgewa fg aefhjgew fgewafg egaf ghewaf egwfg ewgfewa fhgewf e wgfgew afgew fg egafwe fg egwhahjfgsd asdnfv eahfhedhajf gweahj fweghf";
-
-    private void warningWindow() {
-      offsetX = sin(frameCount)*radius;
-      offsetY = cos(frameCount)*radius;
-
-      radius *= 0.90;
-
-      stroke(0);
-      strokeWeight(4);
-      fill(200);
-      rect(200+offsetX, 300+offsetY, display.WIDTH-400, display.HEIGHT-500);
-      fill(color(255, 127, 0));
-      rect(200+offsetX, 200+offsetY, display.WIDTH-400, 100);
-
-      noStroke();
-
-      textAlign(CENTER, CENTER);
-      textSize(62);
-      fill(255);
-      text("WARNING!!", display.WIDTH/2+offsetX, 240+offsetY);
-
-      textAlign(LEFT, LEFT);
-
-      textSize(24);
-      fill(0);
-      text(message+"\n\n[press x to dismiss]", 220+offsetX, 320+offsetY, width-440, height-500);
-    }
-
-    public void showWarningWindow(String m) {
-      //sndNope.play();
-      message = m;
-      radius = 50;
-      displayingWindow = true;
-    }
-
-    public boolean displayingWindow() {
-      return displayingWindow;
-    }
-
-    public void stopDisplayingWindow() {
-      displayingWindow = false;
-    }  
-
-    public void display() {
-      if (displayingWindow) {
-        warningWindow();
-      }
     }
   }
 
