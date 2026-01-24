@@ -1,3 +1,6 @@
+import ddf.minim.*;
+import ddf.minim.ugens.*;
+
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.StringWriter;

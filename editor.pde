@@ -3462,8 +3462,8 @@ public class SettingsScreen extends ReadOnlyEditor {
     engine.CACHE_MUSIC = settings.setBoolean("music_caching", getBooleanField("music_caching").state); 
     settings.setBoolean("backup_realm_files", getBooleanField("backup_realm_files").state); 
     settings.setFloat("fov", getSliderField("field_of_view").getVal());
-    sound.VOLUME_NORMAL = settings.setFloat("volume_normal", getSliderField("volume").getVal());
-    sound.VOLUME_QUIET = settings.setFloat("volume_quiet", getSliderField("minimized_volume").getVal());
+    sound.volumeNormal = settings.setFloat("volume_normal", getSliderField("volume").getVal());
+    sound.volumeQuiet = settings.setFloat("volume_quiet", getSliderField("minimized_volume").getVal());
     display.showFPS = settings.setBoolean("show_fps", getBooleanField("show_fps").state);
     settings.setBoolean("enable_plugins", getBooleanField("enable_plugins").state);
     

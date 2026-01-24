@@ -6,7 +6,6 @@ import java.io.FileNotFoundException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.io.FileOutputStream;
-import org.freedesktop.gstreamer.*;
 import java.io.InputStream;
 import java.io.FileOutputStream;
 import java.net.URL;
@@ -28,7 +27,6 @@ import java.util.ArrayList;
 import java.util.List;
 import com.sun.jna.Native;
 import com.sun.jna.Structure;
-import processing.video.Movie;
 import gifAnimation.*;
 import java.net.URLClassLoader;
 import java.net.URL;
@@ -54,7 +52,7 @@ import java.util.concurrent.TimeUnit;
 public class TWEngine {
   //*****************CONSTANTS SETTINGS**************************
   // Info and versioning
-  private static final String VERSION     = "0.2.0";
+  private static final String VERSION     = "0.2.1";
   
   public String getAppName() {
     return "Timeway";
@@ -74,15 +72,26 @@ public class TWEngine {
 
   // Paths
   //public final String WINDOWS_CMD         = "engine/shell/mywindowscommand.bat";
-  public final String POCKET_PATH         = "pocket/";
-  public final String TEMPLATES_PATH      = "engine/realmtemplates/";
-  public final String EVERYTHING_TXT_PATH = "engine/everything.txt";
-  public final String DEFAULT_MUSIC_PATH  = "engine/music/default.wav";
-  public       String DEFAULT_UPDATE_PATH = "";  // Set up by setup()
-  public final String BOILERPLATE_PATH    = "engine/other/plugin_boilerplate.java";
-  public final String PDFTOPNG_PATH       = "engine/bin/windows/pdftopng.exe";
-  public final String LOW_MEM_EXE         = "engine/other/run_low_mem.exe";
-  public final String NORMAL_MEM_EXE      = "engine/other/run_normal.exe";
+  public String POCKET_PATH() { return "pocket/"; }
+  public String TEMPLATES_PATH() { return "engine/realmtemplates/"; }
+  public String EVERYTHING_TXT_PATH() { return "engine/everything.txt"; }
+  public String DEFAULT_MUSIC_PATH() { return "engine/music/default.wav"; }
+  public String DEFAULT_UPDATE_PATH = "";
+  public String BOILERPLATE_PATH() { return "engine/other/plugin_boilerplate.java"; }
+  public String LOW_MEM_EXE() { return "engine/other/run_low_mem.exe"; }
+  public String NORMAL_MEM_EXE() { return "engine/other/run_normal.exe"; }
+  
+  public String PDFTOPNG_PATH() { 
+    if (isWindows()) return "engine/bin/windows/pdftopng.exe"; 
+    if (isLinux())   return "engine/bin/linux/pdftopng"; 
+    return null;
+  }
+  
+  public String FFMPEG_PATH() { 
+    if (isWindows()) return "engine/bin/windows/ffmpeg.exe"; 
+    if (isLinux())   return "engine/bin/linux/ffmpeg"; 
+    return null;
+  }
   
   public String CONSOLE_FONT() {return "engine/font/SourceCodePro-Regular.ttf";}
   public String IMG_PATH() {return "engine/img/";}
@@ -1840,6 +1849,7 @@ public class TWEngine {
         }
         else {
           for (int i = 0; i < opts.length; i++) {
+            if (opts[i] == null) continue;
             options.add(opts[i]);
             actions.add(acts[i]);
             float wi = app.textWidth(opts[i]);
@@ -2523,12 +2533,577 @@ public class TWEngine {
 
 
 
-
-
-
+  
+  
+  
+  
+  // A good workaround for playing OGG:
+  //ProcessBuilder pb = new ProcessBuilder(
+  //  "ffmpeg.exe",
+  //  "-y",
+  //  "-i", "input.ogg",
+  //  "-ar", "44100",
+  //  "-ac", "2",
+  //  "output.wav"
+  //);
+  
+  //pb.inheritIO();
+  //Process p = pb.start();
+  //p.waitFor();
 
 
   public class AudioModule {
+    private Minim minim;
+    private AudioOutput lineOut;
+    private Music streamerMusic;
+    private Music streamerMusicFadeTo;
+    public HashMap<String, Sampler> sounds;
+    public float volumeNormal = 1f;
+    public float volumeQuiet = 0f;
+    private int fadeMode = 0;
+    
+    public static final int FADE_TO = 1;
+    public static final int FADE_AND_STOP = 2;
+    
+    private static final float MUSIC_FADE_SPEED = 2f;
+    private static final float SFX_SAMPLE_RATE = 44100f;
+    private static final int   STREAM_BUFFER_SIZE = 2048;
+    
+    
+    public AudioModule() {
+      minim = new Minim(app);
+      lineOut = minim.getLineOut();
+      
+      sounds = new HashMap<String, Sampler>();
+      volumeNormal = settings.getFloat("volume_normal", 1f);
+      volumeQuiet = settings.getFloat("volume_quiet", 0.25f);
+      setMasterVolume(volumeNormal);
+    }
+    
+    private class Music {
+      final int STREAM = 1;
+      final int ANDROID = 2;
+      
+      // The reason we have mode is it was part of a legacy system where we used to switch between
+      // stored audio and streamed audio. In fact, that's the entire reason behind having this music
+      // class; more abstraction.
+      // But now that we're using Minim, we no longer need that cached audio. However, being able to
+      // just "bolt on" Android was super convenient, and it was thanks to this abstraction.
+      // Let's keep mode. We never know when we need to bolt on another way of playing music. Plus we're
+      // still using it for Android.
+      private int mode = 0; 
+      private AudioPlayer streamMusic;
+      private AndroidMedia androidMusic;
+      
+      // Load cached music
+      public Music(String path) {
+        if (isAndroid()) {
+          mode = ANDROID;
+          androidMusic = new AndroidMedia(path);
+        }
+        else {
+          mode = STREAM;
+          streamMusic = minim.loadFile(path, STREAM_BUFFER_SIZE);
+          if (streamMusic == null) {
+            //ffmpegConvertToWav(path);
+            streamMusic = minim.loadFile(APPPATH+"engine/music/pixelrealm_default_bgm.wav", STREAM_BUFFER_SIZE);
+          }
+        }
+      }
+      
+      public void play() {
+        if (mode == STREAM) streamMusic.loop();
+        else if (mode == ANDROID) androidMusic.loop();
+      }
+      
+      public void pause() {
+        if (mode == STREAM) streamMusic.pause();
+        else if (mode == ANDROID) androidMusic.pause();
+      }
+      
+      public void stop() {
+        if (mode == STREAM) {
+          streamMusic.pause();
+          streamMusic.rewind();
+        }
+        else if (mode == ANDROID) androidMusic.stop();
+      }
+      
+      public void volume(float vol) {
+        if (mode == STREAM) streamMusic.setGain(volToGain(vol));
+        else if (mode == ANDROID) androidMusic.volume(vol);
+      }
+      
+      public float duration() {
+        if (mode == STREAM) return (float)streamMusic.length()/1000f;
+        else if (mode == ANDROID) return 0f; // TODO: Need proper method for Android
+        return 0f;
+      }
+      
+      public float time() {
+        if (mode == STREAM) return (float)streamMusic.position()/1000f;
+        else if (mode == ANDROID) return 0f; // TODO: Need proper method for Android
+        return 0f;
+      }
+      
+      public void sync(float expectedTime) {
+        float currentTime = this.time();
+        float tolerance = 0.05;
+        if ((currentTime > expectedTime+tolerance) || (currentTime < expectedTime-tolerance)) {
+          this.jump(expectedTime);
+        }
+      }
+      
+      public void jump(float pos) {
+        if (mode == STREAM) streamMusic.cue(int(pos*1000f));
+        else if (mode == ANDROID) {} // TODO: Need proper method for Android
+      }
+      
+      public boolean isPlaying() {
+        if (mode == STREAM) return streamMusic.isPlaying();
+        else if (mode == ANDROID) return androidMusic.isPlaying();
+        return true;
+      }
+      
+      public void fade(float from, float to, float timeSeconds) {
+        if (mode == STREAM) streamMusic.shiftGain(volToGain(from), volToGain(to), int(timeSeconds*1000f));
+        else if (mode == ANDROID) {
+          // TODO: need to implement for android. Is there a method to fade?
+        }
+      }
+      
+      private float volToGain(float vol) {
+        if (vol <= 0f) {
+          return -80f;
+        }
+        else {
+          return 20f * (log(vol) / log(10f));
+        }
+      }
+      
+      private float gainToVol(float gain) {
+        if (gain <= -80f) {
+          return 0f;
+        } else {
+          return pow(10f, gain / 20f);
+        }
+      }
+      
+      public float getVolume() {
+        return gainToVol(streamMusic.getGain());
+      }
+      
+      public void close() {
+        if (mode == STREAM) {
+          stop();
+          streamMusic.close();
+        }
+        else if (mode == ANDROID) {} // No need to close in android.
+      }
+    }
+    
+    
+    public void setNormalVolume() {
+      setMasterVolume(volumeNormal);
+    }
+    
+    public void setQuietVolume() {
+      setMasterVolume(volumeQuiet);
+    }
+    
+    public void loadSound(String path) {
+      
+      final int MAX_VOICE_COUNT = 1;
+      
+      if (file.exists(path)) {
+        // Create sound effect with Minim library, attaching it to master out.
+        Sampler newSampler = new Sampler(path, MAX_VOICE_COUNT, minim);
+        newSampler.patch(lineOut);
+        sounds.put(file.getIsolatedFilename(path), newSampler);
+      }
+      else {
+        console.warn(path+" does not exist.");
+      }
+    }
+    
+    public Sampler getSound(String name) {
+      Sampler sound = sounds.get(name);
+      if (sound == null) {
+      console.bugWarn("getsound: Sound "+name+" doesn't exist!");
+      return null;
+      } else return sound;
+    }
+    
+    
+    public void playSound(String name) {
+      playSound(name, 1.0);
+    }
+    
+    public void playSound(String name, float pitch) {
+      Sampler s = getSound(name);
+      if (s != null) {
+        
+        s.setSampleRate(SFX_SAMPLE_RATE * ( 1f / pitch ) );
+        
+        s.looping = false;
+        s.trigger();
+      }
+    }
+    
+    public void loopSound(String name) {
+      // Don't want loads of annoying loops
+      Sampler s = getSound(name);
+      if (s != null) {
+        s.looping = true;
+        s.trigger();
+      }
+    }
+    
+    public void stopSound(String name) {
+      Sampler s = getSound(name);
+      if (s != null) {
+        s.stop();
+      }
+    }
+    
+    
+    public void setSoundVolume(String name, float vol) {
+      Sampler s = getSound(name);
+      if (s != null) s.amplitude.setLastValue(vol);
+    }
+    
+    
+     
+    public void setMasterVolume(float vol) {
+      setMusicVolume(vol);
+    }
+    
+    public void setMusicVolume(float vol) {
+      // Honestly, should prolly multiply this with the music object's current volume instead of making the
+      // master volume the sole user of the volume function, but it's not a problem right now so we can pretty
+      // much ignore it i think.
+      if (streamerMusic != null) streamerMusic.volume(vol);
+      if (streamerMusicFadeTo != null) streamerMusicFadeTo.volume(vol);
+    }
+    
+    public void streamMusic(final String path) {
+        Thread t1 = new Thread(new Runnable() {
+        public void run() {
+          streamerMusic = loadNewMusic(path);
+            if (streamerMusic != null)
+              streamerMusic.play();
+            }
+          }
+        );
+        //t1.setDaemon(true);
+        t1.start();
+    }
+    
+    private Music loadNewMusic(String path) {
+      // Doesn't seem to throw an exception or report an error is the file isn't
+      // found so let's do it ourselves.
+      if (!file.exists(path)) {
+      console.bugWarn("loadNewMusic: "+path+" doesn't exist!");
+      return null;
+      }
+      
+      Music newMusic = null;
+    
+      try {
+        // Calling this loads our music using our music engine of our choice (as of now it's Minim)
+        newMusic = new Music(path);
+      }
+      catch (Exception e) {
+        console.warn("Error while reading music: "+e.getClass().toString()+", "+e.getMessage());
+        return new Music(APPPATH+"engine/music/pixelrealm_default_bgm.wav"); // TODO: Add sample default fallback music.
+      }
+      
+      return newMusic;
+    }
+    
+    
+    public void stopMusic() {
+      if (streamerMusic != null) {
+        streamerMusic.close();
+        streamerMusic = null;
+      }
+      if (streamerMusicFadeTo != null) {
+        streamerMusicFadeTo.close();
+        streamerMusicFadeTo = null;
+      }
+    }
+    
+    public void pauseMusic() {
+      if (streamerMusic != null) {
+      streamerMusic.pause();
+      }
+    }
+    
+    public void continueMusic() {
+      if (streamerMusic != null) {
+      streamerMusic.play();
+      }
+    }
+    
+    
+    public void streamMusicWithFade(String path) {
+      // If no music is currently playing, don't bother fading out the music, just
+      // start the music as normal.
+      if (streamerMusic == null) {
+        streamMusic(path);
+        return;
+      }
+      
+      // If the previous music is still fading, just stop it.
+      if (streamerMusicFadeTo != null && fadeMode != 0) {
+        streamerMusicFadeTo.close();
+      }
+      
+      streamerMusicFadeTo = loadNewMusic(path);
+      if (streamerMusicFadeTo != null) {
+        streamerMusicFadeTo.fade(0.9f, 1f, 0.5f); // Fade in new music.
+        streamerMusicFadeTo.play();
+      }
+      
+      if (streamerMusic != null) {
+        streamerMusic.fade(1f, 0f, MUSIC_FADE_SPEED);  // Fade out currently playing music
+      }
+      
+      fadeMode = FADE_TO;
+    }
+    
+    public void fadeAndStopMusic() {
+      if (streamerMusic != null) {
+        streamerMusic.fade(1f, 0f, MUSIC_FADE_SPEED); // Fade out, it will eventually be stopped.
+        fadeMode = FADE_AND_STOP;
+      }
+    }
+    
+    public void syncMusic(float expectedTime) {
+      if (streamerMusic != null) {
+      streamerMusic.sync(expectedTime);
+      }
+    }
+    
+    public float getCurrentMusicDuration() {
+      if (streamerMusic != null) {
+      return streamerMusic.duration();
+      }
+      return 0.0;
+    }
+    
+    public boolean musicIsPlaying() {
+      if (streamerMusic != null) {
+      return streamerMusic.isPlaying();
+      }
+      return false;
+    }
+    
+    
+    //    FFMPEG stuff.
+    public String ffmpegConvertToWav(String input) {
+      final String output = generateCachePath("wav");
+      Thread t1 = new Thread(new Runnable() {
+        public void run() {
+          ffmpeg("-y", "-i", input, output);
+        }
+      });
+      t1.start();
+      delay(10);
+      
+      return output;
+    }
+    
+    
+    
+    
+    // ********  BEATS AND BOPS.  ********
+    public int beat = 0;
+    public int step = 0;
+    
+    private float bpm = 120f;
+    private float musicTime = 0f;
+    private boolean customTime = false;
+    
+    public void setCustomMusicTime(float t) {
+      customTime = true;
+      musicTime = t;
+    }
+    
+    public void setMusicTimeAuto() {
+      customTime = true;
+    }
+    
+    public float getTime() {
+      if (customTime) {
+      return musicTime;
+      }
+      else {
+      if (streamerMusic != null) {
+        // TODO: getting time is slow for some reason.
+        return streamerMusic.time();
+      }
+      return 0f;
+      }
+    }
+    
+    public void setBPM(float bpm) {
+      this.bpm = bpm;
+    }
+    
+    public float beatToTime(int beat) {
+      float beatspersecond = 60f/bpm;
+      return beatspersecond*((float)beat);
+    }
+    
+    public float beatToTime(int beat, int step) {
+      float beatspersecond = 60f/bpm;
+      float stepsspersecond = beatspersecond/4f;
+      return beatspersecond*((float)beat)+stepsspersecond*((float)step);
+    }
+    
+    @SuppressWarnings("unused")
+    public boolean beatBetween(int start, int end) {
+      return false;
+    }
+    
+    
+    public float beatSaw(int beatoffset, int stepoffset, int everyxbeat) {
+      if (everyxbeat == 0) everyxbeat = 1;
+      float t = (getTime())+beatToTime(beatoffset, stepoffset);
+    
+      float beatspersecond = 60f/bpm;
+      float beatfloat = (t/beatspersecond);
+      int beat = (int)beatfloat;
+    
+      if (beat % everyxbeat == 0) return 1f-(beatfloat-(float)beat);
+      else return 0f;
+    }
+    
+    public float framesPerBeat() {
+      float beatspersecond = 60f/bpm;
+      float framesPerBeat = (display.BASE_FRAMERATE*beatspersecond);
+      return framesPerBeat;
+    }
+    
+    public float framesPerQuarter() {
+      return framesPerBeat()/4f;
+    }
+    
+    public float beatSaw(int beatoffset, int everyxbeat) {
+      return beatSaw(beatoffset, 0, everyxbeat);
+    }
+    
+    public float beatSaw(int beatoffset) {
+      return beatSaw(beatoffset, 0, 1);
+    }
+    
+    public float beatSawOffbeat(int beatoffset, int everyxbeat) {
+      return beatSaw(beatoffset, 2, everyxbeat);
+    }
+    
+    public float beatSaw() {
+      return beatSaw(0, 0, 1);
+    }
+    
+    public float stepSaw(int offset) {
+      float t = (getTime())+beatToTime(0, offset);
+    
+      float beatspersecond = 60f/bpm;
+      float stepfloat = (t/(beatspersecond/4f));
+    
+      return 1f-(stepfloat-(float)((int)stepfloat));
+    }
+    
+    
+    private void processBeat() {
+      float t = 0f;
+      if (customTime) {
+      t = musicTime;
+      }
+      else {
+      if (streamerMusic != null) {
+        // TODO: getting time is slow for some reason.
+        t = streamerMusic.time();
+      }
+      musicTime = t;
+      }
+      if (bpm == 0f) return;
+      
+      float beatspersecond = 60f/bpm;
+
+      float beatfloat = (t/beatspersecond);
+      float stepfloat = (t/(beatspersecond/4f));
+    
+      beat = (int)beatfloat;
+      step = ((int)stepfloat)%4;
+      
+      if (!customTime) {
+      
+      }
+    }
+    
+    
+    
+    // ******** ok no more beats and bops. Time for the master function ********
+    public void processSound() {
+      processBeat();
+      
+      // Process fade
+      if (fadeMode == 0) {
+        // tiny performance-concerned thing, literally do nothing
+      }
+      else if (fadeMode == FADE_TO && streamerMusic != null) {
+        // Fading to. This means:
+        // streamerMusic will go to 0
+        // streamerMusicFadeTo will go to 1
+        // Once streamerMusic is fully silent, switch around streamMusicFadeTo so it becomes the new instance of streamMusic.
+        if (streamerMusic.getVolume() <= 0.001f) {
+          streamerMusic.close();
+          streamerMusic = streamerMusicFadeTo;
+          streamerMusicFadeTo = null;
+          fadeMode = 0;
+        }
+      }
+      else if (fadeMode == FADE_AND_STOP && streamerMusic != null) {
+        // Fading to. This means:
+        // streamerMusic will go to 0
+        // We don't care about streamerMusicFadeTo
+        if (streamerMusic.getVolume() <= 0.001f) {
+          streamerMusic.close();
+          streamerMusic = null;
+          fadeMode = 0;
+        }
+      }
+
+      if (streamerMusic != null) {
+        //streamerMusic.volume(masterVolume*musicVolume);
+      }
+    }
+    
+    
+    // End of the module
+    
+    
+  }
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+
+
+
+/*
+  public class LegacyAudioModule {
     private Music streamerMusic;
     private Music streamerMusicFadeTo;
     
@@ -2795,7 +3370,7 @@ public class TWEngine {
       }
     }
     
-    public AudioModule() {
+    public LegacyAudioModule() {
       // For now.
       if (isAndroid()) {
         DISABLE_GSTREAMER = true;
@@ -3216,11 +3791,16 @@ public class TWEngine {
     
     public void setMasterVolume(float vol) {
       masterVolume = vol;
-      //Sound.volume(vol);
+      setMusicVolume(vol);
     }
     
     public void setMusicVolume(float vol) {
       musicVolume = vol;
+      
+      // Honestly, should really multiply this with the music's current volume so the volume funciton isn't
+      // exclusive to master volumes, but it's not too much of a biggie right now.
+      if (streamerMusic != null) streamerMusic.volume(vol);
+      if (streamerMusicWithFade != null) streamerMusicFade
     }
   
   
@@ -3619,7 +4199,7 @@ public class TWEngine {
     
     // End of the module
   }
-  
+  */
   
   
   
@@ -3791,7 +4371,7 @@ public class TWEngine {
       // Cus we can't get any information on anything about our files, we'll need to load a list which contains everything
       // so that exists() works.
       if (isAndroid()) {
-        String[] strings = loadStrings(EVERYTHING_TXT_PATH);
+        String[] strings = loadStrings(EVERYTHING_TXT_PATH());
         for (String path : strings) {
           everything.add(path.trim());
         }
@@ -5332,11 +5912,11 @@ public class TWEngine {
     
     public PluginModule() {
       // Load the boilerplate for plugin code.
-      if (file.exists(APPPATH+BOILERPLATE_PATH)) {
+      if (file.exists(APPPATH+BOILERPLATE_PATH())) {
         
       }
       else {
-        console.warn(APPPATH+BOILERPLATE_PATH+" not found! Plugins will not work.");
+        console.warn(APPPATH+BOILERPLATE_PATH()+" not found! Plugins will not work.");
       }
       
       // Get the location of java that is currently running our beloved timeway (we will need it
@@ -5502,12 +6082,12 @@ public class TWEngine {
         // Moved here instead of setup because we want to be able to modify the boilerplate file too without having to restart
         // the program each time.
         
-        console.log(APPPATH+BOILERPLATE_PATH);
+        console.log(APPPATH+BOILERPLATE_PATH());
         
-        console.log(file.exists(APPPATH+BOILERPLATE_PATH));
+        console.log(file.exists(APPPATH+BOILERPLATE_PATH()));
         
-        if (file.exists(APPPATH+BOILERPLATE_PATH)) {
-          String[] txts = app.loadStrings(APPPATH+BOILERPLATE_PATH);
+        if (file.exists(APPPATH+BOILERPLATE_PATH())) {
+          String[] txts = app.loadStrings(APPPATH+BOILERPLATE_PATH());
           boolean secondPart = false;
           for (String s : txts) {
             if (!secondPart && s.trim().equals("[plugin_code]")) {
@@ -5521,7 +6101,7 @@ public class TWEngine {
           }
         }
         else {
-          console.warn(APPPATH+BOILERPLATE_PATH+" not found! Plugins will not work.");
+          console.warn(APPPATH+BOILERPLATE_PATH()+" not found! Plugins will not work.");
         }
         
         
@@ -6039,10 +6619,10 @@ public class TWEngine {
     
     boolean success = false;
     if (enable) {
-      success = file.copy(APPPATH+LOW_MEM_EXE, sketchPath().replaceAll("/", "\\\\")+"/Timeway.exe");
+      success = file.copy(APPPATH+LOW_MEM_EXE(), sketchPath().replaceAll("/", "\\\\")+"/Timeway.exe");
     }
     else {
-      success = file.copy(APPPATH+NORMAL_MEM_EXE, sketchPath().replaceAll("/", "\\\\")+"/Timeway.exe");
+      success = file.copy(APPPATH+NORMAL_MEM_EXE(), sketchPath().replaceAll("/", "\\\\")+"/Timeway.exe");
     }
     
     if (!success) {
@@ -6166,13 +6746,13 @@ public class TWEngine {
   }
   
   private PImage pdftopngnocache(String path) {
-    if (!file.exists(APPPATH+PDFTOPNG_PATH)) {
+    if (!file.exists(APPPATH+PDFTOPNG_PATH())) {
       console.warn("pdftopng missing!");
       return display.errorImg;
     }
     
     String cachepath = generateCachePath("");
-    CmdOutput cmdout = runExecutableCommand(APPPATH+PDFTOPNG_PATH, "-f", "1", "-l", "1", "-r", "48", path, cachepath);
+    CmdOutput cmdout = runExecutableCommand(APPPATH+PDFTOPNG_PATH(), "-f", "1", "-l", "1", "-r", "48", path, cachepath);
     if (!cmdout.success) {
       console.warn("pdftopng error: "+cmdout.exitCode+" "+cmdout.message);
     }
@@ -6193,6 +6773,29 @@ public class TWEngine {
       }
     });
     return img;
+  }
+  
+  // Input
+  public boolean ffmpeg(String... cmd) {
+    if (!file.exists(APPPATH+FFMPEG_PATH())) {
+      console.warn("ffmpeg missing!");
+      return false;
+    }
+    
+    // Make new arguments that use FFMPEG.
+    String[] newArgs = new String[cmd.length+1];
+    newArgs[0] = APPPATH+FFMPEG_PATH();
+    for (int i = 1; i < newArgs.length; i++) {
+      newArgs[i] = cmd[i-1];
+    }
+    
+    CmdOutput cmdout = runExecutableCommand(newArgs);
+    if (!cmdout.success) {
+      console.warn("ffmpeg error: "+cmdout.exitCode+" "+cmdout.message);
+      return false;
+    }
+    
+    return true;
   }
   
   
@@ -7072,7 +7675,7 @@ public class TWEngine {
     } else if (ext.equals("frag")) {
       // Don't load anything since .vert also loads corresponding .frag
     } else if (ext.equals("wav") || ext.equals("ogg") || ext.equals("mp3")) {
-      sound.sounds.put(name, new SoundFile(app, path));
+      sound.loadSound(path);
     } else if (ext.equals("ini")) {
       // Just ignore these
     } else {
@@ -7316,67 +7919,6 @@ public class TWEngine {
   }
   
   
-  // IMPORTANT NOTE: This function does NOT load in a seperate thread, so you should do that yourself
-  // when using this!
-  public SoundFile tryLoadSoundCache(String originalPath, Runnable readOriginalOperation) {
-    openCacheInfo();
-
-    JSONObject cachedItem = cacheInfoJSON.getJSONObject(originalPath);
-    
-    
-    // If the object is null here, then there's no info therefore we cannot
-    // perform the checksum, so continue to load original instead.
-    if (cachedItem != null) {
-      console.info("tryLoadSoundCache: Found cached entry from info file");
-      
-      
-      // First, load the actual sound using the actual file path (the one above is a lie lol)
-      String actualPath = cachedItem.getString("actual", "");
-      
-
-        if (actualPath.length() > 0) {
-          String lastModified = "[null]";        // Test below automatically fails if there's no file found.
-          if (file.exists(originalPath)) lastModified = file.getLastModified(originalPath);
-      
-          // Check if the sound has been modified at all since last time before we load the original.
-          if (cachedItem.getString("lastModified", "").equals(lastModified)) {
-            console.info("tryLoadSoundCache: No modifications");
-            
-            // No checksum tests because checksums are kinda useless anyways!
-            
-            // All checks passed so we can load the cache.
-            console.info("tryLoadSoundCache: loading cached sound");
-            try {
-              // Do NOT let this stay in RAM once we're done with it! (the false argument in this constructor)
-              SoundFile loadedSound = new SoundFile(app, actualPath, false);
-              return loadedSound;
-            }
-            catch (RuntimeException e) {
-              console.info("tryLoadSoundCache: welp, time to load the original!");
-              console.info("tryLoadSoundCache: something went wrong with loading cache (maybe it's corrupted)");
-            }
-            
-            
-            // After this point something happened to the original image (or cache in unusual circumstances)
-            // and must not be used.
-            // We continue to load original and recreate the cache.
-          }
-      }
-      
-      
-    }
-    
-    // We should only reach this point if no cache exists or is corrupted
-    console.info("tryLoadSoundCache: loading original instead");
-    if (readOriginalOperation != null) readOriginalOperation.run();
-    console.info("tryLoadSoundCache: done loading");
-    
-
-    SoundFile returnSound = originalSound;
-    // Set it to null to catch programming errors next time.
-    originalSound = null;
-    return returnSound;
-  }
 
   // Returns image if an image is found, returns null if cache for that image doesn't exist.
   public PImage tryLoadImageCache(String originalPath, Runnable readOriginalOperation) {
@@ -7662,16 +8204,10 @@ public class TWEngine {
 
 
   private PImage originalImage = null;
-  private SoundFile originalSound = null;
   public void setOriginalImage(PImage image) {
     if (image == null) console.bugWarn("setOriginalImage: the image you provided is null! Is your runnable load code working??");
     originalImage = image;
   }
-  public void setOriginalSound(SoundFile sound) {
-    if (sound == null) console.bugWarn("setOriginalSound: the sound you provided is null! Is your runnable load code working??");
-    originalSound = sound;
-  }
-  
   
   
   
@@ -7755,6 +8291,7 @@ public class TWEngine {
     private float holdKeyFrames = 0.;
     private boolean keyFired = false;
     private boolean typingDelay = false;
+    public int typingActive = 0;
     
     private float cache_mouseX = 0.0;
     private float cache_mouseY = 0.0;
@@ -7898,6 +8435,14 @@ public class TWEngine {
   
       //*************KEYBOARD*************
       
+      // If nobody's listening to any typing, then why are there fire flags set true?? Set em false.
+      if (typingActive <= 0) {
+        keyFired = false;
+      }
+      else {
+        typingActive--;
+      }
+      
       // Oneshot key control
       for (int i = 0; i < 1024; i++) {
         if (keys[i] > 0) {
@@ -7994,9 +8539,15 @@ public class TWEngine {
       
     //}
     
+    public boolean typingActive() {
+      return typingActive > 0;
+    }
+    
     
     public String getTyping(String str, boolean includeEnter) {
       boolean solidifyBlink = true;
+      
+      typingActive = 2;
       
       if (typingDelay) {
         typingDelay = false;
@@ -8856,7 +9407,6 @@ public class TWEngine {
   public void requestScreen(Screen screen) {
     if (currScreen != null) {
       currScreen.requestScreen(screen);
-      sound.playSound("multiple_choice");
     }
   }
   
@@ -9262,7 +9812,7 @@ public final class SpriteSystem {
         public ArrayList<Sprite> sprites;
         public Sprite selectedSprite;
         public Stack<Sprite> spritesStack;
-        private int newSpriteX = 0, newSpriteY = 0, newSpriteZ = 0;
+        private int newSpriteX = 100, newSpriteY = 100, newSpriteZ = 0;
         public Sprite unusedSprite;
         public TWEngine engine;
         public PApplet app;
@@ -10637,6 +11187,223 @@ public final class SpriteSystem {
         return (Iterator<T>)Arrays.asList(S).iterator();
       }
     
+    }
+    
+    // --- Linked list stuff ---
+    class ItemSlot<T> {
+        public ItemSlot next = null;
+        public ItemSlot prev = null;
+        public T carrying = null;
+        public float val = 0.;
+    
+        public ItemSlot(T o) {
+          this.carrying = o;
+        }
+    
+        //public void remove() {
+        //  if (this == head)
+        //    head = this.next;
+    
+        //  if (this == tail)
+        //    tail = this.prev;
+    
+        //  if (this == inventorySelectedItem) {
+        //    inventorySelectedItem = this.prev;
+        //    if (inventorySelectedItem == null) 
+        //      inventorySelectedItem = this.next;
+        //    // Will be null as intended if next is null too.
+        //    // i.e., the item just removed happens to be the last item in the inventory.
+        //  }
+    
+        //  if (this.prev != null)
+        //    this.prev.next = this.next;
+    
+        //  if (this.next != null)
+        //    this.next.prev = this.prev;
+        //}
+    
+        //public void addAfterMe(ItemSlot newNode) {
+    
+        //  ItemSlot prev = this;
+        //  ItemSlot next = this.next;
+    
+        //  newNode.next = next;
+        //  newNode.prev = prev;
+        //  if (next != null) next.prev = newNode;
+        //  prev.next = newNode;
+    
+        //  if (this == tail) {
+        //    tail = prev;
+        //  }
+        //}
+    
+        //public void addEnd() {
+        //  if (head == null) {  
+        //    head = this;
+        //    tail = this;
+        //    head.prev = null;
+        //    tail.next = null;
+        //    inventorySelectedItem = this;
+        //  } else {  
+        //    //add newNode to the end of list. tail->next set to newNode  
+        //    tail.next = this;  
+        //    //newNode->previous set to tail  
+        //    this.prev = tail;  
+        //    //newNode becomes new tail  
+        //    tail = this;  
+        //    //tail's next point to null  
+        //    tail.next = null;
+        //  }
+        //  inventorySelectedItem = this;
+        //}
+      }
+    
+    class LinkedList<T> implements Iterable<T> {
+      private int operationCount = 0;
+      public ItemSlot<T> head = null;
+      public ItemSlot<T> tail = null;
+      public ItemSlot<T> inventorySelectedItem = null;
+      
+      @Override
+      public Iterator<T> iterator() {
+          return new LinkedListIterator();
+      }
+  
+      private class LinkedListIterator implements Iterator<T> {
+          private ItemSlot<T> current;
+  
+          public LinkedListIterator() {
+              this.current = head;
+          }
+  
+          @Override
+          public boolean hasNext() {
+              return current != null;
+          }
+  
+          @Override
+          public T next() {
+              if (!hasNext()) {
+                  throw new java.util.NoSuchElementException();
+              }
+              T value = current.carrying;
+              current = current.next;
+              return value;
+          }
+      }
+      
+      ItemSlot itCurr = null;
+      
+      //public T next() { 
+      //  ItemSlot tmp = itCurr;
+      //  itCurr = itCurr.next;
+      //  return tmp.carrying;
+      //} 
+      
+      //public boolean hasNext() {
+      //  return itCurr != null;
+      //}
+    
+      public ItemSlot add(T o) {
+        ItemSlot node = new ItemSlot(o);
+        this.add(node);
+        return node;
+      }
+      
+      public ItemSlot add(ItemSlot node) {
+        if (head == null) {  
+          head = tail = node;
+          head.prev = null;
+          tail.next = null;
+        } else {  
+          //add newNode to the end of list. tail->next set to newNode  
+          tail.next = node;  
+          //newNode->previous set to tail  
+          node.prev = tail;  
+          //newNode becomes new tail  
+          tail = node;  
+          //tail's next point to null  
+          tail.next = null;
+        }  
+        return node;
+      }
+      
+    
+      public ItemSlot remove(ItemSlot node) {
+        if (node == head)
+          head = node.next;
+    
+        if (node == tail)
+          tail = node.prev;
+    
+        if (node.prev != null)
+          node.prev.next = node.next;
+    
+        if (node.next != null)
+          node.next.prev = node.prev;
+    
+        // Object should be dereferenced now.
+        return node;
+      }
+      
+      public void remove(T object) {
+        ItemSlot current = head;
+        while (current != null) {
+          if (current.carrying == object) {
+            remove(current);
+            return;
+          }
+          current = current.next;
+        }
+        throw new RuntimeException("Could not remove item; not found in LinkedList");
+      }
+      
+      public void insertionSort() {
+        operationCount = 0;
+        if (head == null || head.next == null) {
+          return; // List is empty or has only one element, so it is already sorted
+        }
+    
+        ItemSlot current = head.next; // Node to be inserted into the sorted portion
+    
+        while (current != null) {
+          ItemSlot nextNode = current.next; // Store the next node before modifying current.next
+    
+          boolean run = true;
+          while (current.prev != null && run) {
+            operationCount++;
+            if (current.prev.val < current.val) {
+              // Swap them.
+              ItemSlot previous = current.prev;
+              ItemSlot next = current.next;
+    
+              previous.next = next;
+              current.prev = previous.prev;
+              current.next = previous;
+    
+              if (previous.prev != null) {
+                previous.prev.next = current;
+              }
+              previous.prev = current;
+              if (next != null) {
+                next.prev = previous;
+              }
+    
+              if (head == previous) {
+                head = current;
+              }
+              if (tail == current) {
+                tail = previous;
+              }
+            } else run = false;
+          }
+    
+          current = nextNode; // Move to the next node
+        }
+    
+        //if (head == null) console.bugWarn("Null head!");
+        //if (tail == null) console.bugWarn("Null tail!");
+      }
     }
 
 

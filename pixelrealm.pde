@@ -7,6 +7,9 @@ import java.util.ListIterator;
 import java.util.Iterator;
 import java.io.RandomAccessFile;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
+
 // ---- The Pixel Realm screen -----
 // Your folders are realms, your computer's drive is a universe.
 //
@@ -176,6 +179,7 @@ public class PixelRealm extends Screen {
   public static final int REFRESHER_RESTART = 3;        // Tells the thread to refresh its lastmodified list, use this when you're switching realms to prevent an unintended realm refresh.
   public static final int REFRESHER_LONGPAUSE = 4;
   public static final int REFRESHER_EXITLONGPAUSE = 5;
+  
       
   
   
@@ -275,8 +279,6 @@ public class PixelRealm extends Screen {
     
     // --- Sounds and music ---
     sound.loopSound("portal");
-    sound.setSoundVolume("underwater", 0.);
-    sound.loopSound("underwater");
     
     // Some settings
     fovx = radians(settings.getFloat("fov", 60f));
@@ -1278,13 +1280,13 @@ public class PixelRealm extends Screen {
         }
         
         // Another duplicate check that is mostly temporary and I'll have a better solution soon.
-        if (file.exists(engine.APPPATH+engine.POCKET_PATH+newName)) {
+        if (file.exists(engine.APPPATH+engine.POCKET_PATH()+newName)) {
           console.log("genuine conflict");
           promptPocketConflict(newName);
           return false;
         }
         
-        boolean success = file.mv(fro+name, engine.APPPATH+engine.POCKET_PATH+newName);
+        boolean success = file.mv(fro+name, engine.APPPATH+engine.POCKET_PATH()+newName);
         if (!success) {
           //console.warn("failed to move");
           //console.warn("to: "+engine.APPPATH+engine.POCKET_PATH+name);
@@ -1294,7 +1296,7 @@ public class PixelRealm extends Screen {
         }
         // At this point, the file should be moved therefore it is now sync'd with the memory
         // as we move realms.
-        updatePath(engine.APPPATH+engine.POCKET_PATH+newName);
+        updatePath(engine.APPPATH+engine.POCKET_PATH()+newName);
         name = newName;
         this.syncd = true;
       }
@@ -2081,7 +2083,6 @@ public class PixelRealm extends Screen {
     
     
     
-    
     public class TerrainChunkV2 {
       
       // Somewhat of a unique identifier for the chunk.
@@ -2190,6 +2191,8 @@ public class PixelRealm extends Screen {
         }
       }
       
+      
+      
       // Assumes tiles has already been set
       private void updatePShape() {
           scene.textureWrap(REPEAT);
@@ -2199,6 +2202,7 @@ public class PixelRealm extends Screen {
           pshapeChunk.textureMode(NORMAL);
           // TODO: add code ready for custom tile textures.
           pshapeChunk.texture(img_grass.get());
+          
           
           // Bug fix: extra logic cus the edge tile in the minux direction is visible but has no
           // collision and it's very annoying.
@@ -2283,7 +2287,6 @@ public class PixelRealm extends Screen {
         // In non-modifyTerrain mode, terrain uses PShapes stored in GPU memory (fast but rigid, to change tile data you must re-generate entire chunk)
         if (!modifyTerrain) {
           try {
-            
           
             scene.shape(pshapeChunk);
           }
@@ -3302,24 +3305,24 @@ public class PixelRealm extends Screen {
   
         this.rot = json.getFloat("rot", random(-PI, PI));
         
-        Movie video = new Movie(app, dir);
-        video.volume(0f);
+        //Movie video = new Movie(app, dir);
+        //video.volume(0f);
         
-        // Determine if the video should load or not.
-        if (
-          (video.sourceWidth <= 512 || video.sourceHeight <= 512) &&  // Small enough to play without much lag, even if one dimension isn't stupidly big.
-          (video.sourceWidth < 1536 && video.sourceHeight < 1536) && // Avoid weird ass files that were probably designed to throw off Timeway and make it crash.
-          (totalVideosLoaded < MAX_VIDEOS_ALLOWED)) 
-        {
-          this.img = new RealmTextureUV(video);
-          //this.img.getD().pimage = video;
-          movieEnabled = true;
-        }
-        else {
-          this.img = new RealmTextureUV(display.getImg("video_nothumb"));
-          movieEnabled = false;
-        }
-        totalVideosLoaded++;
+        //// Determine if the video should load or not.
+        //if (
+        //  (video.sourceWidth <= 512 || video.sourceHeight <= 512) &&  // Small enough to play without much lag, even if one dimension isn't stupidly big.
+        //  (video.sourceWidth < 1536 && video.sourceHeight < 1536) && // Avoid weird ass files that were probably designed to throw off Timeway and make it crash.
+        //  (totalVideosLoaded < MAX_VIDEOS_ALLOWED)) 
+        //{
+        //  this.img = new RealmTextureUV(video);
+        //  //this.img.getD().pimage = video;
+        //  movieEnabled = true;
+        //}
+        //else {
+        //  this.img = new RealmTextureUV(display.getImg("video_nothumb"));
+        //  movieEnabled = false;
+        //}
+        //totalVideosLoaded++;
       }
       
       public void display() {
@@ -3334,18 +3337,18 @@ public class PixelRealm extends Screen {
               
               //setSize(1.);
               
-              if (this.img.get() instanceof Movie) {
-                Movie video = (Movie)this.img.get();
-                if (!video.isPlaying()) {
-                  video.loop();
-                  video.volume(0f);
-                }
-                if (video.available()) {
-                  video.read(); 
-                }
-                this.wi = (float)video.sourceWidth*size;
-                this.hi = (float)video.sourceHeight*size;
-              }
+              //if (this.img.get() instanceof Movie) {
+              //  Movie video = (Movie)this.img.get();
+              //  if (!video.isPlaying()) {
+              //    video.loop();
+              //    video.volume(0f);
+              //  }
+              //  if (video.available()) {
+              //    video.read(); 
+              //  }
+              //  this.wi = (float)video.sourceWidth*size;
+              //  this.hi = (float)video.sourceHeight*size;
+              //}
               
               //float y1 = y-hi;
               // There's no y2 huehue.
@@ -3373,14 +3376,14 @@ public class PixelRealm extends Screen {
       
       public void finalize() {
         // Loads of obsessive checks
-        if (this.img != null
-        &&  this.img.get() != null
-        &&  this.img.get() != null
-        &&  this.img.get() instanceof Movie)
-        {
-          // Stop the hidden video
-          ((Movie)this.img.get()).stop();
-        }
+        //if (this.img != null
+        //&&  this.img.get() != null
+        //&&  this.img.get() != null
+        //&&  this.img.get() instanceof Movie)
+        //{
+        //  // Stop the hidden video
+        //  ((Movie)this.img.get()).stop();
+        //}
       }
     }
     
@@ -4021,6 +4024,8 @@ public class PixelRealm extends Screen {
           scene.rotateY(d);
           scene.scale(scale);
           
+          
+          
           unifiedShader.setCommonUniforms();
           
           element.render();
@@ -4608,7 +4613,7 @@ public class PixelRealm extends Screen {
       if (entries != null) {
         // For now, we can't put stuff into our pockets in android mode.
         if (!isAndroid()) {
-          File[] pocketFolder = (new File(engine.APPPATH+engine.POCKET_PATH)).listFiles();
+          File[] pocketFolder = (new File(engine.APPPATH+engine.POCKET_PATH())).listFiles();
           for (File f : pocketFolder) {
             String path = f.getAbsolutePath().replaceAll("\\\\", "/");
             String name = file.getFilename(path);
@@ -4693,7 +4698,7 @@ public class PixelRealm extends Screen {
           jsonFile = app.loadJSONObject(dir+realm_turf);
         }
         catch (RuntimeException e) {
-          if (!(dir+realm_turf).contains(engine.APPPATH+engine.TEMPLATES_PATH)) {
+          if (!(dir+realm_turf).contains(engine.APPPATH+engine.TEMPLATES_PATH())) {
             console.warn("There's an error in the folder's turf file (exception). Will now act as if the turf is new.");
             file.backupMove(dir+realm_turf);
           }
@@ -4706,7 +4711,7 @@ public class PixelRealm extends Screen {
         if (jsonFile == null) {
           file.backupMove(dir+realm_turf);
           
-          if (!(dir+realm_turf).contains(engine.APPPATH+engine.TEMPLATES_PATH)) {
+          if (!(dir+realm_turf).contains(engine.APPPATH+engine.TEMPLATES_PATH())) {
             console.warn("There's an error in the folder's turf file (null). Will now act as if the turf is new.");
             file.backupMove(dir+realm_turf);
           }
@@ -4758,8 +4763,8 @@ public class PixelRealm extends Screen {
         // Unknown version.
         else {
           console.log(dir.replaceAll("\\\\", "/"));
-          console.log(engine.TEMPLATES_PATH);
-          if (dir.replaceAll("\\\\", "/").indexOf(engine.TEMPLATES_PATH) == -1) {
+          console.log(engine.TEMPLATES_PATH());
+          if (dir.replaceAll("\\\\", "/").indexOf(engine.TEMPLATES_PATH()) == -1) {
             console.log("Incompatible turf file, backing up old and creating new turf.");
             file.backupMove(dir+realm_turf);
             issueRefresherCommand(REFRESHER_PAUSE);
@@ -5478,6 +5483,8 @@ public class PixelRealm extends Screen {
     
     // ----- Pixel Realm logic code -----
     
+    boolean startSwim = true;
+    boolean startUnderwater = true;
     
     
     public void runPlayer() {
@@ -5680,7 +5687,13 @@ public class PixelRealm extends Screen {
                 
               if (bob-HALF_PI > TWO_PI-HALF_PI) {
                 bob = 0.;
-                sound.playSound("step", random(0.9, 1.2));
+                if (isInWater) {
+                  sound.playSound("water_step", random(0.8, 1.2));
+                }
+                else {
+                  sound.playSound("step", random(0.9, 1.2));
+                }
+                
                 stats.increase("steps", 1);
                 //if (isInWater) 
                 //  // TODO: get an actual water step sound effect
@@ -5707,13 +5720,22 @@ public class PixelRealm extends Screen {
               yvel = min(yvel+SWIM_UP_SPEED, UNDERWATER_TEMINAL_VEL);
               jumpStrength = UNDERWATER_JUMP_STRENGTH;
               if (jumpTimeout <= 0.) {
-                sound.loopSound("swimming");
-                sound.pauseSound("underwater");
+                
+                // This if statement (though really really ugly) makes the sound effect only start once.
+                // Otherwise it's glitchy and never actually starts.
+                if (startSwim) {
+                  sound.loopSound("swimming");
+                  startSwim = false;
+                  
+                  sound.stopSound("underwater");
+                  startUnderwater = true;
+                }
               }
             }
             // No longer in water.
             else {
-              sound.pauseSound("swimming");
+              sound.stopSound("swimming");
+              startSwim = true;
             }
             
             if ((onGround() || coyoteJump > 0.) && jumpTimeout < 1.) {
@@ -5739,9 +5761,23 @@ public class PixelRealm extends Screen {
           // No longer pressing space,
           // don't need to check if we're underwater
           else {
-            sound.pauseSound("swimming");
-            if (isUnderwater) sound.loopSound("underwater");
+            sound.stopSound("swimming");
+            startSwim = true; // Reset
+            
+            if (isUnderwater && startUnderwater) {
+              sound.loopSound("underwater");
+              startUnderwater = false;
+            }
           }
+          
+          if (!isUnderwater) {
+            sound.stopSound("underwater");
+            startUnderwater = true;
+          }
+          
+          
+          
+          
   
           if (jumpTimeout > 0) jumpTimeout -= display.getDelta();
           if (coyoteJump > 0) coyoteJump -= display.getDelta();
@@ -5888,19 +5924,21 @@ public class PixelRealm extends Screen {
             
             if (subTool != 0) {
               
+              final float MAX_TREE_SIZE = 35f;
+              final float MIN_TREE_SIZE = 0.1f;
+              
+              handleGrowShrinkSounds();
+              
+              // Actual control handle
               if (input.keyAction("scale_up", '=') && manualTreeSize <= 35f) {
-                sound.playSoundOnce("grow");
-                sound.stopSound("shrink");
                 manualTreeSize *= pow(1.01, display.getDelta());
                 previewTree.setSize(manualTreeSize);
               }
               else if (input.keyAction("scale_down", '-') && manualTreeSize > 0.1f) {
-                sound.playSoundOnce("shrink");
-                sound.stopSound("grow");
                 manualTreeSize *= pow(0.99, display.getDelta());
                 previewTree.setSize(manualTreeSize);
               }
-              else {
+              else if (manualTreeSize < MIN_TREE_SIZE || manualTreeSize > MAX_TREE_SIZE) {
                 sound.stopSound("grow");
                 sound.stopSound("shrink");
               }
@@ -5919,15 +5957,31 @@ public class PixelRealm extends Screen {
       wasOnGround = onGround();
     }
     
+    private void handleGrowShrinkSounds() {
+      // Sound effect handle
+      if (input.keyActionOnce("scale_up", '=')) {
+        sound.loopSound("grow");
+        sound.stopSound("shrink");
+      }
+      if (input.keyActionOnce("scale_down", '-')) {
+        sound.loopSound("shrink");
+        sound.stopSound("grow");
+      }
+      if (!input.keyAction("scale_down", '-') && !input.keyAction("scale_up", '=')) {
+        sound.stopSound("grow");
+        sound.stopSound("shrink");
+      }
+    }
+    
     
     public void runMorpherTool() {
       if (currentTool == TOOL_MORPHER) {
         
         if (!movementPaused) {
+          handleGrowShrinkSounds();
+          
           // Some keyboard actions and controls (i dont need to explain that)
           if (input.keyAction("scale_up", '=')) {
-            sound.playSoundOnce("grow");
-            sound.stopSound("shrink");
             if (subTool == MORPHER_BULGE || subTool == MORPHER_FLAT) {
               morpherRadius *= pow(1.01, display.getDelta());
             }
@@ -5941,8 +5995,6 @@ public class PixelRealm extends Screen {
             }
           }
           else if (input.keyAction("scale_down", '-')) {
-            sound.playSoundOnce("shrink");
-            sound.stopSound("grow");
             if (subTool == MORPHER_BULGE || subTool == MORPHER_FLAT) {
               morpherRadius *= pow(0.99, display.getDelta());
             }
@@ -5954,10 +6006,6 @@ public class PixelRealm extends Screen {
                 morpherBlockHeight += 6.*display.getDelta();
               }
             }
-          }
-          else {
-            sound.stopSound("grow");
-            sound.stopSound("shrink");
           }
           
           if (input.keyActionOnce("next_subtool", ']')) {
@@ -6740,7 +6788,7 @@ public class PixelRealm extends Screen {
         // - Failed to move
         
         // Yes, it should already be directorified. But we play it safe here.
-        String fro = engine.APPPATH+engine.POCKET_PATH+pitem.name;
+        String fro = engine.APPPATH+engine.POCKET_PATH()+pitem.name;
         String to = newpath;
         // File is not in the pockets folder (for some reason)
         if (!file.exists(fro)) {
@@ -7150,7 +7198,6 @@ public class PixelRealm extends Screen {
       float FADE = 0.9;
       display.recordRendererTime();
       if (isUnderwater) {
-        sound.setSoundVolume("underwater", 1.0);
         scene.beginShape();
         scene.textureMode(NORMAL);
         scene.textureWrap(REPEAT);
@@ -7170,9 +7217,6 @@ public class PixelRealm extends Screen {
         
         scene.endShape();
         scene.noTint();
-      }
-      else {
-        sound.setSoundVolume("underwater", 0.0);
       }
       
       if (portalLight > 0.1) {
@@ -7380,7 +7424,7 @@ public class PixelRealm extends Screen {
     // that another day.
     // Unless I've already coded it. Then this comment is obselete. And we all know that I'll of course forget to
     // update this vague comment in the sea of code.
-    app.saveJSONObject(entries, engine.APPPATH+engine.POCKET_PATH+POCKET_INFO);
+    app.saveJSONObject(entries, engine.APPPATH+engine.POCKET_PATH()+POCKET_INFO);
     if (!success) {
       // bump back the player lol.
       bumpBack();
@@ -7429,7 +7473,7 @@ public class PixelRealm extends Screen {
     }
     
     // Prevent the player going into directories that would make Timeway implode on itself
-    if (file.directorify(to).equals(file.directorify(engine.APPPATH+engine.POCKET_PATH))) {
+    if (file.directorify(to).equals(file.directorify(engine.APPPATH+engine.POCKET_PATH()))) {
       prompt("Nice try", "You can't go into Timeway's pocket directory. Doing so would cause a paradox.", 20);
       bumpBack();
       return;
@@ -7532,12 +7576,12 @@ public class PixelRealm extends Screen {
   protected JSONObject openPocketsFile() {
     // Create pocket folder if it doesn't exist to prevent Timeway from crashing itself
     // TODO: replace with engine file function idk
-    if (!file.exists(engine.APPPATH+engine.POCKET_PATH)) new File(engine.APPPATH+engine.POCKET_PATH).mkdir();
+    if (!file.exists(engine.APPPATH+engine.POCKET_PATH())) new File(engine.APPPATH+engine.POCKET_PATH()).mkdir();
     
     JSONObject json = new JSONObject();
-    if (file.exists(engine.APPPATH+engine.POCKET_PATH+POCKET_INFO)) {
+    if (file.exists(engine.APPPATH+engine.POCKET_PATH()+POCKET_INFO)) {
       try {
-        json = loadJSONObject(engine.APPPATH+engine.POCKET_PATH+POCKET_INFO);
+        json = loadJSONObject(engine.APPPATH+engine.POCKET_PATH()+POCKET_INFO);
       }
       catch (RuntimeException e) {
         console.warn("Could not read pockets ("+e.getClass().getName()+")");
@@ -7548,7 +7592,7 @@ public class PixelRealm extends Screen {
   
   
   protected void playCassette(String path) {
-    sound.forceStopMusic();
+    sound.stopMusic();
     delay(100);
     sound.streamMusic(path);
     cassettePlaying = file.getFilename(path);
@@ -8067,14 +8111,14 @@ public class PixelRealm extends Screen {
         app.text("Some files couldn't be loaded because the memory limit has been reached.", WIDTH-wi+10f-myUpperBarWeight, yy+10f, wi-20f, HEIGHT);
       }
     }
-    else if (loading > 0 || sound.loadingMusic()) {
+    else if (loading > 0) {
       ui.loadingIcon(WIDTH-myUpperBarWeight/2-10, myUpperBarWeight/2, myUpperBarWeight);
       
       // Doesn't matter too much that it's being converted to an int,
       // it doesn't need to be accurate.
       // It's simply an approximate timeout timer for the loading icon to disappear.
       loading -= (int)display.getDelta();
-      if (loading <= 0 && !sound.loadingMusic() && engine.lowMemory) {
+      if (loading <= 0 && engine.lowMemory) {
         System.gc();
       }
     }

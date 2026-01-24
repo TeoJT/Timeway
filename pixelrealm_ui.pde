@@ -1121,12 +1121,12 @@ public class PixelRealmWithUI extends PixelRealm {
       }
       
       public void load(int coll) {
-        file.mkdir(engine.APPPATH+engine.POCKET_PATH);
+        file.mkdir(engine.APPPATH+engine.POCKET_PATH());
         
         HashSet<Integer> takenCells = new HashSet<Integer>();
         
         // God I really need to move this functionality to the engine code.
-        File[] pocketFolder = (new File(engine.APPPATH+engine.POCKET_PATH)).listFiles();
+        File[] pocketFolder = (new File(engine.APPPATH+engine.POCKET_PATH())).listFiles();
           for (File f : pocketFolder) {
             String path = f.getAbsolutePath().replaceAll("\\\\", "/");
             String name = file.getFilename(path);
@@ -1344,7 +1344,7 @@ public class PixelRealmWithUI extends PixelRealm {
                         rpause();
                       
                         String name = file.getFilename(pitem.getPath());
-                        String copypath = file.duplicateFile(pitem.getPath(), engine.APPPATH+engine.POCKET_PATH+renamePixelrealmFile(name));
+                        String copypath = file.duplicateFile(pitem.getPath(), engine.APPPATH+engine.POCKET_PATH()+renamePixelrealmFile(name));
                         if (copypath != null) {
                           console.log("Duplicated "+pitem.name+".");
                           draggingItem = currRealm.loadPocketItem(copypath);
@@ -1471,7 +1471,7 @@ public class PixelRealmWithUI extends PixelRealm {
     
     public void refresh() {
       // Save first
-      app.saveJSONObject(pocketInfo, engine.APPPATH+engine.POCKET_PATH+POCKET_INFO);
+      app.saveJSONObject(pocketInfo, engine.APPPATH+engine.POCKET_PATH()+POCKET_INFO);
       
       try {
         // Reload first!
@@ -2047,7 +2047,7 @@ public class PixelRealmWithUI extends PixelRealm {
       
       String newname = original;
       int i = 1;
-      while (file.exists(engine.APPPATH+engine.POCKET_PATH+newname)) {
+      while (file.exists(engine.APPPATH+engine.POCKET_PATH()+newname)) {
         newname = filename+" ("+i+")."+ext;
         i++;
       }
@@ -2534,7 +2534,7 @@ public class PixelRealmWithUI extends PixelRealm {
     @Override
     public void close() {
       // Save pocket info file
-      app.saveJSONObject(pocketInfo, engine.APPPATH+engine.POCKET_PATH+POCKET_INFO);
+      app.saveJSONObject(pocketInfo, engine.APPPATH+engine.POCKET_PATH()+POCKET_INFO);
       
       // Reload hotbar
       currRealm.loadHotbar();
@@ -2567,7 +2567,7 @@ public class PixelRealmWithUI extends PixelRealm {
       case PocketPanicException.ERR_TOO_FULL:
       Runnable r = new Runnable() {
         public void run() {
-          file.open(engine.APPPATH+engine.POCKET_PATH);
+          file.open(engine.APPPATH+engine.POCKET_PATH());
         }
       };
       menu = new DialogMenu("Pocket load error", "back-newrealm", "Your pockets are too full and could not be loaded. Please remove some items from the pocket folder.", r);
@@ -2617,14 +2617,14 @@ public class PixelRealmWithUI extends PixelRealm {
     public NewRealmMenu() {
       super("Welcome to your new realm", "back-newrealm");
 
-      if (!file.exists(engine.APPPATH+engine.TEMPLATES_PATH)) {
+      if (!file.exists(engine.APPPATH+engine.TEMPLATES_PATH())) {
         console.warn("Templates folder not found.");
         menuShown = false;
       }
       
       // Can't list our own files, gotta use the load_lists.txt
       if (isAndroid()) {
-        String[] realms = loadStrings(engine.APPPATH+engine.TEMPLATES_PATH+"load_list.txt");
+        String[] realms = loadStrings(engine.APPPATH+engine.TEMPLATES_PATH()+"load_list.txt");
         for (String path : realms) {
           // Same as isDirectory() but check the string directly.
           if (path.charAt(path.length()-1) == '/') {
@@ -2633,7 +2633,7 @@ public class PixelRealmWithUI extends PixelRealm {
         }
       }
       else {
-        File realms = new File(engine.APPPATH+engine.TEMPLATES_PATH);
+        File realms = new File(engine.APPPATH+engine.TEMPLATES_PATH());
         for (File f : realms.listFiles()) {
           if (f.isDirectory()) {
             templates.add(file.directorify(f.getAbsolutePath()));
@@ -2807,17 +2807,13 @@ public class PixelRealmWithUI extends PixelRealm {
           app.rect(random(getXmid()-200, getXmid()+200), random(getYmid()-20, getYmid()+20), random(10, 50), random(5, 20));
       }
 
-      // Special condition to make sure we can't go to the last realm that isn't cached on our first playthrough
-      boolean allow = (sound.loadingMusic() && tempIndex > 0) || !sound.loadingMusic();
       
-      if (allow) {
-        if ((input.leftOnce
-          || ui.buttonVary("newrealm-prev", "back_arrow_128", ""))
-          && coolDown <= 0f) {
-          tempIndex--;
-          if (tempIndex < 0) tempIndex = templates.size()-1;
-          preview(tempIndex);
-        }
+      if ((input.leftOnce
+        || ui.buttonVary("newrealm-prev", "back_arrow_128", ""))
+        && coolDown <= 0f) {
+        tempIndex--;
+        if (tempIndex < 0) tempIndex = templates.size()-1;
+        preview(tempIndex);
       }
       
       if ((input.rightOnce
@@ -2886,14 +2882,16 @@ public class PixelRealmWithUI extends PixelRealm {
         }
       }
 
-      if (nodeSound != 0)
-        sound.loopSound("terraform_"+str(nodeSound));
-      else {
-        sound.pauseSound("terraform_1");
-        sound.pauseSound("terraform_2");
-        sound.pauseSound("terraform_3");
-        sound.pauseSound("terraform_4");
-      }
+      // No longer used sounds.
+      
+      //if (nodeSound != 0)
+      //  sound.loopSound("terraform_"+str(nodeSound));
+      //else {
+      //  sound.pauseSound("terraform_1");
+      //  sound.pauseSound("terraform_2");
+      //  sound.pauseSound("terraform_3");
+      //  sound.pauseSound("terraform_4");
+      //}
     }
   }
 
@@ -3245,7 +3243,7 @@ public class PixelRealmWithUI extends PixelRealm {
 
   protected void promptNewRealm() {
     if (gui == null) return;
-    if (!file.exists(engine.APPPATH+engine.TEMPLATES_PATH)) return;
+    if (!file.exists(engine.APPPATH+engine.TEMPLATES_PATH())) return;
     menu = new NewRealmMenu();
     menuShown = true;
   }
@@ -3882,7 +3880,7 @@ public class PixelRealmWithUI extends PixelRealm {
       
       int count = 0;
       // Now loop and cache each file.
-      File realms = new File(engine.APPPATH+engine.TEMPLATES_PATH);
+      File realms = new File(engine.APPPATH+engine.TEMPLATES_PATH());
       for (File f : realms.listFiles()) {
         if (f.isDirectory()) {
           String dir = (file.directorify(f.getAbsolutePath().replaceAll("\\\\", "/")));
@@ -3896,16 +3894,6 @@ public class PixelRealmWithUI extends PixelRealm {
           // If none exist, the default realm sound will already be cached of course. Let's continue
           // since we won't be caching anything.
           if (!file.exists(path)) continue;
-          
-          // Now, engine is of course
-          
-          // Honestly updateMusicCache should be named to createMusicCache lmao
-          // And let's set it to a score of 10000, it's small enough that this startup
-          // premade cache will eventually get cleared out when cache is full, it's 
-          // big enough to evict any larger cache music files that may be there
-          // for whatever reason.
-          sound.updateMusicCache(path);
-          
           
           
           // Remember do x times where x = our argument.
@@ -3983,7 +3971,7 @@ public class PixelRealmWithUI extends PixelRealm {
               }
             };
             tutorialStage = 0;
-            if (!file.exists(engine.APPPATH+engine.TEMPLATES_PATH)) {
+            if (!file.exists(engine.APPPATH+engine.TEMPLATES_PATH())) {
               menu = new DialogMenu("", "back_welcome", dm_tutorial_2_alt_2, r_alt);
             } else {
               menu = new DialogMenu("", "back_welcome", dm_tutorial_1, r);

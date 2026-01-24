@@ -250,12 +250,12 @@ Object runTWIT(int opcode, Object[] args)  {
         
         // soundPlayOnce()
         case 4001:
-        timewayEngine.sound.playSoundOnce((String)args[0]);
+        //timewayEngine.sound.playSoundOnce((String)args[0]);
         break;
         
         // soundPause()
         case 4002:
-        timewayEngine.sound.pauseSound((String)args[0]);
+        //timewayEngine.sound.pauseSound((String)args[0]);
         break;
         
         // soundLoop()

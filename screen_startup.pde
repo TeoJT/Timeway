@@ -10,12 +10,7 @@ public class Startup extends Screen {
     public Startup(TWEngine engine) {
         super(engine);
         
-        // Kickstart gstreamer by playing default realm music (but also not really playing it)
-        File f = new File(engine.DEFAULT_DIR+PixelRealm.REALM_BGM);
-        if (f.exists())
-          sound.streamMusic(engine.DEFAULT_DIR+PixelRealm.REALM_BGM);
-        else
-          sound.streamMusic(engine.APPPATH+PixelRealm.REALM_BGM_DEFAULT);
+        
         //sound.playSound("intro");
         
         // if stats.json is missing, this means user is starting timeway for the first time.

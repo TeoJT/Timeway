@@ -1,0 +1,28 @@
+Timeway experienced a problem and had to close :(
+
+
+class java.lang.NullPointerException
+Message: "Cannot assign field "fontSize" because "newText" is null"
+Stack trace:
+java.lang.NullPointerException: Cannot assign field "fontSize" because "newText" is null
+	at Timeway$Editor.paste(Timeway.java:3649)
+	at Timeway$Editor.renderEditor(Timeway.java:3769)
+	at Timeway$Editor.content(Timeway.java:3941)
+	at Timeway$SettingsScreen.content(Timeway.java:4327)
+	at Timeway$Editor.display(Timeway.java:3921)
+	at Timeway$TWEngine$DisplayModule.displayScreens(Timeway.java:6381)
+	at Timeway$TWEngine.engine(Timeway.java:14129)
+	at Timeway.draw(Timeway.java:307)
+	at processing.core.PApplet.handleDraw(PApplet.java:2094)
+	at processing.opengl.PSurfaceJOGL$DrawListener.display(PSurfaceJOGL.java:840)
+	at jogamp.opengl.GLDrawableHelper.displayImpl(GLDrawableHelper.java:692)
+	at jogamp.opengl.GLDrawableHelper.display(GLDrawableHelper.java:674)
+	at jogamp.opengl.GLAutoDrawableBase$2.run(GLAutoDrawableBase.java:443)
+	at jogamp.opengl.GLDrawableHelper.invokeGLImpl(GLDrawableHelper.java:1293)
+	at jogamp.opengl.GLDrawableHelper.invokeGL(GLDrawableHelper.java:1147)
+	at com.jogamp.newt.opengl.GLWindow.display(GLWindow.java:782)
+	at com.jogamp.opengl.util.AWTAnimatorImpl.display(AWTAnimatorImpl.java:81)
+	at com.jogamp.opengl.util.AnimatorBase.display(AnimatorBase.java:453)
+	at com.jogamp.opengl.util.FPSAnimator$MainTask.run(FPSAnimator.java:178)
+	at java.base/java.util.TimerThread.mainLoop(Timer.java:566)
+	at java.base/java.util.TimerThread.run(Timer.java:516)
