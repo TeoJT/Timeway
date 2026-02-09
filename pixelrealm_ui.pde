@@ -2689,6 +2689,15 @@ public class PixelRealmWithUI extends PixelRealm {
       //  }
       //}
       currRealm.playerY = currRealm.onSurface(currRealm.playerX, currRealm.playerZ);
+      
+      
+      // There is a glitch where if you switch between templates too fast with the Minim library, you could
+      // stop the music before it's even loaded, resulting in the stop not being registered and the music beginning
+      // playback when there's already other music playing.
+      // To prevent this, use the good ol' hard wait method to force us to slow down a bit.
+      while (!sound.musicReady()) {
+        delay(50);
+      }
       sound.stopMusic();
       sound.streamMusic(currRealm.musicPath);
     }

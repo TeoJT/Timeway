@@ -1,8 +1,8 @@
 [
   {
     "size": 16,
-    "color": -7303024,
     "x": 169,
+    "color_hex": "FF909090",
     "y": 606,
     "ID": "73186528",
     "text": "You will start in this directory in the Pixel Realm or Explorer when Timeway starts.",
@@ -10,8 +10,8 @@
   },
   {
     "size": 16,
-    "color": -7303024,
     "x": 168,
+    "color_hex": "FF909090",
     "y": 2820,
     "ID": "32208908",
     "text": "When enabled, images pasted into an entry will be scaled down to save space. Note this may reduce image quality.",
@@ -19,8 +19,8 @@
   },
   {
     "size": 16,
-    "color": -14773,
     "x": 1036,
+    "color_hex": "FFFFC64B",
     "y": 1682,
     "ID": "29296106",
     "text": "but only enable it if you know what",
@@ -28,8 +28,8 @@
   },
   {
     "size": 30,
-    "color": -1,
     "x": 153,
+    "color_hex": "FFFFFFFF",
     "y": 1016,
     "ID": "sleep_when_inactive",
     "text": "Sleep when not in focus",
@@ -37,17 +37,8 @@
   },
   {
     "size": 16,
-    "color": -7303024,
-    "x": 164,
-    "y": 3526,
-    "ID": "71358744",
-    "text": "On Windows, the music streamer service can take a while to start up. While it's starting up, cached music files can be used to keep the\nbackground music playing. However, this increases space used by cache.",
-    "type": 1
-  },
-  {
-    "size": 16,
-    "color": -7303024,
     "x": 152,
+    "color_hex": "FF909090",
     "y": 2454,
     "ID": "61132980",
     "text": "\u0003\u0003\u0003\u0003\u0003\u0003\u0003\u0003\u0003\u0003\u0003\u0003\u0003Backs up old realm files in case something goes wrong and the file becomes corrupted.\nThis increases disk usage.",
@@ -55,17 +46,27 @@
   },
   {
     "size": 16,
-    "color": -7303024,
-    "x": 162,
-    "y": 3343,
+    "x": 157,
+    "color_hex": "FF909090",
+    "y": 3346,
     "ID": "50702696",
     "text": "Timeway makes use of cache files to improve loading performance. This increases disk usage.",
     "type": 1
   },
   {
     "size": 30,
-    "color": -1,
+    "x": 153,
+    "color_hex": "FFFFFFFF",
+    "options": ["Auto"],
+    "y": 1809,
+    "ID": "audio_device",
+    "text": "Audio device",
+    "type": 7
+  },
+  {
+    "size": 30,
     "x": 152,
+    "color_hex": "FFFFFFFF",
     "y": 1307,
     "ID": "dynamic_framerate",
     "text": "Dynamic framerate",
@@ -73,17 +74,17 @@
   },
   {
     "size": 30,
-    "color": -1,
-    "x": 131,
-    "y": 3779,
+    "x": 137,
+    "color_hex": "FFFFFFFF",
+    "y": 3494,
     "ID": "more_ram",
     "text": "Use more RAM for better performance",
     "type": 4
   },
   {
     "size": 50,
-    "color": -1,
     "x": 123,
+    "color_hex": "FFFFFFFF",
     "y": 2724,
     "ID": "24442112",
     "text": "Entry editor",
@@ -91,17 +92,17 @@
   },
   {
     "size": 16,
-    "color": -7303024,
-    "x": 165,
-    "y": 3826,
+    "x": 158,
+    "color_hex": "FF909090",
+    "y": 3544,
     "ID": "65375252",
     "text": "Timeway typically uses 1.0-2.0GB of RAM when this is enabled; disabling this setting uses around 0.5-1.0GB, at the cost of performance.\nRequires restart.",
     "type": 1
   },
   {
     "size": 16,
-    "color": -7303024,
     "x": 174,
+    "color_hex": "FF909090",
     "y": 1228,
     "ID": "37230472",
     "text": "Timeway will attempt to run at the target framerate. If it cannot reach it, (e.g. targeting 60fps but running at 40fps), you may experience\nstuttering and unsmooth framerates. Auto mode dynamically determines the best target framerate based on your computer's performance.",
@@ -109,8 +110,8 @@
   },
   {
     "size": 50,
-    "color": -1,
     "x": 116,
+    "color_hex": "FFFFFFFF",
     "y": 3144,
     "ID": "59597140",
     "text": "Performance and cache",
@@ -118,8 +119,8 @@
   },
   {
     "size": 50,
-    "color": -1,
     "x": 131,
+    "color_hex": "FFFFFFFF",
     "y": 1912,
     "ID": "asdfag",
     "text": "Pixel Realm",
@@ -127,8 +128,8 @@
   },
   {
     "size": 16,
-    "color": -14773,
     "x": 168,
+    "color_hex": "FFFFC64B",
     "y": 1704,
     "ID": "01461899.25",
     "text": "you're doing.",
@@ -136,8 +137,8 @@
   },
   {
     "size": 30,
-    "color": -1,
     "x": 146,
+    "color_hex": "FFFFFFFF",
     "y": 2780,
     "ID": "scale_down_images",
     "text": "Scale down images",
@@ -146,8 +147,8 @@
   {
     "min_value": 10,
     "size": 30,
-    "color": -1,
     "x": 156,
+    "color_hex": "FFFFFFFF",
     "y": 776,
     "ID": "scroll_sensitivity",
     "text": "Scroll sensitivity",
@@ -157,8 +158,8 @@
   {
     "min_value": 0,
     "size": 30,
-    "color": -1,
     "x": 155,
+    "color_hex": "FFFFFFFF",
     "y": 703,
     "ID": "minimized_volume",
     "text": "Minimized volume",
@@ -168,8 +169,8 @@
   {
     "button_color": "FF614D7D",
     "size": 30,
-    "color": -1,
     "x": 180,
+    "color_hex": "FFFFFFFF",
     "y": 881,
     "ID": "keybind_settings",
     "text": "Keybind settings",
@@ -178,8 +179,8 @@
   },
   {
     "size": 16,
-    "color": -7303024,
     "x": 171,
+    "color_hex": "FF909090",
     "y": 1057,
     "ID": "74239664",
     "text": "When minimized or not in focus, Timeway will enter sleep, saving CPU and battery.",
@@ -187,8 +188,8 @@
   },
   {
     "size": 16,
-    "color": -7303024,
     "x": 166,
+    "color_hex": "FF909090",
     "y": 2053,
     "ID": "26828670",
     "text": "How pixelated the screen is. Higher = more pixelated.\u0003\u0003\u0003\u0003\u0003\u0003\u0003\u0003\u0003\u0003\u0003\u0003\u0003\u0003\u0003\u0003\u0003\u0003\u0003\u0003\u0003",
@@ -196,8 +197,8 @@
   },
   {
     "size": 16,
-    "color": -7303024,
     "x": 183,
+    "color_hex": "FF909090",
     "y": 1502,
     "ID": "67597328",
     "text": "Shows the FPS (frames per second) at the top-left of the screen.",
@@ -206,8 +207,8 @@
   {
     "min_value": 1,
     "size": 30,
-    "color": -7303024,
     "x": 148,
+    "color_hex": "FF909090",
     "y": 2012,
     "ID": "pixelation_scale",
     "text": "Pixelation scale",
@@ -216,17 +217,17 @@
   },
   {
     "size": 30,
-    "color": -1,
-    "x": 132,
-    "y": 3292,
+    "x": 136,
+    "color_hex": "FFFFFFFF",
+    "y": 3294,
     "ID": "enable_caching",
     "text": "Enable caching",
     "type": 4
   },
   {
     "size": 30,
-    "color": -1,
     "x": 150,
+    "color_hex": "FFFFFFFF",
     "options": [
       "Auto",
       "60 FPS",
@@ -240,8 +241,8 @@
   },
   {
     "size": 30,
-    "color": -1,
     "x": 155,
+    "color_hex": "FFFFFFFF",
     "y": 540,
     "ID": "home_directory",
     "text": "Home directory",
@@ -249,8 +250,8 @@
   },
   {
     "size": 30,
-    "color": -1,
     "x": 143,
+    "color_hex": "FFFFFFFF",
     "options": [
       "Prompt realm templates",
       "Create default realm files",
@@ -264,8 +265,8 @@
   },
   {
     "size": 70,
-    "color": -1,
     "x": 120,
+    "color_hex": "FFFFFFFF",
     "y": 375,
     "ID": "44235440",
     "text": "Settings",
@@ -273,8 +274,8 @@
   },
   {
     "size": 16,
-    "color": -7303024,
     "x": 179,
+    "color_hex": "FF909090",
     "y": 1349,
     "ID": "70892456",
     "text": "Lowers the framerate to save power when there is little motion on the screen, e.g. while editing a Timeway entry. You may want to disable\nthis if you're on a desktop computer.",
@@ -282,17 +283,8 @@
   },
   {
     "size": 30,
-    "color": -1,
-    "x": 136,
-    "y": 3481,
-    "ID": "music_caching",
-    "text": "Music caching",
-    "type": 4
-  },
-  {
-    "size": 30,
-    "color": -1,
     "x": 143,
+    "color_hex": "FFFFFFFF",
     "y": 2412,
     "ID": "backup_realm_files",
     "text": "Backup old realm files",
@@ -301,8 +293,8 @@
   {
     "min_value": 30,
     "size": 30,
-    "color": -7303024,
     "x": 146,
+    "color_hex": "FF909090",
     "y": 2149,
     "ID": "field_of_view",
     "text": "Field of view",
@@ -312,8 +304,8 @@
   {
     "min_value": 0,
     "size": 30,
-    "color": -1,
     "x": 155,
+    "color_hex": "FFFFFFFF",
     "y": 668,
     "ID": "volume",
     "text": "Volume",
@@ -322,8 +314,8 @@
   },
   {
     "size": 50,
-    "color": -1,
     "x": 121,
+    "color_hex": "FFFFFFFF",
     "y": 469,
     "ID": "38969888",
     "text": "General",
@@ -331,8 +323,8 @@
   },
   {
     "size": 24,
-    "color": -41633,
     "x": 405,
+    "color_hex": "FFFF5D5F",
     "y": 585,
     "ID": "invalid_path_error",
     "text": "Invalid path",
@@ -340,8 +332,8 @@
   },
   {
     "size": 24,
-    "color": -20992,
     "x": 567,
+    "color_hex": "FFFFAE00",
     "y": 1200,
     "ID": "target_framerate_warning",
     "text": "This option is not recommended.",
@@ -349,8 +341,8 @@
   },
   {
     "size": 30,
-    "color": -1,
     "x": 154,
+    "color_hex": "FFFFFFFF",
     "y": 1461,
     "ID": "show_fps",
     "text": "Show FPS",
@@ -358,8 +350,8 @@
   },
   {
     "size": 16,
-    "color": -7303024,
     "x": 170,
+    "color_hex": "FF909090",
     "y": 1658,
     "ID": "64003664",
     "text": "Plugins extend Timeway functionality and are automatically loaded during runtime. These are experimental so they are turned off by\ndefault for security. You may enable this if you want to program with Timeway or use plugins, ",
@@ -367,8 +359,8 @@
   },
   {
     "size": 30,
-    "color": -1,
     "x": 151,
+    "color_hex": "FFFFFFFF",
     "y": 1616,
     "ID": "enable_plugins",
     "text": "Enable plugins",

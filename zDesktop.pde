@@ -25,6 +25,9 @@ import javax.sound.sampled.AudioFormat;
 import javax.sound.sampled.AudioInputStream;
 import java.awt.datatransfer.Transferable;
 import java.awt.Image;
+import ddf.minim.*;
+import javax.sound.sampled.*;
+import ddf.minim.ugens.*;
 
 
 

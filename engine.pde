@@ -113,8 +113,6 @@ public class TWEngine {
   public static final int     MAX_RAM_NORMAL = 1024*1024*1024; // 1GB
   public static final int     MAX_RAM_LIMITED = 1024*1024*200; // 200MB
   
-  public boolean CACHE_MUSIC = false;
-  
 
   // Dynamic constants (changes based on things like e.g. configuration file)
   public       PFont  DEFAULT_FONT;
@@ -2553,8 +2551,9 @@ public class TWEngine {
 
 
   public class AudioModule {
-    private Minim minim;
-    private AudioOutput lineOut;
+    public Minim minim = null;         // Initially starts out null, gets set during runtime.
+    private AudioOutput lineOut = null;
+    private AtomicBoolean musicReady = new AtomicBoolean(true);
     private Music streamerMusic;
     private Music streamerMusicFadeTo;
     public HashMap<String, Sampler> sounds;
@@ -2565,19 +2564,16 @@ public class TWEngine {
     public static final int FADE_TO = 1;
     public static final int FADE_AND_STOP = 2;
     
-    private static final float MUSIC_FADE_SPEED = 2f;
-    private static final float SFX_SAMPLE_RATE = 44100f;
-    private static final int   STREAM_BUFFER_SIZE = 2048;
+    private static final float  MUSIC_FADE_SPEED = 2f;
+    private static final float  SFX_SAMPLE_RATE = 44100f;
+    private static final int    STREAM_BUFFER_SIZE = 2048;
+    private static final String DEFAULT_MUSIC = "engine/music/pixelrealm_default_bgm.wav";
     
     
     public AudioModule() {
-      minim = new Minim(app);
-      lineOut = minim.getLineOut();
-      
       sounds = new HashMap<String, Sampler>();
       volumeNormal = settings.getFloat("volume_normal", 1f);
       volumeQuiet = settings.getFloat("volume_quiet", 0.25f);
-      setMasterVolume(volumeNormal);
     }
     
     private class Music {
@@ -2595,6 +2591,13 @@ public class TWEngine {
       private AudioPlayer streamMusic;
       private AndroidMedia androidMusic;
       
+      public class MusicLoadFailException extends RuntimeException {
+        // Literally doesn't need anything in it.
+        // In my opinion, probably one of the weaker java designs, needing to create different classes
+        // just to specify a certain type of exception.
+        // Passing an error code or string into a RuntimeException would 
+      }
+      
       // Load cached music
       public Music(String path) {
         if (isAndroid()) {
@@ -2604,9 +2607,10 @@ public class TWEngine {
         else {
           mode = STREAM;
           streamMusic = minim.loadFile(path, STREAM_BUFFER_SIZE);
+          
           if (streamMusic == null) {
-            //ffmpegConvertToWav(path);
-            streamMusic = minim.loadFile(APPPATH+"engine/music/pixelrealm_default_bgm.wav", STREAM_BUFFER_SIZE);
+            streamMusic = minim.loadFile(APPPATH+DEFAULT_MUSIC, STREAM_BUFFER_SIZE);
+            throw new MusicLoadFailException();
           }
         }
       }
@@ -2702,6 +2706,19 @@ public class TWEngine {
       }
     }
     
+    private boolean isSupportedMinim(String path) {
+      String ext = file.getExt(path);
+      if (ext.equals("wav")
+        || ext.equals("mp3")
+        
+        // Minim formats
+        || ext.equals("aiff")
+        || ext.equals("au")
+        || ext.equals("snd"))
+        return true;
+      else
+        return false;
+    }
     
     public void setNormalVolume() {
       setMasterVolume(volumeNormal);
@@ -2715,14 +2732,19 @@ public class TWEngine {
       
       final int MAX_VOICE_COUNT = 1;
       
-      if (file.exists(path)) {
-        // Create sound effect with Minim library, attaching it to master out.
-        Sampler newSampler = new Sampler(path, MAX_VOICE_COUNT, minim);
-        newSampler.patch(lineOut);
-        sounds.put(file.getIsolatedFilename(path), newSampler);
+      if (lineOut != null) {
+        if (file.exists(path)) {
+          // Create sound effect with Minim library, attaching it to master out.
+          Sampler newSampler = new Sampler(path, MAX_VOICE_COUNT, minim);
+          newSampler.patch(lineOut);
+          sounds.put(file.getIsolatedFilename(path), newSampler);
+        }
+        else {
+          console.warn(path+" does not exist.");
+        }
       }
       else {
-        console.warn(path+" does not exist.");
+        console.bugWarn("loadSound: ("+path+") Minim is not ready yet!");
       }
     }
     
@@ -2792,10 +2814,12 @@ public class TWEngine {
           streamerMusic = loadNewMusic(path);
             if (streamerMusic != null)
               streamerMusic.play();
+              musicReady.set(true);
             }
           }
         );
         //t1.setDaemon(true);
+        musicReady.set(false);
         t1.start();
     }
     
@@ -2808,14 +2832,37 @@ public class TWEngine {
       }
       
       Music newMusic = null;
-    
-      try {
-        // Calling this loads our music using our music engine of our choice (as of now it's Minim)
-        newMusic = new Music(path);
+      
+      // If supported by minim, we can begin streaming right away.
+      if (isSupportedMinim(path)) {
+        try {
+          // Calling this loads our music using our music engine of our choice (as of now it's Minim)
+          newMusic = new Music(path);
+        }
+        catch (RuntimeException e) {
+          // At this point here, the Music constructor will have already started playing default music.
+          console.warn("Failed to play "+file.getFilename(path)+". (not converted)");
+        }
       }
-      catch (Exception e) {
-        console.warn("Error while reading music: "+e.getClass().toString()+", "+e.getMessage());
-        return new Music(APPPATH+"engine/music/pixelrealm_default_bgm.wav"); // TODO: Add sample default fallback music.
+      else if (file.isAudioFile(path)) {
+        try {
+          // The image is of an unsupported format.
+          if (!cacheExists(path)) {
+            String cachePath = ffmpegConvertToMP3(path);
+            newMusic = new Music(cachePath);
+          }
+          else {
+            newMusic = new Music(tryGetCachePath(path));
+          }
+        }
+        catch (RuntimeException e) {
+          // At this point here, the Music constructor will have already started playing default music.
+          console.warn("Failed to play "+file.getFilename(path)+". (converted)");
+        }
+      }
+      else {
+        console.warn("File "+file.getFilename(path)+" is an unsupported format ("+file.getExt(path)+").");
+        newMusic = new Music(APPPATH+DEFAULT_MUSIC);
       }
       
       return newMusic;
@@ -2845,6 +2892,9 @@ public class TWEngine {
       }
     }
     
+    public boolean musicReady() {
+      return musicReady.get();
+    }
     
     public void streamMusicWithFade(String path) {
       // If no music is currently playing, don't bother fading out the music, just
@@ -2859,17 +2909,24 @@ public class TWEngine {
         streamerMusicFadeTo.close();
       }
       
-      streamerMusicFadeTo = loadNewMusic(path);
-      if (streamerMusicFadeTo != null) {
-        streamerMusicFadeTo.fade(0.9f, 1f, 0.5f); // Fade in new music.
-        streamerMusicFadeTo.play();
-      }
       
-      if (streamerMusic != null) {
-        streamerMusic.fade(1f, 0f, MUSIC_FADE_SPEED);  // Fade out currently playing music
-      }
-      
-      fadeMode = FADE_TO;
+      Thread t1 = new Thread(new Runnable() {
+        public void run() {
+          streamerMusicFadeTo = loadNewMusic(path);
+          if (streamerMusicFadeTo != null) {
+            streamerMusicFadeTo.fade(0.9f, 1f, 0.5f); // Fade in new music.
+            streamerMusicFadeTo.play();
+            musicReady.set(true);
+          }
+          
+          if (streamerMusic != null) {
+            streamerMusic.fade(1f, 0f, MUSIC_FADE_SPEED);  // Fade out currently playing music
+          }
+          
+          fadeMode = FADE_TO;
+      }});
+      musicReady.set(false);
+      t1.start();
     }
     
     public void fadeAndStopMusic() {
@@ -2901,15 +2958,29 @@ public class TWEngine {
     
     
     //    FFMPEG stuff.
-    public String ffmpegConvertToWav(String input) {
-      final String output = generateCachePath("wav");
-      Thread t1 = new Thread(new Runnable() {
-        public void run() {
-          ffmpeg("-y", "-i", input, output);
-        }
-      });
-      t1.start();
-      delay(10);
+    public String ffmpegConvertToMP3(String originalPath) {
+      final String output = saveCacheEntry(originalPath, "mp3", 5555);
+      
+      int BIG_FILE_THRESHOLD = 20*1048576;
+      
+      int fileSize = file.fileSize(originalPath);
+      
+      if (fileSize > BIG_FILE_THRESHOLD) {
+        // Convert big file in seperate thread, with ability to playback file while it's still being written to.
+        Thread t1 = new Thread(new Runnable() {
+          public void run() {
+            ffmpeg("-y", "-i", originalPath, "-c:a", "libmp3lame", "-b:a", "192k", "-write_xing", "0", "-id3v2_version", "0", output);
+          }
+        });
+        t1.start();
+        
+        delay(1000);
+      }
+      else {
+        // Convert smaller file size. Since it's small, we can wait for the relatively short conversion operationl.
+        ffmpeg("-y", "-i", originalPath, output);
+      }
+      
       
       return output;
     }
@@ -3043,10 +3114,109 @@ public class TWEngine {
       }
     }
     
+    public boolean ready() {
+      return (minim != null) && (lineOut != null);
+    }
+    
+    
+    // Lmao don't care 
+    @SuppressWarnings("deprecation")
+    public void selectAudioDevice(String likeDevice, boolean failGracefully) {
+      
+        Mixer.Info[] mixers = AudioSystem.getMixerInfo();
+        for (int i = 0; i < mixers.length; i++) {
+          if (mixers[i].getName().toLowerCase().contains(likeDevice.toLowerCase())) {
+            minim.setOutputMixer(AudioSystem.getMixer(mixers[i]));
+            return;
+          }
+        }
+        
+        if (failGracefully) {
+          // Quietly fail and attempt to select the default audio device.
+          autoSelectDevice();
+        }
+        else {
+          console.log("Could not select unknown device "+likeDevice+".");
+        }
+    }
+    
+    
+    public void selectAudioDevice(String likeDevice) {
+      selectAudioDevice(likeDevice, true); // True to fail gracefully by default (auto-selects audio device if not found)
+    }
+    
+    
+    private void autoSelectDevice() {
+      if (isWindows()) {
+        selectAudioDevice("Primary Sound Driver", false); // False because failing gracefully potentially means being stuck in an infinite loop.
+      }
+      //else if (isLinux()) {
+        
+      //}
+      else {
+        console.warn("Can't select audio device, don't know which OS-specific audio device we should choose!");
+      }
+    }
+    
+    
+    public String[] getAudioDevices() {
+      if (minim != null) {
+        Mixer.Info[] mixers = AudioSystem.getMixerInfo();
+        String[] deviceNames = new String[mixers.length];
+        for (int i = 0; i < mixers.length; i++) {
+          deviceNames[i] = mixers[i].getName();
+        }
+        return deviceNames;
+      }
+      else {
+        console.bugWarn("getAudioDevices: minim not yet initialised.");
+        return new String[0];
+      }
+    }
+    
     
     
     // ******** ok no more beats and bops. Time for the master function ********
     public void processSound() {
+      // First, Minim needs to be initialised here. Apparently initialising it during setup() is a bad idea.
+      if (minim == null) {
+        try {
+          minim = new Minim(app);
+          
+          if (settings.getString("audio_device", "Auto").equals("Auto")) {
+            autoSelectDevice();
+          }
+          else {
+            selectAudioDevice(settings.getString("audio_device", "Auto"));
+          }
+          
+          // Annnnnnd a error fallback option for when it's needed.
+          if (settings.getBoolean("show_audio_devices_debug", false)) {
+            String devices[] = getAudioDevices();
+            for (String s : devices) {
+              console.log(s);
+            }
+          }
+          // Just make it appear in config.
+          else settings.setBoolean("show_audio_devices_debug", false);
+          
+        }
+        catch (RuntimeException e) {
+          console.warn("Minim initialisation failed, trying again.");
+        }
+      }
+      
+      if (lineOut == null) {
+        try {
+          lineOut = minim.getLineOut();
+          setMasterVolume(volumeNormal);
+        }
+        catch (RuntimeException e) {
+          console.warn("Minim initialisation failed, trying again.");
+        }
+      }
+      
+      
       processBeat();
       
       // Process fade
@@ -4960,11 +5130,19 @@ public class TWEngine {
         return false;
     }
     
+    // Timeway's recognised audio files (but not directly supported by the minim library).
     public boolean isAudioFile(String path) {
       String ext = getExt(path);
       if (ext.equals("wav")
         || ext.equals("mp3")
         || ext.equals("flac")
+        
+        // Minim formats
+        || ext.equals("aiff")
+        || ext.equals("au")
+        || ext.equals("snd")
+        
+        || ext.equals("wma")
         || ext.equals("ogg"))
         return true;
       else
@@ -6365,7 +6543,7 @@ public class TWEngine {
     
     // First, load the essential stuff.
     
-    loadAsset(APPPATH+SOUND_PATH()+"intro.wav");
+    //loadAsset(APPPATH+SOUND_PATH()+"intro.wav");   // Don't need the intro sound.
     loadAsset(APPPATH+IMG_PATH()+"logo.png");
     loadAllAssets(APPPATH+IMG_PATH()+"loadingmorph/");
     // We need to load shaders on the main thread.
@@ -6668,13 +6846,16 @@ public class TWEngine {
   //  }
   //}
 
+  public CmdOutput runExecutableCommand(String... cmd) {
+    return runExecutableCommand(false, cmd);
+  }
 
   
   // Now this thing basically just runs a windows command, not too complicated.
   // If I'm lucky enough, I think this thing should work in linux too even though
   // the cmd system is completely different, because we're essentially just calling
   // some java executables.
-  public CmdOutput runExecutableCommand(String... cmd) {
+  public CmdOutput runExecutableCommand(boolean infiniteTime, String... cmd) {
     //for (String c : cmd) {
     //  print(c + " ");
     //}
@@ -6692,8 +6873,12 @@ public class TWEngine {
       
       
       // This function should prolly run this in a different thread.
+      int timeLimit = settings.getInt("compilation_timeout_milliseconds", 6000);
+      if (infiniteTime) {
+        timeLimit = Integer.MAX_VALUE;
+      }
       
-      boolean timeout = !process.waitFor(settings.getInt("compilation_timeout_milliseconds", 6000), TimeUnit.MILLISECONDS);
+      boolean timeout = !process.waitFor(timeLimit, TimeUnit.MILLISECONDS);
       
       if (timeout) {
         return new CmdOutput(1, "Compilation timeout; this is typically caused by a boilerplate code error.");
@@ -6789,7 +6974,7 @@ public class TWEngine {
       newArgs[i] = cmd[i-1];
     }
     
-    CmdOutput cmdout = runExecutableCommand(newArgs);
+    CmdOutput cmdout = runExecutableCommand(true, newArgs);
     if (!cmdout.success) {
       console.warn("ffmpeg error: "+cmdout.exitCode+" "+cmdout.message);
       return false;
@@ -7398,6 +7583,11 @@ public class TWEngine {
     loadAllAssets(APPPATH+IMG_PATH());
     loadAllAssets(APPPATH+FONT_PATH());
     loadAllAssets(APPPATH+SHADER_PATH());
+    
+    while (!sound.ready()) {  // Purposefully delay until the audiomodule is ready to load sounds.
+      delay(1);
+    }
+    
     loadAllAssets(APPPATH+SOUND_PATH());
   }
 
@@ -7906,17 +8096,21 @@ public class TWEngine {
       
 
         if (actualPath.length() > 0) {
-          String lastModified = "[null]";        // Test below automatically fails if there's no file found.
-          if (file.exists(originalPath)) lastModified = file.getLastModified(originalPath);
-      
-          if (cachedItem.getString("lastModified", "").equals(lastModified) || cachedItem.getString("lastModified", "").equals("")) {
-            return actualPath;
+          if (file.exists(actualPath)) {
+            String lastModified = "[null]";        // Test below automatically fails if there's no file found.
+            if (file.exists(originalPath)) lastModified = file.getLastModified(originalPath);
+        
+            if (cachedItem.getString("lastModified", "").equals(lastModified) || cachedItem.getString("lastModified", "").equals("")) {
+              return actualPath;
+            }
           }
         }
     }
     
     return originalPath;
   }
+  
+  
   
   
 
@@ -8032,9 +8226,14 @@ public class TWEngine {
   
   
   public String saveCacheEntry(String originalPath, int size) {
+    return saveCacheEntry(originalPath, file.getExt(originalPath), size);
+  }
+  
+  
+  public String saveCacheEntry(String originalPath, String ext, int size) {
     
     JSONObject properties = new JSONObject();
-    String cachePath = generateCachePath(file.getExt(originalPath));
+    String cachePath = generateCachePath(ext);
     
     
     properties.setString("actual", cachePath);

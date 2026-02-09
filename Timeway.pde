@@ -1,5 +1,3 @@
-import ddf.minim.*;
-import ddf.minim.ugens.*;
 
 import java.io.FileWriter;
 import java.io.IOException;
@@ -172,7 +170,7 @@ void setup() {
     
     // Print a lil information to the terminal as a bonus :P
     println("\n***** "+timewayEngine.getAppName()+" "+timewayEngine.getVersion()+" *****");
-    println("by Téo Taylor\n\n");
+    println("by Teo Taylor\n\n"); // Seriously? It can't print out the 'é' in the terminal????
     
     // Self-explainatory.
     requestAndroidPermissions();

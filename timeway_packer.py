@@ -288,10 +288,10 @@ if (os.path.isdir("timeway_windows_"+version)):
                 shutil.copyfile(source, dest+"/"+os.path.basename(source))
                 print("Copied file: "+ os.path.basename(source))
 
-            copy_files(usr_folder_path+"/Documents/Processing/libraries/video/library/windows64", new_name_windows+"/lib/windows64")
-            copy_file(usr_folder_path+"/Documents/Processing/libraries/video/library/gst1-java-core-1.2.0.jar", new_name_windows+"/lib")
-            copy_file(usr_folder_path+"/Documents/Processing/libraries/video/library/jna.jar", new_name_windows+"/lib")
-            copy_file(usr_folder_path+"/Documents/Processing/libraries/video/library/video.jar", new_name_windows+"/lib")
+            # copy_files(usr_folder_path+"/Documents/Processing/libraries/video/library/windows64", new_name_windows+"/lib/windows64")
+            # copy_file(usr_folder_path+"/Documents/Processing/libraries/video/library/gst1-java-core-1.2.0.jar", new_name_windows+"/lib")
+            # copy_file(usr_folder_path+"/Documents/Processing/libraries/video/library/jna.jar", new_name_windows+"/lib")
+            # copy_file(usr_folder_path+"/Documents/Processing/libraries/video/library/video.jar", new_name_windows+"/lib")
 
 
             # If the lib folder does not have dsj.dll, copy it from the code folder to the lib folder

@@ -1088,7 +1088,12 @@ public class Editor extends Screen {
         insertText("Button", engine.mouseX(), engine.mouseY()-20, TYPE_BUTTON);
       }};
       
-      //ui.createOptionsMenu(labels, actions);
+      // We only want to display these if we're actually editing a system timewayentry.
+      // Wouldn't make sense to display these UI fields for normal entries, as sad as it
+      // is not to expose them during normal use.
+      if (entryPath.contains(engine.APPPATH+"engine/entryscreens")) {
+        ui.createOptionsMenu(labels, actions);
+      }
     }
     
     
@@ -3299,6 +3304,16 @@ public class SettingsScreen extends ReadOnlyEditor {
     loadSettings();
     get("invalid_path_error").visible = !(file.exists(getInputField("home_directory").inputText) && file.isDirectory(getInputField("home_directory").inputText));
     
+    // Populate options field for audio devices
+    String[] devices = sound.getAudioDevices();
+    String[] devicesWithAuto = new String[devices.length+1];
+    devicesWithAuto[0] = "Auto";
+    for (int i = 0; i < devices.length; i++) {
+      devicesWithAuto[i+1] = devices[i];
+    }
+    getOptionsField("audio_device").createOptions(devicesWithAuto);
+    
+    
     mockSceneHeight = (int)(HEIGHT-myUpperBarWeight-myLowerBarWeight);
   }
   
@@ -3397,6 +3412,18 @@ public class SettingsScreen extends ReadOnlyEditor {
     getBooleanField("scale_down_images").state = settings.getBoolean("auto_scale_down", false);
     getSliderField("scroll_sensitivity").setVal(settings.getFloat("scroll_sensitivity", 20f));
     
+    String selectedAudioDevice = settings.getString("audio_device", "Auto");
+    getOptionsField("audio_device").selectedOption = "Auto"; // Auto by default
+    String[] devices = getOptionsField("audio_device").options; // Will also include "Auto" which saves us from having to implement a special check for that.
+    // An extra check here in case the audio device that used to be here is no longer there.
+    for (String device : devices) {
+      if (device.equals(selectedAudioDevice)) {
+        getOptionsField("audio_device").selectedOption = selectedAudioDevice;
+        break;
+      }
+    }
+    
+    
     String newRealmAction = settings.getString("new_realm_action", "prompt");
     if (newRealmAction.equals("prompt")) newRealmAction = "Prompt realm templates";
     if (newRealmAction.equals("default")) newRealmAction = "Create default realm files";
@@ -3416,7 +3443,6 @@ public class SettingsScreen extends ReadOnlyEditor {
     
     
     getInputField("home_directory").inputText = settings.getString("home_directory", System.getProperty("user.home").replace('\\', '/'));
-    getBooleanField("music_caching").state = settings.getBoolean("music_caching", true);
     getBooleanField("backup_realm_files").state = settings.getBoolean("backup_realm_files", true);
     getSliderField("field_of_view").setVal(settings.getFloat("fov", 60f));
     getSliderField("volume").setVal(settings.getFloat("volume_normal", 1f));
@@ -3431,6 +3457,9 @@ public class SettingsScreen extends ReadOnlyEditor {
     engine.setLowMemory(!getBooleanField("more_ram").state);
     settings.setBoolean("auto_scale_down", getBooleanField("scale_down_images").state);
     input.scrollSensitivity = settings.setFloat("scroll_sensitivity", getSliderField("scroll_sensitivity").getVal());
+    
+    settings.setString("audio_device", getOptionsField("audio_device").selectedOption);
+    //sound.selectAudioDevice(getOptionsField("audio_device").selectedOption);
     
     String selected = getOptionsField("new_realm").selectedOption;
     if (selected.equals("Prompt realm templates")) {
@@ -3459,7 +3488,6 @@ public class SettingsScreen extends ReadOnlyEditor {
     
     
     engine.DEFAULT_DIR = settings.setString("home_directory", file.directorify(getInputField("home_directory").inputText));
-    engine.CACHE_MUSIC = settings.setBoolean("music_caching", getBooleanField("music_caching").state); 
     settings.setBoolean("backup_realm_files", getBooleanField("backup_realm_files").state); 
     settings.setFloat("fov", getSliderField("field_of_view").getVal());
     sound.volumeNormal = settings.setFloat("volume_normal", getSliderField("volume").getVal());
