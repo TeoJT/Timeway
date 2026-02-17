@@ -3,6 +3,7 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.io.StringWriter;
 import java.io.PrintWriter;
+import java.io.PrintStream;
 
 /**
 *********************************** Timeway ***********************************
@@ -65,7 +66,6 @@ final boolean sketch_MAXIMISE = true;
 
 
 
-
 TWEngine timewayEngine;
 
 boolean sketch_showCrashScreen = false;
@@ -77,9 +77,6 @@ void settings() {
     //if (isLinux())
     //  System.setProperty("jogl.disable.openglcore", "true");
     size(displayWidth, displayHeight, P2D);
-    //size(900, 1800, P2D);
-    //size(750, 1200, P2D);
-    //size(1920, 1080, P2D);
     smooth(1);
     pixelDensity(1);
     
@@ -100,7 +97,8 @@ void settings() {
     
   }
   catch (Exception e) {
-    minimalErrorDialog("A fatal error has occurred: \n"+e.getMessage()+"\n"+e.getStackTrace());
+    minimalErrorDialog("A fatal error has occurred on startup: \n"+e.getMessage()+"\n"+e.getStackTrace());
+    exit();
   }
 }
 
@@ -112,6 +110,7 @@ void shutdown() {
     pr.shutdown();
   }
 }
+
 
 
 void sketch_openErrorLog(String mssg) {

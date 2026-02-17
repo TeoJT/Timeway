@@ -39,6 +39,8 @@ import java.util.Arrays;   // Used by the stack class at the bottom
 import java.util.Collections;
 import java.lang.reflect.InvocationTargetException;
 import java.util.concurrent.TimeUnit;
+import javax.sound.sampled.*;
+
 
 
 //Garbage Collection Tuning: While you can't change the heap size dynamically, you can tune garbage collection behavior using JVM options such as:
@@ -2571,9 +2573,11 @@ public class TWEngine {
     
     
     public AudioModule() {
+      println("Audio module init");
       sounds = new HashMap<String, Sampler>();
       volumeNormal = settings.getFloat("volume_normal", 1f);
       volumeQuiet = settings.getFloat("volume_quiet", 0.25f);
+      println("After audiomodule init");
     }
     
     private class Music {
@@ -2732,12 +2736,18 @@ public class TWEngine {
       
       final int MAX_VOICE_COUNT = 1;
       
+      println("Load sound");
+      
       if (lineOut != null) {
         if (file.exists(path)) {
           // Create sound effect with Minim library, attaching it to master out.
+          println("Create new sample");
           Sampler newSampler = new Sampler(path, MAX_VOICE_COUNT, minim);
+          println("Patch sample");
           newSampler.patch(lineOut);
+          println("Put sound");
           sounds.put(file.getIsolatedFilename(path), newSampler);
+          println("Done load sound");
         }
         else {
           console.warn(path+" does not exist.");
@@ -3181,7 +3191,19 @@ public class TWEngine {
       // First, Minim needs to be initialised here. Apparently initialising it during setup() is a bad idea.
       if (minim == null) {
         try {
+          
+          
+          println("TEST: loading mixers");
+          Mixer.Info[] infos = AudioSystem.getMixerInfo();
+          for (Mixer.Info info : infos) {
+            println(info.getName());
+          }
+          println("Finished listing mixers");
+          
+          println("Initialise minim");
           minim = new Minim(app);
+          println("After initialise minim");
+          //minim.debugOn();
           
           if (settings.getString("audio_device", "Auto").equals("Auto")) {
             autoSelectDevice();
@@ -3249,6 +3271,21 @@ public class TWEngine {
       if (streamerMusic != null) {
         //streamerMusic.volume(masterVolume*musicVolume);
       }
+    }
+    
+    
+    
+    
+    public void cleanup() {
+      if (streamerMusic != null) {
+        streamerMusic.stop();
+        streamerMusic.close();
+      }
+      if (streamerMusicFadeTo != null) {
+        streamerMusic.stop();
+        streamerMusicFadeTo.close();
+      }
+      minim.stop();
     }
     
     
@@ -8548,7 +8585,7 @@ public class TWEngine {
     
     
     public InputModule() {
-      scrollSensitivity = settings.getFloat("scroll_sensitivity", 20f);
+      scrollSensitivity = settings.getFloat("scroll_sensitivity", 50f);
       CURSOR_CHAR = settings.getString("text_cursor_char", "_");
     }
     
@@ -9596,6 +9633,7 @@ public class TWEngine {
   }
   
   public void shutdown() {
+    sound.cleanup();
     stats.save();
     stats.set("last_closed", (int)(System.currentTimeMillis() / 1000L));
     settings.forceSaveSettings();

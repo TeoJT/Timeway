@@ -1,0 +1,307 @@
+Audio module init
+After audiomodule init
+
+***** Timeway 0.2.1 *****
+by Teo Taylor
+
+
+TEST: loading mixers
+Port Speakers (2- Realtek High Defin
+Port Speakers (Boom Audio)
+Port Microphone Array (2- Realtek Hi
+Primary Sound Driver
+Speakers (2- Realtek High Definition Audio(SST))
+Speakers (Boom Audio)
+Primary Sound Capture Driver
+Microphone Array (2- Realtek Hi
+Finished listing mixers
+Initialise minim
+STATIC: Minim class loading
+Minim constructor start
+Set vars
+B1
+B2
+B3
+B4
+B5
+B6
+B7
+B8
+B9
+B10
+B11
+C1
+C2
+C3
+A1
+A2
+A3
+A4
+A5
+A6
+A7
+A8
+After initialise minim
+Load sound
+Create new sample
+Patch sample
+Put sound
+Done load sound
+Load sound
+Create new sample
+Patch sample
+Put sound
+Done load sound
+Load sound
+Create new sample
+Patch sample
+Put sound
+Done load sound
+Load sound
+Create new sample
+Patch sample
+Put sound
+Done load sound
+Load sound
+Create new sample
+Patch sample
+Put sound
+Done load sound
+Load sound
+Create new sample
+Patch sample
+Put sound
+Done load sound
+Load sound
+Create new sample
+Patch sample
+Put sound
+Done load sound
+Load sound
+Create new sample
+Patch sample
+Put sound
+Done load sound
+Load sound
+Create new sample
+Patch sample
+Put sound
+Done load sound
+Load sound
+Create new sample
+Patch sample
+Put sound
+Done load sound
+Load sound
+Create new sample
+Patch sample
+Put sound
+Done load sound
+Load sound
+Create new sample
+Patch sample
+Put sound
+Done load sound
+Load sound
+Create new sample
+Patch sample
+Put sound
+Done load sound
+Load sound
+Create new sample
+Patch sample
+Put sound
+Done load sound
+Load sound
+Create new sample
+Patch sample
+Put sound
+Done load sound
+Load sound
+Create new sample
+Patch sample
+Put sound
+Done load sound
+Load sound
+Create new sample
+Patch sample
+Put sound
+Done load sound
+Load sound
+Create new sample
+Patch sample
+Put sound
+Done load sound
+Load sound
+Create new sample
+Patch sample
+Put sound
+Done load sound
+Load sound
+Create new sample
+Patch sample
+Put sound
+Done load sound
+Load sound
+Create new sample
+Patch sample
+Put sound
+Done load sound
+Load sound
+Create new sample
+Patch sample
+Put sound
+Done load sound
+Load sound
+Create new sample
+Patch sample
+Put sound
+Done load sound
+Load sound
+Create new sample
+Patch sample
+Put sound
+Done load sound
+Load sound
+Create new sample
+Patch sample
+Put sound
+Done load sound
+Load sound
+Create new sample
+Patch sample
+Put sound
+Done load sound
+Load sound
+Create new sample
+Patch sample
+Put sound
+Done load sound
+Load sound
+Create new sample
+Patch sample
+Put sound
+Done load sound
+Load sound
+Create new sample
+Patch sample
+Put sound
+Done load sound
+Load sound
+Create new sample
+Patch sample
+Put sound
+Done load sound
+Load sound
+Create new sample
+Patch sample
+Put sound
+Done load sound
+Load sound
+Create new sample
+Patch sample
+Put sound
+Done load sound
+Load sound
+Create new sample
+Patch sample
+Put sound
+Done load sound
+Load sound
+Create new sample
+Patch sample
+Put sound
+Done load sound
+Load sound
+Create new sample
+Patch sample
+Put sound
+Done load sound
+Load sound
+Create new sample
+Patch sample
+Put sound
+Done load sound
+Load sound
+Create new sample
+Patch sample
+Put sound
+Done load sound
+Load sound
+Create new sample
+Patch sample
+Put sound
+Done load sound
+Load sound
+Create new sample
+Patch sample
+Put sound
+Done load sound
+Load sound
+Create new sample
+Patch sample
+Put sound
+Done load sound
+Load sound
+Create new sample
+Patch sample
+Put sound
+Done load sound
+Load sound
+Create new sample
+Patch sample
+Put sound
+Done load sound
+Load sound
+Create new sample
+Patch sample
+Put sound
+Done load sound
+Load sound
+Create new sample
+Patch sample
+Put sound
+Done load sound
+Load sound
+Create new sample
+Patch sample
+Put sound
+Done load sound
+Load sound
+Create new sample
+Patch sample
+Put sound
+Done load sound
+Load sound
+Create new sample
+Patch sample
+Put sound
+Done load sound
+Load sound
+Create new sample
+Patch sample
+Put sound
+Done load sound
+Load sound
+Create new sample
+Patch sample
+Put sound
+Done load sound
+Load sound
+Create new sample
+Patch sample
+Put sound
+Done load sound
+Load sound
+Create new sample
+Patch sample
+Put sound
+Done load sound
+Load sound
+Create new sample
+Patch sample
+Put sound
+Done load sound
+==== JavaSound Minim Error ====
+==== Don't know the ID3 code TXXX
+
