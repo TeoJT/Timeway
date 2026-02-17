@@ -138,6 +138,13 @@ public class PixelRealm extends Screen {
   
   // --- Global state and working variables (doesn't require per-realm states) ---
   private PGraphics scene;
+  // Virtual camera: disjointed from player but scene displays around it. For example,
+  // distant terrain fades as camera moves.
+  private float virtCameraX = 1000f, virtCameraY = 0f, virtCameraZ = 1000f;
+  // Actual camera: the final camera that is disjointed from virtual cameras. Goes wherever it likes,
+  // without the scene fading or disappearing around it. Moving this camera only is usually used for
+  // debugging purposes e.g. viewing the scene from a different angle to view and debug culling.
+  private float actualCameraX = 1000f, actualCameraY = 0f, actualCameraZ = 1000f;
   private float runAcceleration = 0.;
   private float bob = 0.0;
   private float jumpTimeout = 0;
@@ -158,7 +165,7 @@ public class PixelRealm extends Screen {
   protected float morpherRadius = 150f;
   protected float morpherBlockHeight = 0f;
   protected float morpherBlockCooldown = 0f;
-  protected float fovx = PI/3.0;
+  protected float fovx = PI/3f;
   protected float fovy = 0.;
   private int slippingJumpsAllowed = 2;
   protected PixelRealmState.PRObject optionHighlightedItem = null;
