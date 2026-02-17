@@ -55,16 +55,6 @@
   },
   {
     "size": 30,
-    "x": 153,
-    "color_hex": "FFFFFFFF",
-    "options": ["Auto"],
-    "y": 1809,
-    "ID": "audio_device",
-    "text": "Audio device",
-    "type": 7
-  },
-  {
-    "size": 30,
     "x": 152,
     "color_hex": "FFFFFFFF",
     "y": 1307,

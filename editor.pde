@@ -3304,14 +3304,17 @@ public class SettingsScreen extends ReadOnlyEditor {
     loadSettings();
     get("invalid_path_error").visible = !(file.exists(getInputField("home_directory").inputText) && file.isDirectory(getInputField("home_directory").inputText));
     
-    // Populate options field for audio devices
-    String[] devices = sound.getAudioDevices();
-    String[] devicesWithAuto = new String[devices.length+1];
-    devicesWithAuto[0] = "Auto";
-    for (int i = 0; i < devices.length; i++) {
-      devicesWithAuto[i+1] = devices[i];
-    }
-    getOptionsField("audio_device").createOptions(devicesWithAuto);
+    // This used to be part of code to allow selecting a different audio device.
+    // It is disabled as auto-selecting the audio device seems to work well.
+    // However, maybe one day this could be a useful setting to re-introduce here.
+    // 
+    //String[] devices = sound.getAudioDevices();
+    //String[] devicesWithAuto = new String[devices.length+1];
+    //devicesWithAuto[0] = "Auto";
+    //for (int i = 0; i < devices.length; i++) {
+    //  devicesWithAuto[i+1] = devices[i];
+    //}
+    //getOptionsField("audio_device").createOptions(devicesWithAuto);
     
     
     mockSceneHeight = (int)(HEIGHT-myUpperBarWeight-myLowerBarWeight);
@@ -3405,23 +3408,27 @@ public class SettingsScreen extends ReadOnlyEditor {
     }
   }
   
-  
+  // Gets the settings and sets the values in all the input fields to those settings.
   private void loadSettings() {
     getBooleanField("dynamic_framerate").state = settings.getBoolean("dynamic_framerate", true);
     getBooleanField("more_ram").state = !settings.getBoolean("low_memory", false);
     getBooleanField("scale_down_images").state = settings.getBoolean("auto_scale_down", false);
-    getSliderField("scroll_sensitivity").setVal(settings.getFloat("scroll_sensitivity", 20f));
+    getSliderField("scroll_sensitivity").setVal(settings.getFloat("scroll_sensitivity", 50f));
     
-    String selectedAudioDevice = settings.getString("audio_device", "Auto");
-    getOptionsField("audio_device").selectedOption = "Auto"; // Auto by default
-    String[] devices = getOptionsField("audio_device").options; // Will also include "Auto" which saves us from having to implement a special check for that.
-    // An extra check here in case the audio device that used to be here is no longer there.
-    for (String device : devices) {
-      if (device.equals(selectedAudioDevice)) {
-        getOptionsField("audio_device").selectedOption = selectedAudioDevice;
-        break;
-      }
-    }
+    // An old setting when I thought there was a terrible bug to do with audio devices. Useful, so keeping it here incase I want to add it back at some point.
+    
+    //String selectedAudioDevice = settings.getString("audio_device", "Auto");
+    //getOptionsField("audio_device").selectedOption = "Auto"; // Auto by default
+    
+    
+    //String[] devices = getOptionsField("audio_device").options; // Will also include "Auto" which saves us from having to implement a special check for that.
+    //// An extra check here in case the audio device that used to be here is no longer there.
+    //for (String device : devices) {
+    //  if (device.equals(selectedAudioDevice)) {
+    //    getOptionsField("audio_device").selectedOption = selectedAudioDevice;
+    //    break;
+    //  }
+    //}
     
     
     String newRealmAction = settings.getString("new_realm_action", "prompt");
@@ -3433,6 +3440,7 @@ public class SettingsScreen extends ReadOnlyEditor {
     getSliderIntField("pixelation_scale").setVal(settings.getInt("pixelation_scale", 4));
     getBooleanField("enable_caching").state = settings.getBoolean("caching", true);
     
+    // Yes, powermode settings still uses HIGH / NORMAL / SLEEPY for determining the framerate.
     String powerMode = settings.getString("force_power_mode", "Auto");
     if (powerMode.equals("HIGH")) powerMode = "60 FPS";
     if (powerMode.equals("NORMAL")) powerMode = "30 FPS";
@@ -3451,6 +3459,7 @@ public class SettingsScreen extends ReadOnlyEditor {
     getBooleanField("enable_plugins").state = settings.getBoolean("enable_plugins", false);
   }
   
+  // When the user clicks back, save the settings. TODO: save settings when closing Timeway.
   public void endScreenAnimation() {
     super.endScreenAnimation();
     power.setDynamicFramerate(settings.setBoolean("dynamic_framerate", getBooleanField("dynamic_framerate").state));
@@ -3458,7 +3467,9 @@ public class SettingsScreen extends ReadOnlyEditor {
     settings.setBoolean("auto_scale_down", getBooleanField("scale_down_images").state);
     input.scrollSensitivity = settings.setFloat("scroll_sensitivity", getSliderField("scroll_sensitivity").getVal());
     
-    settings.setString("audio_device", getOptionsField("audio_device").selectedOption);
+    // No longer an option in the settings.
+    
+    //settings.setString("audio_device", getOptionsField("audio_device").selectedOption);
     //sound.selectAudioDevice(getOptionsField("audio_device").selectedOption);
     
     String selected = getOptionsField("new_realm").selectedOption;
@@ -3789,7 +3800,17 @@ public class SettingsScreen extends ReadOnlyEditor {
 
 
 
-
+// To set a custom button:
+// 1. In timeway, type /edit
+// 2. Edit the keybindings page and create the buttons you need. Recommended to give the text in the button a name corresponding
+//    to the keybinding name.
+// 3. Save and close Timeway. Then locate keybindings.timewayentry and edit the JSON in a text editor (yes, really)
+// 4. Find the button you just added (hopefully you added the keybinding name to that text so you can find it easily!)
+// 5. Modify the button's ID to be the keybinding name, save and close text editor
+// 6. In the code here, add the keybinding name to the keybindings array.
+// 7. Add the default keybinding to the defaultBindings array. Make sure its index matches that of the keybinding name you added
+//    in the keybindings array.
+// 8. Test it, and assuming everything works, you're done!
 public class KeybindSettingsScreen extends ReadOnlyEditor {
   public final static String KEYBIND_SETTING_PATH        = "engine/entryscreens/keybindSettings.timewayentry";
   public final static String KEYBIND_SETTING_PATH_PHONE  = "engine/entryscreens/keybindSettings_phone.timewayentry";
@@ -3830,6 +3851,7 @@ public class KeybindSettingsScreen extends ReadOnlyEditor {
       "open_pocket"
   };
   
+  // Default keybindings, they map (by index) to the keybinding names in the array above.
   private char[] defaultBindings = {
       'w',
       's',
@@ -3884,18 +3906,25 @@ public class KeybindSettingsScreen extends ReadOnlyEditor {
   public void content() {
     power.setAwake();
     super.content();
-
+    
+    // Ready font
     app.fill(255);
     app.textFont(engine.DEFAULT_FONT, 24);
     app.textAlign(CENTER, CENTER);
+    
+    // "Enter keybind..." dialog
     if (enterInputPrompt) {
+      // UI system
       ui.useSpriteSystem(readonlyEditorUI);
       //readonlyEditorUI.interactable = true;
+      
+      // Background (and get position of background)
       readonlyEditorUI.sprite("keybinding_prompt_back", "black");
       float x = readonlyEditorUI.getSprite("keybinding_prompt_back").getX();
       float y = readonlyEditorUI.getSprite("keybinding_prompt_back").getY();
       app.text("Enter key or mouse input...", x+300f, y+80f);
       
+      // Animated keybinding icon.
       if (display.getTimeSeconds() % 1f < 0.5f) {
         display.imgCentre("keybinding_1_128", x+300f, y+130f);
       }
@@ -3903,45 +3932,62 @@ public class KeybindSettingsScreen extends ReadOnlyEditor {
         display.imgCentre("keybinding_2_128", x+300f, y+130f);
       }
       
+      // Keypress/mouse click detection
       if (input.anyKeyOnce()) {
-        enterInputPrompt = false;
-        settings.setKeybinding(settingKey, input.getLastKeyPressed());
-        getButton(settingKey).text = input.keyTextForm(input.getLastKeyPressed());
+        enterInputPrompt = false;  // close menu
+        settings.setKeybinding(settingKey, input.getLastKeyPressed());    // Set the keybinding
+        getButton(settingKey).text = input.keyTextForm(input.getLastKeyPressed());   // Update the display text in the button.
       }
       else if (input.primaryOnce) {
-        enterInputPrompt = false;
-        settings.setKeybinding(settingKey, TWEngine.InputModule.LEFT_CLICK);
-        getButton(settingKey).text = "Left click";
+        enterInputPrompt = false;  // close menu
+        settings.setKeybinding(settingKey, TWEngine.InputModule.LEFT_CLICK);   // Set the mouesbinding
+        getButton(settingKey).text = "Left click";   // Update the display text in the button.
       }
       else if (input.secondaryOnce) {
-        enterInputPrompt = false;
-        settings.setKeybinding(settingKey, TWEngine.InputModule.RIGHT_CLICK);
-        getButton(settingKey).text = "Right click";
+        enterInputPrompt = false;  // close menu
+        settings.setKeybinding(settingKey, TWEngine.InputModule.RIGHT_CLICK);   // Set the mouesbinding
+        getButton(settingKey).text = "Right click";   // Update the display text in the button.
       }
     }
+    
+    // Reset to default settings prompt
     else if (resetPrompt) {
+      // Sprites
       ui.useSpriteSystem(readonlyEditorUI);
       //readonlyEditorUI.interactable = true;
+      
+      // Background
       readonlyEditorUI.sprite("keybinding_reset_back", "black");
       float x = readonlyEditorUI.getSprite("keybinding_reset_back").getX();
       float y = readonlyEditorUI.getSprite("keybinding_reset_back").getY();
+      
+      // Dialog text
       app.text("Are you sure you want to reset to defaults?\nThis cannot be undone.", x+315f, y+50f);
       
+      // Yes button
       if (ui.buttonVary("keybindings_reset_yes", "tick_128", "Yes")) {
         sound.playSound("select_general");
         resetPrompt = false;
+        
+        // Reset all the keys to their defined defaults
         for (int i = 0; i < keybindings.length; i++) {
           settings.setKeybinding(keybindings[i], defaultBindings[i]);
           getButton(keybindings[i]).text = input.keyTextForm(defaultBindings[i]);
         }
+        
         console.log("Reset keybindings.");
       }
+      
+      // No button, just close the menu
       if (ui.buttonVary("keybindings_reset_no", "cross_128", "No")) {
         sound.playSound("select_any");
         resetPrompt = false;
       }
     }
+    
+    // When no menu is here, run normal logic for detecting button presses.
     else {
+      // Any one of the keybinding buttons
       for (int i = 0; i < keybindings.length; i++) {
         if (getButton(keybindings[i]).clicked) {
           sound.playSound("select_any");
@@ -3950,6 +3996,7 @@ public class KeybindSettingsScreen extends ReadOnlyEditor {
         }
       }
       
+      // Reset button
       if (getButton("reset_button").clicked) {
         sound.playSound("select_general");
         resetPrompt = true;

@@ -2573,11 +2573,32 @@ public class TWEngine {
     
     
     public AudioModule() {
-      println("Audio module init");
       sounds = new HashMap<String, Sampler>();
       volumeNormal = settings.getFloat("volume_normal", 1f);
       volumeQuiet = settings.getFloat("volume_quiet", 0.25f);
-      println("After audiomodule init");
+      
+      minim = new Minim(app);
+      //minim.debugOn();
+      
+      if (settings.getString("audio_device", "Auto").equals("Auto")) {
+        autoSelectDevice();
+      }
+      else {
+        selectAudioDevice(settings.getString("audio_device", "Auto"));
+      }
+      
+      // Annnnnnd a error fallback option for when it's needed.
+      if (settings.getBoolean("show_audio_devices_debug", false)) {
+        String devices[] = getAudioDevices();
+        for (String s : devices) {
+          console.log(s);
+        }
+      }
+      // Just make it appear in config.
+      else settings.setBoolean("show_audio_devices_debug", false);
+      
+      lineOut = minim.getLineOut();
+      setMasterVolume(volumeNormal);
     }
     
     private class Music {
@@ -2736,18 +2757,12 @@ public class TWEngine {
       
       final int MAX_VOICE_COUNT = 1;
       
-      println("Load sound");
-      
       if (lineOut != null) {
         if (file.exists(path)) {
           // Create sound effect with Minim library, attaching it to master out.
-          println("Create new sample");
           Sampler newSampler = new Sampler(path, MAX_VOICE_COUNT, minim);
-          println("Patch sample");
           newSampler.patch(lineOut);
-          println("Put sound");
           sounds.put(file.getIsolatedFilename(path), newSampler);
-          println("Done load sound");
         }
         else {
           console.warn(path+" does not exist.");
@@ -3188,57 +3203,6 @@ public class TWEngine {
     
     // ******** ok no more beats and bops. Time for the master function ********
     public void processSound() {
-      // First, Minim needs to be initialised here. Apparently initialising it during setup() is a bad idea.
-      if (minim == null) {
-        try {
-          
-          
-          println("TEST: loading mixers");
-          Mixer.Info[] infos = AudioSystem.getMixerInfo();
-          for (Mixer.Info info : infos) {
-            println(info.getName());
-          }
-          println("Finished listing mixers");
-          
-          println("Initialise minim");
-          minim = new Minim(app);
-          println("After initialise minim");
-          //minim.debugOn();
-          
-          if (settings.getString("audio_device", "Auto").equals("Auto")) {
-            autoSelectDevice();
-          }
-          else {
-            selectAudioDevice(settings.getString("audio_device", "Auto"));
-          }
-          
-          // Annnnnnd a error fallback option for when it's needed.
-          if (settings.getBoolean("show_audio_devices_debug", false)) {
-            String devices[] = getAudioDevices();
-            for (String s : devices) {
-              console.log(s);
-            }
-          }
-          // Just make it appear in config.
-          else settings.setBoolean("show_audio_devices_debug", false);
-          
-        }
-        catch (RuntimeException e) {
-          console.warn("Minim initialisation failed, trying again.");
-        }
-      }
-      
-      if (lineOut == null) {
-        try {
-          lineOut = minim.getLineOut();
-          setMasterVolume(volumeNormal);
-        }
-        catch (RuntimeException e) {
-          console.warn("Minim initialisation failed, trying again.");
-        }
-      }
-      
-      
       processBeat();
       
       // Process fade
@@ -6268,8 +6232,8 @@ public class TWEngine {
         }
         // TODO: extended error checking
         catch (Exception e) {
-          System.err.println("passPApplet Exception: "+ e.getClass().getSimpleName());
-          System.err.println(e.getMessage());
+          console.warn("passPApplet Exception: "+ e.getClass().getSimpleName());
+          console.warn(e.getMessage());
         }
       }
       
@@ -7878,8 +7842,6 @@ public class TWEngine {
     // Get file name without the extension
     String name = path.substring(path.lastIndexOf("/")+1, path.lastIndexOf("."));
 
-    //println(name);
-
     // We don't need to bother with content that's already been loaded.
     if (loadedContent.contains(name) || name.equals("everything") || name.equals("load_list")) {
       return;
@@ -7941,13 +7903,11 @@ public class TWEngine {
         if (ext.length() <= 1) {
           // Load all assets in that directory
           loadAllAssets(assets[i]);
-          //println(assets[i]+" is dir");
         }
         // If asset is a file
         else {
           // Load asset
           loadAsset(assets[i]);
-          //println(assets[i]+" is file");
         }
       }
     }
