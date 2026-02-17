@@ -138,13 +138,17 @@ public class PixelRealm extends Screen {
   
   // --- Global state and working variables (doesn't require per-realm states) ---
   private PGraphics scene;
+  // 0/any = player, 1 = virtual, 2 = actual
+  private float cameraControl = 0;
   // Virtual camera: disjointed from player but scene displays around it. For example,
   // distant terrain fades as camera moves.
   private float virtCameraX = 1000f, virtCameraY = 0f, virtCameraZ = 1000f;
+  private float virtCameraToX = 1000f, virtCameraToY = 0f, virtCameraToZ = 1000f;
   // Actual camera: the final camera that is disjointed from virtual cameras. Goes wherever it likes,
   // without the scene fading or disappearing around it. Moving this camera only is usually used for
   // debugging purposes e.g. viewing the scene from a different angle to view and debug culling.
   private float actualCameraX = 1000f, actualCameraY = 0f, actualCameraZ = 1000f;
+  private float actualCameraToX = 1000f, actualCameraToY = 0f, actualCameraToZ = 1000f;
   private float runAcceleration = 0.;
   private float bob = 0.0;
   private float jumpTimeout = 0;
@@ -1520,7 +1524,6 @@ public class PixelRealm extends Screen {
     // --- Legacy stuff for backward compatibility ---
     private Stack<PixelRealmState.PRObject> legacy_terrainObjects;
     public HashSet<String> legacy_autogenStuff;
-    public boolean lights = false;
     public int collectedCoins = 0;
     public boolean coins = false;
     public boolean improvedFog2 = true;  // Newer 2.1 realms have different looking fog, but of course we have existing realms with the older fog.
@@ -2933,7 +2936,7 @@ public class PixelRealm extends Screen {
         super.display();
         
         boolean dontRender = false;
-        float dist = PApplet.pow((playerX-x), 2)+PApplet.pow((playerZ-z), 2);
+        float dist = PApplet.pow((virtCameraX-x), 2)+PApplet.pow((virtCameraZ-z), 2);
         if (versionCompatibility == 1) {
           if (dist > terrain.FADE_DIST_OBJECTS) {
             float fade = calculateFade(dist, terrain.FADE_DIST_OBJECTS);
@@ -2947,8 +2950,8 @@ public class PixelRealm extends Screen {
           }
         }
         else if (versionCompatibility == 2) {
-          float x = playerX-this.x;
-          float z = playerZ-this.z;
+          float x = virtCameraX-this.x;
+          float z = virtCameraZ-this.z;
           if (x*x+z*z > terrain.FADE_DIST_OBJECTS) {
             dontRender = true;
           }
@@ -3159,13 +3162,13 @@ public class PixelRealm extends Screen {
         float xx2 = x - sin_d;
         float zz2 = z - cos_d;
         
-        float x1 = playerX-xx1;
+        float x1 = virtCameraToX-xx1;
         float y1 = playerY-this.y;
-        float z1 = playerZ-zz1;
+        float z1 = virtCameraToZ-zz1;
         
-        float x2 = playerX-xx2;
+        float x2 = virtCameraToX-xx2;
         float y2 = y1;
-        float z2 = playerZ-zz2;
+        float z2 = virtCameraToZ-zz2;
         
         // BUG FIX:
         // Calculate the edge with the furthest distance to the player (camera).
@@ -3210,10 +3213,10 @@ public class PixelRealm extends Screen {
                 float hwi = wi/2;
                 float sin_dd = sin(rot+HALF_PI)*(hwi);
                 float cos_dd = cos(rot+HALF_PI)*(hwi);
-                float dx1 = playerX - (x + sin_dd);
-                float dz1 = playerZ - (z + cos_dd);
-                float dx2 = playerX - (x - sin_dd);
-                float dz2 = playerZ - (z - cos_dd);
+                float dx1 = virtCameraX - (x + sin_dd);
+                float dz1 = virtCameraZ - (z + cos_dd);
+                float dx2 = virtCameraX - (x - sin_dd);
+                float dz2 = virtCameraZ - (z - cos_dd);
                 if (unifiedShader != null) {
                   unifiedShader.set("flipTexture", abs(dx1*dx1+dz1*dz1) < abs(dx2*dx2+dz2*dz2));
                   unifiedShader.consumeUniforms();
@@ -3819,8 +3822,8 @@ public class PixelRealm extends Screen {
       }
   
       public void calculateVal() {
-        float xx = playerX-x;
-        float zz = playerZ-z;
+        float xx = virtCameraX-x;
+        float zz = virtCameraZ-z;
         this.myOrderingNode.val = xx*xx + zz*zz + wi*0.5;
       }
       
@@ -3967,7 +3970,7 @@ public class PixelRealm extends Screen {
         if (versionCompatibility == 1) {
           //Add some fog for objects as they get further away.
           //Note that if the transparacy is 100%, the object will not be rendered at all.
-          float dist = PApplet.pow((playerX-x), 2f)+PApplet.pow((playerZ-z), 2f);
+          float dist = PApplet.pow((virtCameraX-x), 2f)+PApplet.pow((virtCameraZ-z), 2f);
           
           if (dist > terrain.FADE_DIST_OBJECTS) {
             float fade = calculateFade(dist, terrain.FADE_DIST_OBJECTS);
@@ -3981,8 +3984,8 @@ public class PixelRealm extends Screen {
           }
         }
         else if (versionCompatibility == 2) {
-          float xx = playerX-this.x;
-          float zz = playerZ-this.z;
+          float xx = virtCameraX-this.x;
+          float zz = virtCameraZ-this.z;
           if (xx*xx+zz*zz > terrain.FADE_DIST_OBJECTS) {
             dontRender = true;
           }
@@ -5570,37 +5573,40 @@ public class PixelRealm extends Screen {
           float ypoint1 = 0.;
           float ypoint2 = 0.;
           
-          if (input.keyAction("move_forward", 'w')) {
-            movex += sin_d*speed;
-            movez += cos_d*speed;
-            ypoint1 = onSurface(playerX+sin_d, playerZ+cos_d);  // Front
-            ypoint2 = onSurface(playerX-sin_d, playerZ-cos_d);  // Behind
-  
-            isWalking = true;
-          }
-          if (input.keyAction("move_left", 'a')) {
-            movex += cos_d*speed;
-            movez += -sin_d*speed;
-            ypoint1 = onSurface(playerX+cos_d, playerZ-sin_d);  // Left
-            ypoint2 = onSurface(playerX-cos_d, playerZ+sin_d);  // Right
-  
-            isWalking = true;
-          }
-          if (input.keyAction("move_backward", 's')) {
-            movex += -sin_d*speed;
-            movez += -cos_d*speed;
-            ypoint1 = onSurface(playerX-sin_d, playerZ-cos_d);  // Behind
-            ypoint2 = onSurface(playerX+sin_d, playerZ+cos_d);  // Front
-  
-            isWalking = true;
-          }
-          if (input.keyAction("move_right", 'd')) {
-            movex += -cos_d*speed;
-            movez += sin_d*speed;
-            ypoint1 = onSurface(playerX-cos_d, playerZ+sin_d);  // Right
-            ypoint2 = onSurface(playerX+cos_d, playerZ-sin_d);  // Left
-            
-            isWalking = true;
+          if (cameraControl == 0) {
+              if (input.keyAction("move_forward", 'w')) {
+                movex += sin_d*speed;
+                movez += cos_d*speed;
+                ypoint1 = onSurface(playerX+sin_d, playerZ+cos_d);  // Front
+                ypoint2 = onSurface(playerX-sin_d, playerZ-cos_d);  // Behind
+      
+                isWalking = true;
+              }
+              if (input.keyAction("move_left", 'a')) {
+                movex += cos_d*speed;
+                movez += -sin_d*speed;
+                ypoint1 = onSurface(playerX+cos_d, playerZ-sin_d);  // Left
+                ypoint2 = onSurface(playerX-cos_d, playerZ+sin_d);  // Right
+      
+                isWalking = true;
+              }
+              if (input.keyAction("move_backward", 's')) {
+                movex += -sin_d*speed;
+                movez += -cos_d*speed;
+                ypoint1 = onSurface(playerX-sin_d, playerZ-cos_d);  // Behind
+                ypoint2 = onSurface(playerX+sin_d, playerZ+cos_d);  // Front
+      
+                isWalking = true;
+              }
+              if (input.keyAction("move_right", 'd')) {
+                movex += -cos_d*speed;
+                movez += sin_d*speed;
+                ypoint1 = onSurface(playerX-cos_d, playerZ+sin_d);  // Right
+                ypoint2 = onSurface(playerX+cos_d, playerZ-sin_d);  // Left
+                
+                isWalking = true;
+              }
+      
           }
           
           float slopeness = ypoint2-ypoint1;
@@ -5611,7 +5617,7 @@ public class PixelRealm extends Screen {
             movez *= allowance;
           }
   
-  
+
           if (input.keyAction("move_slow", TWEngine.InputModule.SHIFT_KEY)) {
             if (input.keyAction("turn_right", 'e')) rot = -SLOW_TURN_SPEED*display.getDelta();
             if (input.keyAction("turn_left", 'q')) rot =  SLOW_TURN_SPEED*display.getDelta();
@@ -6328,8 +6334,8 @@ public class PixelRealm extends Screen {
       engine.noiseDetail(4, 0.5); 
         
       scene.pushMatrix();
-      float chunkx = floor(playerX/tt.getGroundSize())+1.;
-      float chunkz = floor(playerZ/tt.getGroundSize())+1.; 
+      float chunkx = floor(virtCameraX/tt.getGroundSize())+1.;
+      float chunkz = floor(virtCameraZ/tt.getGroundSize())+1.; 
   
       // This only uses a single cycle, dw.
       legacy_terrainObjects.clear();
@@ -6344,7 +6350,7 @@ public class PixelRealm extends Screen {
         //                                                        random bug fix over here.
         for (float tilex = chunkx-tt.getRenderDistance()-1; tilex < chunkx+tt.getRenderDistance(); tilex += 1.) {
           float x = tt.getGroundSize()*(tilex-0.5), z = tt.getGroundSize()*(tilez-0.5);
-          float dist = PApplet.pow((playerX-x), 2)+PApplet.pow((playerZ-z), 2);
+          float dist = PApplet.pow((virtCameraX-x), 2)+PApplet.pow((virtCameraZ-z), 2);
   
           boolean dontRender = false;
           if (dist > tt.FADE_DIST_GROUND) {
@@ -6592,8 +6598,8 @@ public class PixelRealm extends Screen {
         break;
       }
       
-      int startx = round((playerX)/(chunkWiHi))-renderDistance-1;
-      int startz = round((playerZ)/(chunkWiHi))-renderDistance;
+      int startx = round((virtCameraX)/(chunkWiHi))-renderDistance-1;
+      int startz = round((virtCameraZ)/(chunkWiHi))-renderDistance;
       
       for (int y = csy; y < renderDistance+cey; y++) {
         for (int x = csx; x < renderDistance+cex; x++) {
@@ -6680,8 +6686,8 @@ public class PixelRealm extends Screen {
       
       int irenderDist = int(renderDistance*1.8f);
       
-      float startx = round((playerX)/(waterSize))-renderDistance-1;
-      float startz = round((playerZ)/(waterSize))-renderDistance;
+      float startx = round((virtCameraX)/(waterSize))-renderDistance-1;
+      float startz = round((virtCameraZ)/(waterSize))-renderDistance;
       
       int cullDirection = getCullDirection();
       
@@ -6713,19 +6719,19 @@ public class PixelRealm extends Screen {
           
           switch (cullDirection) {
             case 0:
-            if (xx2 > playerX)  // Top
+            if (xx2 > virtCameraX)  // Top
               scene.shape(waterObject);
             break;
             case 1:
-            if (zz1 < playerZ)
+            if (zz1 < virtCameraZ)
               scene.shape(waterObject);
             break;
             case 2:
-            if (xx1 < playerX)  // Bottom
+            if (xx1 < virtCameraX)  // Bottom
               scene.shape(waterObject);
             break;
             case 3:
-            if (zz2 > playerZ)  // Left
+            if (zz2 > virtCameraZ)  // Left
               scene.shape(waterObject);
             break;
           }
@@ -7156,19 +7162,19 @@ public class PixelRealm extends Screen {
 
         switch (cullDirection) {
           case 0:
-          if (o.x > playerX)  // Top
+          if (o.x > virtCameraX)  // Top
             o.display();
           break;
           case 1:
-          if (o.z < playerZ)
+          if (o.z < virtCameraZ)
             o.display();
           break;
           case 2:
-          if (o.x < playerX)  // Bottom
+          if (o.x < virtCameraX)  // Bottom
             o.display();
           break;
           case 3:
-          if (o.z > playerZ)  // Left
+          if (o.z > virtCameraZ)  // Left
             o.display();
           break;
         }
@@ -7736,6 +7742,80 @@ public class PixelRealm extends Screen {
     apiMode = mode;
     currRealm.runPlugin();
   }
+
+
+  private void runCamera() {
+    final float CAMERA_CONTROL_SPEED = 5f;
+    if (cameraControl != 0) {
+      float rot = 0.;
+      float movex = 0.;
+      float movey = 0.;
+      float movez = 0.;
+      float ypoint1 = 0.;
+      float ypoint2 = 0.;
+      float speed = CAMERA_CONTROL_SPEED;
+
+      if (input.keyAction("dash", TWEngine.InputModule.CTRL_KEY)) {
+        speed = CAMERA_CONTROL_SPEED*2f;
+      }
+      
+      if (input.keyAction("move_forward", 'w')) {
+        movex += sin_d*speed;
+        movez += cos_d*speed;
+      }
+      if (input.keyAction("move_left", 'a')) {
+        movex += cos_d*speed;
+        movez += -sin_d*speed;
+      }
+      if (input.keyAction("move_backward", 's')) {
+        movex += -sin_d*speed;
+        movez += -cos_d*speed;
+      }
+      if (input.keyAction("move_right", 'd')) {
+        movex += -cos_d*speed;
+        movez += sin_d*speed;
+      }
+
+      if (input.shiftDown) {
+        movey += speed;
+      }
+      if (input.keyAction("jump", ' ')) {
+        movey -= speed;
+      }
+
+      // Move virtual camera
+      if (cameraControl == 1) {
+        virtCameraX += movex;
+        virtCameraX += movey;
+        virtCameraZ += movez;
+        
+        // TODO: not final direction calculation for virtCamera
+        virtCameraToX = virtCameraX+sin(currRealm.direction)*LOOK_DIST;
+        virtCameraToY = virtCameraY;
+        virtCameraToZ = virtCameraZ+cos(currRealm.direction)*LOOK_DIST;
+      }
+      else if (cameraControl == 2) {
+        actualCameraX += movex;
+        actualCameraY += movey;
+        actualCameraZ += movez;
+        
+        // TODO: not final direction calculation for virtCamera
+        actualCameraToX = actualCameraX+sin(currRealm.direction)*LOOK_DIST;
+        actualCameraToY = actualCameraY;
+        actualCameraToZ = actualCameraZ+cos(currRealm.direction)*LOOK_DIST;
+      }
+    }
+    else {
+      virtCameraX = currRealm.playerX;
+      virtCameraY = currRealm.playerY+(sin(bob)*3);
+      virtCameraZ = currRealm.playerZ;
+
+      float LOOK_DIST = 200.;
+      virtCameraToX = virtCameraX+sin(currRealm.direction)*LOOK_DIST;
+      virtCameraToY = virtCameraY;
+      virtCameraToZ = virtCameraZ+cos(currRealm.direction)*LOOK_DIST;
+    }
+  }
     
         
   // Finally, the most important code of all
@@ -7746,25 +7826,6 @@ public class PixelRealm extends Screen {
     // Pre-rendering stuff.
     portalCoolDown -= display.getDelta();
     animationTick += display.getDelta();
-    // Trollolloloolloollolloll
-    // (This is so that we can begin in a new caching location if we decide to move)
-    //backgroundRealm = null;
-    //if (realmsToVisit.size() > 0) {
-    //  realmsToVisit.clear();
-    //}
-    
-    if (timeNotMoving > 2000) {
-      if (!power.getPowerSaver()) {
-        //doBackgroundCaching(15);
-      }
-      if (beginBackgroundCaching) {
-        //console.log("zzz...");
-        //beginBackgroundCaching = false;
-      }
-    }
-    else {
-      //beginBackgroundCaching = true;
-    }
     
     runMultithreadedLoader();
     if (refreshRealm.getAndSet(false) == true) {
@@ -7779,6 +7840,7 @@ public class PixelRealm extends Screen {
     // Do all non-display logic (for stuff that is displayed)
     // Stuff that is currently on-screen is stored in ordering list.
     currRealm.runPlayer();
+    runCamera();
     engine.timestamp("Player");
     currRealm.runPRObjects();
     currShaderMode = 0;
@@ -7804,19 +7866,23 @@ public class PixelRealm extends Screen {
     "pixelRes", 1500f*scale, 221f*scale,
     "tintColor", 1f, 1f, 1f, 1f);
 
-    //scene.translate(-xpos+(scene.width / 2), ypos+(sin(bob)*3)+(scene.height / 2)+80, -zpos+(scene.width / 2));
-    {
-      float x = currRealm.playerX;
-      float y = currRealm.playerY+(sin(bob)*3)-PLAYER_HEIGHT;
-      float z = currRealm.playerZ;
-      float LOOK_DIST = 200.;
-      display.recordRendererTime();
-      scene.camera(x, y, z, 
-        x+sin(currRealm.direction)*LOOK_DIST, y, z+cos(currRealm.direction)*LOOK_DIST, 
-        0., 1., 0.);
-      if (currRealm.lights) scene.pointLight(255, 245, 245, x, y, z);
-      display.recordLogicTime();
+    // Time for the real camera
+    
+    // If camera is set to control actual camera, we follow whatever actualCameraX is set to.
+    // Otherwise, follow virtual camera like default behaviour.
+    if (cameraControl != 2) {
+      actualCameraX = virtCameraX;
+      actualCameraY = virtCameraX;
+      actualCameraZ = virtCameraZ;
+      
+      actualCameraToX = virtCameraToX;
+      actualCameraToY = virtCameraToX;
+      actualCameraToZ = virtCameraToZ;
     }
+
+    scene.camera(actualCameraX, actualCameraY, actualCameraZ, 
+      actualCameraToX, actualCameraToY, actualCameraToZ, 
+      0., 1., 0.);
     engine.timestamp("perspective");
 
     currRealm.renderTerrain();
@@ -8271,6 +8337,26 @@ public class PixelRealm extends Screen {
       currRealm.improvedFog2 = true;
       currRealm.terrain.update();
       console.log(currRealm.version+" realm upgraded to newest.");
+      return true;
+    }
+    else if (engine.commandEquals(command, "/camera") || engine.commandEquals(command, "/defaultcamera") || engine.commandEquals(command, "/playercamera")) {
+      if (cameraControl != 0) {
+        cameraControl = 0;
+        console.log("Reset camera mode to player.");
+      }
+      else {
+        console.log("Camera mode set to player.");
+      }
+      return true;
+    }
+    else if (engine.commandEquals(command, "/virtualcamera")) {
+      cameraControl = 1;
+      console.log("Now controlling virtual camera.");
+      return true;
+    }
+    else if (engine.commandEquals(command, "/actualcamera")) {
+      cameraControl = 2;
+      console.log("Now controlling actual camera.");
       return true;
     }
       
