@@ -137,7 +137,7 @@ public class PixelRealm extends Screen {
   public final static String REALM_BGM_DEFAULT_LEGACY = "engine/music/pixelrealm_default_bgm_legacy.wav";
   
   // --- Global state and working variables (doesn't require per-realm states) ---
-  private PGraphics scene;
+  protected PGraphics scene;
   // 0/any = player, 1 = virtual, 2 = actual
   private float cameraControl = 0;
   // Virtual camera: disjointed from player but scene displays around it. For example,
@@ -180,7 +180,7 @@ public class PixelRealm extends Screen {
   private int manualTreeIndex = 0;
   
   private PShader unifiedShader = null;
-  private PGL pgl;
+  protected PGL pgl;
   
   private AtomicBoolean refreshRealm = new AtomicBoolean(false);
   private AtomicInteger refresherCommand = new AtomicInteger(0);
@@ -538,6 +538,12 @@ public class PixelRealm extends Screen {
         return 0;
       }
       return obj.glName;
+    }
+    
+    // Deletes the texture, object cannot be used from that point forward
+    // so you should set it to null after that.
+    public void cleanup() {
+      deleteTexture(singleImg);
     }
   }
   
@@ -918,7 +924,42 @@ public class PixelRealm extends Screen {
       rebindVertexShader = false;
     }
   }
+  
+  protected Texture getTexture(PImage img, PGraphics graphics) {
+    Texture obj = ((Texture)graphics.getCache(img));
+    if (obj == null) {
+      return ((PGraphicsOpenGL)graphics).getTexture(img);
+    }
+    return obj;
+  }
+  
+  
+  protected Texture getTexture(PImage img) {
+    return getTexture(img, g);
+  }
     
+  protected int pimgToGLName(PImage img) {
+    return getTexture(img).glName;
+  }
+  
+  protected void deleteTexture(PImage img, PGraphics graphics) {
+    if (pgl == null) {
+      console.bugWarn("deleteTexture: beginPGL must be called.");
+      return;
+    }
+    
+    // Technically, could delete multiple textures. But I'm not too bothered about
+    // the delete overhead for now.
+    IntBuffer intBuffer = IntBuffer.allocate(1);
+    intBuffer.put(0, getTexture(img, graphics).glName);
+    pgl.deleteTextures(1, intBuffer);
+    getTexture(img, graphics).glName = 0;
+  }
+  
+  protected void deleteTexture(PImage img) {
+    deleteTexture(img, g);
+  }
+  
   
   // Class for holding our special super-fast billboards and quads
   class GLQuadElement {
@@ -947,15 +988,6 @@ public class PixelRealm extends Screen {
     
     public GLQuadElement(RealmTextureUV img, int imgIndex) {
       this(img, imgIndex, img.getWidth(imgIndex), img.getHeight(imgIndex));
-    }
-    
-    private int pimgToGLName(PImage img) {
-      Texture obj = ((Texture)scene.getCache(img));
-      if (obj == null) {
-        obj = ((PGraphicsOpenGL)scene).getTexture(img);
-        return obj.glName;
-      }
-      return obj.glName;
     }
     
     private void genBuffer() {
@@ -1162,6 +1194,11 @@ public class PixelRealm extends Screen {
     
     // Sometimes, we just gotta have weird hacks in weird places in our code which results in 
     // weird constructors with weird purposes.
+    // What does it do?
+    // Well, it's used for the pocket menu.
+    // In the grid, items marked as "isWeird" aren't actually items, rather they're used
+    // for displaying text, gaps, or anything else.
+    // Yes, I acknowledge this is fundamentally really really cursed.
     public boolean isWeird = false;
     
     public PocketItem(String name, boolean isWeird) {
@@ -1211,6 +1248,7 @@ public class PixelRealm extends Screen {
     
     public void displayIcon(float x, float y, float wihi) {
       PImage ico = null;
+      
       
       // Quick fix for now
       if (item instanceof PixelRealmState.MusicFileObject) {
@@ -1276,7 +1314,6 @@ public class PixelRealm extends Screen {
         // Can't move files that have the same filename as another file
         // in the pocket.
         if (isDuplicate) {
-          console.log("isDuplicate");
           promptPocketConflict(name);
           return false;
         }
@@ -1292,7 +1329,6 @@ public class PixelRealm extends Screen {
         
         // Another duplicate check that is mostly temporary and I'll have a better solution soon.
         if (file.exists(engine.APPPATH+engine.POCKET_PATH()+newName)) {
-          console.log("genuine conflict");
           promptPocketConflict(newName);
           return false;
         }
@@ -1318,6 +1354,10 @@ public class PixelRealm extends Screen {
     
     public boolean pocketMove(String fro) {
       return pocketMove(fro, name);
+    }
+    
+    public void cleanup() {
+      item.destroy();
     }
   }
   
@@ -4614,6 +4654,7 @@ public class PixelRealm extends Screen {
       
       // Oh, and we need to load our pocket objects
       // First reset all our lists.
+      pocketObjects.clear();
       pocketObjects = new HashSet<PRObject>();
       //pocketItemNames = new HashSet<String>();
       
@@ -4652,7 +4693,6 @@ public class PixelRealm extends Screen {
 
       // Add it to za lists
       pocketObjects.add(p.item);
-      //if (p.item instanceof FileObject) files.add((FileObject)p.item);
       
       // Yeet it into the void so we can't see it.
       throwItIntoTheVoid(p.item);
@@ -7746,14 +7786,14 @@ public class PixelRealm extends Screen {
 
   private void runCamera() {
     final float CAMERA_CONTROL_SPEED = 5f;
+    final float LOOK_DIST = 200.;
     if (cameraControl != 0) {
-      float rot = 0.;
       float movex = 0.;
       float movey = 0.;
       float movez = 0.;
-      float ypoint1 = 0.;
-      float ypoint2 = 0.;
       float speed = CAMERA_CONTROL_SPEED;
+      float sin_d = sin(currRealm.direction);
+      float cos_d = cos(currRealm.direction);
 
       if (input.keyAction("dash", TWEngine.InputModule.CTRL_KEY)) {
         speed = CAMERA_CONTROL_SPEED*2f;
@@ -7786,7 +7826,7 @@ public class PixelRealm extends Screen {
       // Move virtual camera
       if (cameraControl == 1) {
         virtCameraX += movex;
-        virtCameraX += movey;
+        virtCameraY += movey;
         virtCameraZ += movez;
         
         // TODO: not final direction calculation for virtCamera
@@ -7807,14 +7847,14 @@ public class PixelRealm extends Screen {
     }
     else {
       virtCameraX = currRealm.playerX;
-      virtCameraY = currRealm.playerY+(sin(bob)*3);
+      virtCameraY = currRealm.playerY+(sin(bob)*3)-PLAYER_HEIGHT;
       virtCameraZ = currRealm.playerZ;
 
-      float LOOK_DIST = 200.;
       virtCameraToX = virtCameraX+sin(currRealm.direction)*LOOK_DIST;
       virtCameraToY = virtCameraY;
       virtCameraToZ = virtCameraZ+cos(currRealm.direction)*LOOK_DIST;
     }
+    
   }
     
         
@@ -7872,11 +7912,11 @@ public class PixelRealm extends Screen {
     // Otherwise, follow virtual camera like default behaviour.
     if (cameraControl != 2) {
       actualCameraX = virtCameraX;
-      actualCameraY = virtCameraX;
+      actualCameraY = virtCameraY;
       actualCameraZ = virtCameraZ;
       
       actualCameraToX = virtCameraToX;
-      actualCameraToY = virtCameraToX;
+      actualCameraToY = virtCameraToY;
       actualCameraToZ = virtCameraToZ;
     }
 

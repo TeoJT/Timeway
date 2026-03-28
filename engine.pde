@@ -3254,8 +3254,6 @@ public class TWEngine {
     
     
     // End of the module
-    
-    
   }
   
   
@@ -8825,7 +8823,9 @@ public abstract class Screen {
     if (power.powerMode != PowerMode.MINIMAL) {
       app.pushMatrix();
       //float scl = display.getScale();
-      app.translate(screenx, screeny);
+      
+      // Take 4 pixels away because for some reason it's offset by 4 pixels.
+      app.translate(screenx-4f, screeny);
       app.scale(display.getScale());
       this.backg();
       this.content();

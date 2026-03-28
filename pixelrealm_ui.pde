@@ -1115,6 +1115,13 @@ public class PixelRealmWithUI extends PixelRealm {
         throw new PocketPanicException(PocketPanicException.ERR_TOO_FULL);
       }
       
+      public void cleanup() {
+        for (int i = 0; i < grid.length; i++) {
+          if (grid[i] != null && !grid[i].isWeird && grid[i].item != null && grid[i].item.img != null) {
+            grid[i].cleanup();
+          }
+        }
+      }
       
       public void insertIntoFreeCell(PocketItem pitem) {
         grid[findFreeCell()] = pitem;
@@ -1265,9 +1272,6 @@ public class PixelRealmWithUI extends PixelRealm {
                 app.rect(gridx + x * squarewihi, actualy, squarewihi, squarewihi);
                 
                 
-                //if (input.primaryOnce) {
-                //  console.log(i);
-                //}
                 
                 // Pick up item when clicked & held
                 if ((input.primaryOnce || (input.shiftDown && input.primaryDown)) && grid[i] != null && !stickItemToMouse) {
@@ -2363,8 +2367,13 @@ public class PixelRealmWithUI extends PixelRealm {
       app.textAlign(LEFT, TOP);
       app.text("Pocket", xxx+80f, yyy+5f);
       
+      
+      int letmego = 2;
+      if (letmego == 1) return;
+      
       // Pockets grid
       pocketsGrid.display(xxx, yyy+60f, getWidth(), hii);
+      
       
       // Outer grid selection tab (hotbar, realm assets, or folder files)
       // First get sprite position of outer grid (tabs go above that)
@@ -2536,6 +2545,10 @@ public class PixelRealmWithUI extends PixelRealm {
       // Save pocket info file
       app.saveJSONObject(pocketInfo, engine.APPPATH+engine.POCKET_PATH()+POCKET_INFO);
       
+      pocketsGrid.cleanup();
+      hotbarGrid.cleanup();
+      realmGrid.cleanup();
+      
       // Reload hotbar
       currRealm.loadHotbar();
       
@@ -2544,8 +2557,11 @@ public class PixelRealmWithUI extends PixelRealm {
         switchTool(TOOL_GRABBER);
       }
       
+      System.gc();
+      
       
       // Restore old memusage state
+      // TODO: inaccurate memusage because we could have items which have been moved to the hotbar, increasing the actual memory.
       memUsage.set(prevMemUsage);
     }
   }
