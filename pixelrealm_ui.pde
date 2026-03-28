@@ -1042,6 +1042,7 @@ public class PixelRealmWithUI extends PixelRealm {
     private boolean showInputField = false;
     private String promptInput = "";
     private Runnable promptInputRunWhenEnter = null;
+    private float prevMouseY = 0f;
     
     private String hoverLabel = null;
     private color  hoverLabelColor = color(0);
@@ -1068,6 +1069,7 @@ public class PixelRealmWithUI extends PixelRealm {
       public float verticalSpacing = 0f;
       public boolean refreshRealmWhenFileDeletedFlag = false;  // This is used as a cheap way to refresh the realm when a realm asset is deleted in the realm grid.
       public boolean allowRename = true;  // Another cheap way to allow/disallow renaming in the realm grid.
+      private boolean touchScrolling = false;
       
       public PocketItem[] grid;
       
@@ -1196,10 +1198,16 @@ public class PixelRealmWithUI extends PixelRealm {
         
         float bottom = ly*(squarewihi + verticalSpacing);
         
+        
         // Scroll, use special functionality in that we're always processing the scroll, but only receiving wheel inputs when
         // mouse is in area. This will keep the grids animated even if we're switching between the grids
         if (!promptShown()) {
-          scroll = input.processScroll(scroll, 10f, bottom-hii+10f, ui.mouseInArea(gridx, gridy, (squarewihi + verticalSpacing)*SLOTS_WI+5f, hii));
+          if (touchScrolling) {
+            scroll += (input.mouseY() - prevMouseY);
+          }
+          else {
+            scroll = input.processScroll(scroll, 10f, bottom-hii+10f, ui.mouseInArea(gridx, gridy, (squarewihi + verticalSpacing)*SLOTS_WI+5f, hii));
+          }
         }
         
         if (!input.primaryDown) preventShiftClick = false;
@@ -1214,6 +1222,10 @@ public class PixelRealmWithUI extends PixelRealm {
             for (int x = 0; x < SLOTS_WI; x++) {
               int i = y*SLOTS_WI+x;
               
+              // For later
+              boolean touchScrollStartCondition = input.primaryOnce && !stickItemToMouse && !input.shiftDown && !touchScrolling;
+              
+              
               // End at the end of the grid
               if (i >= grid.length) {
                 break;
@@ -1221,6 +1233,11 @@ public class PixelRealmWithUI extends PixelRealm {
               
               // Weirdass special conditions for custom cells.
               if (grid[i] != null && grid[i].isWeird) {
+                // Extra logic here before continue statements to account for touch scrolling
+                if (touchScrollStartCondition && ui.mouseInArea(gridx + x * squarewihi, actualy, squarewihi, squarewihi)) {
+                  touchScrolling = true;
+                }
+                
                 // This one leaves a gap if it's using the blank dummy.
                 if (grid[i] == blankCellDummy) {
                   continue;
@@ -1311,6 +1328,13 @@ public class PixelRealmWithUI extends PixelRealm {
                     sound.playSound("pocket_pickup");
                   }
                 }
+                // Grid cell is empty and mouse is clicked (start scrolling)
+                // We don't want to scroll if shift is held because we might annoyingly move the grid when the user is trying
+                // to shift-click a column of items.
+                else if (touchScrollStartCondition) {
+                  touchScrolling = true;
+                }
+                
                 
                 
                 // Show options when right-clicked.
@@ -1458,7 +1482,15 @@ public class PixelRealmWithUI extends PixelRealm {
         }
         
         display.noClip();
+        
+        if (touchScrolling && input.primaryReleased) {
+          touchScrolling = false;
+        }
+        
       }
+      
+      
+      
     }
     
     final int POCKET = 1;
@@ -2425,6 +2457,8 @@ public class PixelRealmWithUI extends PixelRealm {
         case 2:
         break;
       }
+      
+      prevMouseY = input.mouseY();
       
       
       // This section of code must run after all grid display() calls.

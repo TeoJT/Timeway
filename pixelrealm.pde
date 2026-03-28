@@ -8379,7 +8379,7 @@ public class PixelRealm extends Screen {
       console.log(currRealm.version+" realm upgraded to newest.");
       return true;
     }
-    else if (engine.commandEquals(command, "/camera") || engine.commandEquals(command, "/defaultcamera") || engine.commandEquals(command, "/playercamera")) {
+    else if (engine.commandEquals(command, "/cam") || engine.commandEquals(command, "/pcam") || engine.commandEquals(command, "/defaultcamera") || engine.commandEquals(command, "/playercamera")) {
       if (cameraControl != 0) {
         cameraControl = 0;
         console.log("Reset camera mode to player.");
@@ -8389,12 +8389,12 @@ public class PixelRealm extends Screen {
       }
       return true;
     }
-    else if (engine.commandEquals(command, "/virtualcamera")) {
+    else if (engine.commandEquals(command, "/vcam")) {
       cameraControl = 1;
       console.log("Now controlling virtual camera.");
       return true;
     }
-    else if (engine.commandEquals(command, "/actualcamera")) {
+    else if (engine.commandEquals(command, "/acam")) {
       cameraControl = 2;
       console.log("Now controlling actual camera.");
       return true;
