@@ -56,8 +56,6 @@ void main(void)
 		vec2 tt = gl_FragCoord.xy/pixelRes.xy;
 		tt.y = 1.-tt.y;
 		st.y -= 0.05;
-
-		
 		
 		float t = time*speed*PI;
 		

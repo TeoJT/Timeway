@@ -10,9 +10,9 @@
   },
   {
     "size": 16,
-    "x": 168,
+    "x": 172,
     "color_hex": "FF909090",
-    "y": 2820,
+    "y": 2855,
     "ID": "32208908",
     "text": "When enabled, images pasted into an entry will be scaled down to save space. Note this may reduce image quality.",
     "type": 1
@@ -129,7 +129,7 @@
     "size": 30,
     "x": 146,
     "color_hex": "FFFFFFFF",
-    "y": 2780,
+    "y": 2812,
     "ID": "scale_down_images",
     "text": "Scale down images",
     "type": 4

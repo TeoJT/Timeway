@@ -1061,7 +1061,8 @@ public class PixelRealmWithUI extends PixelRealm {
     
     
     private class Grid {
-      private float scroll = 0;
+      private float scroll = 0f;
+      private float scrollVel = 0f;
       private Runnable moveInAction = null;
       private Runnable shiftMoveToAction = null;
       
@@ -1203,11 +1204,13 @@ public class PixelRealmWithUI extends PixelRealm {
         // mouse is in area. This will keep the grids animated even if we're switching between the grids
         if (!promptShown()) {
           if (touchScrolling) {
-            scroll += (input.mouseY() - prevMouseY);
+            scrollVel = (input.mouseY() - prevMouseY);
           }
           else {
             scroll = input.processScroll(scroll, 10f, bottom-hii+10f, ui.mouseInArea(gridx, gridy, (squarewihi + verticalSpacing)*SLOTS_WI+5f, hii));
           }
+          scroll += scrollVel;
+          scrollVel *= 0.95*display.getDelta();
         }
         
         if (!input.primaryDown) preventShiftClick = false;
@@ -3664,7 +3667,7 @@ public class PixelRealmWithUI extends PixelRealm {
       display.imgCentre("music", x-wi-30, y, 40, 40);
       app.noTint();
 
-      if (musicURL.length() > 0 && input.mouseY() > (HEIGHT-myLowerBarWeight) && input.primaryOnce) {
+      if (musicURL.length() > 0 && input.mouseY() > (HEIGHT-myLowerBarWeight) && input.mouseX() > WIDTH/2f && input.primaryOnce) {
         app.link(musicURL);
       }
     } 

@@ -137,17 +137,17 @@ public class PixelRealm extends Screen {
   public final static String REALM_BGM_DEFAULT_LEGACY = "engine/music/pixelrealm_default_bgm_legacy.wav";
   
   // --- Global state and working variables (doesn't require per-realm states) ---
-  protected PGraphics scene;
+  private PGraphics scene;
   // 0/any = player, 1 = virtual, 2 = actual
   private float cameraControl = 0;
   // Virtual camera: disjointed from player but scene displays around it. For example,
   // distant terrain fades as camera moves.
-  private float virtCameraX = 1000f, virtCameraY = 0f, virtCameraZ = 1000f;
+  private float virtCameraX = 1000f, virtCameraY = 0f, virtCameraZ = 1000f, virtCameraDir = 0f;
   private float virtCameraToX = 1000f, virtCameraToY = 0f, virtCameraToZ = 1000f;
   // Actual camera: the final camera that is disjointed from virtual cameras. Goes wherever it likes,
   // without the scene fading or disappearing around it. Moving this camera only is usually used for
   // debugging purposes e.g. viewing the scene from a different angle to view and debug culling.
-  private float actualCameraX = 1000f, actualCameraY = 0f, actualCameraZ = 1000f;
+  private float actualCameraX = 1000f, actualCameraY = 0f, actualCameraZ = 1000f, actualCameraDir = 0f;
   private float actualCameraToX = 1000f, actualCameraToY = 0f, actualCameraToZ = 1000f;
   private float runAcceleration = 0.;
   private float bob = 0.0;
@@ -180,7 +180,7 @@ public class PixelRealm extends Screen {
   private int manualTreeIndex = 0;
   
   private PShader unifiedShader = null;
-  protected PGL pgl;
+  private PGL pgl;
   
   private AtomicBoolean refreshRealm = new AtomicBoolean(false);
   private AtomicInteger refresherCommand = new AtomicInteger(0);
@@ -538,12 +538,6 @@ public class PixelRealm extends Screen {
         return 0;
       }
       return obj.glName;
-    }
-    
-    // Deletes the texture, object cannot be used from that point forward
-    // so you should set it to null after that.
-    public void cleanup() {
-      deleteTexture(singleImg);
     }
   }
   
@@ -924,42 +918,7 @@ public class PixelRealm extends Screen {
       rebindVertexShader = false;
     }
   }
-  
-  protected Texture getTexture(PImage img, PGraphics graphics) {
-    Texture obj = ((Texture)graphics.getCache(img));
-    if (obj == null) {
-      return ((PGraphicsOpenGL)graphics).getTexture(img);
-    }
-    return obj;
-  }
-  
-  
-  protected Texture getTexture(PImage img) {
-    return getTexture(img, g);
-  }
     
-  protected int pimgToGLName(PImage img) {
-    return getTexture(img).glName;
-  }
-  
-  protected void deleteTexture(PImage img, PGraphics graphics) {
-    if (pgl == null) {
-      console.bugWarn("deleteTexture: beginPGL must be called.");
-      return;
-    }
-    
-    // Technically, could delete multiple textures. But I'm not too bothered about
-    // the delete overhead for now.
-    IntBuffer intBuffer = IntBuffer.allocate(1);
-    intBuffer.put(0, getTexture(img, graphics).glName);
-    pgl.deleteTextures(1, intBuffer);
-    getTexture(img, graphics).glName = 0;
-  }
-  
-  protected void deleteTexture(PImage img) {
-    deleteTexture(img, g);
-  }
-  
   
   // Class for holding our special super-fast billboards and quads
   class GLQuadElement {
@@ -988,6 +947,15 @@ public class PixelRealm extends Screen {
     
     public GLQuadElement(RealmTextureUV img, int imgIndex) {
       this(img, imgIndex, img.getWidth(imgIndex), img.getHeight(imgIndex));
+    }
+    
+    private int pimgToGLName(PImage img) {
+      Texture obj = ((Texture)scene.getCache(img));
+      if (obj == null) {
+        obj = ((PGraphicsOpenGL)scene).getTexture(img);
+        return obj.glName;
+      }
+      return obj.glName;
     }
     
     private void genBuffer() {
@@ -1194,11 +1162,6 @@ public class PixelRealm extends Screen {
     
     // Sometimes, we just gotta have weird hacks in weird places in our code which results in 
     // weird constructors with weird purposes.
-    // What does it do?
-    // Well, it's used for the pocket menu.
-    // In the grid, items marked as "isWeird" aren't actually items, rather they're used
-    // for displaying text, gaps, or anything else.
-    // Yes, I acknowledge this is fundamentally really really cursed.
     public boolean isWeird = false;
     
     public PocketItem(String name, boolean isWeird) {
@@ -1248,7 +1211,6 @@ public class PixelRealm extends Screen {
     
     public void displayIcon(float x, float y, float wihi) {
       PImage ico = null;
-      
       
       // Quick fix for now
       if (item instanceof PixelRealmState.MusicFileObject) {
@@ -1314,6 +1276,7 @@ public class PixelRealm extends Screen {
         // Can't move files that have the same filename as another file
         // in the pocket.
         if (isDuplicate) {
+          console.log("isDuplicate");
           promptPocketConflict(name);
           return false;
         }
@@ -1329,6 +1292,7 @@ public class PixelRealm extends Screen {
         
         // Another duplicate check that is mostly temporary and I'll have a better solution soon.
         if (file.exists(engine.APPPATH+engine.POCKET_PATH()+newName)) {
+          console.log("genuine conflict");
           promptPocketConflict(newName);
           return false;
         }
@@ -1352,12 +1316,13 @@ public class PixelRealm extends Screen {
     }
     
     
-    public boolean pocketMove(String fro) {
-      return pocketMove(fro, name);
-    }
-    
     public void cleanup() {
       item.destroy();
+    }
+    
+    
+    public boolean pocketMove(String fro) {
+      return pocketMove(fro, name);
     }
   }
   
@@ -2716,12 +2681,18 @@ public class PixelRealm extends Screen {
         setSize(size-max((amount*amount), 0.001));
       }
       
-      public void addRequestToQueue(final String path) {
-        addRequestToQueue(path, -1);
+      public void addRequestToQueueWithNoCaching(final String path) {
+        addRequestToQueue(path, NO_CACHING);
       }
       
+      public void addRequestToQueue(final String path) {
+        addRequestToQueue(path, NO_SHRINKING);
+      }
       
-      public void addRequestToQueue(final String path, final int shrink) {
+      final int NO_SHRINKING = -1;
+      final int NO_CACHING = -2;
+      
+      public void addRequestToQueue(final String path, final int shrinkOrOptions) {
         this.beginLoadFlag.set(false);
         loadQueue.add(this.beginLoadFlag);
         final boolean isImg = this instanceof ImageFileObject || this instanceof EntryFileObject;
@@ -2786,7 +2757,7 @@ public class PixelRealm extends Screen {
               memOverload = true;
             }
             else {
-              incrementMemUsage(512*512*4);
+              incrementMemUsage(512*512*4);   // TODO: what is this??
               String ext = file.getExt(path);
               
               if (ext.equals("gif")) {
@@ -2824,24 +2795,35 @@ public class PixelRealm extends Screen {
                   
                 }
                 else {
-                  im = engine.tryLoadImageCache(path, new Runnable() {
-                    public void run() {
-                      PImage im2 = loadImage(path);
-                      if (shrink != -1) {
-                        engine.scaleDown(im2, shrink);
-                      }
-                      engine.setOriginalImage(im2);
-                      if (isImg)
-                        ((ImageFileObject)me).cacheFlag = true;
-                      
-                      // No need in normal mode since that will just cause lag. Remember, the threads are there to beg the garbage collector
-                      // if memory spikes gets a little too high.
-                      if (engine.lowMemory) {
-                        System.gc();
+                  // No caching option
+                  if (shrinkOrOptions == NO_CACHING) {
+                    im = loadImage(path);
+                  }
+                  
+                  // Caching option. May apply shrink.
+                  else {
+                    im = engine.tryLoadImageCache(path, new Runnable() {
+                      public void run() {
+                        PImage im2 = loadImage(path);
+                        
+                        if (shrinkOrOptions != NO_SHRINKING) {
+                          engine.scaleDown(im2, shrinkOrOptions);
+                        }
+                        engine.setOriginalImage(im2);
+                        if (isImg)
+                          ((ImageFileObject)me).cacheFlag = true;
+                        
+                        // No need in normal mode since that will just cause lag. Remember, the threads are there to beg the garbage collector
+                        // if memory spikes gets a little too high.
+                        if (engine.lowMemory) {
+                          System.gc();
+                        }
                       }
                     }
+                    );
                   }
-                  );
+                  
+                  //
                   img = new RealmTextureUV(im);
                   elementRefreshRequired = true;
                 }
@@ -3040,7 +3022,7 @@ public class PixelRealm extends Screen {
         
         scene.pushMatrix();
         scene.translate(x, y-hi-20, z);
-        float d = direction-PI;
+        float d = virtCameraDir-PI;
         scene.rotateY(d);
         scene.textFont(engine.DEFAULT_FONT, 16);
         scene.textAlign(CENTER, CENTER);
@@ -3244,7 +3226,7 @@ public class PixelRealm extends Screen {
               //setSize(1.);
               this.wi = img.getWidth()*size;
               this.hi = img.getHeight()*size;
-              // There's no y2 huehue.
+              // There's no y2 huehue.`
               
               useEnvironmentShader();
               
@@ -3296,8 +3278,14 @@ public class PixelRealm extends Screen {
         // Depends on our image format:
         if (file.getExt(this.filename).equals("gif") && showExperimentalGifs) cacheFlag = false;
         
-          
-        addRequestToQueue(dir, MAX_CACHE_SIZE);
+        // Bug fix: when opening pockets, realm assets are cached, causing blurry skies (because they're big enough to trigger the shrink condition).
+        // We should never be caching realm assets in the first place.
+        if (this.filename.length() > 12 && this.filename.substring(0, 12).equals(".pixelrealm-")) {
+          addRequestToQueueWithNoCaching(dir);
+        }
+        else {
+          addRequestToQueue(dir, MAX_CACHE_SIZE);
+        }
       }
       
       // Same as load, except we do NOT call addRequestToQueue(dir, MAX_CACHE_SIZE) and instead copy the multithreaded code
@@ -3670,10 +3658,10 @@ public class PixelRealm extends Screen {
         
         // If not null there exists some image of that file.
         if (sky != null) {
-          addRequestToQueue(sky);
+          addRequestToQueueWithNoCaching(sky);
         }
         else if (sky1 != null) {
-          addRequestToQueue(sky1);
+          addRequestToQueueWithNoCaching(sky1);
         }
         else {
           // No img sky found, get default sky
@@ -3731,7 +3719,7 @@ public class PixelRealm extends Screen {
           useTextShader();
           
           // Display text over the portal showing the directory.
-          float d = direction-PI;
+          float d = virtCameraDir-PI;
           //float w = img.width*size;
           
           scene.pushMatrix();
@@ -4069,7 +4057,7 @@ public class PixelRealm extends Screen {
         if (render) {
           scene.pushMatrix();
           
-          float d = direction-PI;
+          float d = virtCameraDir-PI;
           scene.translate(x, y, z);
           scene.rotateY(d);
           scene.scale(scale);
@@ -4654,7 +4642,6 @@ public class PixelRealm extends Screen {
       
       // Oh, and we need to load our pocket objects
       // First reset all our lists.
-      pocketObjects.clear();
       pocketObjects = new HashSet<PRObject>();
       //pocketItemNames = new HashSet<String>();
       
@@ -4693,6 +4680,7 @@ public class PixelRealm extends Screen {
 
       // Add it to za lists
       pocketObjects.add(p.item);
+      //if (p.item instanceof FileObject) files.add((FileObject)p.item);
       
       // Yeet it into the void so we can't see it.
       throwItIntoTheVoid(p.item);
@@ -5646,6 +5634,15 @@ public class PixelRealm extends Screen {
                 
                 isWalking = true;
               }
+              
+              
+              if (input.keyAction("move_slow", TWEngine.InputModule.SHIFT_KEY)) {
+                if (input.keyAction("turn_right", 'e')) rot = -SLOW_TURN_SPEED*display.getDelta();
+                if (input.keyAction("turn_left", 'q')) rot =  SLOW_TURN_SPEED*display.getDelta();
+              } else {
+                if (input.keyAction("turn_right", 'e')) rot = -TURN_SPEED*display.getDelta();
+                if (input.keyAction("turn_left", 'q')) rot =  TURN_SPEED*display.getDelta();
+              }
       
           }
           
@@ -5658,13 +5655,6 @@ public class PixelRealm extends Screen {
           }
   
 
-          if (input.keyAction("move_slow", TWEngine.InputModule.SHIFT_KEY)) {
-            if (input.keyAction("turn_right", 'e')) rot = -SLOW_TURN_SPEED*display.getDelta();
-            if (input.keyAction("turn_left", 'q')) rot =  SLOW_TURN_SPEED*display.getDelta();
-          } else {
-            if (input.keyAction("turn_right", 'e')) rot = -TURN_SPEED*display.getDelta();
-            if (input.keyAction("turn_left", 'q')) rot =  TURN_SPEED*display.getDelta();
-          }
           
           //if (input.keyAction("look_right_touch", 'e')) rot = -MEDIUM_TURN_SPEED*display.getDelta();
           //if (input.keyAction("look_left_touch", 'q')) rot =  MEDIUM_TURN_SPEED*display.getDelta();
@@ -5767,7 +5757,7 @@ public class PixelRealm extends Screen {
           cache_flatCosDirection = cos(direction-PI+HALF_PI);
           
           // --- Jump & gravity physics ---
-          if (input.keyAction("jump", ' ')) {
+          if (input.keyAction("jump", ' ') && cameraControl == 0) {
             float jumpStrength = JUMP_STRENGTH;
             if (isInWater) {
               yvel = min(yvel+SWIM_UP_SPEED, UNDERWATER_TEMINAL_VEL);
@@ -7163,7 +7153,7 @@ public class PixelRealm extends Screen {
     private int getCullDirection() {
       int cullDirection = 0;
       
-      float dir = (direction-HALF_PI/2f)%TWO_PI;
+      float dir = (virtCameraDir-HALF_PI/2f)%TWO_PI;
       if (dir < 0)
         dir += TWO_PI;
       if (dir < HALF_PI)
@@ -7248,7 +7238,6 @@ public class PixelRealm extends Screen {
     // That "effect" is just the portal glow.
     public void renderEffects() {
       scene.perspective(PI/3.0, (float)scene.width/scene.height, 10., 1000000.);
-      float FADE = 0.9;
       display.recordRendererTime();
       if (isUnderwater) {
         scene.beginShape();
@@ -7273,13 +7262,7 @@ public class PixelRealm extends Screen {
       }
       
       if (portalLight > 0.1) {
-        scene.blendMode(ADD);
-        scene.fill(portalLight);
-  
         sound.setSoundVolume("portal", max(portalLight/255., 0.));
-        scene.noStroke();
-        scene.rect(0, 0, scene.width, scene.height);
-        scene.blendMode(NORMAL);
       }
       
       // Sorry not sorry for putting this in "effects".
@@ -7297,13 +7280,6 @@ public class PixelRealm extends Screen {
         coinCounterBounce *= pow(0.85, display.getDelta());
       }
       display.recordLogicTime();
-      
-    
-      // When we exit a portal, there's usually a bit of lag as we read files/perform loading,
-      // which causes the delta to be high and try to boost us forwards like 30 frames.
-      // However, with the old FPS system, SLEEPY mode was the minimum at 15fps, which meant we could
-      // only skip at most 4 frames at a time. We wanna keep that cool bug :sunglasses:
-      portalLight *= PApplet.pow(FADE, min(display.getDelta(), 4));
 
     }
     
@@ -7785,15 +7761,27 @@ public class PixelRealm extends Screen {
 
 
   private void runCamera() {
-    final float CAMERA_CONTROL_SPEED = 5f;
-    final float LOOK_DIST = 200.;
+    final float CAMERA_CONTROL_SPEED = 10f;
+    final float LOOK_DIST = 200f;
     if (cameraControl != 0) {
-      float movex = 0.;
-      float movey = 0.;
-      float movez = 0.;
+      float movex = 0f;
+      float movey = 0f;
+      float movez = 0f;
+      float rot   = 0f;
       float speed = CAMERA_CONTROL_SPEED;
       float sin_d = sin(currRealm.direction);
       float cos_d = cos(currRealm.direction);
+      
+      // Virtual camera sin and cos dirs
+      if (cameraControl == 1) {
+        sin_d = sin(virtCameraDir);
+        cos_d = cos(virtCameraDir);
+      }
+      else if (cameraControl == 2) {
+        sin_d = sin(actualCameraDir);
+        cos_d = cos(actualCameraDir);
+      }
+      
 
       if (input.keyAction("dash", TWEngine.InputModule.CTRL_KEY)) {
         speed = CAMERA_CONTROL_SPEED*2f;
@@ -7822,6 +7810,16 @@ public class PixelRealm extends Screen {
       if (input.keyAction("jump", ' ')) {
         movey -= speed;
       }
+      
+      
+      if (input.keyAction("move_slow", TWEngine.InputModule.SHIFT_KEY)) {
+        if (input.keyAction("turn_right", 'e')) rot = -SLOW_TURN_SPEED*display.getDelta();
+        if (input.keyAction("turn_left", 'q')) rot =  SLOW_TURN_SPEED*display.getDelta();
+      } else {
+        if (input.keyAction("turn_right", 'e')) rot = -TURN_SPEED*display.getDelta();
+        if (input.keyAction("turn_left", 'q')) rot =  TURN_SPEED*display.getDelta();
+      }
+      
 
       // Move virtual camera
       if (cameraControl == 1) {
@@ -7829,26 +7827,33 @@ public class PixelRealm extends Screen {
         virtCameraY += movey;
         virtCameraZ += movez;
         
+        virtCameraDir += rot;
+        
         // TODO: not final direction calculation for virtCamera
-        virtCameraToX = virtCameraX+sin(currRealm.direction)*LOOK_DIST;
+        virtCameraToX = virtCameraX+sin(virtCameraDir)*LOOK_DIST;
         virtCameraToY = virtCameraY;
-        virtCameraToZ = virtCameraZ+cos(currRealm.direction)*LOOK_DIST;
+        virtCameraToZ = virtCameraZ+cos(virtCameraDir)*LOOK_DIST;
+        
       }
       else if (cameraControl == 2) {
         actualCameraX += movex;
         actualCameraY += movey;
         actualCameraZ += movez;
         
+        actualCameraDir += rot;
+        
         // TODO: not final direction calculation for virtCamera
-        actualCameraToX = actualCameraX+sin(currRealm.direction)*LOOK_DIST;
+        actualCameraToX = actualCameraX+sin(actualCameraDir)*LOOK_DIST;
         actualCameraToY = actualCameraY;
-        actualCameraToZ = actualCameraZ+cos(currRealm.direction)*LOOK_DIST;
+        actualCameraToZ = actualCameraZ+cos(actualCameraDir)*LOOK_DIST;
       }
     }
     else {
       virtCameraX = currRealm.playerX;
       virtCameraY = currRealm.playerY+(sin(bob)*3)-PLAYER_HEIGHT;
       virtCameraZ = currRealm.playerZ;
+      
+      virtCameraDir = currRealm.direction;
 
       virtCameraToX = virtCameraX+sin(currRealm.direction)*LOOK_DIST;
       virtCameraToY = virtCameraY;
@@ -7872,6 +7877,14 @@ public class PixelRealm extends Screen {
       console.log("Change detected, refreshing realm.");
       refresh();
     }
+    
+    
+    // When we exit a portal, there's usually a bit of lag as we read files/perform loading,
+    // which causes the delta to be high and try to boost us forwards like 30 frames.
+    // However, with the old FPS system, SLEEPY mode was the minimum at 15fps, which meant we could
+    // only skip at most 4 frames at a time. We wanna keep that cool bug :sunglasses:
+    float FADE = 0.9;
+    portalLight *= PApplet.pow(FADE, min(display.getDelta(), 4));
     
     //This function assumes you have not called portal.beginDraw().
     
@@ -7914,7 +7927,7 @@ public class PixelRealm extends Screen {
       actualCameraX = virtCameraX;
       actualCameraY = virtCameraY;
       actualCameraZ = virtCameraZ;
-      
+      actualCameraDir = virtCameraDir;
       actualCameraToX = virtCameraToX;
       actualCameraToY = virtCameraToY;
       actualCameraToZ = virtCameraToZ;
@@ -7960,7 +7973,19 @@ public class PixelRealm extends Screen {
     float wi = scene.width*DISPLAY_SCALE;
     float hi = this.height;
     
+    if (portalLight > 0.1) {
+      float time = (display.getTimeSeconds() * 0.33f) % 1f;
+      display.shader("portal_enter", 
+      "u_time", time, 
+      "u_offset", ((WIDTH/2)-wi/2)*display.getScale() + display.getScale() + screenx, ((HEIGHT/2)-hi/2)*display.getScale(),
+      "u_resolution", WIDTH*display.getScale(), hi*display.getScale(),
+      "portalLight", portalLight/255f);
+    }
+    
     app.image(scene, (WIDTH/2)-wi/2, (HEIGHT/2)-hi/2, wi, hi);
+    
+    if (portalLight > 0.1)  display.resetShader();
+    
     engine.timestamp("display scene");
     
     display.recordLogicTime();
@@ -8379,7 +8404,7 @@ public class PixelRealm extends Screen {
       console.log(currRealm.version+" realm upgraded to newest.");
       return true;
     }
-    else if (engine.commandEquals(command, "/cam") || engine.commandEquals(command, "/pcam") || engine.commandEquals(command, "/defaultcamera") || engine.commandEquals(command, "/playercamera")) {
+    else if (engine.commandEquals(command, "/cam") || engine.commandEquals(command, "/pcam")) {
       if (cameraControl != 0) {
         cameraControl = 0;
         console.log("Reset camera mode to player.");

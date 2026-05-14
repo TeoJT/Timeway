@@ -2871,7 +2871,6 @@ public class TWEngine {
       }
       else if (file.isAudioFile(path)) {
         try {
-          // The image is of an unsupported format.
           if (!cacheExists(path)) {
             String cachePath = ffmpegConvertToMP3(path);
             newMusic = new Music(cachePath);
@@ -6842,8 +6841,12 @@ public class TWEngine {
   public int calculateChecksum(PImage image) {
     // To prevent a really bad bug from happening, only actually calculate the checksum if the image is bigger than say,
     // 64 pixels lol.
+    
+    // OK So because this bug happened again, I'm just going to put in a safety measure as a last-resort loop break.
+    int loopLockCounter = 0;
+    
     try {
-      if (image.width > 64 || image.height > 64) {
+      if (image.width > 64 && image.height > 64) {
         int checksum = 0;
         int w = image.width;
         int h = image.height;
@@ -6860,6 +6863,13 @@ public class TWEngine {
   
             // Add the pixel values to the checksum
             checksum += red + green + blue;
+            
+            // Last-resort safety feature.
+            loopLockCounter++;
+            if (loopLockCounter > 10_000_000) {
+              console.bugWarn("calculateChecksum: had to force break out of infinite loop. Wi: "+w+"  Hi: "+h+".");
+              break;
+            }
           }
         }
   
@@ -8824,8 +8834,7 @@ public abstract class Screen {
       app.pushMatrix();
       //float scl = display.getScale();
       
-      // Take 4 pixels away because for some reason it's offset by 4 pixels.
-      app.translate(screenx-4f, screeny);
+      app.translate(screenx, screeny);
       app.scale(display.getScale());
       this.backg();
       this.content();
